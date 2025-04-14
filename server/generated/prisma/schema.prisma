@@ -1,0 +1,87 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          Int          @id @default(autoincrement())
+  email       String       @unique
+  name        String
+  role        Role
+  tests       Test[]       @relation("TeacherTests")
+  submissions Submission[]
+  createdAt   DateTime     @default(now())
+}
+
+enum Role {
+  TEACHER
+  STUDENT
+}
+
+model Test {
+  id          Int          @id @default(autoincrement())
+  title       String
+  description String?
+  creator     User         @relation("TeacherTests", fields: [creatorId], references: [id])
+  creatorId   Int
+  questions   Question[]
+  submissions Submission[] // 🔧 přidáno – zpětný vztah k Submission
+  createdAt   DateTime     @default(now())
+}
+
+model Question {
+  id        Int          @id @default(autoincrement())
+  text      String
+  type      QuestionType
+  test      Test         @relation(fields: [testId], references: [id])
+  testId    Int
+  options   Option[]
+  answers   Answer[]
+  responses Response[] // 🔧 přidáno – zpětný vztah k Response
+}
+
+enum QuestionType {
+  FILL_IN_THE_BLANK
+  MULTIPLE_CHOICE
+}
+
+model Option {
+  id         Int      @id @default(autoincrement())
+  text       String
+  question   Question @relation(fields: [questionId], references: [id])
+  questionId Int
+}
+
+model Answer {
+  id         Int      @id @default(autoincrement())
+  text       String
+  question   Question @relation(fields: [questionId], references: [id])
+  questionId Int
+}
+
+model Submission {
+  id          Int        @id @default(autoincrement())
+  student     User       @relation(fields: [studentId], references: [id])
+  studentId   Int
+  test        Test       @relation(fields: [testId], references: [id])
+  testId      Int
+  responses   Response[]
+  score       Float?
+  submittedAt DateTime   @default(now())
+}
+
+model Response {
+  id           Int        @id @default(autoincrement())
+  submission   Submission @relation(fields: [submissionId], references: [id])
+  submissionId Int
+  question     Question   @relation(fields: [questionId], references: [id])
+  questionId   Int
+  givenText    String
+  isCorrect    Boolean?
+  feedback     String?
+}
