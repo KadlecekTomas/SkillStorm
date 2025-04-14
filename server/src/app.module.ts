@@ -8,7 +8,13 @@ import { SubmissionModule } from './submission/submission.module';
 import { ResponseModule } from './response/response.module';
 
 @Module({
-  imports: [UserModule, TestModule, QuestionModule, SubmissionModule, ResponseModule],
+  imports: [
+    UserModule,
+    TestModule,
+    QuestionModule,
+    SubmissionModule,
+    ResponseModule,
+  ],
   controllers: [AppController],
   providers: [AppService],
 })

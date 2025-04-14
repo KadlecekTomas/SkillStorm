@@ -185,7 +185,7 @@ const config = {
       "value": "prisma-client-js"
     },
     "output": {
-      "value": "C:\\Users\\kadle\\Pictures\\SkillStorm\\server\\generated\\prisma",
+      "value": "C:\\Users\\kadle\\OneDrive - Univerzita Hradec Králové\\Obrázky\\SkillStorm\\server\\generated\\prisma",
       "fromEnvVar": null
     },
     "config": {
@@ -196,14 +196,18 @@ const config = {
         "fromEnvVar": null,
         "value": "windows",
         "native": true
+      },
+      {
+        "fromEnvVar": null,
+        "value": "debian-openssl-3.0.x"
       }
     ],
     "previewFeatures": [],
-    "sourceFilePath": "C:\\Users\\kadle\\Pictures\\SkillStorm\\server\\prisma\\schema.prisma",
+    "sourceFilePath": "C:\\Users\\kadle\\OneDrive - Univerzita Hradec Králové\\Obrázky\\SkillStorm\\server\\prisma\\schema.prisma",
     "isCustomOutput": true
   },
   "relativeEnvPaths": {
-    "rootEnvPath": "../../.env",
+    "rootEnvPath": null,
     "schemaEnvPath": "../../.env"
   },
   "relativePath": "../../prisma",
@@ -213,16 +217,17 @@ const config = {
     "db"
   ],
   "activeProvider": "postgresql",
+  "postinstall": false,
   "inlineDatasources": {
     "db": {
       "url": {
         "fromEnvVar": "DATABASE_URL",
-        "value": "postgresql://postgres:user@localhost:5432/skillstormdb"
+        "value": null
       }
     }
   },
-  "inlineSchema": "generator client {\n  provider = \"prisma-client-js\"\n  output   = \"../generated/prisma\"\n}\n\ndatasource db {\n  provider = \"postgresql\"\n  url      = env(\"DATABASE_URL\")\n}\n\nmodel User {\n  id          Int          @id @default(autoincrement())\n  email       String       @unique\n  name        String\n  role        Role\n  tests       Test[]       @relation(\"TeacherTests\")\n  submissions Submission[]\n  createdAt   DateTime     @default(now())\n}\n\nenum Role {\n  TEACHER\n  STUDENT\n}\n\nmodel Test {\n  id          Int          @id @default(autoincrement())\n  title       String\n  description String?\n  creator     User         @relation(\"TeacherTests\", fields: [creatorId], references: [id])\n  creatorId   Int\n  questions   Question[]\n  submissions Submission[] // 🔧 přidáno – zpětný vztah k Submission\n  createdAt   DateTime     @default(now())\n}\n\nmodel Question {\n  id        Int          @id @default(autoincrement())\n  text      String\n  type      QuestionType\n  test      Test         @relation(fields: [testId], references: [id])\n  testId    Int\n  options   Option[]\n  answers   Answer[]\n  responses Response[] // 🔧 přidáno – zpětný vztah k Response\n}\n\nenum QuestionType {\n  FILL_IN_THE_BLANK\n  MULTIPLE_CHOICE\n}\n\nmodel Option {\n  id         Int      @id @default(autoincrement())\n  text       String\n  question   Question @relation(fields: [questionId], references: [id])\n  questionId Int\n}\n\nmodel Answer {\n  id         Int      @id @default(autoincrement())\n  text       String\n  question   Question @relation(fields: [questionId], references: [id])\n  questionId Int\n}\n\nmodel Submission {\n  id          Int        @id @default(autoincrement())\n  student     User       @relation(fields: [studentId], references: [id])\n  studentId   Int\n  test        Test       @relation(fields: [testId], references: [id])\n  testId      Int\n  responses   Response[]\n  score       Float?\n  submittedAt DateTime   @default(now())\n}\n\nmodel Response {\n  id           Int        @id @default(autoincrement())\n  submission   Submission @relation(fields: [submissionId], references: [id])\n  submissionId Int\n  question     Question   @relation(fields: [questionId], references: [id])\n  questionId   Int\n  givenText    String\n  isCorrect    Boolean?\n  feedback     String?\n}\n",
-  "inlineSchemaHash": "cba554bbb1768407a081d6a8c70611d3e8bbc45ad553261a1959e6aa9d5204fd",
+  "inlineSchema": "generator client {\n  provider      = \"prisma-client-js\"\n  output        = \"../generated/prisma\"\n  binaryTargets = [\"native\", \"debian-openssl-3.0.x\"]\n}\n\ndatasource db {\n  provider = \"postgresql\"\n  url      = env(\"DATABASE_URL\")\n}\n\nmodel User {\n  id          Int          @id @default(autoincrement())\n  email       String       @unique\n  name        String\n  role        Role\n  tests       Test[]       @relation(\"TeacherTests\")\n  submissions Submission[]\n  createdAt   DateTime     @default(now())\n}\n\nenum Role {\n  TEACHER\n  STUDENT\n}\n\nmodel Test {\n  id          Int          @id @default(autoincrement())\n  title       String\n  description String?\n  creator     User         @relation(\"TeacherTests\", fields: [creatorId], references: [id])\n  creatorId   Int\n  questions   Question[]\n  submissions Submission[] // 🔧 přidáno – zpětný vztah k Submission\n  createdAt   DateTime     @default(now())\n}\n\nmodel Question {\n  id        Int          @id @default(autoincrement())\n  text      String\n  type      QuestionType\n  test      Test         @relation(fields: [testId], references: [id])\n  testId    Int\n  options   Option[]\n  answers   Answer[]\n  responses Response[] // 🔧 přidáno – zpětný vztah k Response\n}\n\nenum QuestionType {\n  FILL_IN_THE_BLANK\n  MULTIPLE_CHOICE\n}\n\nmodel Option {\n  id         Int      @id @default(autoincrement())\n  text       String\n  question   Question @relation(fields: [questionId], references: [id])\n  questionId Int\n}\n\nmodel Answer {\n  id         Int      @id @default(autoincrement())\n  text       String\n  question   Question @relation(fields: [questionId], references: [id])\n  questionId Int\n}\n\nmodel Submission {\n  id          Int        @id @default(autoincrement())\n  student     User       @relation(fields: [studentId], references: [id])\n  studentId   Int\n  test        Test       @relation(fields: [testId], references: [id])\n  testId      Int\n  responses   Response[]\n  score       Float?\n  submittedAt DateTime   @default(now())\n}\n\nmodel Response {\n  id           Int        @id @default(autoincrement())\n  submission   Submission @relation(fields: [submissionId], references: [id])\n  submissionId Int\n  question     Question   @relation(fields: [questionId], references: [id])\n  questionId   Int\n  givenText    String\n  isCorrect    Boolean?\n  feedback     String?\n}\n",
+  "inlineSchemaHash": "89ff3898c4edd945df481e37d4c2637b1ef4bc4de4b2f2b6a0f20b999257eee0",
   "copyEngine": true
 }
 config.dirname = '/'
