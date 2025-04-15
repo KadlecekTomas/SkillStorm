@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { $Enums } from '../../generated/prisma';
 
@@ -22,14 +22,21 @@ export class UserService {
     role: $Enums.Role;
     passwordHash: string;
   }) {
-    return this.prisma.user.create({
-      data: {
-        email: data.email,
-        name: data.name,
-        role: data.role,
-        passwordHash: data.passwordHash,
-      },
-    });
+    try {
+      return await this.prisma.user.create({
+        data: {
+          email: data.email,
+          name: data.name,
+          role: data.role,
+          passwordHash: data.passwordHash,
+        },
+      });
+    } catch (error) {
+      if (error.code === 'P2002') {
+        throw new ConflictException('Email already exists');
+      }
+      throw error;
+    }
   }
 
   async delete(id: number) {

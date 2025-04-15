@@ -1,4 +1,8 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+  ConflictException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { RegisterDto } from './dto/register.dto';
@@ -15,30 +19,36 @@ export class AuthService {
 
   async register(registerDto: RegisterDto) {
     const { email, password, name } = registerDto;
+    try {
+      const existingUser = await this.prisma.user.findUnique({
+        where: { email },
+      });
 
-    const existingUser = await this.prisma.user.findUnique({
-      where: { email },
-    });
+      if (existingUser) {
+        throw new ConflictException('Email already exists');
+      }
 
-    if (existingUser) {
-      throw new UnauthorizedException('Email already exists');
+      const passwordHash = await bcrypt.hash(password, 10);
+
+      const user = await this.prisma.user.create({
+        data: {
+          email,
+          name,
+          passwordHash,
+          role: $Enums.Role.STUDENT,
+        },
+      });
+
+      const payload = { sub: user.id, email: user.email };
+      return {
+        access_token: this.jwtService.sign(payload),
+      };
+    } catch (error) {
+      if (error instanceof ConflictException) {
+        throw error;
+      }
+      throw new UnauthorizedException('Registration failed');
     }
-
-    const passwordHash = await bcrypt.hash(password, 10);
-
-    const user = await this.prisma.user.create({
-      data: {
-        email,
-        name,
-        passwordHash,
-        role: $Enums.Role.STUDENT,
-      },
-    });
-
-    const payload = { sub: user.id, email: user.email };
-    return {
-      access_token: this.jwtService.sign(payload),
-    };
   }
 
   async login(loginDto: LoginDto) {
@@ -56,6 +66,25 @@ export class AuthService {
 
     if (!isPasswordValid) {
       throw new UnauthorizedException('Invalid credentials');
+    }
+
+    const payload = { sub: user.id, email: user.email };
+    return {
+      access_token: this.jwtService.sign(payload),
+    };
+  }
+
+  async refreshToken(userId: number) {
+    if (!userId) {
+      throw new UnauthorizedException('Invalid user ID');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('User not found');
     }
 
     const payload = { sub: user.id, email: user.email };

@@ -7,10 +7,18 @@ import {
   Delete,
   UsePipes,
   ValidationPipe,
+  UseGuards,
 } from '@nestjs/common';
 import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
-import { ApiTags, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiParam,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
+import { AuthGuard } from '@nestjs/passport';
 
 @ApiTags('users')
 @Controller('users')
@@ -44,12 +52,16 @@ export class UserController {
     status: 400,
     description: 'Bad request - invalid input data',
   })
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
   async create(@Body() createUserDto: CreateUserDto) {
     return this.userService.create(createUserDto);
   }
 
   @Delete(':id')
   @ApiOperation({ summary: 'Delete user by ID' })
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
   @ApiParam({ name: 'id', description: 'User ID' })
   @ApiResponse({
     status: 200,

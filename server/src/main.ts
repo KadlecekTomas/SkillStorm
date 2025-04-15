@@ -6,11 +6,19 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   const config = new DocumentBuilder()
-    .setTitle('SkillStorm API')
-    .setDescription('The SkillStorm API description')
+    .setTitle('Test System API')
+    .setDescription('The test system API description')
     .setVersion('1.0')
-    .addTag('users')
+    .addBearerAuth({
+      type: 'http',
+      scheme: 'bearer',
+      bearerFormat: 'JWT',
+      name: 'JWT',
+      description: 'Enter JWT token',
+      in: 'header',
+    })
     .build();
+
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, document);
 

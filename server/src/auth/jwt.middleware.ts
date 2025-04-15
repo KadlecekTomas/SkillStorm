@@ -10,8 +10,8 @@ import { ConfigService } from '@nestjs/config';
 @Injectable()
 export class JwtMiddleware implements NestMiddleware {
   constructor(
-    private readonly jwtService: JwtService,
-    private readonly configService: ConfigService,
+    private jwtService: JwtService,
+    private configService: ConfigService,
   ) {}
 
   async use(req: Request, res: Response, next: NextFunction) {
@@ -31,8 +31,7 @@ export class JwtMiddleware implements NestMiddleware {
       const payload = await this.jwtService.verifyAsync(token, {
         secret: this.configService.get<string>('JWT_SECRET'),
       });
-
-      // Add userId to request object
+      // Store user ID consistently
       req['user'] = { userId: payload.sub };
       next();
     } catch {

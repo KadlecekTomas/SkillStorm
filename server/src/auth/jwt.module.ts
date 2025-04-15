@@ -1,10 +1,16 @@
-import { Module } from '@nestjs/common';
+import {
+  Module,
+  NestModule,
+  MiddlewareConsumer,
+  RequestMethod,
+} from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtMiddleware } from './jwt.middleware';
 
 @Module({
   imports: [
+    ConfigModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({
@@ -14,7 +20,18 @@ import { JwtMiddleware } from './jwt.middleware';
       inject: [ConfigService],
     }),
   ],
-  providers: [JwtMiddleware],
-  exports: [JwtMiddleware],
+  providers: [JwtMiddleware, ConfigService],
+  exports: [JwtModule],
 })
-export class JwtAuthModule {}
+export class JwtAuthModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(JwtMiddleware)
+      .exclude(
+        { path: 'auth/register', method: RequestMethod.POST },
+        { path: 'auth/login', method: RequestMethod.POST },
+        { path: '/users', method: RequestMethod.GET },
+      )
+      .forRoutes('*');
+  }
+}
