@@ -26,4 +26,11 @@ export class CreateUserDto {
   })
   @IsEnum($Enums.Role)
   role: $Enums.Role;
+
+  @ApiProperty({
+    description: 'The hashed password of the user',
+    example: '$2b$10$hashedpasswordstring',
+  })
+  @IsString()
+  passwordHash: string;
 }

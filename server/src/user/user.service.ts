@@ -16,12 +16,18 @@ export class UserService {
     });
   }
 
-  async create(data: { email: string; name: string; role: $Enums.Role }) {
+  async create(data: {
+    email: string;
+    name: string;
+    role: $Enums.Role;
+    passwordHash: string;
+  }) {
     return this.prisma.user.create({
       data: {
         email: data.email,
         name: data.name,
         role: data.role,
+        passwordHash: data.passwordHash,
       },
     });
   }
