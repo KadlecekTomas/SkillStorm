@@ -39,7 +39,7 @@ export class UserController {
   @ApiResponse({ status: 200, description: 'Returns the user' })
   @ApiResponse({ status: 404, description: 'User not found' })
   async findOne(@Param('id') id: string) {
-    return this.userService.findById(Number(id));
+    return this.userService.findById(id);
   }
 
   @Post()
@@ -72,6 +72,6 @@ export class UserController {
     description: 'User not found',
   })
   async remove(@Param('id') id: string) {
-    return this.userService.delete(Number(id));
+    return this.userService.delete(id);
   }
 }

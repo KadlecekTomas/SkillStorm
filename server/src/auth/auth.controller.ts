@@ -1,6 +1,5 @@
-import { Controller, Post, Body, Req } from '@nestjs/common';
+import { Controller, Post, Body, UnauthorizedException } from '@nestjs/common';
 import { AuthService } from './auth.service';
-import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import {
   ApiTags,
@@ -8,6 +7,7 @@ import {
   ApiResponse,
   ApiBearerAuth,
 } from '@nestjs/swagger';
+import { RegisterDto } from './dto/register.dto';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -53,7 +53,10 @@ export class AuthController {
     status: 401,
     description: 'Unauthorized - invalid or expired token',
   })
-  async refreshToken(@Req() req: any) {
-    return this.authService.refreshToken(req.user.userId);
+  async refreshToken(@Body('userId') userId: string) {
+    if (!userId) {
+      throw new UnauthorizedException('User ID is required');
+    }
+    return this.authService.refreshToken(userId);
   }
 }

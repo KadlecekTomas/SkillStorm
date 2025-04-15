@@ -10,7 +10,7 @@ datasource db {
 }
 
 model User {
-  id           Int          @id @default(autoincrement())
+  id           String       @id @default(uuid())
   email        String       @unique
   name         String
   role         Role
@@ -26,25 +26,25 @@ enum Role {
 }
 
 model Test {
-  id          Int          @id @default(autoincrement())
+  id          String       @id @default(uuid())
   title       String
   description String?
   creator     User         @relation("TeacherTests", fields: [creatorId], references: [id])
-  creatorId   Int
+  creatorId   String
   questions   Question[]
-  submissions Submission[] // 🔧 přidáno – zpětný vztah k Submission
+  submissions Submission[]
   createdAt   DateTime     @default(now())
 }
 
 model Question {
-  id        Int          @id @default(autoincrement())
+  id        String       @id @default(uuid())
   text      String
   type      QuestionType
   test      Test         @relation(fields: [testId], references: [id])
-  testId    Int
+  testId    String
   options   Option[]
   answers   Answer[]
-  responses Response[] // 🔧 přidáno – zpětný vztah k Response
+  responses Response[]
 }
 
 enum QuestionType {
@@ -53,36 +53,36 @@ enum QuestionType {
 }
 
 model Option {
-  id         Int      @id @default(autoincrement())
+  id         String   @id @default(uuid())
   text       String
   question   Question @relation(fields: [questionId], references: [id])
-  questionId Int
+  questionId String
 }
 
 model Answer {
-  id         Int      @id @default(autoincrement())
+  id         String   @id @default(uuid())
   text       String
   question   Question @relation(fields: [questionId], references: [id])
-  questionId Int
+  questionId String
 }
 
 model Submission {
-  id          Int        @id @default(autoincrement())
+  id          String     @id @default(uuid())
   student     User       @relation(fields: [studentId], references: [id])
-  studentId   Int
+  studentId   String
   test        Test       @relation(fields: [testId], references: [id])
-  testId      Int
+  testId      String
   responses   Response[]
   score       Float?
   submittedAt DateTime   @default(now())
 }
 
 model Response {
-  id           Int        @id @default(autoincrement())
+  id           String     @id @default(uuid())
   submission   Submission @relation(fields: [submissionId], references: [id])
-  submissionId Int
+  submissionId String
   question     Question   @relation(fields: [questionId], references: [id])
-  questionId   Int
+  questionId   String
   givenText    String
   isCorrect    Boolean?
   feedback     String?

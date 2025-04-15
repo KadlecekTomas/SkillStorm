@@ -1,5 +1,6 @@
-import { IsEmail, IsString, MinLength } from 'class-validator';
+import { IsEmail, IsString, MinLength, IsEnum } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { $Enums } from '../../../generated/prisma';
 
 export class RegisterDto {
   @ApiProperty({
@@ -26,4 +27,12 @@ export class RegisterDto {
   @IsString()
   @MinLength(6)
   password: string;
+
+  @ApiProperty({
+    description: 'The role of the user',
+    enum: $Enums.Role,
+    example: 'STUDENT',
+  })
+  @IsEnum($Enums.Role)
+  role: $Enums.Role;
 }

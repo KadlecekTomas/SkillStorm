@@ -10,7 +10,7 @@ export class UserService {
     return this.prisma.user.findMany();
   }
 
-  async findById(id: number) {
+  async findById(id: string) {
     return this.prisma.user.findUnique({
       where: { id },
     });
@@ -39,7 +39,7 @@ export class UserService {
     }
   }
 
-  async delete(id: number) {
+  async delete(id: string) {
     return this.prisma.user.delete({
       where: { id },
     });
