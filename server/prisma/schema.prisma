@@ -9,22 +9,65 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id          String       @id @default(uuid())
-  email       String       @unique
-  name        String
-  role        Role
-  passwordHash String
-  tests       Test[]       @relation("TeacherTests")
-  submissions Submission[]
-  createdAt   DateTime     @default(now())
-}
-
+//
+// ENUMS
+//
 enum Role {
-  TEACHER
   STUDENT
+  TEACHER
+  DIRECTOR
+  SUPERADMIN
 }
 
+enum QuestionType {
+  FILL_IN_THE_BLANK
+  MULTIPLE_CHOICE
+}
+
+//
+// USER MANAGEMENT
+//
+model User {
+  id            String        @id @default(uuid())
+  email         String        @unique
+  name          String
+  role          Role
+  passwordHash  String
+  tests         Test[]        @relation("TeacherTests")
+  submissions   Submission[]
+  refreshTokens RefreshToken[]
+  gamification  Gamification?
+  auditLogs     AuditLog[]
+  createdAt     DateTime      @default(now())
+}
+
+//
+// AUTH
+//
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+}
+
+//
+// GAMIFICATION
+//
+model Gamification {
+  id       String @id @default(uuid())
+  user     User   @relation(fields: [userId], references: [id])
+  userId   String @unique
+  xp       Int    @default(0)
+  level    Int    @default(1)
+  avatar   String?
+}
+
+//
+// TESTS & QUESTIONS
+//
 model Test {
   id          String       @id @default(uuid())
   title       String
@@ -47,11 +90,6 @@ model Question {
   responses Response[]
 }
 
-enum QuestionType {
-  FILL_IN_THE_BLANK
-  MULTIPLE_CHOICE
-}
-
 model Option {
   id         String   @id @default(uuid())
   text       String
@@ -66,6 +104,9 @@ model Answer {
   questionId String
 }
 
+//
+// SUBMISSIONS & RESPONSES
+//
 model Submission {
   id          String       @id @default(uuid())
   student     User         @relation(fields: [studentId], references: [id])
@@ -86,4 +127,30 @@ model Response {
   givenText    String
   isCorrect    Boolean?
   feedback     String?
+}
+
+//
+// AUDIT LOGS
+//
+model AuditLog {
+  id        String   @id @default(uuid())
+  user      User?    @relation(fields: [userId], references: [id])
+  userId    String?
+  action    String
+  entity    String
+  entityId  String?
+  createdAt DateTime @default(now())
+}
+
+//
+// STATS VIEW (PostgreSQL VIEW – jen pro čtení)
+//
+model TaskCompletionStats {
+  test_id           String
+  title             String
+  total_submissions Int
+  passed_count      Int
+  pass_rate         Float
+
+  @@ignore // View – nelze zapisovat
 }
