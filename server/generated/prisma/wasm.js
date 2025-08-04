@@ -126,6 +126,22 @@ exports.Prisma.UserScalarFieldEnum = {
   createdAt: 'createdAt'
 };
 
+exports.Prisma.RefreshTokenScalarFieldEnum = {
+  id: 'id',
+  token: 'token',
+  userId: 'userId',
+  createdAt: 'createdAt',
+  expiresAt: 'expiresAt'
+};
+
+exports.Prisma.GamificationScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  xp: 'xp',
+  level: 'level',
+  avatar: 'avatar'
+};
+
 exports.Prisma.TestScalarFieldEnum = {
   id: 'id',
   title: 'title',
@@ -158,6 +174,7 @@ exports.Prisma.SubmissionScalarFieldEnum = {
   studentId: 'studentId',
   testId: 'testId',
   score: 'score',
+  status: 'status',
   submittedAt: 'submittedAt'
 };
 
@@ -168,6 +185,56 @@ exports.Prisma.ResponseScalarFieldEnum = {
   givenText: 'givenText',
   isCorrect: 'isCorrect',
   feedback: 'feedback'
+};
+
+exports.Prisma.AuditLogScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  action: 'action',
+  entity: 'entity',
+  entityId: 'entityId',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.SchoolScalarFieldEnum = {
+  id: 'id',
+  name: 'name',
+  address: 'address',
+  city: 'city',
+  country: 'country',
+  directorId: 'directorId',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.TeacherScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  schoolId: 'schoolId'
+};
+
+exports.Prisma.StudentScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  classroomId: 'classroomId'
+};
+
+exports.Prisma.ClassroomScalarFieldEnum = {
+  id: 'id',
+  name: 'name',
+  schoolId: 'schoolId',
+  teacherId: 'teacherId'
+};
+
+exports.Prisma.SubjectScalarFieldEnum = {
+  id: 'id',
+  name: 'name',
+  schoolId: 'schoolId'
+};
+
+exports.Prisma.TeacherSubjectScalarFieldEnum = {
+  id: 'id',
+  teacherId: 'teacherId',
+  subjectId: 'subjectId'
 };
 
 exports.Prisma.SortOrder = {
@@ -185,8 +252,10 @@ exports.Prisma.NullsOrder = {
   last: 'last'
 };
 exports.Role = exports.$Enums.Role = {
+  STUDENT: 'STUDENT',
   TEACHER: 'TEACHER',
-  STUDENT: 'STUDENT'
+  DIRECTOR: 'DIRECTOR',
+  SUPERADMIN: 'SUPERADMIN'
 };
 
 exports.QuestionType = exports.$Enums.QuestionType = {
@@ -194,14 +263,29 @@ exports.QuestionType = exports.$Enums.QuestionType = {
   MULTIPLE_CHOICE: 'MULTIPLE_CHOICE'
 };
 
+exports.SubmissionStatus = exports.$Enums.SubmissionStatus = {
+  PENDING: 'PENDING',
+  APPROVED: 'APPROVED',
+  REJECTED: 'REJECTED'
+};
+
 exports.Prisma.ModelName = {
   User: 'User',
+  RefreshToken: 'RefreshToken',
+  Gamification: 'Gamification',
   Test: 'Test',
   Question: 'Question',
   Option: 'Option',
   Answer: 'Answer',
   Submission: 'Submission',
-  Response: 'Response'
+  Response: 'Response',
+  AuditLog: 'AuditLog',
+  School: 'School',
+  Teacher: 'Teacher',
+  Student: 'Student',
+  Classroom: 'Classroom',
+  Subject: 'Subject',
+  TeacherSubject: 'TeacherSubject'
 };
 
 /**

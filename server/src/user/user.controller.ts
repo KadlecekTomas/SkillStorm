@@ -14,46 +14,36 @@ import { CreateUserDto } from './dto/create-user.dto';
 import {
   ApiTags,
   ApiOperation,
-  ApiResponse,
   ApiParam,
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 
 @ApiTags('users')
+@ApiBearerAuth()
 @Controller('users')
 @UsePipes(new ValidationPipe())
 export class UserController {
   constructor(private readonly userService: UserService) {}
 
   @Get()
-  @ApiOperation({ summary: 'Get all users' })
-  @ApiResponse({ status: 200, description: 'Returns all users' })
+  @ApiOperation({ summary: 'Get all users (without password hash)' })
+  @UseGuards(AuthGuard('jwt'))
   async findAll() {
     return this.userService.findAll();
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Get user by ID' })
+  @ApiOperation({ summary: 'Get user by ID (without password hash)' })
   @ApiParam({ name: 'id', description: 'User ID' })
-  @ApiResponse({ status: 200, description: 'Returns the user' })
-  @ApiResponse({ status: 404, description: 'User not found' })
+  @UseGuards(AuthGuard('jwt'))
   async findOne(@Param('id') id: string) {
     return this.userService.findById(id);
   }
 
   @Post()
   @ApiOperation({ summary: 'Create a new user' })
-  @ApiResponse({
-    status: 201,
-    description: 'The user has been successfully created',
-  })
-  @ApiResponse({
-    status: 400,
-    description: 'Bad request - invalid input data',
-  })
   @UseGuards(AuthGuard('jwt'))
-  @ApiBearerAuth()
   async create(@Body() createUserDto: CreateUserDto) {
     return this.userService.create(createUserDto);
   }
@@ -61,16 +51,7 @@ export class UserController {
   @Delete(':id')
   @ApiOperation({ summary: 'Delete user by ID' })
   @UseGuards(AuthGuard('jwt'))
-  @ApiBearerAuth()
   @ApiParam({ name: 'id', description: 'User ID' })
-  @ApiResponse({
-    status: 200,
-    description: 'The user has been successfully deleted',
-  })
-  @ApiResponse({
-    status: 404,
-    description: 'User not found',
-  })
   async remove(@Param('id') id: string) {
     return this.userService.delete(id);
   }

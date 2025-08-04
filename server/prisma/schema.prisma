@@ -24,21 +24,33 @@ enum QuestionType {
   MULTIPLE_CHOICE
 }
 
+enum SubmissionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 //
 // USER MANAGEMENT
 //
 model User {
-  id            String        @id @default(uuid())
-  email         String        @unique
+  id            String         @id @default(uuid())
+  email         String         @unique
   name          String
   role          Role
   passwordHash  String
-  tests         Test[]        @relation("TeacherTests")
+  tests         Test[]         @relation("TeacherTests")
   submissions   Submission[]
   refreshTokens RefreshToken[]
   gamification  Gamification?
   auditLogs     AuditLog[]
-  createdAt     DateTime      @default(now())
+  createdAt     DateTime       @default(now())
+
+  directorSchool School?  @relation("DirectorSchool")
+  teacherProfile Teacher?
+  studentProfile Student?
+
+  @@index([role]) // Často budeme filtrovat uživatele podle role
 }
 
 //
@@ -57,12 +69,12 @@ model RefreshToken {
 // GAMIFICATION
 //
 model Gamification {
-  id       String @id @default(uuid())
-  user     User   @relation(fields: [userId], references: [id])
-  userId   String @unique
-  xp       Int    @default(0)
-  level    Int    @default(1)
-  avatar   String?
+  id     String  @id @default(uuid())
+  user   User    @relation(fields: [userId], references: [id])
+  userId String  @unique
+  xp     Int     @default(0)
+  level  Int     @default(1)
+  avatar String?
 }
 
 //
@@ -108,14 +120,18 @@ model Answer {
 // SUBMISSIONS & RESPONSES
 //
 model Submission {
-  id          String       @id @default(uuid())
-  student     User         @relation(fields: [studentId], references: [id])
+  id          String           @id @default(uuid())
+  student     User             @relation(fields: [studentId], references: [id])
   studentId   String
-  test        Test         @relation(fields: [testId], references: [id])
+  test        Test             @relation(fields: [testId], references: [id])
   testId      String
   responses   Response[]
   score       Float?
-  submittedAt DateTime     @default(now())
+  status      SubmissionStatus @default(PENDING)
+  submittedAt DateTime         @default(now())
+
+  @@index([studentId]) // Pro rychlé vyhledávání pokusů studenta
+  @@index([testId]) // Pro rychlé vyhledávání odevzdání podle testu
 }
 
 model Response {
@@ -153,4 +169,72 @@ model TaskCompletionStats {
   pass_rate         Float
 
   @@ignore // View – nelze zapisovat
+}
+
+model School {
+  id         String      @id @default(uuid())
+  name       String
+  address    String?
+  city       String?
+  country    String?
+  director   User        @relation("DirectorSchool", fields: [directorId], references: [id])
+  directorId String      @unique
+  teachers   Teacher[]
+  classrooms Classroom[]
+  subjects   Subject[]
+  createdAt  DateTime    @default(now())
+}
+
+model Teacher {
+  id       String           @id @default(uuid())
+  user     User             @relation(fields: [userId], references: [id])
+  userId   String           @unique
+  school   School           @relation(fields: [schoolId], references: [id])
+  schoolId String
+  subjects TeacherSubject[]
+  classes  Classroom[]      @relation("ClassroomTeacher")
+
+  @@index([schoolId]) // Vyhledávání učitelů podle školy
+}
+
+model Student {
+  id          String    @id @default(uuid())
+  user        User      @relation(fields: [userId], references: [id])
+  userId      String    @unique
+  classroom   Classroom @relation(fields: [classroomId], references: [id])
+  classroomId String
+
+  @@index([classroomId]) // Vyhledávání studentů podle třídy
+}
+
+model Classroom {
+  id        String    @id @default(uuid())
+  name      String
+  school    School    @relation(fields: [schoolId], references: [id])
+  schoolId  String
+  teacher   Teacher?  @relation("ClassroomTeacher", fields: [teacherId], references: [id])
+  teacherId String?
+  students  Student[]
+  subjects  Subject[]
+
+  @@index([schoolId]) // Vyhledávání tříd podle školy
+}
+
+model Subject {
+  id         String           @id @default(uuid())
+  name       String
+  school     School           @relation(fields: [schoolId], references: [id])
+  schoolId   String
+  teachers   TeacherSubject[]
+  classrooms Classroom[]
+
+  @@index([schoolId]) // Vyhledávání předmětů podle školy
+}
+
+model TeacherSubject {
+  id        String  @id @default(uuid())
+  teacher   Teacher @relation(fields: [teacherId], references: [id])
+  teacherId String
+  subject   Subject @relation(fields: [subjectId], references: [id])
+  subjectId String
 }

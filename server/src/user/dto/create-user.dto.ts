@@ -28,9 +28,11 @@ export class CreateUserDto {
   role: $Enums.Role;
 
   @ApiProperty({
-    description: 'The hashed password of the user',
-    example: '$2b$10$hashedpasswordstring',
+    description:
+      'The password of the user (plain text, will be hashed on backend)',
+    example: 'StrongPassword123!',
   })
   @IsString()
-  passwordHash: string;
+  @MinLength(8)
+  password: string;
 }
