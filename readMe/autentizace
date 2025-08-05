@@ -1,0 +1,99 @@
+Implementace autentizace a autorizace s využitím JWT v projektu SkillStorm
+1. Úvod
+V rámci vývoje webové vzdělávací platformy SkillStorm bylo potřeba implementovat robustní autentizační a autorizační řešení. Cílem bylo zajistit bezpečné přihlášení uživatelů, správu jejich relací a řízení přístupu na základě rolí (RBAC – Role-Based Access Control).
+
+2. Použité technologie
+NestJS – backend framework pro Node.js.
+
+Prisma ORM – databázová vrstva pro PostgreSQL.
+
+JWT (JSON Web Token) – mechanismus pro autentizaci uživatelů.
+
+Bcrypt – hashování hesel.
+
+Swagger – dokumentace API.
+
+3. Funkcionality, které byly implementovány
+3.1 Registrace a přihlášení
+Uživatel si při registraci zvolí email, heslo, jméno a případně systémovou roli.
+
+Heslo je před uložením hashováno pomocí knihovny bcrypt.
+
+Při přihlášení se ověřuje kombinace emailu a hesla.
+
+Po úspěšném přihlášení se vygenerují:
+
+Access token – krátkodobý (15 minut) pro přístup k API.
+
+Refresh token – dlouhodobý (7 dní) pro obnovu access tokenu.
+
+3.2 Refresh Token Rotation
+Při každém volání /auth/refresh:
+
+Starý refresh token se smaže z databáze.
+
+Vygeneruje se nový access token a nový refresh token.
+
+Tento mechanismus zabraňuje zneužití ukradeného refresh tokenu (ochrana proti replay attacku).
+
+3.3 Okamžitý logout (Blacklist tokenů)
+Implementována tabulka RevokedToken pro ukládání odhlášených (neplatných) access tokenů.
+
+Při volání /auth/logout:
+
+Access token se uloží do blacklistu (RevokedToken).
+
+Refresh token se smaže z databáze.
+
+Každý chráněný endpoint kontroluje, zda access token není v blacklistu.
+
+Výhoda: Access token přestane fungovat okamžitě po odhlášení.
+
+3.4 Role-Based Access Control (RBAC)
+Implementovány role na úrovni organizace (OrganizationRole):
+STUDENT, TEACHER, DIRECTOR.
+
+Vytvořen dekorátor @Roles() a guard RolesGuard.
+
+Guard ověřuje, zda přihlášený uživatel má požadovanou organizační roli.
+
+Role se propisuje do JWT při loginu (organizationRole) a načítá se při validaci v JwtStrategy.
+
+3.5 Guard pro přístup k datům školy
+Implementován SchoolAccessGuard pro kontrolu, zda uživatel patří do konkrétní školy (organizace).
+
+Guard ověřuje roli a vazbu mezi uživatelem a organizací v databázi (Membership).
+
+3.6 Moduly a endpointy pro učitele
+Vytvořen modul TeachersModule s controllerem a service vracejícím přehled pro učitele/direktora (/teachers/dashboard).
+
+Přístup je omezen na role TEACHER a DIRECTOR.
+
+Momentálně vrací testovací data, v budoucnu bude napojen na reálná data z databáze.
+
+4. Bezpečnostní aspekty
+Hashování hesel pomocí bcrypt.
+
+Krátká platnost access tokenu (15 minut).
+
+Blacklist access tokenů pro okamžitý logout.
+
+Refresh token rotation pro minimalizaci rizika zneužití refresh tokenu.
+
+RBAC pro přesné řízení přístupu k endpointům.
+
+Ochrana proti přístupu uživatelů do jiných organizací.
+
+5. Možné budoucí rozšíření
+Implementace MFA (Multi-Factor Authentication).
+
+Správa aktivních relací uživatele (device management).
+
+Napojení /teachers/dashboard na reálná data z databáze.
+
+Logování a audit přístupů k chráněným datům.
+
+📌 Závěr:
+Tímto řešením jsme dosáhli vysoké úrovně bezpečnosti autentizačního systému (cca 9/10).
+Díky kombinaci krátkodobých access tokenů, blacklistu, refresh token rotation a RBAC máme pod kontrolou nejen přihlášení uživatele, ale i okamžité ukončení relace a přesné řízení přístupu.
+
