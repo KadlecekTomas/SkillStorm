@@ -497,7 +497,7 @@ const config = {
       "value": "prisma-client-js"
     },
     "output": {
-      "value": "C:\\Users\\kadle\\OneDrive - Univerzita Hradec Králové\\Obrázky\\SkillStorm\\server\\generated\\prisma",
+      "value": "C:\\Users\\kadle\\Pictures\\SkillStorm\\server\\generated\\prisma",
       "fromEnvVar": null
     },
     "config": {
@@ -515,7 +515,7 @@ const config = {
       }
     ],
     "previewFeatures": [],
-    "sourceFilePath": "C:\\Users\\kadle\\OneDrive - Univerzita Hradec Králové\\Obrázky\\SkillStorm\\server\\prisma\\schema.prisma",
+    "sourceFilePath": "C:\\Users\\kadle\\Pictures\\SkillStorm\\server\\prisma\\schema.prisma",
     "isCustomOutput": true
   },
   "relativeEnvPaths": {

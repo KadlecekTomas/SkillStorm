@@ -1,127 +1,105 @@
-import { PrismaClient } from '@prisma/client';
-import bcrypt from 'bcrypt';
+import { PrismaClient, OrganizationRole } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
 
-type PermissionKey =
-  | 'CREATE_TEST'
-  | 'EDIT_TEST'
-  | 'DELETE_TEST'
-  | 'VIEW_RESULTS'
-  | 'MANAGE_STUDENTS'
-  | 'MANAGE_TEACHERS';
-
-type OrganizationRole = 'STUDENT' | 'TEACHER' | 'DIRECTOR';
-type PlanTarget = 'SCHOOL' | 'PRIVATE' | 'COMMUNITY';
-
 async function main() {
-  console.log('🌱 Starting seed...');
+  // 1️⃣ Superadmin
+  const existingAdmin = await prisma.user.findFirst({
+    where: { systemRole: 'SUPERADMIN' },
+  });
 
-  // 1️⃣ Seed Permissions
-  const permissionKeys: PermissionKey[] = [
-    'CREATE_TEST',
-    'EDIT_TEST',
-    'DELETE_TEST',
-    'VIEW_RESULTS',
-    'MANAGE_STUDENTS',
-    'MANAGE_TEACHERS',
-  ];
-
-  for (const key of permissionKeys) {
-    await prisma.permission.upsert({
-      where: { key },
-      update: {},
-      create: {
-        key,
-        description: key.replace(/_/g, ' ').toLowerCase(),
-        allowedTypes: ['SCHOOL', 'PRIVATE', 'COMMUNITY'],
+  if (!existingAdmin) {
+    const passwordHash = await bcrypt.hash('admin123', 10);
+    await prisma.user.create({
+      data: {
+        email: 'admin@example.com',
+        name: 'Super Admin',
+        passwordHash,
+        systemRole: 'SUPERADMIN',
       },
     });
+    console.log('✅ Superadmin vytvořen: admin@example.com / admin123');
+  } else {
+    console.log('ℹ️ Superadmin už existuje, seed vynechán.');
   }
 
-  // 2️⃣ Role → Permissions map
-  const rolePermissions: Record<OrganizationRole, PermissionKey[]> = {
-    STUDENT: ['VIEW_RESULTS'],
-    TEACHER: [
-      'CREATE_TEST',
-      'EDIT_TEST',
-      'DELETE_TEST',
-      'VIEW_RESULTS',
-      'MANAGE_STUDENTS',
-    ],
-    DIRECTOR: [
-      'CREATE_TEST',
-      'EDIT_TEST',
-      'DELETE_TEST',
-      'VIEW_RESULTS',
-      'MANAGE_STUDENTS',
-      'MANAGE_TEACHERS',
-    ],
-  };
+  // 2️⃣ Základní organizace pro test
+  let organization = await prisma.organization.findFirst();
+  if (!organization) {
+    organization = await prisma.organization.create({
+      data: {
+        name: 'Test School',
+        type: 'SCHOOL',
+      },
+    });
+    console.log('🏫 Organizace vytvořena:', organization.name);
+  }
 
-  const allPermissions = await prisma.permission.findMany();
-
-  // 3️⃣ Assign permissions to roles
-  for (const role of Object.keys(rolePermissions) as OrganizationRole[]) {
-    for (const permKey of rolePermissions[role]) {
-      const perm = allPermissions.find((p) => p.key === permKey);
-      if (!perm) continue;
-
-      await prisma.rolePermission.upsert({
-        where: {
-          role_permissionId: {
-            role,
-            permissionId: perm.id,
-          },
-        },
-        update: {},
-        create: {
-          role,
-          permissionId: perm.id,
-          allowed: true,
-        },
-      });
+  // Helper pro tvorbu uživatele s membership
+  async function createUserWithRole(
+    email: string,
+    name: string,
+    password: string,
+    role: OrganizationRole,
+  ) {
+    const existingUser = await prisma.user.findUnique({ where: { email } });
+    if (existingUser) {
+      console.log(`ℹ️ ${role} už existuje: ${email}`);
+      return;
     }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    const user = await prisma.user.create({
+      data: {
+        email,
+        name,
+        passwordHash,
+      },
+    });
+
+    await prisma.membership.create({
+      data: {
+        userId: user.id,
+        organizationId: organization!.id,
+        role,
+      },
+    });
+
+    console.log(`✅ ${role} vytvořen: ${email} / ${password}`);
   }
 
-  // 4️⃣ Subscription Plan
-  await prisma.subscriptionPlan.upsert({
-    where: { id: '00000000-0000-0000-0000-000000000001' },
-    update: {},
-    create: {
-      id: '00000000-0000-0000-0000-000000000001',
-      name: 'Free School Plan',
-      target: 'SCHOOL' as PlanTarget,
-      price: 0,
-      currency: 'USD',
-      billingCycle: 'monthly',
-      maxUsers: 50,
-      features: { tests: true, materials: true, reports: true },
-    },
-  });
+  // 3️⃣ Director
+  await createUserWithRole(
+    'director@example.com',
+    'Test Director',
+    'director123',
+    OrganizationRole.DIRECTOR,
+  );
 
-  // 5️⃣ Superadmin User
-  const hashedPassword = await bcrypt.hash('admin123', 10);
-  await prisma.user.upsert({
-    where: { email: 'superadmin@skillstorm.com' },
-    update: {},
-    create: {
-      email: 'superadmin@skillstorm.com',
-      passwordHash: hashedPassword,
-      name: 'Super Admin',
-      systemRole: 'SUPERADMIN',
-      status: 'ACTIVE',
-    },
-  });
+  // 4️⃣ Teacher
+  await createUserWithRole(
+    'teacher@example.com',
+    'Test Teacher',
+    'teacher123',
+    OrganizationRole.TEACHER,
+  );
 
-  console.log('✅ Seed completed.');
+  // 5️⃣ Student
+  await createUserWithRole(
+    'student@example.com',
+    'Test Student',
+    'student123',
+    OrganizationRole.STUDENT,
+  );
 }
 
 main()
-  .catch((e) => {
-    console.error('❌ Seed failed', e);
-    process.exit(1);
-  })
-  .finally(async () => {
+  .then(async () => {
     await prisma.$disconnect();
+  })
+  .catch(async (e) => {
+    console.error(e);
+    await prisma.$disconnect();
+    process.exit(1);
   });

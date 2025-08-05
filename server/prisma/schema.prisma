@@ -3,8 +3,7 @@
 // =======================================================
 
 generator client {
-  provider      = "prisma-client-js"
-  output        = "../generated/prisma"
+  provider = "prisma-client-js"
   binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
@@ -584,6 +583,12 @@ model ExportLog {
   createdAt        DateTime       @default(now()) @map("created_at")
 
   @@map("export_logs")
+}
+
+model RevokedToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  revokedAt DateTime @default(now())
 }
 
 // =======================================================

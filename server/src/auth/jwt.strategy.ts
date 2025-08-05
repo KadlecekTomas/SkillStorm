@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { PrismaService } from '../prisma/prisma.service';
@@ -12,39 +12,40 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
-      ignoreExpiration: false,
       secretOrKey: configService.get<string>('JWT_SECRET'),
+      ignoreExpiration: false,
+      passReqToCallback: true,
     });
   }
 
-  async validate(payload: any) {
-    console.log('PAYLOAD FROM JWT:', payload); // 🔍 debug
+  async validate(req: Request, payload: any) {
+    // Získat aktuální JWT token z requestu
+    const token = ExtractJwt.fromAuthHeaderAsBearerToken()(req);
+
+    // Ověřit, zda není token v blacklistu
+    const revoked = await this.prisma.revokedToken.findUnique({
+      where: { token },
+    });
+
+    if (revoked) {
+      throw new UnauthorizedException('Token has been revoked');
+    }
 
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        createdAt: true,
-      },
+      select: { id: true, email: true, name: true, systemRole: true },
     });
 
-    console.log('USER FROM DB:', user); // 🔍 debug
-
     if (!user) {
-      return {
-        userId: payload.sub,
-        role: payload.role || null, // fallback na payload
-      };
+      throw new UnauthorizedException('User not found');
     }
 
     return {
       userId: user.id,
       email: user.email,
       name: user.name,
-      role: user.role, // ✅ DŮLEŽITÉ
+      systemRole: user.systemRole,
+      organizationRole: payload.organizationRole || null,
     };
   }
 }

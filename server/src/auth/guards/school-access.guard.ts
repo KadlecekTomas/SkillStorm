@@ -4,7 +4,6 @@ import {
   Injectable,
   ForbiddenException,
 } from '@nestjs/common';
-import { Role } from 'generated/prisma';
 import { PrismaService } from 'src/prisma/prisma.service';
 
 @Injectable()
@@ -14,38 +13,53 @@ export class SchoolAccessGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
     const user = request.user;
-    const schoolId = request.params.id || request.body.schoolId;
+    const organizationId = request.params.id || request.body.organizationId;
 
     if (!user) throw new ForbiddenException('Nepřihlášený uživatel.');
 
-    if (user.role === Role.SUPERADMIN) return true;
+    // 1️⃣ Globální superadmin má přístup všude
+    if (user.systemRole === 'SUPERADMIN') return true;
 
-    if (user.role === Role.DIRECTOR) {
-      const directorSchool = await this.prisma.school.findFirst({
-        where: { directorId: user.id },
+    // 2️⃣ Ředitel – kontrola, zda má členství v organizaci jako DIRECTOR
+    if (user.organizationRole === 'DIRECTOR') {
+      const directorMembership = await this.prisma.membership.findFirst({
+        where: {
+          userId: user.userId,
+          organizationId,
+          role: 'DIRECTOR',
+        },
       });
-      if (!directorSchool || directorSchool.id !== schoolId) {
+      if (!directorMembership) {
         throw new ForbiddenException('Nemáš přístup k této škole.');
       }
       return true;
     }
 
-    if (user.role === Role.TEACHER) {
-      const teacher = await this.prisma.teacher.findFirst({
-        where: { userId: user.id },
+    // 3️⃣ Učitel
+    if (user.organizationRole === 'TEACHER') {
+      const teacherMembership = await this.prisma.membership.findFirst({
+        where: {
+          userId: user.userId,
+          organizationId,
+          role: 'TEACHER',
+        },
       });
-      if (!teacher || teacher.schoolId !== schoolId) {
+      if (!teacherMembership) {
         throw new ForbiddenException('Nemáš přístup k této škole.');
       }
       return true;
     }
 
-    if (user.role === Role.STUDENT) {
-      const student = await this.prisma.student.findFirst({
-        where: { userId: user.id },
-        include: { classroom: true },
+    // 4️⃣ Student
+    if (user.organizationRole === 'STUDENT') {
+      const studentMembership = await this.prisma.membership.findFirst({
+        where: {
+          userId: user.userId,
+          organizationId,
+          role: 'STUDENT',
+        },
       });
-      if (!student || student.classroom.schoolId !== schoolId) {
+      if (!studentMembership) {
         throw new ForbiddenException('Nemáš přístup k této škole.');
       }
       return true;

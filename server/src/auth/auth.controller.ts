@@ -1,89 +1,52 @@
-import { Controller, Post, Body, Get, UseGuards, Req } from '@nestjs/common';
+import { Controller, Post, Body, Get, Req, UseGuards } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
-import {
-  ApiTags,
-  ApiOperation,
-  ApiResponse,
-  ApiBearerAuth,
-} from '@nestjs/swagger';
 import { RegisterDto } from './dto/register.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
-import { AuthGuard } from '@nestjs/passport';
-import { PrismaService } from 'src/prisma/prisma.service';
-import { Roles } from './decorators/roles.decorator';
-import { RolesGuard } from './guards/roles.guard';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { Public } from './guards/public.decorator';
+import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
-  constructor(
-    private readonly authService: AuthService,
-    private readonly prisma: PrismaService,
-  ) {}
+  constructor(private readonly authService: AuthService) {}
 
-  @Post('register')
   @Public()
+  @Post('register')
   @ApiOperation({ summary: 'Register a new user' })
-  @ApiResponse({
-    status: 201,
-    description: 'User successfully registered',
-    schema: {
-      example: {
-        accessToken: 'jwt_access_token_here',
-        refreshToken: 'jwt_refresh_token_here',
-        user: {
-          id: 'uuid',
-          email: 'john.doe@example.com',
-          name: 'John Doe',
-          role: 'STUDENT',
-          createdAt: '2025-08-03T09:56:58.597Z',
-        },
-      },
-    },
-  })
-  async register(@Body() data: RegisterDto) {
-    return this.authService.register(data);
+  async register(@Body() dto: RegisterDto) {
+    return this.authService.register(dto);
   }
 
+  @Public()
   @Post('login')
   @ApiOperation({ summary: 'Login user' })
-  @Public()
-  @ApiResponse({
-    status: 200,
-    description: 'User successfully logged in',
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized - invalid credentials',
-  })
-  async login(@Body() loginDto: LoginDto) {
-    return this.authService.login(loginDto);
+  async login(@Body() dto: LoginDto) {
+    return this.authService.login(dto);
   }
 
+  @Public()
   @Post('refresh')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Refresh access token' })
-  @ApiResponse({ status: 200, description: 'Returns a new access token' })
-  @ApiResponse({ status: 401, description: 'Invalid or expired refresh token' })
-  async refresh(@Body() body: RefreshTokenDto) {
-    return this.authService.refreshAccessToken(body.refreshToken);
+  async refresh(@Body() dto: RefreshTokenDto) {
+    return this.authService.refreshAccessToken(dto.refreshToken);
+  }
+
+  @Post('logout')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  async logout(@Req() req, @Body('refreshToken') refreshToken: string) {
+    const accessToken = req.headers.authorization?.split(' ')[1];
+    return this.authService.logout(accessToken, refreshToken);
   }
 
   @Get('me')
-  @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth()
-  async getProfile(@Req() req) {
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Get current user profile' })
+  async me(@Req() req) {
     return this.authService.getUserProfile(req.user.userId);
-  }
-
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles('DIRECTOR', 'SUPERADMIN')
-  @Get('me-admin')
-  @ApiBearerAuth()
-  async getProfileAdmin(@Req() req) {
-    console.log('REQ.USER v controlleru:', req.user);
-    return req.user;
   }
 }
