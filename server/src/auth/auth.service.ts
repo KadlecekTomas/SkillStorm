@@ -47,7 +47,15 @@ export class AuthService {
     const existing = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
-    if (existing) throw new BadRequestException('Email already exists');
+
+    if (existing) {
+      if (!existing.isAnonymized || existing.status !== 'INACTIVE') {
+        throw new BadRequestException('Email already exists');
+      }
+
+      // Pokud user existuje, ale byl anonymizován → smažeme jeho starý anonymní záznam
+      await this.prisma.user.delete({ where: { id: existing.id } });
+    }
 
     const passwordHash = await bcrypt.hash(dto.password, 10);
 
@@ -56,7 +64,7 @@ export class AuthService {
         email: dto.email,
         name: dto.name,
         passwordHash,
-        systemRole: dto.systemRole || 'SUPERADMIN', // první uživatel jako superadmin
+        systemRole: dto.systemRole || 'SUPERADMIN',
       },
     });
 
@@ -76,10 +84,7 @@ export class AuthService {
   async login(loginDto: LoginDto) {
     const { email, password } = loginDto;
 
-    const user = await this.prisma.user.findUnique({
-      where: { email },
-    });
-
+    const user = await this.prisma.user.findUnique({ where: { email } });
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
     }
@@ -88,6 +93,11 @@ export class AuthService {
     if (!isPasswordValid) {
       throw new UnauthorizedException('Invalid credentials');
     }
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() },
+    });
 
     // Najít organizační roli z Membership
     const membership = await this.prisma.membership.findFirst({
@@ -111,6 +121,14 @@ export class AuthService {
     const refreshToken = this.jwtService.sign(payload, {
       secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
       expiresIn: '7d',
+    });
+
+    await this.prisma.refreshToken.create({
+      data: {
+        token: refreshToken,
+        userId: user.id,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      },
     });
 
     return {
@@ -212,6 +230,7 @@ export class AuthService {
         name: true,
         systemRole: true,
         createdAt: true,
+        lastLoginAt: true,
       },
     });
   }

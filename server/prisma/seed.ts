@@ -19,9 +19,9 @@ async function main() {
         systemRole: 'SUPERADMIN',
       },
     });
-    console.log('✅ Superadmin vytvořen: admin@example.com / admin123');
+    console.log(' Superadmin vytvořen: admin@example.com / admin123');
   } else {
-    console.log('ℹ️ Superadmin už existuje, seed vynechán.');
+    console.log(' Superadmin už existuje, seed vynechán.');
   }
 
   // 2️⃣ Základní organizace pro test
@@ -45,7 +45,7 @@ async function main() {
   ) {
     const existingUser = await prisma.user.findUnique({ where: { email } });
     if (existingUser) {
-      console.log(`ℹ️ ${role} už existuje: ${email}`);
+      console.log(` ${role} už existuje: ${email}`);
       return;
     }
 
