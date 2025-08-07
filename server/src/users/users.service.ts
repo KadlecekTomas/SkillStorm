@@ -19,9 +19,16 @@ export class UsersService {
   }
 
   async findOne(id: string) {
-    const user = await this.prisma.user.findUnique({ where: { id } });
+    const user = await this.prisma.user.findUnique({
+      where: { id },
+      include: {
+        memberships: true, // pro kontrolu organizace při delete
+      },
+    });
+
     if (!user || user.isAnonymized)
       throw new NotFoundException('User not found');
+
     return user;
   }
 

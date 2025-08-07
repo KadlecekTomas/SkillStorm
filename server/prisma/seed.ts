@@ -4,102 +4,116 @@ import * as bcrypt from 'bcrypt';
 const prisma = new PrismaClient();
 
 async function main() {
+  console.log('\n🌱 Spouštím seeding...\n');
+
   // 1️⃣ Superadmin
+  const superadminEmail = 'admin@example.com';
   const existingAdmin = await prisma.user.findFirst({
-    where: { systemRole: 'SUPERADMIN' },
+    where: { email: superadminEmail },
   });
 
   if (!existingAdmin) {
     const passwordHash = await bcrypt.hash('admin123', 10);
     await prisma.user.create({
       data: {
-        email: 'admin@example.com',
+        email: superadminEmail,
         name: 'Super Admin',
         passwordHash,
         systemRole: 'SUPERADMIN',
       },
     });
-    console.log(' Superadmin vytvořen: admin@example.com / admin123');
+    console.log(`🛡️  SUPERADMIN vytvořen: ${superadminEmail} / admin123`);
   } else {
-    console.log(' Superadmin už existuje, seed vynechán.');
+    console.log(`🛡️  SUPERADMIN už existuje: ${superadminEmail}`);
   }
 
-  // 2️⃣ Základní organizace pro test
-  let organization = await prisma.organization.findFirst();
+  // 2️⃣ Organizace
+  let organization = await prisma.organization.findFirst({
+    where: { name: 'Test School' },
+  });
+
   if (!organization) {
     organization = await prisma.organization.create({
       data: {
         name: 'Test School',
         type: 'SCHOOL',
+        city: 'Praha',
+        address: 'Palackého 12',
+        country: 'Česko',
       },
     });
-    console.log('🏫 Organizace vytvořena:', organization.name);
+    console.log(`🏫 Organizace vytvořena: ${organization.name}`);
+  } else {
+    console.log(`🏫 Organizace už existuje: ${organization.name}`);
   }
 
-  // Helper pro tvorbu uživatele s membership
-  async function createUserWithRole(
+  // 3️⃣ Helper pro tvorbu uživatele s membership
+  async function createUserWithMembership(
     email: string,
     name: string,
     password: string,
     role: OrganizationRole,
   ) {
-    const existingUser = await prisma.user.findUnique({ where: { email } });
-    if (existingUser) {
-      console.log(` ${role} už existuje: ${email}`);
-      return;
+    let user = await prisma.user.findUnique({ where: { email } });
+
+    if (!user) {
+      const passwordHash = await bcrypt.hash(password, 10);
+      user = await prisma.user.create({
+        data: { email, name, passwordHash },
+      });
+      console.log(`👤 Uživatel vytvořen: ${email} / ${password}`);
+    } else {
+      console.log(`👤 Uživatel už existuje: ${email}`);
     }
 
-    const passwordHash = await bcrypt.hash(password, 10);
-    const user = await prisma.user.create({
-      data: {
-        email,
-        name,
-        passwordHash,
-      },
-    });
-
-    await prisma.membership.create({
-      data: {
+    const membership = await prisma.membership.findFirst({
+      where: {
         userId: user.id,
-        organizationId: organization!.id,
-        role,
+        organizationId: organization.id,
       },
     });
 
-    console.log(`✅ ${role} vytvořen: ${email} / ${password}`);
+    if (!membership) {
+      await prisma.membership.create({
+        data: {
+          userId: user.id,
+          organizationId: organization.id,
+          role,
+        },
+      });
+      console.log(`✅ Membership přidán: ${email} → ${role}`);
+    } else {
+      console.log(`ℹ️  Membership už existuje: ${email}`);
+    }
   }
 
-  // 3️⃣ Director
-  await createUserWithRole(
+  // 4️⃣ Vytvoř testovací uživatele
+  await createUserWithMembership(
     'director@example.com',
     'Test Director',
     'director123',
     OrganizationRole.DIRECTOR,
   );
-
-  // 4️⃣ Teacher
-  await createUserWithRole(
+  await createUserWithMembership(
     'teacher@example.com',
     'Test Teacher',
     'teacher123',
     OrganizationRole.TEACHER,
   );
-
-  // 5️⃣ Student
-  await createUserWithRole(
+  await createUserWithMembership(
     'student@example.com',
     'Test Student',
     'student123',
     OrganizationRole.STUDENT,
   );
+
+  console.log('\n✅ Seeding hotov!');
 }
 
 main()
-  .then(async () => {
-    await prisma.$disconnect();
-  })
-  .catch(async (e) => {
+  .then(() => prisma.$disconnect())
+  .catch((e) => {
     console.error(e);
-    await prisma.$disconnect();
+    prisma.$disconnect();
     process.exit(1);
   });

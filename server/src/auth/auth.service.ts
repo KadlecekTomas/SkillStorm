@@ -16,7 +16,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
-  ) {}
+  ) { }
 
   private async generateTokens(user: any) {
     const payload = { sub: user.id, systemRole: user.systemRole };
@@ -102,7 +102,10 @@ export class AuthService {
     // Najít organizační roli z Membership
     const membership = await this.prisma.membership.findFirst({
       where: { userId: user.id },
-      select: { role: true },
+      select: {
+        role: true,
+        organizationId: true,
+      },
     });
 
     const organizationRole = membership?.role || null;
@@ -111,6 +114,7 @@ export class AuthService {
       sub: user.id,
       systemRole: user.systemRole,
       organizationRole,
+      organizationId: membership?.organizationId
     };
 
     const accessToken = this.jwtService.sign(payload, {

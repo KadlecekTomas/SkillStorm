@@ -285,7 +285,7 @@ model SubscriptionPlan {
 
 model RefreshToken {
   id               String   @id @default(uuid()) @map("refresh_token_id")
-  token            String   @unique @db.VarChar(255)
+  token            String   @unique @db.Text
   userId           String   @map("user_id")
   createdAt        DateTime @default(now()) @map("created_at")
   expiresAt        DateTime @map("expires_at")

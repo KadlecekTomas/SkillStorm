@@ -1,9 +1,18 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { ValidationPipe } from '@nestjs/common';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true, // zahodí neznámá pole
+      forbidNonWhitelisted: true, // vyhodí 400 při neznámých polích
+      transform: true, // důležité pro @Transform
+    }),
+  );
 
   const config = new DocumentBuilder()
     .setTitle('Test System API')
