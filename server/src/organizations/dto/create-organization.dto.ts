@@ -1,5 +1,5 @@
 import { IsEnum, IsOptional, IsString, Length } from 'class-validator';
-import { OrganizationType } from '@prisma/client';
+import { $Enums, OrganizationType } from '@prisma/client';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 
@@ -7,21 +7,25 @@ export class CreateOrganizationDto {
   @ApiProperty({ example: 'ZŠ Palackého' })
   @IsString()
   @Length(3, 255)
-  name: string;
+  @Transform(({ value }) => value?.trim())
+  name!: string;
 
   @ApiPropertyOptional({ example: 'Palackého 12' })
   @IsOptional()
   @IsString()
+  @Transform(({ value }) => value?.trim())
   address?: string;
 
   @ApiPropertyOptional({ example: 'Praha' })
   @IsOptional()
   @IsString()
+  @Transform(({ value }) => value?.trim())
   city?: string;
 
   @ApiPropertyOptional({ example: 'Česko' })
   @IsOptional()
   @IsString()
+  @Transform(({ value }) => value?.trim())
   country?: string;
 
   @ApiPropertyOptional({
@@ -34,5 +38,5 @@ export class CreateOrganizationDto {
     message: 'Typ organizace musí být SCHOOL, PRIVATE nebo COMMUNITY',
   })
   @Transform(({ value }) => value?.toUpperCase())
-  type?: OrganizationType;
+  type?: $Enums.OrganizationType; // typově přes $Enums
 }

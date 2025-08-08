@@ -1,0 +1,30 @@
+// src/modules/subjects/dto/query-subjects.dto.ts
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsInt, IsOptional, IsString, Min } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+
+export class QuerySubjectsDto {
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number = 1;
+
+  @ApiPropertyOptional({ example: 20 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  limit?: number = 20;
+
+  @ApiPropertyOptional({ example: 'mat' })
+  @IsOptional()
+  @Transform(({ value }) => value?.trim())
+  @IsString()
+  search?: string;
+
+  @ApiPropertyOptional({ example: true })
+  @IsOptional()
+  includeLevels?: boolean;
+}

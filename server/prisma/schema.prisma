@@ -1,9 +1,9 @@
 // =======================================================
-// Prisma Schema – SkillStorm v.500/100 (Enterprise Fixed)
+// Prisma Schema – SkillStorm v.600/100 (Enterprise Catalog + Grades + Years)
 // =======================================================
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
   binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
@@ -18,6 +18,18 @@ datasource db {
 
 enum SystemRole {
   SUPERADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum MaterialAccessLevel {
+  FREE
+  SCHOOL_ONLY
+  PAID
 }
 
 enum OrganizationRole {
@@ -111,76 +123,128 @@ enum AuditEntityType {
   PERMISSION
 }
 
+enum PublishStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum TopicPhase {
+  INTRO
+  DEEPEN
+  RECAP
+  EXTENSION
+}
+
+enum Difficulty {
+  BASIC
+  INTERMEDIATE
+  ADVANCED
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  RETAINED
+  TRANSFERRED
+  GRADUATED
+  LEFT
+}
+
+enum ImportStatus {
+  PENDING
+  PROCESSING
+  DONE
+  FAILED
+}
+
 // =======================================================
 // CORE USER / ORGANIZATION / MEMBERSHIP
 // =======================================================
 
 model User {
-  id               String         @id @default(uuid()) @map("user_id")
-  email            String         @unique @db.VarChar(320)
-  passwordHash     String         @db.VarChar(255) @map("password_hash")
-  name             String         @db.VarChar(150)
-  preferredLang    String?        @db.VarChar(10) @map("preferred_lang")
-  systemRole       SystemRole?    @map("system_role")
-  status           String         @default("ACTIVE")
-  lastLoginAt      DateTime?      @map("last_login_at")
-  isAnonymized     Boolean        @default(false) @map("is_anonymized")
+  id            String      @id @default(uuid()) @map("user_id")
+  email         String?     @unique @db.VarChar(320)
+  username      String?     @unique @db.VarChar(64)
+  passwordHash  String      @map("password_hash") @db.VarChar(255)
+  name          String      @db.VarChar(150)
+  preferredLang String?     @map("preferred_lang") @db.VarChar(10)
+  systemRole    SystemRole? @map("system_role")
+  status        UserStatus  @default(ACTIVE)
+  lastLoginAt   DateTime?   @map("last_login_at")
+  isAnonymized  Boolean     @default(false) @map("is_anonymized")
 
-  memberships      Membership[]
-  refreshTokens    RefreshToken[]
-  auditLogs        AuditLog[]
-  userPermissions  UserPermission[]
+  memberships       Membership[]
+  refreshTokens     RefreshToken[]
+  auditLogs         AuditLog[]
+  userPermissions   UserPermission[]
+  materialPurchases MaterialPurchase[]
 
-  createdAt        DateTime       @default(now()) @map("created_at")
-  updatedAt        DateTime       @updatedAt @map("updated_at")
-  deletedAt        DateTime?      @map("deleted_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
 
-  @@index([email])
+  @@index([username])
   @@map("users")
 }
 
 model Organization {
-  id               String           @id @default(uuid()) @map("organization_id")
-  name             String           @db.VarChar(255)
-  address          String?          @db.VarChar(255)
-  city             String?          @db.VarChar(100)
-  country          String?          @db.VarChar(100)
-  type             OrganizationType @default(SCHOOL)
+  id      String           @id @default(uuid()) @map("organization_id")
+  name    String           @db.VarChar(255)
+  address String?          @db.VarChar(255)
+  city    String?          @db.VarChar(100)
+  country String?          @db.VarChar(100)
+  type    OrganizationType @default(SCHOOL)
 
-  memberships      Membership[]
-  subscriptions    Subscription[]
-  classrooms       Classroom[]
-  subjects         Subject[]
-  auditLogs        AuditLog[]
+  memberships       Membership[]
+  subscriptions     Subscription[]
+  classSections     ClassSection[]
+  subjects          Subject[]
+  auditLogs         AuditLog[]
   learningMaterials LearningMaterial[]
-  tests            Test[]
-  importBatches    ImportBatch[]
-  exportLogs       ExportLog[]
+  tests             Test[]
+  importBatches     ImportBatch[]
+  exportLogs        ExportLog[]
+  teachers          Teacher[]
+  students          Student[]
+  settings          OrganizationSettings?
+  academicYears     AcademicYear[]
+  materialPurchases MaterialPurchase[]
 
-  teachers Teacher[]
-  students Student[] 
-
-  createdAt        DateTime         @default(now()) @map("created_at")
-  updatedAt        DateTime         @updatedAt @map("updated_at")
-  deletedAt        DateTime?        @map("deleted_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
 
   @@index([name])
   @@index([city])
   @@map("organizations")
 }
 
-model Membership {
-  id               String           @id @default(uuid()) @map("membership_id")
-  userId           String           @map("user_id")
-  organizationId   String           @map("organization_id")
-  role             OrganizationRole
-  xp               Int              @default(0)
-  level            Int              @default(1)
-  avatarType       String?          @db.VarChar(50) @map("avatar_type")
-  isAnonymized     Boolean          @default(false) @map("is_anonymized")
+model OrganizationSettings {
+  id                     String  @id @default(uuid()) @map("organization_settings_id")
+  orgId                  String  @unique @map("organization_id")
+  usernamePattern        String  @default("{surname}{fi}{yy}") // e.g. novakj25
+  domainAlias            String?
+  initialPassword        String  @default("ChangeMe!{yy}")
+  forceResetOnFirstLogin Boolean @default(true)
+  ssoProvider            String? // "Bakalari" | "AzureAD" | null
 
-  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@map("organization_settings")
+}
+
+model Membership {
+  id             String           @id @default(uuid()) @map("membership_id")
+  userId         String           @map("user_id")
+  organizationId String           @map("organization_id")
+  role           OrganizationRole
+  xp             Int              @default(0)
+  level          Int              @default(1)
+  avatarType     String?          @map("avatar_type") @db.VarChar(50)
+  isAnonymized   Boolean          @default(false) @map("is_anonymized")
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   teacher          Teacher?
   student          Student?
@@ -190,9 +254,9 @@ model Membership {
   importedBatches  ImportBatch[]
   exportedLogs     ExportLog[]
 
-  createdAt        DateTime         @default(now()) @map("created_at")
-  updatedAt        DateTime         @updatedAt @map("updated_at")
-  deletedAt        DateTime?        @map("deleted_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
 
   @@unique([userId, organizationId])
   @@index([organizationId, role])
@@ -205,37 +269,37 @@ model Membership {
 // =======================================================
 
 model Permission {
-  id               String           @id @default(uuid()) @map("permission_id")
-  key              PermissionKey    @unique
-  description      String?
-  allowedTypes     OrganizationType[]
+  id           String             @id @default(uuid()) @map("permission_id")
+  key          PermissionKey      @unique
+  description  String?
+  allowedTypes OrganizationType[]
 
-  rolePermissions  RolePermission[]
-  userPermissions  UserPermission[]
+  rolePermissions RolePermission[]
+  userPermissions UserPermission[]
 
   @@map("permissions")
 }
 
 model RolePermission {
-  id               String           @id @default(uuid()) @map("role_permission_id")
-  role             OrganizationRole
-  permissionId     String           @map("permission_id")
+  id           String           @id @default(uuid()) @map("role_permission_id")
+  role         OrganizationRole
+  permissionId String           @map("permission_id")
 
-  permission       Permission       @relation(fields: [permissionId], references: [id], onDelete: Cascade)
-  allowed          Boolean          @default(true)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  allowed    Boolean    @default(true)
 
   @@unique([role, permissionId])
   @@map("role_permissions")
 }
 
 model UserPermission {
-  id               String       @id @default(uuid()) @map("user_permission_id")
-  userId           String       @map("user_id")
-  permissionId     String       @map("permission_id")
-  allowed          Boolean      @default(true)
+  id           String  @id @default(uuid()) @map("user_permission_id")
+  userId       String  @map("user_id")
+  permissionId String  @map("permission_id")
+  allowed      Boolean @default(true)
 
-  user             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  permission       Permission   @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
 
   @@unique([userId, permissionId])
   @@map("user_permissions")
@@ -246,18 +310,18 @@ model UserPermission {
 // =======================================================
 
 model Subscription {
-  id               String            @id @default(uuid()) @map("subscription_id")
-  organizationId   String            @map("organization_id")
-  planId           String            @map("plan_id")
-  status           SubscriptionStatus
-  startDate        DateTime          @map("start_date")
-  endDate          DateTime          @map("end_date")
+  id             String             @id @default(uuid()) @map("subscription_id")
+  organizationId String             @map("organization_id")
+  planId         String             @map("plan_id")
+  status         SubscriptionStatus
+  startDate      DateTime           @map("start_date")
+  endDate        DateTime           @map("end_date")
 
-  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  plan             SubscriptionPlan  @relation(fields: [planId], references: [id])
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  plan         SubscriptionPlan @relation(fields: [planId], references: [id])
 
-  createdAt        DateTime          @default(now()) @map("created_at")
-  deletedAt        DateTime?         @map("deleted_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  deletedAt DateTime? @map("deleted_at")
 
   @@index([organizationId])
   @@index([planId])
@@ -265,16 +329,16 @@ model Subscription {
 }
 
 model SubscriptionPlan {
-  id               String       @id @default(uuid()) @map("plan_id")
-  name             String
-  target           PlanTarget  
-  price            Decimal      @db.Decimal(10,2)
-  currency         String       @db.VarChar(3)
-  billingCycle     String       @db.VarChar(50) @map("billing_cycle")
-  maxUsers         Int?         @map("max_users")
-  features         Json
+  id           String     @id @default(uuid()) @map("plan_id")
+  name         String
+  target       PlanTarget
+  price        Decimal    @db.Decimal(10, 2)
+  currency     String     @db.VarChar(3)
+  billingCycle String     @map("billing_cycle") @db.VarChar(50)
+  maxUsers     Int?       @map("max_users")
+  features     Json
 
-  subscriptions    Subscription[]
+  subscriptions Subscription[]
 
   @@map("subscription_plans")
 }
@@ -284,16 +348,24 @@ model SubscriptionPlan {
 // =======================================================
 
 model RefreshToken {
-  id               String   @id @default(uuid()) @map("refresh_token_id")
-  token            String   @unique @db.Text
-  userId           String   @map("user_id")
-  createdAt        DateTime @default(now()) @map("created_at")
-  expiresAt        DateTime @map("expires_at")
+  id        String   @id @default(uuid()) @map("refresh_token_id")
+  token     String   @unique @db.Text
+  userId    String   @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  expiresAt DateTime @map("expires_at")
 
-  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@map("refresh_tokens")
+}
+
+model RevokedToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  revokedAt DateTime @default(now())
+
+  @@map("RevokedToken")
 }
 
 // =======================================================
@@ -301,20 +373,20 @@ model RefreshToken {
 // =======================================================
 
 model AuditLog {
-  id               String          @id @default(uuid()) @map("audit_log_id")
-  userId           String?         @map("user_id")
-  organizationId   String?         @map("organization_id")
-  entityType       AuditEntityType @map("entity_type")
-  entityId         String?         @map("entity_id")
-  action           String
-  ipAddress        String?         @map("ip_address")
-  userAgent        String?         @map("user_agent")
-  metadata         Json?
-  changedFields    Json?           @map("changed_fields")
-  createdAt        DateTime        @default(now()) @map("created_at")
+  id             String          @id @default(uuid()) @map("audit_log_id")
+  userId         String?         @map("user_id")
+  organizationId String?         @map("organization_id")
+  entityType     AuditEntityType @map("entity_type")
+  entityId       String?         @map("entity_id")
+  action         String
+  ipAddress      String?         @map("ip_address")
+  userAgent      String?         @map("user_agent")
+  metadata       Json?
+  changedFields  Json?           @map("changed_fields")
+  createdAt      DateTime        @default(now()) @map("created_at")
 
-  user             User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
-  organization     Organization?   @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  user         User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([organizationId])
@@ -323,191 +395,353 @@ model AuditLog {
 }
 
 // =======================================================
-// SCHOOL STRUCTURE
+// SCHOOL STRUCTURE – YEARS, CLASSES, PEOPLE
 // =======================================================
 
-model Classroom {
-  id               String        @id @default(uuid()) @map("classroom_id")
-  name             String
-  organizationId   String        @map("organization_id")
-  grade            SchoolGrade
-  studyField       String?       @map("study_field")
-  teacherId        String?       @map("teacher_id")
+model AcademicYear {
+  id          String       @id @default(uuid()) @map("academic_year_id")
+  orgId       String       @map("organization_id")
+  label       String // e.g. "2025/26"
+  startsAt    DateTime
+  endsAt      DateTime
+  isCurrent   Boolean      @default(false)
+  enrollments Enrollment[]
 
-  organization     Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  teacher Teacher? @relation("ClassroomTeacher", fields: [teacherId], references: [id], onDelete: SetNull)
-  students         Student[]
-  subjects         Subject[]
+  organization  Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  classSections ClassSection[]
 
-  deletedAt        DateTime?     @map("deleted_at")
+  @@unique([orgId, label])
+  @@map("academic_years")
+}
 
-  @@index([organizationId])
-  @@index([teacherId])
-  @@map("classrooms")
+model ClassSection {
+  id                String             @id @default(uuid()) @map("class_section_id")
+  orgId             String             @map("organization_id")
+  yearId            String             @map("academic_year_id")
+  grade             SchoolGrade
+  section           String // "A" | "B" | "C"
+  label             String?
+  teacherId         String?            @map("teacher_id")
+  studentClassrooms StudentClassroom[]
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  academicYear AcademicYear @relation(fields: [yearId], references: [id], onDelete: Cascade)
+  teacher      Teacher?     @relation("Homeroom", fields: [teacherId], references: [id], onDelete: SetNull)
+  enrollments  Enrollment[]
+
+  @@unique([orgId, yearId, grade, section])
+  @@index([orgId, grade])
+  @@map("class_sections")
 }
 
 model Teacher {
-  id             String       @id @default(uuid()) @map("teacher_id")
-  membershipId   String       @unique @map("membership_id")  
-  organizationId String       @map("organization_id")
+  id             String @id @default(uuid()) @map("teacher_id")
+  membershipId   String @unique @map("membership_id")
+  organizationId String @map("organization_id")
 
-  membership     Membership   @relation(fields: [membershipId], references: [id], onDelete: Cascade)
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  membership   Membership   @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
-  subjects       TeacherSubject[]
-  classes        Classroom[]  @relation("ClassroomTeacher")
+  subjects   TeacherSubject[]
+  homeroomOf ClassSection[]   @relation("Homeroom")
 
-  deletedAt      DateTime?    @map("deleted_at")
+  deletedAt DateTime? @map("deleted_at")
 
   @@index([organizationId])
   @@map("teachers")
 }
 
 model Student {
-  id             String      @id @default(uuid()) @map("student_id")
-  membershipId   String      @unique @map("membership_id") 
-  classroomId    String      @map("classroom_id")
+  id            String  @id @default(uuid()) @map("student_id")
+  membershipId  String  @unique @map("membership_id")
+  orgId         String  @map("organization_id")
+  studentNumber String?
+  externalId    String?
 
-  membership     Membership  @relation(fields: [membershipId], references: [id], onDelete: Cascade)
-  classroom      Classroom   @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+  membership   Membership   @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  enrollments  Enrollment[]
 
-  deletedAt      DateTime?   @map("deleted_at")
+  deletedAt        DateTime?          @map("deleted_at")
+  StudentClassroom StudentClassroom[]
 
-  organization   Organization @relation(fields: [organizationId], references: [id])
-  organizationId String       @map("organization_id")
-
-  @@index([classroomId])
+  @@index([orgId, studentNumber])
   @@map("students")
 }
 
+model Enrollment {
+  id             String           @id @default(uuid()) @map("enrollment_id")
+  studentId      String           @map("student_id")
+  classSectionId String           @map("class_section_id")
+  yearId         String           @map("academic_year_id")
+  status         EnrollmentStatus @default(ACTIVE)
+
+  student      Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  classSection ClassSection @relation(fields: [classSectionId], references: [id], onDelete: Cascade)
+  academicYear AcademicYear @relation(fields: [yearId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, yearId])
+  @@index([classSectionId])
+  @@map("enrollments")
+}
+
+// =======================================================
+// SUBJECTS – Catalog + School Instances + Levels
+// =======================================================
+
+model CatalogSubject {
+  id       String         @id @default(uuid()) @map("catalog_subject_id")
+  code     String         @unique
+  name     String
+  topics   CatalogTopic[]
+  subjects Subject[]
+
+  @@map("catalog_subjects")
+}
+
+model CatalogTopic {
+  id          String       @id @default(uuid()) @map("catalog_topic_id")
+  subjectId   String       @map("catalog_subject_id")
+  name        String
+  topicLevels TopicLevel[]
+
+  subject CatalogSubject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@unique([subjectId, name])
+  @@map("catalog_topics")
+}
+
 model Subject {
-  id               String           @id @default(uuid()) @map("subject_id")
+  id               String  @id @default(uuid()) @map("subject_id")
+  organizationId   String  @map("organization_id")
+  catalogSubjectId String? @map("catalog_subject_id")
   name             String
-  organizationId   String           @map("organization_id")
 
-  organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  teachers         TeacherSubject[]
-  classrooms       Classroom[]
-  topics           Topic[]
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  catalogSubject CatalogSubject? @relation(fields: [catalogSubjectId], references: [id], onDelete: Restrict)
 
+  levels            SubjectLevel[]
+  teachers          TeacherSubject[]
   learningMaterials LearningMaterial[]
 
-  deletedAt        DateTime?        @map("deleted_at")
+  deletedAt DateTime? @map("deleted_at")
 
+  @@unique([organizationId, catalogSubjectId])
   @@index([organizationId])
+  @@index([catalogSubjectId])
   @@map("subjects")
 }
 
-model Topic {
-  id               String     @id @default(uuid()) @map("topic_id")
-  name             String
-  subjectId        String     @map("subject_id")
+model SubjectLevel {
+  id        String      @id @default(uuid()) @map("subject_level_id")
+  subjectId String      @map("subject_id")
+  grade     SchoolGrade
+  order     Int?
+  label     String?
 
-  subject          Subject    @relation(fields: [subjectId], references: [id], onDelete: Cascade)
-  learningMaterials LearningMaterial[]
+  subject Subject      @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  topics  TopicLevel[]
 
-  @@index([subjectId])
-  @@map("topics")
+  @@unique([subjectId, grade])
+  @@map("subject_levels")
+}
+
+model TopicLevel {
+  id                String             @id @default(uuid()) @map("topic_level_id")
+  subjectLevelId    String             @map("subject_level_id")
+  catalogTopicId    String             @map("catalog_topic_id")
+  name              String?
+  phase             TopicPhase         @default(INTRO)
+  difficulty        Difficulty         @default(BASIC)
+  order             Int?
+  objectives        Json?
+  prerequisites     Json?
+  studentClassrooms StudentClassroom[]
+
+  subjectLevel SubjectLevel @relation(fields: [subjectLevelId], references: [id], onDelete: Cascade)
+  catalogTopic CatalogTopic @relation(fields: [catalogTopicId], references: [id], onDelete: Restrict)
+
+  materialAssignments MaterialAssignment[]
+  testAssignments     TestAssignment[]
+  LearningMaterial    LearningMaterial[]
+
+  @@unique([subjectLevelId, catalogTopicId, phase])
+  @@index([catalogTopicId])
+  @@map("topic_levels")
 }
 
 model TeacherSubject {
-  id               String  @id @default(uuid()) @map("teacher_subject_id")
-  teacherId        String  @map("teacher_id")
-  subjectId        String  @map("subject_id")
+  id        String @id @default(uuid()) @map("teacher_subject_id")
+  teacherId String @map("teacher_id")
+  subjectId String @map("subject_id")
 
-  teacher          Teacher @relation(fields: [teacherId], references: [id], onDelete: Cascade)
-  subject          Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  teacher Teacher @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  subject Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
 
   @@unique([teacherId, subjectId])
   @@map("teacher_subjects")
 }
 
 // =======================================================
-// LEARNING MATERIALS
+// LEARNING MATERIALS (with assignments) & TESTS
 // =======================================================
 
 model LearningMaterial {
-  id               String          @id @default(uuid()) @map("material_id")
-  title            String
-  description      String?
-  contentType      ContentType     @map("content_type")
-  educationLevel   EducationLevel  @map("education_level")
-  schoolGrade      SchoolGrade?    @map("school_grade")
-  subjectId        String?         @map("subject_id")
-  topicId          String?         @map("topic_id")
-  fileUrl          String?         @map("file_url")
-  richContent      Json?           @map("rich_content")
-  scope            ContentScope    @default(GLOBAL)
-  organizationId   String?         @map("organization_id")
-  createdById      String          @map("created_by_id")
+  id             String         @id @default(uuid()) @map("material_id")
+  title          String
+  description    String?
+  contentType    ContentType    @map("content_type")
+  educationLevel EducationLevel @map("education_level")
+  schoolGrade    SchoolGrade?   @map("school_grade")
+  subjectId      String?        @map("subject_id")
 
-  subject          Subject?        @relation(fields: [subjectId], references: [id], onDelete: SetNull)
-  topic            Topic?          @relation(fields: [topicId], references: [id], onDelete: SetNull)
-  organization     Organization?   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  createdBy        Membership      @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  topicLevelId String? @map("topic_level_id")
 
-  createdAt        DateTime        @default(now()) @map("created_at")
-  deletedAt        DateTime?       @map("deleted_at")
+  fileUrl        String?      @map("file_url")
+  richContent    Json?        @map("rich_content")
+  scope          ContentScope @default(GLOBAL)
+  organizationId String?      @map("organization_id")
+  createdById    String       @map("created_by_id")
 
+  accessLevel    MaterialAccessLevel @default(FREE) @map("access_level")
+  price          Decimal?            @db.Decimal(10, 2)
+  currency       String?             @default("CZK")
+  isDownloadable Boolean             @default(true) @map("is_downloadable")
+
+  subject      Subject?      @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  topicLevel   TopicLevel?   @relation(fields: [topicLevelId], references: [id], onDelete: SetNull)
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    Membership    @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  assignments MaterialAssignment[]
+
+  purchases MaterialPurchase[]
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@index([topicLevelId])
   @@map("learning_materials")
 }
 
-// =======================================================
-// TESTS & QUESTIONS
-// =======================================================
+model StudentClassroom {
+  id             String   @id @default(uuid()) @map("student_classroom_id")
+  studentId      String   @map("student_id")
+  classSectionId String   @map("class_section_id")
+  schoolYear     String
+  assignedAt     DateTime @default(now()) @map("assigned_at")
+
+  student      Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  classSection ClassSection @relation(fields: [classSectionId], references: [id], onDelete: Cascade)
+  TopicLevel   TopicLevel?  @relation(fields: [topicLevelId], references: [id])
+  topicLevelId String?
+
+  @@unique([studentId, schoolYear])
+  @@index([classSectionId, schoolYear])
+  @@map("student_classrooms")
+}
+
+model MaterialAssignment {
+  id           String  @id @default(uuid()) @map("material_assignment_id")
+  topicLevelId String  @map("topic_level_id")
+  materialId   String  @map("material_id")
+  isPrimary    Boolean @default(false)
+  order        Int?
+
+  topicLevel TopicLevel       @relation(fields: [topicLevelId], references: [id], onDelete: Cascade)
+  material   LearningMaterial @relation(fields: [materialId], references: [id], onDelete: Cascade)
+
+  @@unique([topicLevelId, materialId])
+  @@index([materialId])
+  @@map("material_assignments")
+}
+
+model MaterialPurchase {
+  id             String   @id @default(uuid()) @map("material_purchase_id")
+  materialId     String   @map("material_id")
+  organizationId String   @map("organization_id")
+  purchasedById  String   @map("purchased_by_id")
+  price          Decimal  @db.Decimal(10, 2)
+  currency       String   @default("CZK")
+  purchasedAt    DateTime @default(now()) @map("purchased_at")
+
+  material     LearningMaterial @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  purchasedBy  User             @relation(fields: [purchasedById], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, materialId])
+  @@map("material_purchases")
+}
 
 model Test {
-  id               String        @id @default(uuid()) @map("test_id")
-  organizationId   String        @map("organization_id")
-  title            String
-  description      String?
-  version          Int           @default(1)
-  order            Int?
-  creatorId        String        @map("creator_id")
+  id             String        @id @default(uuid()) @map("test_id")
+  organizationId String        @map("organization_id")
+  title          String
+  description    String?
+  version        Int           @default(1)
+  status         PublishStatus @default(DRAFT)
+  order          Int?
+  creatorId      String        @map("creator_id")
 
-  organization     Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  creator          Membership    @relation(fields: [creatorId], references: [id], onDelete: Cascade)
-  questions        Question[]
-  submissions      Submission[]
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  creator      Membership       @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  questions    Question[]
+  submissions  Submission[]
+  assignments  TestAssignment[]
 
-  createdAt        DateTime      @default(now()) @map("created_at")
-  updatedAt        DateTime      @updatedAt @map("updated_at")
-  deletedAt        DateTime?     @map("deleted_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
 
   @@map("tests")
 }
 
-model Question {
-  id               String       @id @default(uuid()) @map("question_id")
-  text             String
-  type             QuestionType
-  order            Int?
-  testId           String       @map("test_id")
+model TestAssignment {
+  id           String  @id @default(uuid()) @map("test_assignment_id")
+  topicLevelId String  @map("topic_level_id")
+  testId       String  @map("test_id")
+  isPrimary    Boolean @default(false)
+  order        Int?
 
-  test             Test         @relation(fields: [testId], references: [id], onDelete: Cascade)
-  options          Option[]
-  answers          Answer[]
-  responses        Response[]
+  topicLevel TopicLevel @relation(fields: [topicLevelId], references: [id], onDelete: Cascade)
+  test       Test       @relation(fields: [testId], references: [id], onDelete: Cascade)
+
+  @@unique([topicLevelId, testId])
+  @@index([testId])
+  @@map("test_assignments")
+}
+
+model Question {
+  id     String       @id @default(uuid()) @map("question_id")
+  text   String
+  type   QuestionType
+  order  Int?
+  testId String       @map("test_id")
+
+  test      Test       @relation(fields: [testId], references: [id], onDelete: Cascade)
+  options   Option[]
+  answers   Answer[]
+  responses Response[]
 
   @@map("questions")
 }
 
 model Option {
-  id               String   @id @default(uuid()) @map("option_id")
-  text             String
-  questionId       String   @map("question_id")
+  id         String @id @default(uuid()) @map("option_id")
+  text       String
+  questionId String @map("question_id")
 
-  question         Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
 
   @@map("options")
 }
 
 model Answer {
-  id               String   @id @default(uuid()) @map("answer_id")
-  text             String
-  questionId       String   @map("question_id")
+  id         String @id @default(uuid()) @map("answer_id")
+  text       String
+  questionId String @map("question_id")
 
-  question         Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
 
   @@map("answers")
 }
@@ -517,36 +751,40 @@ model Answer {
 // =======================================================
 
 model Submission {
-  id               String            @id @default(uuid()) @map("submission_id")
-  studentId        String            @map("student_id")
-  testId           String            @map("test_id")
-  score            Float?
-  status           SubmissionStatus  @default(PENDING)
-  submittedAt      DateTime          @default(now()) @map("submitted_at")
+  id          String           @id @default(uuid()) @map("submission_id")
+  studentId   String           @map("student_id")
+  testId      String           @map("test_id")
+  score       Float?
+  status      SubmissionStatus @default(PENDING)
+  submittedAt DateTime         @default(now()) @map("submitted_at")
 
-  student          Membership        @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  test             Test              @relation(fields: [testId], references: [id], onDelete: Cascade)
-  responses        Response[]
+  student   Membership @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  test      Test       @relation(fields: [testId], references: [id], onDelete: Cascade)
+  responses Response[]
 
-  deletedAt        DateTime?         @map("deleted_at")
+  deletedAt DateTime? @map("deleted_at")
 
+  @@index([testId, status])
+  @@index([studentId, submittedAt])
   @@map("submissions")
 }
 
 model Response {
-  id               String     @id @default(uuid()) @map("response_id")
-  submissionId     String     @map("submission_id")
-  questionId       String     @map("question_id")
-  givenText        String
-  isCorrect        Boolean?
-  feedback         String?
-  explanation      String?
-  attemptNumber    Int        @default(1) @map("attempt_number")
-  corrected        Boolean?   @default(false)
+  id            String   @id @default(uuid()) @map("response_id")
+  submissionId  String   @map("submission_id")
+  questionId    String   @map("question_id")
+  givenText     String
+  isCorrect     Boolean?
+  feedback      String?
+  explanation   String?
+  attemptNumber Int      @default(1) @map("attempt_number")
+  corrected     Boolean? @default(false)
 
-  submission       Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
-  question         Question   @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  submission Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  question   Question   @relation(fields: [questionId], references: [id], onDelete: Cascade)
 
+  @@index([submissionId])
+  @@index([questionId])
   @@map("responses")
 }
 
@@ -555,44 +793,38 @@ model Response {
 // =======================================================
 
 model ImportBatch {
-  id               String         @id @default(uuid()) @map("import_batch_id")
-  organizationId   String         @map("organization_id")
-  fileName         String         @map("file_name")
-  importedById     String         @map("imported_by_id")
-  status           String
-  processedAt      DateTime?      @map("processed_at")
+  id             String       @id @default(uuid()) @map("import_batch_id")
+  organizationId String       @map("organization_id")
+  fileName       String       @map("file_name")
+  importedById   String       @map("imported_by_id")
+  status         ImportStatus
+  processedAt    DateTime?    @map("processed_at")
 
-  organization     Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  importedBy       Membership     @relation(fields: [importedById], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  importedBy   Membership   @relation(fields: [importedById], references: [id], onDelete: Cascade)
 
-  createdAt        DateTime       @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
   @@map("import_batches")
 }
 
 model ExportLog {
-  id               String         @id @default(uuid()) @map("export_log_id")
-  organizationId   String         @map("organization_id")
-  type             String
-  format           String
-  exportedById     String         @map("exported_by_id")
+  id             String @id @default(uuid()) @map("export_log_id")
+  organizationId String @map("organization_id")
+  type           String
+  format         String
+  exportedById   String @map("exported_by_id")
 
-  organization     Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  exportedBy       Membership     @relation(fields: [exportedById], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  exportedBy   Membership   @relation(fields: [exportedById], references: [id], onDelete: Cascade)
 
-  createdAt        DateTime       @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
   @@map("export_logs")
 }
 
-model RevokedToken {
-  id        String   @id @default(uuid())
-  token     String   @unique
-  revokedAt DateTime @default(now())
-}
-
 // =======================================================
-// STATS VIEW
+// STATS VIEW (ignored)
 // =======================================================
 
 model TaskCompletionStats {
@@ -606,13 +838,13 @@ model TaskCompletionStats {
 }
 
 model vw_student_progress {
-  membership_id    String
-  student_name     String
-  classroom_name   String
+  membership_id     String
+  student_name      String
+  classroom_name    String
   total_submissions Int
-  avg_score        Float
-  xp               Int
-  level            Int
+  avg_score         Float
+  xp                Int
+  level             Int
 
   @@ignore
 }
@@ -628,11 +860,11 @@ model vw_teacher_dashboard {
 }
 
 model vw_classroom_results {
-  classroom_id String
+  classroom_id   String
   classroom_name String
-  avg_score    Float
-  best_score   Float
-  worst_score  Float
+  avg_score      Float
+  best_score     Float
+  worst_score    Float
 
   @@ignore
 }

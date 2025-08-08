@@ -2,6 +2,12 @@
 CREATE TYPE "public"."SystemRole" AS ENUM ('SUPERADMIN');
 
 -- CreateEnum
+CREATE TYPE "public"."UserStatus" AS ENUM ('ACTIVE', 'INACTIVE', 'SUSPENDED');
+
+-- CreateEnum
+CREATE TYPE "public"."MaterialAccessLevel" AS ENUM ('FREE', 'SCHOOL_ONLY', 'PAID');
+
+-- CreateEnum
 CREATE TYPE "public"."OrganizationRole" AS ENUM ('STUDENT', 'TEACHER', 'DIRECTOR');
 
 -- CreateEnum
@@ -37,15 +43,31 @@ CREATE TYPE "public"."PlanTarget" AS ENUM ('SCHOOL', 'PRIVATE', 'COMMUNITY');
 -- CreateEnum
 CREATE TYPE "public"."AuditEntityType" AS ENUM ('USER', 'ORGANIZATION', 'CLASSROOM', 'TEST', 'LEARNING_MATERIAL', 'PERMISSION');
 
+-- CreateEnum
+CREATE TYPE "public"."PublishStatus" AS ENUM ('DRAFT', 'PUBLISHED', 'ARCHIVED');
+
+-- CreateEnum
+CREATE TYPE "public"."TopicPhase" AS ENUM ('INTRO', 'DEEPEN', 'RECAP', 'EXTENSION');
+
+-- CreateEnum
+CREATE TYPE "public"."Difficulty" AS ENUM ('BASIC', 'INTERMEDIATE', 'ADVANCED');
+
+-- CreateEnum
+CREATE TYPE "public"."EnrollmentStatus" AS ENUM ('ACTIVE', 'RETAINED', 'TRANSFERRED', 'GRADUATED', 'LEFT');
+
+-- CreateEnum
+CREATE TYPE "public"."ImportStatus" AS ENUM ('PENDING', 'PROCESSING', 'DONE', 'FAILED');
+
 -- CreateTable
 CREATE TABLE "public"."users" (
     "user_id" TEXT NOT NULL,
-    "email" VARCHAR(320) NOT NULL,
+    "email" VARCHAR(320),
+    "username" VARCHAR(64),
     "password_hash" VARCHAR(255) NOT NULL,
     "name" VARCHAR(150) NOT NULL,
     "preferred_lang" VARCHAR(10),
     "system_role" "public"."SystemRole",
-    "status" TEXT NOT NULL DEFAULT 'ACTIVE',
+    "status" "public"."UserStatus" NOT NULL DEFAULT 'ACTIVE',
     "last_login_at" TIMESTAMP(3),
     "is_anonymized" BOOLEAN NOT NULL DEFAULT false,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -68,6 +90,19 @@ CREATE TABLE "public"."organizations" (
     "deleted_at" TIMESTAMP(3),
 
     CONSTRAINT "organizations_pkey" PRIMARY KEY ("organization_id")
+);
+
+-- CreateTable
+CREATE TABLE "public"."organization_settings" (
+    "organization_settings_id" TEXT NOT NULL,
+    "organization_id" TEXT NOT NULL,
+    "usernamePattern" TEXT NOT NULL DEFAULT '{surname}{fi}{yy}',
+    "domainAlias" TEXT,
+    "initialPassword" TEXT NOT NULL DEFAULT 'ChangeMe!{yy}',
+    "forceResetOnFirstLogin" BOOLEAN NOT NULL DEFAULT true,
+    "ssoProvider" TEXT,
+
+    CONSTRAINT "organization_settings_pkey" PRIMARY KEY ("organization_settings_id")
 );
 
 -- CreateTable
@@ -148,12 +183,21 @@ CREATE TABLE "public"."subscription_plans" (
 -- CreateTable
 CREATE TABLE "public"."refresh_tokens" (
     "refresh_token_id" TEXT NOT NULL,
-    "token" VARCHAR(255) NOT NULL,
+    "token" TEXT NOT NULL,
     "user_id" TEXT NOT NULL,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "expires_at" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "refresh_tokens_pkey" PRIMARY KEY ("refresh_token_id")
+);
+
+-- CreateTable
+CREATE TABLE "public"."RevokedToken" (
+    "id" TEXT NOT NULL,
+    "token" TEXT NOT NULL,
+    "revokedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "RevokedToken_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -174,16 +218,28 @@ CREATE TABLE "public"."audit_logs" (
 );
 
 -- CreateTable
-CREATE TABLE "public"."classrooms" (
-    "classroom_id" TEXT NOT NULL,
-    "name" TEXT NOT NULL,
+CREATE TABLE "public"."academic_years" (
+    "academic_year_id" TEXT NOT NULL,
     "organization_id" TEXT NOT NULL,
-    "grade" "public"."SchoolGrade" NOT NULL,
-    "study_field" TEXT,
-    "teacher_id" TEXT,
-    "deleted_at" TIMESTAMP(3),
+    "label" TEXT NOT NULL,
+    "startsAt" TIMESTAMP(3) NOT NULL,
+    "endsAt" TIMESTAMP(3) NOT NULL,
+    "isCurrent" BOOLEAN NOT NULL DEFAULT false,
 
-    CONSTRAINT "classrooms_pkey" PRIMARY KEY ("classroom_id")
+    CONSTRAINT "academic_years_pkey" PRIMARY KEY ("academic_year_id")
+);
+
+-- CreateTable
+CREATE TABLE "public"."class_sections" (
+    "class_section_id" TEXT NOT NULL,
+    "organization_id" TEXT NOT NULL,
+    "academic_year_id" TEXT NOT NULL,
+    "grade" "public"."SchoolGrade" NOT NULL,
+    "section" TEXT NOT NULL,
+    "label" TEXT,
+    "teacher_id" TEXT,
+
+    CONSTRAINT "class_sections_pkey" PRIMARY KEY ("class_section_id")
 );
 
 -- CreateTable
@@ -200,30 +256,78 @@ CREATE TABLE "public"."teachers" (
 CREATE TABLE "public"."students" (
     "student_id" TEXT NOT NULL,
     "membership_id" TEXT NOT NULL,
-    "classroom_id" TEXT NOT NULL,
-    "deleted_at" TIMESTAMP(3),
     "organization_id" TEXT NOT NULL,
+    "studentNumber" TEXT,
+    "externalId" TEXT,
+    "deleted_at" TIMESTAMP(3),
 
     CONSTRAINT "students_pkey" PRIMARY KEY ("student_id")
 );
 
 -- CreateTable
+CREATE TABLE "public"."enrollments" (
+    "enrollment_id" TEXT NOT NULL,
+    "student_id" TEXT NOT NULL,
+    "class_section_id" TEXT NOT NULL,
+    "academic_year_id" TEXT NOT NULL,
+    "status" "public"."EnrollmentStatus" NOT NULL DEFAULT 'ACTIVE',
+
+    CONSTRAINT "enrollments_pkey" PRIMARY KEY ("enrollment_id")
+);
+
+-- CreateTable
+CREATE TABLE "public"."catalog_subjects" (
+    "catalog_subject_id" TEXT NOT NULL,
+    "code" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+
+    CONSTRAINT "catalog_subjects_pkey" PRIMARY KEY ("catalog_subject_id")
+);
+
+-- CreateTable
+CREATE TABLE "public"."catalog_topics" (
+    "catalog_topic_id" TEXT NOT NULL,
+    "catalog_subject_id" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+
+    CONSTRAINT "catalog_topics_pkey" PRIMARY KEY ("catalog_topic_id")
+);
+
+-- CreateTable
 CREATE TABLE "public"."subjects" (
     "subject_id" TEXT NOT NULL,
-    "name" TEXT NOT NULL,
     "organization_id" TEXT NOT NULL,
+    "catalog_subject_id" TEXT,
+    "name" TEXT NOT NULL,
     "deleted_at" TIMESTAMP(3),
 
     CONSTRAINT "subjects_pkey" PRIMARY KEY ("subject_id")
 );
 
 -- CreateTable
-CREATE TABLE "public"."topics" (
-    "topic_id" TEXT NOT NULL,
-    "name" TEXT NOT NULL,
+CREATE TABLE "public"."subject_levels" (
+    "subject_level_id" TEXT NOT NULL,
     "subject_id" TEXT NOT NULL,
+    "grade" "public"."SchoolGrade" NOT NULL,
+    "order" INTEGER,
+    "label" TEXT,
 
-    CONSTRAINT "topics_pkey" PRIMARY KEY ("topic_id")
+    CONSTRAINT "subject_levels_pkey" PRIMARY KEY ("subject_level_id")
+);
+
+-- CreateTable
+CREATE TABLE "public"."topic_levels" (
+    "topic_level_id" TEXT NOT NULL,
+    "subject_level_id" TEXT NOT NULL,
+    "catalog_topic_id" TEXT NOT NULL,
+    "name" TEXT,
+    "phase" "public"."TopicPhase" NOT NULL DEFAULT 'INTRO',
+    "difficulty" "public"."Difficulty" NOT NULL DEFAULT 'BASIC',
+    "order" INTEGER,
+    "objectives" JSONB,
+    "prerequisites" JSONB,
+
+    CONSTRAINT "topic_levels_pkey" PRIMARY KEY ("topic_level_id")
 );
 
 -- CreateTable
@@ -244,16 +348,56 @@ CREATE TABLE "public"."learning_materials" (
     "education_level" "public"."EducationLevel" NOT NULL,
     "school_grade" "public"."SchoolGrade",
     "subject_id" TEXT,
-    "topic_id" TEXT,
+    "topic_level_id" TEXT,
     "file_url" TEXT,
     "rich_content" JSONB,
     "scope" "public"."ContentScope" NOT NULL DEFAULT 'GLOBAL',
     "organization_id" TEXT,
     "created_by_id" TEXT NOT NULL,
+    "access_level" "public"."MaterialAccessLevel" NOT NULL DEFAULT 'FREE',
+    "price" DECIMAL(10,2),
+    "currency" TEXT DEFAULT 'CZK',
+    "is_downloadable" BOOLEAN NOT NULL DEFAULT true,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "deleted_at" TIMESTAMP(3),
 
     CONSTRAINT "learning_materials_pkey" PRIMARY KEY ("material_id")
+);
+
+-- CreateTable
+CREATE TABLE "public"."student_classrooms" (
+    "student_classroom_id" TEXT NOT NULL,
+    "student_id" TEXT NOT NULL,
+    "class_section_id" TEXT NOT NULL,
+    "schoolYear" TEXT NOT NULL,
+    "assigned_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "topicLevelId" TEXT,
+
+    CONSTRAINT "student_classrooms_pkey" PRIMARY KEY ("student_classroom_id")
+);
+
+-- CreateTable
+CREATE TABLE "public"."material_assignments" (
+    "material_assignment_id" TEXT NOT NULL,
+    "topic_level_id" TEXT NOT NULL,
+    "material_id" TEXT NOT NULL,
+    "isPrimary" BOOLEAN NOT NULL DEFAULT false,
+    "order" INTEGER,
+
+    CONSTRAINT "material_assignments_pkey" PRIMARY KEY ("material_assignment_id")
+);
+
+-- CreateTable
+CREATE TABLE "public"."material_purchases" (
+    "material_purchase_id" TEXT NOT NULL,
+    "material_id" TEXT NOT NULL,
+    "organization_id" TEXT NOT NULL,
+    "purchased_by_id" TEXT NOT NULL,
+    "price" DECIMAL(10,2) NOT NULL,
+    "currency" TEXT NOT NULL DEFAULT 'CZK',
+    "purchased_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "material_purchases_pkey" PRIMARY KEY ("material_purchase_id")
 );
 
 -- CreateTable
@@ -263,6 +407,7 @@ CREATE TABLE "public"."tests" (
     "title" TEXT NOT NULL,
     "description" TEXT,
     "version" INTEGER NOT NULL DEFAULT 1,
+    "status" "public"."PublishStatus" NOT NULL DEFAULT 'DRAFT',
     "order" INTEGER,
     "creator_id" TEXT NOT NULL,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -270,6 +415,17 @@ CREATE TABLE "public"."tests" (
     "deleted_at" TIMESTAMP(3),
 
     CONSTRAINT "tests_pkey" PRIMARY KEY ("test_id")
+);
+
+-- CreateTable
+CREATE TABLE "public"."test_assignments" (
+    "test_assignment_id" TEXT NOT NULL,
+    "topic_level_id" TEXT NOT NULL,
+    "test_id" TEXT NOT NULL,
+    "isPrimary" BOOLEAN NOT NULL DEFAULT false,
+    "order" INTEGER,
+
+    CONSTRAINT "test_assignments_pkey" PRIMARY KEY ("test_assignment_id")
 );
 
 -- CreateTable
@@ -335,7 +491,7 @@ CREATE TABLE "public"."import_batches" (
     "organization_id" TEXT NOT NULL,
     "file_name" TEXT NOT NULL,
     "imported_by_id" TEXT NOT NULL,
-    "status" TEXT NOT NULL,
+    "status" "public"."ImportStatus" NOT NULL,
     "processed_at" TIMESTAMP(3),
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -392,25 +548,23 @@ CREATE TABLE "public"."vw_classroom_results" (
     "worst_score" DOUBLE PRECISION NOT NULL
 );
 
--- CreateTable
-CREATE TABLE "public"."_ClassroomToSubject" (
-    "A" TEXT NOT NULL,
-    "B" TEXT NOT NULL,
-
-    CONSTRAINT "_ClassroomToSubject_AB_pkey" PRIMARY KEY ("A","B")
-);
-
 -- CreateIndex
 CREATE UNIQUE INDEX "users_email_key" ON "public"."users"("email");
 
 -- CreateIndex
-CREATE INDEX "users_email_idx" ON "public"."users"("email");
+CREATE UNIQUE INDEX "users_username_key" ON "public"."users"("username");
+
+-- CreateIndex
+CREATE INDEX "users_username_idx" ON "public"."users"("username");
 
 -- CreateIndex
 CREATE INDEX "organizations_name_idx" ON "public"."organizations"("name");
 
 -- CreateIndex
 CREATE INDEX "organizations_city_idx" ON "public"."organizations"("city");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "organization_settings_organization_id_key" ON "public"."organization_settings"("organization_id");
 
 -- CreateIndex
 CREATE INDEX "memberships_organization_id_role_idx" ON "public"."memberships"("organization_id", "role");
@@ -443,6 +597,9 @@ CREATE UNIQUE INDEX "refresh_tokens_token_key" ON "public"."refresh_tokens"("tok
 CREATE INDEX "refresh_tokens_user_id_idx" ON "public"."refresh_tokens"("user_id");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "RevokedToken_token_key" ON "public"."RevokedToken"("token");
+
+-- CreateIndex
 CREATE INDEX "audit_logs_user_id_idx" ON "public"."audit_logs"("user_id");
 
 -- CreateIndex
@@ -452,10 +609,13 @@ CREATE INDEX "audit_logs_organization_id_idx" ON "public"."audit_logs"("organiza
 CREATE INDEX "audit_logs_entity_type_idx" ON "public"."audit_logs"("entity_type");
 
 -- CreateIndex
-CREATE INDEX "classrooms_organization_id_idx" ON "public"."classrooms"("organization_id");
+CREATE UNIQUE INDEX "academic_years_organization_id_label_key" ON "public"."academic_years"("organization_id", "label");
 
 -- CreateIndex
-CREATE INDEX "classrooms_teacher_id_idx" ON "public"."classrooms"("teacher_id");
+CREATE INDEX "class_sections_organization_id_grade_idx" ON "public"."class_sections"("organization_id", "grade");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "class_sections_organization_id_academic_year_id_grade_secti_key" ON "public"."class_sections"("organization_id", "academic_year_id", "grade", "section");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "teachers_membership_id_key" ON "public"."teachers"("membership_id");
@@ -467,19 +627,79 @@ CREATE INDEX "teachers_organization_id_idx" ON "public"."teachers"("organization
 CREATE UNIQUE INDEX "students_membership_id_key" ON "public"."students"("membership_id");
 
 -- CreateIndex
-CREATE INDEX "students_classroom_id_idx" ON "public"."students"("classroom_id");
+CREATE INDEX "students_organization_id_studentNumber_idx" ON "public"."students"("organization_id", "studentNumber");
+
+-- CreateIndex
+CREATE INDEX "enrollments_class_section_id_idx" ON "public"."enrollments"("class_section_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "enrollments_student_id_academic_year_id_key" ON "public"."enrollments"("student_id", "academic_year_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "catalog_subjects_code_key" ON "public"."catalog_subjects"("code");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "catalog_topics_catalog_subject_id_name_key" ON "public"."catalog_topics"("catalog_subject_id", "name");
 
 -- CreateIndex
 CREATE INDEX "subjects_organization_id_idx" ON "public"."subjects"("organization_id");
 
 -- CreateIndex
-CREATE INDEX "topics_subject_id_idx" ON "public"."topics"("subject_id");
+CREATE INDEX "subjects_catalog_subject_id_idx" ON "public"."subjects"("catalog_subject_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "subjects_organization_id_catalog_subject_id_key" ON "public"."subjects"("organization_id", "catalog_subject_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "subject_levels_subject_id_grade_key" ON "public"."subject_levels"("subject_id", "grade");
+
+-- CreateIndex
+CREATE INDEX "topic_levels_catalog_topic_id_idx" ON "public"."topic_levels"("catalog_topic_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "topic_levels_subject_level_id_catalog_topic_id_phase_key" ON "public"."topic_levels"("subject_level_id", "catalog_topic_id", "phase");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "teacher_subjects_teacher_id_subject_id_key" ON "public"."teacher_subjects"("teacher_id", "subject_id");
 
 -- CreateIndex
-CREATE INDEX "_ClassroomToSubject_B_index" ON "public"."_ClassroomToSubject"("B");
+CREATE INDEX "learning_materials_topic_level_id_idx" ON "public"."learning_materials"("topic_level_id");
+
+-- CreateIndex
+CREATE INDEX "student_classrooms_class_section_id_schoolYear_idx" ON "public"."student_classrooms"("class_section_id", "schoolYear");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "student_classrooms_student_id_schoolYear_key" ON "public"."student_classrooms"("student_id", "schoolYear");
+
+-- CreateIndex
+CREATE INDEX "material_assignments_material_id_idx" ON "public"."material_assignments"("material_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "material_assignments_topic_level_id_material_id_key" ON "public"."material_assignments"("topic_level_id", "material_id");
+
+-- CreateIndex
+CREATE INDEX "material_purchases_organization_id_material_id_idx" ON "public"."material_purchases"("organization_id", "material_id");
+
+-- CreateIndex
+CREATE INDEX "test_assignments_test_id_idx" ON "public"."test_assignments"("test_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "test_assignments_topic_level_id_test_id_key" ON "public"."test_assignments"("topic_level_id", "test_id");
+
+-- CreateIndex
+CREATE INDEX "submissions_test_id_status_idx" ON "public"."submissions"("test_id", "status");
+
+-- CreateIndex
+CREATE INDEX "submissions_student_id_submitted_at_idx" ON "public"."submissions"("student_id", "submitted_at");
+
+-- CreateIndex
+CREATE INDEX "responses_submission_id_idx" ON "public"."responses"("submission_id");
+
+-- CreateIndex
+CREATE INDEX "responses_question_id_idx" ON "public"."responses"("question_id");
+
+-- AddForeignKey
+ALTER TABLE "public"."organization_settings" ADD CONSTRAINT "organization_settings_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("organization_id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "public"."memberships" ADD CONSTRAINT "memberships_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "public"."users"("user_id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -512,10 +732,16 @@ ALTER TABLE "public"."audit_logs" ADD CONSTRAINT "audit_logs_user_id_fkey" FOREI
 ALTER TABLE "public"."audit_logs" ADD CONSTRAINT "audit_logs_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("organization_id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "public"."classrooms" ADD CONSTRAINT "classrooms_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("organization_id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "public"."academic_years" ADD CONSTRAINT "academic_years_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("organization_id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "public"."classrooms" ADD CONSTRAINT "classrooms_teacher_id_fkey" FOREIGN KEY ("teacher_id") REFERENCES "public"."teachers"("teacher_id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "public"."class_sections" ADD CONSTRAINT "class_sections_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("organization_id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."class_sections" ADD CONSTRAINT "class_sections_academic_year_id_fkey" FOREIGN KEY ("academic_year_id") REFERENCES "public"."academic_years"("academic_year_id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."class_sections" ADD CONSTRAINT "class_sections_teacher_id_fkey" FOREIGN KEY ("teacher_id") REFERENCES "public"."teachers"("teacher_id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "public"."teachers" ADD CONSTRAINT "teachers_membership_id_fkey" FOREIGN KEY ("membership_id") REFERENCES "public"."memberships"("membership_id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -527,16 +753,34 @@ ALTER TABLE "public"."teachers" ADD CONSTRAINT "teachers_organization_id_fkey" F
 ALTER TABLE "public"."students" ADD CONSTRAINT "students_membership_id_fkey" FOREIGN KEY ("membership_id") REFERENCES "public"."memberships"("membership_id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "public"."students" ADD CONSTRAINT "students_classroom_id_fkey" FOREIGN KEY ("classroom_id") REFERENCES "public"."classrooms"("classroom_id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "public"."students" ADD CONSTRAINT "students_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("organization_id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "public"."students" ADD CONSTRAINT "students_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("organization_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "public"."enrollments" ADD CONSTRAINT "enrollments_student_id_fkey" FOREIGN KEY ("student_id") REFERENCES "public"."students"("student_id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."enrollments" ADD CONSTRAINT "enrollments_class_section_id_fkey" FOREIGN KEY ("class_section_id") REFERENCES "public"."class_sections"("class_section_id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."enrollments" ADD CONSTRAINT "enrollments_academic_year_id_fkey" FOREIGN KEY ("academic_year_id") REFERENCES "public"."academic_years"("academic_year_id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."catalog_topics" ADD CONSTRAINT "catalog_topics_catalog_subject_id_fkey" FOREIGN KEY ("catalog_subject_id") REFERENCES "public"."catalog_subjects"("catalog_subject_id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "public"."subjects" ADD CONSTRAINT "subjects_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("organization_id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "public"."topics" ADD CONSTRAINT "topics_subject_id_fkey" FOREIGN KEY ("subject_id") REFERENCES "public"."subjects"("subject_id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "public"."subjects" ADD CONSTRAINT "subjects_catalog_subject_id_fkey" FOREIGN KEY ("catalog_subject_id") REFERENCES "public"."catalog_subjects"("catalog_subject_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."subject_levels" ADD CONSTRAINT "subject_levels_subject_id_fkey" FOREIGN KEY ("subject_id") REFERENCES "public"."subjects"("subject_id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."topic_levels" ADD CONSTRAINT "topic_levels_subject_level_id_fkey" FOREIGN KEY ("subject_level_id") REFERENCES "public"."subject_levels"("subject_level_id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."topic_levels" ADD CONSTRAINT "topic_levels_catalog_topic_id_fkey" FOREIGN KEY ("catalog_topic_id") REFERENCES "public"."catalog_topics"("catalog_topic_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "public"."teacher_subjects" ADD CONSTRAINT "teacher_subjects_teacher_id_fkey" FOREIGN KEY ("teacher_id") REFERENCES "public"."teachers"("teacher_id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -548,7 +792,7 @@ ALTER TABLE "public"."teacher_subjects" ADD CONSTRAINT "teacher_subjects_subject
 ALTER TABLE "public"."learning_materials" ADD CONSTRAINT "learning_materials_subject_id_fkey" FOREIGN KEY ("subject_id") REFERENCES "public"."subjects"("subject_id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "public"."learning_materials" ADD CONSTRAINT "learning_materials_topic_id_fkey" FOREIGN KEY ("topic_id") REFERENCES "public"."topics"("topic_id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "public"."learning_materials" ADD CONSTRAINT "learning_materials_topic_level_id_fkey" FOREIGN KEY ("topic_level_id") REFERENCES "public"."topic_levels"("topic_level_id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "public"."learning_materials" ADD CONSTRAINT "learning_materials_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("organization_id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -557,10 +801,40 @@ ALTER TABLE "public"."learning_materials" ADD CONSTRAINT "learning_materials_org
 ALTER TABLE "public"."learning_materials" ADD CONSTRAINT "learning_materials_created_by_id_fkey" FOREIGN KEY ("created_by_id") REFERENCES "public"."memberships"("membership_id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "public"."student_classrooms" ADD CONSTRAINT "student_classrooms_student_id_fkey" FOREIGN KEY ("student_id") REFERENCES "public"."students"("student_id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."student_classrooms" ADD CONSTRAINT "student_classrooms_class_section_id_fkey" FOREIGN KEY ("class_section_id") REFERENCES "public"."class_sections"("class_section_id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."student_classrooms" ADD CONSTRAINT "student_classrooms_topicLevelId_fkey" FOREIGN KEY ("topicLevelId") REFERENCES "public"."topic_levels"("topic_level_id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."material_assignments" ADD CONSTRAINT "material_assignments_topic_level_id_fkey" FOREIGN KEY ("topic_level_id") REFERENCES "public"."topic_levels"("topic_level_id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."material_assignments" ADD CONSTRAINT "material_assignments_material_id_fkey" FOREIGN KEY ("material_id") REFERENCES "public"."learning_materials"("material_id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."material_purchases" ADD CONSTRAINT "material_purchases_material_id_fkey" FOREIGN KEY ("material_id") REFERENCES "public"."learning_materials"("material_id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."material_purchases" ADD CONSTRAINT "material_purchases_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("organization_id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."material_purchases" ADD CONSTRAINT "material_purchases_purchased_by_id_fkey" FOREIGN KEY ("purchased_by_id") REFERENCES "public"."users"("user_id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "public"."tests" ADD CONSTRAINT "tests_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("organization_id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "public"."tests" ADD CONSTRAINT "tests_creator_id_fkey" FOREIGN KEY ("creator_id") REFERENCES "public"."memberships"("membership_id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."test_assignments" ADD CONSTRAINT "test_assignments_topic_level_id_fkey" FOREIGN KEY ("topic_level_id") REFERENCES "public"."topic_levels"("topic_level_id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."test_assignments" ADD CONSTRAINT "test_assignments_test_id_fkey" FOREIGN KEY ("test_id") REFERENCES "public"."tests"("test_id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "public"."questions" ADD CONSTRAINT "questions_test_id_fkey" FOREIGN KEY ("test_id") REFERENCES "public"."tests"("test_id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -594,9 +868,3 @@ ALTER TABLE "public"."export_logs" ADD CONSTRAINT "export_logs_organization_id_f
 
 -- AddForeignKey
 ALTER TABLE "public"."export_logs" ADD CONSTRAINT "export_logs_exported_by_id_fkey" FOREIGN KEY ("exported_by_id") REFERENCES "public"."memberships"("membership_id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "public"."_ClassroomToSubject" ADD CONSTRAINT "_ClassroomToSubject_A_fkey" FOREIGN KEY ("A") REFERENCES "public"."classrooms"("classroom_id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "public"."_ClassroomToSubject" ADD CONSTRAINT "_ClassroomToSubject_B_fkey" FOREIGN KEY ("B") REFERENCES "public"."subjects"("subject_id") ON DELETE CASCADE ON UPDATE CASCADE;

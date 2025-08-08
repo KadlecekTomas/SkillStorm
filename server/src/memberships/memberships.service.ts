@@ -12,6 +12,17 @@ export class MembershipsService {
   constructor(private prisma: PrismaService) {}
 
   async create(dto: CreateMembershipDto) {
+    // Validace existence org + user
+    const [org, user] = await Promise.all([
+      this.prisma.organization.findUnique({
+        where: { id: dto.organizationId },
+      }),
+      this.prisma.user.findUnique({ where: { id: dto.userId } }),
+    ]);
+    if (!org) throw new NotFoundException('Organizace nebyla nalezena');
+    if (!user) throw new NotFoundException('Uživatel nebyl nalezen');
+
+    // Unikátní členství v rámci organizace
     const exists = await this.prisma.membership.findUnique({
       where: {
         userId_organizationId: {
@@ -20,7 +31,6 @@ export class MembershipsService {
         },
       },
     });
-
     if (exists) {
       throw new ConflictException('Uživatel je už členem této organizace.');
     }
@@ -28,9 +38,9 @@ export class MembershipsService {
     return this.prisma.membership.create({ data: dto });
   }
 
-  findByOrganization(orgId: string) {
+  findByOrganization(organizationId: string) {
     return this.prisma.membership.findMany({
-      where: { organizationId: orgId },
+      where: { organizationId },
       include: {
         user: {
           select: {
@@ -47,19 +57,63 @@ export class MembershipsService {
             deletedAt: true,
           },
         },
+        // Student part (dle Prisma schématu)
         student: {
           include: {
-            classroom: {
-              select: { name: true },
+            enrollments: {
+              include: {
+                academicYear: {
+                  select: { id: true, label: true, isCurrent: true },
+                },
+                classSection: {
+                  select: {
+                    id: true,
+                    grade: true,
+                    section: true,
+                    label: true,
+                  },
+                },
+              },
+            },
+            StudentClassroom: {
+              include: {
+                classSection: {
+                  select: { id: true, grade: true, section: true, label: true },
+                },
+                TopicLevel: {
+                  select: {
+                    id: true,
+                    phase: true,
+                    difficulty: true,
+                    subjectLevel: {
+                      select: {
+                        id: true,
+                        grade: true,
+                        subject: { select: { id: true, name: true } },
+                      },
+                    },
+                  },
+                },
+              },
             },
           },
         },
+        // Teacher part (TeacherSubject + homeroomOf)
         teacher: {
           include: {
             subjects: {
               include: {
-                subject: {
-                  select: { name: true },
+                subject: { select: { id: true, name: true } },
+              },
+            },
+            homeroomOf: {
+              select: {
+                id: true,
+                grade: true,
+                section: true,
+                label: true,
+                academicYear: {
+                  select: { id: true, label: true, isCurrent: true },
                 },
               },
             },
@@ -70,9 +124,11 @@ export class MembershipsService {
   }
 
   async findOne(id: string) {
-    const m = await this.prisma.membership.findUnique({ where: { id } });
-    if (!m) throw new NotFoundException('Membership not found');
-    return m;
+    const membership = await this.prisma.membership.findUnique({
+      where: { id },
+    });
+    if (!membership) throw new NotFoundException('Membership not found');
+    return membership;
   }
 
   update(id: string, dto: UpdateMembershipDto) {

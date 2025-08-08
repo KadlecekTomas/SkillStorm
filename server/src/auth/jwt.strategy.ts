@@ -19,34 +19,32 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(req: Request, payload: any) {
-    // Získat aktuální JWT token z requestu
     const token = ExtractJwt.fromAuthHeaderAsBearerToken()(req);
-
-    // Ověřit, zda není token v blacklistu
     const revoked = await this.prisma.revokedToken.findUnique({
       where: { token },
     });
-
-    if (revoked) {
-      throw new UnauthorizedException('Token has been revoked');
-    }
+    if (revoked) throw new UnauthorizedException('Token has been revoked');
 
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
-      select: { id: true, email: true, name: true, systemRole: true },
+      select: {
+        id: true,
+        email: true,
+        username: true,
+        name: true,
+        systemRole: true,
+      },
     });
-
-    if (!user) {
-      throw new UnauthorizedException('User not found');
-    }
+    if (!user) throw new UnauthorizedException('User not found');
 
     return {
       userId: user.id,
       email: user.email,
+      username: user.username,
       name: user.name,
       systemRole: user.systemRole,
-      organizationRole: payload.organizationRole || null,
-      organizationId: payload.organizationId || null,
+      organizationRole: payload.organizationRole ?? null,
+      organizationId: payload.organizationId ?? null,
     };
   }
 }

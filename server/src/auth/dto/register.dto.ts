@@ -1,32 +1,41 @@
 import {
   IsEmail,
+  IsOptional,
   IsString,
   MinLength,
   IsEnum,
-  IsOptional,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { SystemRole } from '@prisma/client';
 
 export class RegisterDto {
   @ApiProperty({
-    description: 'The name of the user',
-    example: 'John Doe',
+    description: 'Jméno uživatele',
+    example: 'Jan Novák',
     minLength: 2,
   })
   @IsString()
   @MinLength(2)
   name: string;
 
-  @ApiProperty({
-    description: 'The email of the user',
-    example: 'john.doe@example.com',
+  @ApiPropertyOptional({
+    description: 'E-mail (volitelné – může být null)',
+    example: 'jan.novak@example.com',
   })
+  @IsOptional()
   @IsEmail()
-  email: string;
+  email?: string;
+
+  @ApiPropertyOptional({
+    description: 'Uživatelské jméno (volitelné; když nepřijde, vygeneruje se)',
+    example: 'novakj',
+  })
+  @IsOptional()
+  @IsString()
+  username?: string;
 
   @ApiProperty({
-    description: 'The password of the user',
+    description: 'Heslo',
     example: 'password123',
     minLength: 6,
   })
@@ -35,7 +44,7 @@ export class RegisterDto {
   password: string;
 
   @ApiPropertyOptional({
-    description: 'The system role of the user',
+    description: 'Systémová role',
     enum: SystemRole,
     example: SystemRole.SUPERADMIN,
   })

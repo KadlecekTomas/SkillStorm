@@ -1,3 +1,4 @@
+// src/auth/auth.service.ts
 import {
   Injectable,
   UnauthorizedException,
@@ -9,218 +10,262 @@ import * as bcrypt from 'bcrypt';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ConfigService } from '@nestjs/config';
+import { Membership, User, $Enums } from '@prisma/client';
+import { randomBytes, randomUUID } from 'crypto';
+import { addDays } from 'date-fns';
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
+
+type JwtClaims = {
+  sub: string;
+  email: string | null;
+  username: string | null;
+  systemRole: $Enums.SystemRole | null;
+  organizationRole: $Enums.OrganizationRole | null;
+  organizationId: string | null;
+};
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
-    private readonly configService: ConfigService,
-  ) { }
+    private readonly config: ConfigService,
+  ) {}
 
-  private async generateTokens(user: any) {
-    const payload = { sub: user.id, systemRole: user.systemRole };
+  // -------------------------
+  // Helpers
+  // -------------------------
+  private normalize(s: string) {
+    return s
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
+  }
 
-    const accessToken = this.jwtService.sign(payload, {
-      secret: this.configService.get<string>('JWT_SECRET'),
-      expiresIn: '15m',
-    });
+  private async ensureUniqueUsername(baseInput: string) {
+    const base =
+      (this.normalize(baseInput) || 'user')
+        .replace(/[^a-z0-9]+/g, '')
+        .slice(0, 16) || 'user';
+    let candidate = base;
+    let i = 1;
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const exists = await this.prisma.user.findUnique({
+        where: { username: candidate },
+        select: { id: true },
+      });
+      if (!exists) return candidate;
+      candidate = `${base}${i++}`;
+    }
+  }
 
-    const refreshToken = this.jwtService.sign(payload, {
-      secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
-      expiresIn: '7d',
-    });
+  private buildClaims(user: User, membership: Membership | null): JwtClaims {
+    return {
+      sub: user.id,
+      email: user.email ?? null,
+      username: user.username ?? null,
+      systemRole: user.systemRole ?? null,
+      organizationRole: membership?.role ?? null,
+      organizationId: membership?.organizationId ?? null,
+    };
+  }
 
-    // uložit refresh token do DB
-    await this.prisma.refreshToken.create({
-      data: {
-        token: refreshToken,
-        userId: user.id,
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+  // ---------- Refresh token (opaque + retry na P2002) ----------
+  private async issueRefreshToken(userId: string) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const token = randomBytes(48).toString('hex'); // 96 znaků
+        await this.prisma.refreshToken.create({
+          data: {
+            token,
+            userId,
+            expiresAt: addDays(new Date(), 7),
+          },
+        });
+        return token;
+      } catch (e) {
+        if (e instanceof PrismaClientKnownRequestError && e.code === 'P2002') {
+          // unikátní kolize tokenu – zkusíme znova
+          continue;
+        }
+        throw e;
+      }
+    }
+    throw new Error('Failed to issue refresh token after retries');
+  }
+
+  private async generateTokens(user: User, membership: Membership | null) {
+    const claims = this.buildClaims(user, membership);
+    const accessSecret = this.config.get<string>('JWT_SECRET');
+
+    const accessToken = this.jwtService.sign(
+      { ...claims },
+      {
+        secret: accessSecret,
+        expiresIn: '15m',
+        jwtid: randomUUID(), // unikátní JTI → lepší revokace
       },
-    });
+    );
 
+    const refreshToken = await this.issueRefreshToken(user.id);
     return { accessToken, refreshToken };
   }
 
-  async register(dto: RegisterDto) {
-    const existing = await this.prisma.user.findUnique({
-      where: { email: dto.email },
-    });
+  // -------------------------
+  // Public API
+  // -------------------------
 
-    if (existing) {
-      if (!existing.isAnonymized || existing.status !== 'INACTIVE') {
+  async register(dto: RegisterDto) {
+    // Email je volitelný – pokud je, ověř jedinečnost
+    if (dto.email) {
+      const existing = await this.prisma.user.findUnique({
+        where: { email: dto.email },
+      });
+      if (existing) {
         throw new BadRequestException('Email already exists');
       }
-
-      // Pokud user existuje, ale byl anonymizován → smažeme jeho starý anonymní záznam
-      await this.prisma.user.delete({ where: { id: existing.id } });
     }
 
     const passwordHash = await bcrypt.hash(dto.password, 10);
 
+    // Username – volitelně z dto, jinak z emailu/jména
+    const baseUname =
+      dto.username ?? dto.email?.split('@')[0] ?? dto.name ?? 'user';
+    const username = await this.ensureUniqueUsername(baseUname);
+
+    const now = new Date(); // jednotný čas
+
     const user = await this.prisma.user.create({
       data: {
-        email: dto.email,
+        email: dto.email ?? null,
+        username,
         name: dto.name,
         passwordHash,
-        systemRole: dto.systemRole || 'SUPERADMIN',
+        systemRole: dto.systemRole ?? null,
+        lastLoginAt: now,
       },
     });
 
-    const tokens = await this.generateTokens(user);
+    const tokens = await this.generateTokens(user, null);
 
     return {
       ...tokens,
       user: {
         id: user.id,
         email: user.email,
+        username: user.username,
         name: user.name,
         systemRole: user.systemRole,
+        organizationRole: null,
+        organizationId: null,
+        lastLoginAt: user.lastLoginAt,
       },
     };
   }
 
-  async login(loginDto: LoginDto) {
-    const { email, password } = loginDto;
+  async login(dto: LoginDto) {
+    // login = username NEBO email
+    const user = await this.prisma.user.findFirst({
+      where: {
+        OR: [{ username: dto.login }, { email: dto.login }],
+      },
+    });
+    if (!user) throw new UnauthorizedException('Invalid credentials');
 
-    const user = await this.prisma.user.findUnique({ where: { email } });
-    if (!user) {
+    const isPasswordValid = await bcrypt.compare(
+      dto.password,
+      user.passwordHash,
+    );
+    if (!isPasswordValid)
       throw new UnauthorizedException('Invalid credentials');
-    }
 
-    const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
-    if (!isPasswordValid) {
-      throw new UnauthorizedException('Invalid credentials');
-    }
-
-    await this.prisma.user.update({
+    // aktualizace lastLoginAt (DB) – ať se propíše i do response
+    const updatedUser = await this.prisma.user.update({
       where: { id: user.id },
       data: { lastLoginAt: new Date() },
     });
 
-    // Najít organizační roli z Membership
     const membership = await this.prisma.membership.findFirst({
       where: { userId: user.id },
-      select: {
-        role: true,
-        organizationId: true,
-      },
+      orderBy: { createdAt: 'asc' }, // deterministicky, pokud má víc členství
     });
 
-    const organizationRole = membership?.role || null;
-
-    const payload = {
-      sub: user.id,
-      systemRole: user.systemRole,
-      organizationRole,
-      organizationId: membership?.organizationId
-    };
-
-    const accessToken = this.jwtService.sign(payload, {
-      secret: this.configService.get<string>('JWT_SECRET'),
-      expiresIn: '15m',
-    });
-
-    const refreshToken = this.jwtService.sign(payload, {
-      secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
-      expiresIn: '7d',
-    });
-
-    await this.prisma.refreshToken.create({
-      data: {
-        token: refreshToken,
-        userId: user.id,
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      },
-    });
+    const tokens = await this.generateTokens(updatedUser, membership);
 
     return {
-      accessToken,
-      refreshToken,
+      ...tokens,
       user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        systemRole: user.systemRole,
-        organizationRole,
+        id: updatedUser.id,
+        email: updatedUser.email,
+        username: updatedUser.username,
+        name: updatedUser.name,
+        systemRole: updatedUser.systemRole,
+        organizationRole: membership?.role ?? null,
+        organizationId: membership?.organizationId ?? null,
+        lastLoginAt: updatedUser.lastLoginAt, // ← propsáno ven
       },
     };
   }
 
   async refreshAccessToken(oldRefreshToken: string) {
-    try {
-      // 1. Najdi refresh token v DB
-      const existingToken = await this.prisma.refreshToken.findUnique({
-        where: { token: oldRefreshToken },
-      });
-
-      if (!existingToken) {
-        throw new UnauthorizedException('Invalid refresh token');
+    // 1) musí existovat v DB (opaque kontrola)
+    const row = await this.prisma.refreshToken.findUnique({
+      where: { token: oldRefreshToken },
+    });
+    if (!row || row.expiresAt < new Date()) {
+      if (row) {
+        await this.prisma.refreshToken.delete({
+          where: { token: oldRefreshToken },
+        });
       }
-
-      // 2. Ověř JWT podpis refresh tokenu
-      const payload = this.jwtService.verify(oldRefreshToken, {
-        secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
-      });
-
-      // 3. Smaž starý refresh token z DB
-      await this.prisma.refreshToken.delete({
-        where: { token: oldRefreshToken },
-      });
-
-      // 4. Najdi uživatele
-      const user = await this.prisma.user.findUnique({
-        where: { id: payload.sub },
-      });
-
-      if (!user) {
-        throw new UnauthorizedException('User not found');
-      }
-
-      // 5. Vytvoř nový access token
-      const newAccessToken = this.jwtService.sign(
-        { sub: user.id, systemRole: user.systemRole },
-        {
-          secret: this.configService.get<string>('JWT_SECRET'),
-          expiresIn: '15m',
-        },
-      );
-
-      // 6. Vytvoř nový refresh token
-      const newRefreshToken = this.jwtService.sign(
-        { sub: user.id, systemRole: user.systemRole },
-        {
-          secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
-          expiresIn: '7d',
-        },
-      );
-
-      // 7. Ulož nový refresh token do DB
-      await this.prisma.refreshToken.create({
-        data: {
-          token: newRefreshToken,
-          userId: user.id,
-          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 dní
-        },
-      });
-
-      return { accessToken: newAccessToken, refreshToken: newRefreshToken };
-    } catch (err) {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
+
+    // 2) rotate – smaž starý refresh token
+    await this.prisma.refreshToken.delete({
+      where: { token: oldRefreshToken },
+    });
+
+    // 3) získej uživatele + jeho (první) membership pro payload
+    const user = await this.prisma.user.findUnique({
+      where: { id: row.userId },
+    });
+    if (!user) throw new UnauthorizedException('User not found');
+
+    const membership = await this.prisma.membership.findFirst({
+      where: { userId: user.id },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const claims = this.buildClaims(user, membership);
+
+    // 4) nové tokeny
+    const accessToken = this.jwtService.sign(
+      { ...claims },
+      {
+        secret: this.config.get('JWT_SECRET'),
+        expiresIn: '15m',
+        jwtid: randomUUID(),
+      },
+    );
+    const refreshToken = await this.issueRefreshToken(user.id);
+
+    return { accessToken, refreshToken };
   }
 
   async logout(accessToken: string, refreshToken: string) {
-    // 1. Uložit access token do blacklistu
-    await this.prisma.revokedToken.create({
-      data: { token: accessToken },
-    });
+    // Blacklistni access token (aby nešel použít dál)
+    if (accessToken) {
+      await this.prisma.revokedToken.create({ data: { token: accessToken } });
+    }
 
-    // 2. Smazat refresh token z DB
-    await this.prisma.refreshToken.deleteMany({
-      where: { token: refreshToken },
-    });
+    // Smaž refresh token (může existovat i více – smažeme konkrétní)
+    if (refreshToken) {
+      await this.prisma.refreshToken.deleteMany({
+        where: { token: refreshToken },
+      });
+    }
 
     return { message: 'Logged out successfully' };
   }
@@ -231,6 +276,7 @@ export class AuthService {
       select: {
         id: true,
         email: true,
+        username: true,
         name: true,
         systemRole: true,
         createdAt: true,

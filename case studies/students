@@ -1,0 +1,44 @@
+Case Study 1 – ZŠ Jabloňová: Příprava na školní výlet
+Situace:
+Škola plánuje třídenní výlet pro celý druhý stupeň. Potřebuje rychle vytvořit seznam účastníků pro autobusovou dopravu, ubytování a stravování.
+
+Jak to řešili dřív:
+
+Třídní učitelé posílali papírové seznamy vedení.
+
+Data se ručně přepisovala do Excelu.
+
+Často se zapomnělo uvést třídu nebo jméno třídního učitele, což vedlo k chybám v rozdělení žáků do autobusů.
+
+Jak to řeší s naším exportem:
+
+Zástupce ředitele vybere ve filtru ročník “6.–9.” a stáhne export se sloupci: jméno, třída, třídní učitel, email.
+
+Export trvá pár sekund a obsahuje aktuální data přímo z databáze.
+
+Seznam se pošle dopravci, ubytování a kuchyni.
+
+Výsledek: žádné přepisování, žádné duplicity, úspora 2–3 hodin práce.
+
+Case Study 2 – Gymnázium Komenského: Analýza naplněnosti tříd pro zřizovatele
+Situace:
+Kraj požaduje každý rok v prosinci přehled počtu žáků v každém ročníku a třídě.
+
+Jak to řešili dřív:
+
+Administrativa musela projít třídní knihy a počítat žáky.
+
+Data se posílala z různých systémů (Bakaláři, Excel) a ručně slučovala.
+
+Celý proces trval 2–3 dny.
+
+Jak to řeší s naším exportem:
+
+Administrativní pracovník si vybere export se sloupci: třída, ročník, počet žáků, třídní učitel.
+
+Excel se otevře v Power BI, kde se automaticky vytvoří grafy naplněnosti tříd.
+
+Kraj má přehled během jednoho odpoledne.
+
+Výsledek: proces, který dříve zabral 2–3 dny, je hotový za 30 minut a bez chyb.
+

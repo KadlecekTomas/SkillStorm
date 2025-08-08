@@ -1,6 +1,6 @@
 import { applyDecorators, UseGuards } from '@nestjs/common';
-import { JwtMiddleware } from './jwt.middleware';
+import { AuthGuard } from '@nestjs/passport';
 
 export function JwtAuth() {
-  return applyDecorators(UseGuards(JwtMiddleware));
+  return applyDecorators(UseGuards(AuthGuard('jwt')));
 }
