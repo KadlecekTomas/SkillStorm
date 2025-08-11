@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  Inject,
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import {
@@ -18,22 +19,45 @@ import { QueryStudentsDto } from './dto/query-students.dto';
 import * as XLSX from 'xlsx';
 import { ExportStudentsDto, ExportTemplate } from './dto/export-students.dto';
 
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import type { Cache } from 'cache-manager';
+import {
+  buildVersionedListKey,
+  bumpOrgVersion,
+  cacheGetOrSet,
+  cacheScopeForUser,
+  getOrgVersion,
+} from 'shared/cache/org-cache.utils';
+
 function toPrismaSearch(search?: string): Prisma.StudentWhereInput | undefined {
-  if (!search) return undefined;
+  const s = (search ?? '').trim();
+  if (!s) return undefined;
+
   return {
     OR: [
+      // jméno / email (uživatelský účet studenta)
       {
         membership: {
-          is: {
-            user: { is: { name: { contains: search, mode: 'insensitive' } } },
-          },
+          is: { user: { is: { name: { contains: s, mode: 'insensitive' } } } },
         },
       },
-      { studentNumber: { contains: search, mode: 'insensitive' } },
-      { externalId: { contains: search, mode: 'insensitive' } },
+      {
+        membership: {
+          is: { user: { is: { email: { contains: s, mode: 'insensitive' } } } },
+        },
+      },
+
+      // studentNumber
+      { studentNumber: { equals: s, mode: 'insensitive' } },
+      { studentNumber: { contains: s, mode: 'insensitive' } },
+
+      // externalId
+      { externalId: { equals: s, mode: 'insensitive' } },
+      { externalId: { contains: s, mode: 'insensitive' } },
     ],
   };
 }
+
 function toEnrollmentFilter(
   yearId?: string,
   classSectionId?: string,
@@ -49,6 +73,7 @@ function toEnrollmentFilter(
   };
 }
 
+// ---- export helpers (beze změny) ----
 const DEFAULT_COLUMNS = [
   'studentId',
   'orgId',
@@ -64,9 +89,7 @@ const DEFAULT_COLUMNS = [
   'yearLabel',
   'isCurrentYear',
 ] as const;
-
 type ExportColumn = (typeof DEFAULT_COLUMNS)[number];
-
 type TemplateConfig = {
   columns: ExportColumn[];
   includeEnrollments: boolean;
@@ -74,9 +97,7 @@ type TemplateConfig = {
   mode?: 'light' | 'full';
   filename?: string;
 };
-
 const TEMPLATES: Record<ExportTemplate, TemplateConfig> = {
-  // Přehled pro třídního učitele
   tridni: {
     columns: [
       'userName',
@@ -90,7 +111,6 @@ const TEMPLATES: Record<ExportTemplate, TemplateConfig> = {
     mode: 'light',
     filename: 'prechled_tridni',
   },
-  // Kontakty pro rozesílky
   kontakty: {
     columns: ['userName', 'userEmail', 'classLabel', 'yearLabel'],
     includeEnrollments: true,
@@ -98,7 +118,6 @@ const TEMPLATES: Record<ExportTemplate, TemplateConfig> = {
     mode: 'light',
     filename: 'kontakty_studentu',
   },
-  // Import do LMS (typicky stačí identifikátory)
   lms: {
     columns: ['userId', 'userEmail', 'userName', 'classLabel', 'yearLabel'],
     includeEnrollments: true,
@@ -106,7 +125,6 @@ const TEMPLATES: Record<ExportTemplate, TemplateConfig> = {
     mode: 'light',
     filename: 'lms_import',
   },
-  // Ředitelský přehled (bohatší)
   reditel: {
     columns: [
       'classLabel',
@@ -117,17 +135,14 @@ const TEMPLATES: Record<ExportTemplate, TemplateConfig> = {
       'userName',
       'studentNumber',
       'userEmail',
-    ] as ExportColumn[],
+    ],
     includeEnrollments: true,
     format: 'xlsx',
     mode: 'full',
     filename: 'reditelsky_prehled',
   },
 };
-
 const ALLOWED_COLUMNS = new Set<string>(DEFAULT_COLUMNS as readonly string[]);
-
-// Pomocník: vyřeš columns / includeEnrollments / format z template + overrides
 function resolveExportOptions(q: ExportStudentsDto): {
   columns: ExportColumn[];
   includeEnrollments: boolean;
@@ -135,35 +150,29 @@ function resolveExportOptions(q: ExportStudentsDto): {
   filenameBase: string;
 } {
   const tpl = q.template ? TEMPLATES[q.template] : undefined;
-
-  // sloupce: columns > template.columns > DEFAULT
   const columns: ExportColumn[] =
     q.columns && q.columns.length
       ? (q.columns.filter((c) => ALLOWED_COLUMNS.has(c)) as ExportColumn[])
       : (tpl?.columns ?? [...DEFAULT_COLUMNS]);
-
-  // includeEnrollments: explicitní dotaz > template > default(false pro velké exporty)
   const includeEnrollments =
     typeof q.includeEnrollments === 'boolean'
       ? q.includeEnrollments
       : (tpl?.includeEnrollments ?? true);
-
-  // format: explicitní > template > xlsx
   const format = (q.format ?? tpl?.format ?? 'xlsx') as 'csv' | 'xlsx';
-
-  // filename base: explicitní > template > default
   const filenameBase = (
     q.filename && q.filename.trim().length > 1
       ? q.filename.trim()
       : (tpl?.filename ?? 'students_export')
   ).replace(/[^a-z0-9_\-]/gi, '_');
-
   return { columns, includeEnrollments, format, filenameBase };
 }
 
 @Injectable()
 export class StudentsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    @Inject(CACHE_MANAGER) private readonly cache: Cache,
+  ) {}
 
   private async audit(opts: {
     userId?: string;
@@ -177,7 +186,7 @@ export class StudentsService {
       data: {
         userId: opts.userId ?? null,
         organizationId: opts.orgId ?? null,
-        entityType: AuditEntityType.ORGANIZATION, // držíme se schématu
+        entityType: AuditEntityType.ORGANIZATION,
         entityId: opts.entityId ?? null,
         action: opts.action,
         metadata: opts.metadata ?? null,
@@ -186,8 +195,8 @@ export class StudentsService {
     });
   }
 
+  // ---------- CREATE ----------
   async create(dto: CreateStudentDto, user: JwtPayload) {
-    // kontrola membership existence + role
     const membership = await this.prisma.membership.findUnique({
       where: { id: dto.membershipId },
       select: { id: true, role: true, organizationId: true },
@@ -201,8 +210,6 @@ export class StudentsService {
     if (membership.organizationId !== dto.orgId) {
       throw new ForbiddenException('Membership nepatří do zadané organizace.');
     }
-
-    // už existuje Student pro to membership?
     const alreadyStudent = await this.prisma.student.findUnique({
       where: { membershipId: dto.membershipId },
       select: { id: true },
@@ -210,7 +217,6 @@ export class StudentsService {
     if (alreadyStudent)
       throw new ForbiddenException('Tento uživatel je již studentem.');
 
-    // business pravidlo: TEACHER/DIRECTOR smí jen v rámci své organizace
     if (
       user.systemRole !== SystemRole.SUPERADMIN &&
       user.organizationId !== dto.orgId
@@ -233,14 +239,21 @@ export class StudentsService {
       userId: user.userId,
       orgId: dto.orgId,
       action: 'STUDENT_CREATE',
-      entityId: dto.orgId, // logujeme na ORGANIZATION
+      entityId: dto.orgId,
       metadata: { studentId: created.id, membershipId: dto.membershipId },
       changedFields: dto as any,
     });
 
+    // 🔔 invalidace org‑scoped cache (listy studentů)
+    await bumpOrgVersion(
+      this.cache,
+      cacheScopeForUser(user.systemRole, dto.orgId),
+    );
+
     return created;
   }
 
+  // ---------- LIST (versioned list cache) ----------
   async findAll(user: JwtPayload, q: QueryStudentsDto) {
     const page = q.page ?? 1;
     const limit = q.limit ?? 20;
@@ -251,69 +264,88 @@ export class StudentsService {
         ? { deletedAt: null }
         : { deletedAt: null, orgId: user.organizationId };
 
-    const text = toPrismaSearch(q.search);
-    const enr = toEnrollmentFilter(q.yearId, q.classSectionId);
-
-    // 🔧 explicitní typ = konec TS kňourání
     const where: Prisma.StudentWhereInput = {
       ...baseWhere,
-      ...(text ?? {}),
-      ...(enr ?? {}),
+      ...(toPrismaSearch(q.search) ?? {}),
+      ...(toEnrollmentFilter(q.yearId, q.classSectionId) ?? {}),
     };
 
-    const [total, data] = await this.prisma.$transaction([
-      this.prisma.student.count({ where }),
-      this.prisma.student.findMany({
-        where,
-        include: {
-          membership: { include: { user: true } },
-          enrollments: {
-            include: {
-              academicYear: true,
-              classSection: {
-                include: {
-                  teacher: {
-                    include: { membership: { include: { user: true } } },
+    // verze podle scope (superadmin → 'ALL', jinak orgId)
+    const scopeId = cacheScopeForUser(user.systemRole, user.organizationId);
+    const ver = await getOrgVersion(this.cache, scopeId);
+
+    const cacheKey = buildVersionedListKey({
+      namespace: 'students',
+      scopeId,
+      version: ver,
+      page,
+      limit,
+      search: q.search,
+      includeLevels: false,
+      order: [{ 'membership.user.name': 'asc' }, { studentNumber: 'asc' }],
+      filters: {
+        yearId: q.yearId ?? null,
+        classSectionId: q.classSectionId ?? null,
+      },
+    });
+
+    return cacheGetOrSet(this.cache, cacheKey, 300_000, async () => {
+      const [total, data] = await this.prisma.$transaction([
+        this.prisma.student.count({ where }),
+        this.prisma.student.findMany({
+          where,
+          include: {
+            membership: { include: { user: true } },
+            enrollments: {
+              include: {
+                academicYear: true,
+                classSection: {
+                  include: {
+                    teacher: {
+                      include: { membership: { include: { user: true } } },
+                    },
                   },
                 },
               },
             },
           },
-        },
-        // Student NEMÁ createdAt — použij jméno/číslo jako stabilní pořadí
-        orderBy: [
-          { membership: { user: { name: 'asc' } } }, // nebo vynech, když nechceš nested sort
-          { studentNumber: 'asc' },
-          { membershipId: 'asc' },
-        ],
-        skip,
-        take: limit,
-      }),
-    ]);
+          orderBy: [
+            { membership: { user: { name: 'asc' } } },
+            { studentNumber: 'asc' },
+            { membershipId: 'asc' },
+          ],
+          skip,
+          take: limit,
+        }),
+      ]);
 
-    return {
-      data,
-      meta: {
-        page,
-        limit,
-        total,
-        pages: Math.max(1, Math.ceil(total / limit)),
-      },
-    };
+      return {
+        data,
+        meta: {
+          page,
+          limit,
+          total,
+          pages: Math.max(1, Math.ceil(total / limit)),
+        },
+      };
+    });
   }
 
+  // ---------- DETAIL ----------
   async findOne(id: string, user: JwtPayload) {
     const student = await this.prisma.student.findUnique({
       where: { id },
       include: {
-        membership: { include: { user: true } },
+        membership: { select: { id: true, userId: true, user: true } },
         enrollments: {
           include: {
             academicYear: true,
             classSection: {
               include: {
                 teacher: {
-                  include: { membership: { include: { user: true } } },
+                  include: {
+                    membership: { select: { userId: true, user: true } },
+                  },
                 },
               },
             },
@@ -329,6 +361,7 @@ export class StudentsService {
     return student;
   }
 
+  // ---------- UPDATE ----------
   async update(id: string, dto: UpdateStudentDto, user: JwtPayload) {
     const student = await this.getStudentWithContext(id);
     canAccessStudent(student, user);
@@ -350,9 +383,14 @@ export class StudentsService {
       changedFields: dto as any,
     });
 
+    await bumpOrgVersion(
+      this.cache,
+      cacheScopeForUser(user.systemRole, student.orgId),
+    );
     return updated;
   }
 
+  // ---------- DELETE (soft) ----------
   async remove(id: string, user: JwtPayload) {
     const student = await this.getStudentWithContext(id);
 
@@ -381,6 +419,10 @@ export class StudentsService {
       metadata: { studentId: deleted.id },
     });
 
+    await bumpOrgVersion(
+      this.cache,
+      cacheScopeForUser(user.systemRole, deleted.orgId),
+    );
     return deleted;
   }
 
@@ -408,17 +450,15 @@ export class StudentsService {
     return student;
   }
 
+  // ---------- EXPORT (beze změny logiky) ----------
   async export(
     user: JwtPayload,
     q: ExportStudentsDto,
   ): Promise<{ buffer: Buffer; contentType: string; filename: string }> {
     const batchSize = q.batchSize ?? 1000;
-
-    // 🔥 z template vyřeš vše potřebné (s ohledem na overrides)
     const { columns, includeEnrollments, format, filenameBase } =
       resolveExportOptions(q);
 
-    // WHERE podle oprávnění + filtrů (beze změny)
     const baseWhere: Prisma.StudentWhereInput =
       user.systemRole === SystemRole.SUPERADMIN
         ? { deletedAt: null }
@@ -430,11 +470,9 @@ export class StudentsService {
       ...(toEnrollmentFilter(q.yearId, q.classSectionId) ?? {}),
     };
 
-    // (volitelná automatika) pokud je moc řádků a uživatel dal xlsx → přepni na csv
     const total = await this.prisma.student.count({ where });
     const bookType = total > 20000 && format === 'xlsx' ? 'csv' : format;
 
-    // pevně typovaný include → typově víme o user/enrollments
     const studentInclude = Prisma.validator<Prisma.StudentInclude>()({
       organization: true,
       membership: { include: { user: true } },
@@ -449,7 +487,6 @@ export class StudentsService {
         },
       },
     });
-
     type StudentWithAll = Prisma.StudentGetPayload<{
       include: typeof studentInclude;
     }>;
@@ -496,7 +533,6 @@ export class StudentsService {
             yearLabel: e?.academicYear?.label ?? null,
             isCurrentYear: e?.academicYear?.isCurrent ?? null,
           };
-
           rows.push(this.pickColumns(row, columns));
         }
       }
@@ -508,14 +544,17 @@ export class StudentsService {
 
     const buffer = XLSX.write(wb, { type: 'buffer', bookType });
 
+    // audit exportu
     await this.audit({
       userId: user.userId,
       orgId:
-        user.systemRole === SystemRole.SUPERADMIN ? null : user.organizationId,
+        user.systemRole === SystemRole.SUPERADMIN
+          ? undefined
+          : user.organizationId,
       action: `STUDENT_EXPORT_${String(bookType).toUpperCase()}`,
       entityId:
         user.systemRole === SystemRole.SUPERADMIN
-          ? null
+          ? undefined
           : (user.organizationId ?? undefined),
       metadata: {
         total,

@@ -11,6 +11,7 @@ import {
   Req,
   ForbiddenException,
   ParseUUIDPipe,
+  Query,
 } from '@nestjs/common';
 import { CreateOrganizationDto } from './dto/create-organization.dto';
 import { UpdateOrganizationDto } from './dto/update-organization.dto';
@@ -19,23 +20,32 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { $Enums, OrganizationType } from '@prisma/client';
 import { OrganizationsService } from './organizations.service';
-import { ApiBearerAuth, ApiTags, ApiOperation } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiTags,
+  ApiOperation,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { SchoolAccessGuard } from '../auth/guards/school-access.guard';
+import { QueryOrganizationsDto } from './dto/query-organizations.dto';
+import { CacheTTL } from '@nestjs/cache-manager';
+import { InvalidateScopes } from 'src/common/cache/invalidate.decorator';
 
-@Controller('organizations')
 @ApiTags('organizations')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
+@Controller('organizations')
 export class OrganizationsController {
   constructor(private readonly service: OrganizationsService) {}
 
   @Post()
   @ApiOperation({
     summary:
-      'Create organization (PRIVATE/COMMUNITY: any user, SCHOOL: superadmin or any current director)',
+      'Create organization (PRIVATE/COMMUNITY: any user, SCHOOL: superadmin nebo aktuální director)',
   })
+  @InvalidateScopes(() => ['ALL']) // globální list → invaliduj ALL
   async create(@Body() dto: CreateOrganizationDto, @Req() req: any) {
-    const userId = req.user?.id;
+    const userId = req.user?.userId;
     const isSuper = req.user?.systemRole === $Enums.SystemRole.SUPERADMIN;
 
     if (dto.type === OrganizationType.SCHOOL && !isSuper) {
@@ -52,9 +62,16 @@ export class OrganizationsController {
 
   @Get()
   @Roles($Enums.SystemRole.SUPERADMIN)
-  @ApiOperation({ summary: 'Get all organizations (only for superadmin)' })
-  findAll() {
-    return this.service.findAll();
+  @ApiOperation({
+    summary: 'Get organizations (only superadmin), s pagination + search',
+  })
+  @ApiQuery({ name: 'search', required: false, type: String })
+  @ApiQuery({ name: 'type', required: false, enum: OrganizationType })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @CacheTTL(0) // vypnout HTTP response cache – používáme verzovanou cache v service
+  findAll(@Query() q: QueryOrganizationsDto) {
+    return this.service.findAll(q);
   }
 
   @Get(':id')
@@ -66,8 +83,9 @@ export class OrganizationsController {
     $Enums.SystemRole.SUPERADMIN,
   )
   @ApiOperation({
-    summary: 'Get organization detail (director/teacher/student)',
+    summary: 'Get organization detail (director/teacher/student/superadmin)',
   })
+  @CacheTTL(0)
   findOne(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.findOne(id);
   }
@@ -76,12 +94,12 @@ export class OrganizationsController {
   @UseGuards(SchoolAccessGuard)
   @Roles($Enums.OrganizationRole.DIRECTOR, $Enums.SystemRole.SUPERADMIN)
   @ApiOperation({ summary: 'Update organization (director or superadmin)' })
+  @InvalidateScopes(() => ['ALL'])
   update(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() dto: UpdateOrganizationDto,
     @Req() req: any,
   ) {
-    // ochrana: jen SUPERADMIN smí měnit typ → SCHOOL
     if (
       dto.type === OrganizationType.SCHOOL &&
       req.user?.systemRole !== $Enums.SystemRole.SUPERADMIN
@@ -90,12 +108,13 @@ export class OrganizationsController {
         'Pouze superadmin může změnit typ organizace na SCHOOL.',
       );
     }
-    return this.service.update(id, dto);
+    return this.service.update(id, dto, req.user?.userId ?? null);
   }
 
   @Delete(':id')
   @Roles($Enums.SystemRole.SUPERADMIN)
   @ApiOperation({ summary: 'Soft delete organization (only for superadmin)' })
+  @InvalidateScopes(() => ['ALL'])
   remove(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.remove(id);
   }

@@ -9,12 +9,19 @@ import {
   Query,
   Request,
   UseGuards,
+  ParseUUIDPipe,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiQuery,
+  ApiTags,
+} from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { Roles } from 'src/auth/decorators/roles.decorator';
 import { OrganizationRole, SystemRole } from '@prisma/client';
+
 import { QueryCatalogDto } from './dto/query-catalog.dto';
 import { CreateCatalogSubjectDto } from './dto/create-catalog-subject.dto';
 import { UpdateCatalogSubjectDto } from './dto/update-catalog-subject.dto';
@@ -32,14 +39,19 @@ import { CatalogService } from './catalog.service';
 export class CatalogController {
   constructor(private readonly service: CatalogService) {}
 
-  // ------- READ (teacher/director/superadmin) -------
+  // ---------- READ (teacher/director/superadmin) ----------
   @Get('subjects')
   @Roles(
     SystemRole.SUPERADMIN,
     OrganizationRole.DIRECTOR,
     OrganizationRole.TEACHER,
   )
-  @ApiOperation({ summary: 'CatalogSubject list' })
+  @ApiOperation({
+    summary: 'CatalogSubject list (search + pagination, cached)',
+  })
+  @ApiQuery({ name: 'search', required: false, type: String })
+  @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, type: Number, example: 20 })
   listSubjects(@Query() q: QueryCatalogDto) {
     return this.service.listSubjects(q);
   }
@@ -50,8 +62,8 @@ export class CatalogController {
     OrganizationRole.DIRECTOR,
     OrganizationRole.TEACHER,
   )
-  @ApiOperation({ summary: 'CatalogSubject detail' })
-  getSubject(@Param('id') id: string) {
+  @ApiOperation({ summary: 'CatalogSubject detail (cached)' })
+  getSubject(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.getSubject(id);
   }
 
@@ -61,8 +73,14 @@ export class CatalogController {
     OrganizationRole.DIRECTOR,
     OrganizationRole.TEACHER,
   )
-  @ApiOperation({ summary: 'CatalogTopic list by CatalogSubject' })
-  listTopics(@Param('id') id: string, @Query() q: QueryCatalogDto) {
+  @ApiOperation({ summary: 'CatalogTopic list by CatalogSubject (cached)' })
+  @ApiQuery({ name: 'search', required: false, type: String })
+  @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, type: Number, example: 50 })
+  listTopics(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Query() q: QueryCatalogDto,
+  ) {
     return this.service.listTopicsByCatalogSubject(id, q);
   }
 
@@ -72,23 +90,21 @@ export class CatalogController {
     OrganizationRole.DIRECTOR,
     OrganizationRole.TEACHER,
   )
-  @ApiOperation({ summary: 'CatalogTopic detail' })
-  getTopic(@Param('id') id: string) {
+  @ApiOperation({ summary: 'CatalogTopic detail (cached)' })
+  getTopic(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.getTopic(id);
   }
 
-  // ------- MATERIALIZE (teacher/director in org, or superadmin) -------
+  // ---------- MATERIALIZE (teacher/director in org, or superadmin) ----------
   @Post('subjects/:id/materialize-to-org')
   @Roles(
     SystemRole.SUPERADMIN,
     OrganizationRole.DIRECTOR,
     OrganizationRole.TEACHER,
   )
-  @ApiOperation({
-    summary: 'Vytvoř Subject (+SubjectLevel) v organizaci z CatalogSubject',
-  })
+  @ApiOperation({ summary: 'Vytvoř Subject (+levels) v org z CatalogSubject' })
   materializeSubject(
-    @Param('id') catalogSubjectId: string,
+    @Param('id', new ParseUUIDPipe()) catalogSubjectId: string,
     @Body() dto: MaterializeSubjectDto,
     @Request() req,
   ) {
@@ -103,7 +119,7 @@ export class CatalogController {
   )
   @ApiOperation({ summary: 'Vytvoř TopicLevel v SubjectLevel z CatalogTopic' })
   materializeTopic(
-    @Param('id') catalogTopicId: string,
+    @Param('id', new ParseUUIDPipe()) catalogTopicId: string,
     @Body() dto: MaterializeTopicDto,
     @Request() req,
   ) {
@@ -120,14 +136,14 @@ export class CatalogController {
     summary: 'Bulk materializace více CatalogTopic do SubjectLevel',
   })
   materializeTopicsBulk(
-    @Param('id') catalogSubjectId: string,
+    @Param('id', new ParseUUIDPipe()) catalogSubjectId: string,
     @Body() dto: MaterializeTopicsBulkDto,
     @Request() req,
   ) {
     return this.service.materializeTopicsBulk(catalogSubjectId, dto, req.user);
   }
 
-  // ------- CRUD (superadmin only) -------
+  // ---------- CRUD (superadmin only) ----------
   @Post('subjects')
   @Roles(SystemRole.SUPERADMIN)
   @ApiOperation({ summary: 'Create CatalogSubject (SUPERADMIN)' })
@@ -139,7 +155,7 @@ export class CatalogController {
   @Roles(SystemRole.SUPERADMIN)
   @ApiOperation({ summary: 'Update CatalogSubject (SUPERADMIN)' })
   updateCatalogSubject(
-    @Param('id') id: string,
+    @Param('id', new ParseUUIDPipe()) id: string,
     @Body() dto: UpdateCatalogSubjectDto,
   ) {
     return this.service.updateCatalogSubject(id, dto);
@@ -148,7 +164,7 @@ export class CatalogController {
   @Delete('subjects/:id')
   @Roles(SystemRole.SUPERADMIN)
   @ApiOperation({ summary: 'Delete CatalogSubject (SUPERADMIN)' })
-  deleteCatalogSubject(@Param('id') id: string) {
+  deleteCatalogSubject(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.deleteCatalogSubject(id);
   }
 
@@ -158,7 +174,7 @@ export class CatalogController {
     summary: 'Create CatalogTopic under CatalogSubject (SUPERADMIN)',
   })
   createCatalogTopic(
-    @Param('id') subjectId: string,
+    @Param('id', new ParseUUIDPipe()) subjectId: string,
     @Body() dto: CreateCatalogTopicDto,
   ) {
     return this.service.createCatalogTopic(subjectId, dto);
@@ -168,7 +184,7 @@ export class CatalogController {
   @Roles(SystemRole.SUPERADMIN)
   @ApiOperation({ summary: 'Update CatalogTopic (SUPERADMIN)' })
   updateCatalogTopic(
-    @Param('id') id: string,
+    @Param('id', new ParseUUIDPipe()) id: string,
     @Body() dto: UpdateCatalogTopicDto,
   ) {
     return this.service.updateCatalogTopic(id, dto);
@@ -177,7 +193,7 @@ export class CatalogController {
   @Delete('topics/:id')
   @Roles(SystemRole.SUPERADMIN)
   @ApiOperation({ summary: 'Delete CatalogTopic (SUPERADMIN)' })
-  deleteCatalogTopic(@Param('id') id: string) {
+  deleteCatalogTopic(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.deleteCatalogTopic(id);
   }
 }

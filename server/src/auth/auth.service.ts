@@ -2,7 +2,7 @@
 import {
   Injectable,
   UnauthorizedException,
-  BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
@@ -10,7 +10,7 @@ import * as bcrypt from 'bcrypt';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ConfigService } from '@nestjs/config';
-import { Membership, User, $Enums } from '@prisma/client';
+import { Membership, User, $Enums, Prisma } from '@prisma/client';
 import { randomBytes, randomUUID } from 'crypto';
 import { addDays } from 'date-fns';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
@@ -123,7 +123,8 @@ export class AuthService {
         where: { email: dto.email },
       });
       if (existing) {
-        throw new BadRequestException('Email already exists');
+        // dřív: throw new BadRequestException('Email already exists');
+        throw new ConflictException('Email already exists'); // ← změna na 409
       }
     }
 
@@ -132,36 +133,63 @@ export class AuthService {
     // Username – volitelně z dto, jinak z emailu/jména
     const baseUname =
       dto.username ?? dto.email?.split('@')[0] ?? dto.name ?? 'user';
-    const username = await this.ensureUniqueUsername(baseUname);
 
-    const now = new Date(); // jednotný čas
+    // zkusíme 2× kvůli eventualitě závodu (P2002)
+    const now = new Date();
 
-    const user = await this.prisma.user.create({
-      data: {
-        email: dto.email ?? null,
-        username,
-        name: dto.name,
-        passwordHash,
-        systemRole: dto.systemRole ?? null,
-        lastLoginAt: now,
-      },
-    });
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const username = await this.ensureUniqueUsername(
+        attempt === 0
+          ? baseUname
+          : `${baseUname}${Math.floor(Math.random() * 1000)}`,
+      );
 
-    const tokens = await this.generateTokens(user, null);
+      try {
+        const user = await this.prisma.user.create({
+          data: {
+            email: dto.email ?? null,
+            username,
+            name: dto.name,
+            passwordHash,
+            systemRole: dto.systemRole ?? null,
+            lastLoginAt: now,
+          },
+        });
 
-    return {
-      ...tokens,
-      user: {
-        id: user.id,
-        email: user.email,
-        username: user.username,
-        name: user.name,
-        systemRole: user.systemRole,
-        organizationRole: null,
-        organizationId: null,
-        lastLoginAt: user.lastLoginAt,
-      },
-    };
+        const tokens = await this.generateTokens(user, null);
+        return {
+          ...tokens,
+          user: {
+            id: user.id,
+            email: user.email,
+            username: user.username,
+            name: user.name,
+            systemRole: user.systemRole,
+            organizationRole: null,
+            organizationId: null,
+            lastLoginAt: user.lastLoginAt,
+          },
+        };
+      } catch (e) {
+        // Prisma unique clash (username/email)
+        if (
+          e instanceof Prisma.PrismaClientKnownRequestError &&
+          e.code === 'P2002'
+        ) {
+          // pokud target obsahuje 'email' → vrať 409 hned
+          const target = (e.meta as any)?.target as string[] | undefined;
+          if (target?.includes('email')) {
+            throw new ConflictException('Email already exists');
+          }
+          // pokud username, zkusíme ještě jednou s jiným suffixem; jinak po 2 pokusech 409
+          continue;
+        }
+        throw e;
+      }
+    }
+
+    // po 2 pokusech stále kolize username → 409
+    throw new ConflictException('Username already exists');
   }
 
   async login(dto: LoginDto) {

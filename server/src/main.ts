@@ -2,6 +2,8 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ValidationPipe } from '@nestjs/common';
+import { PrismaService } from './prisma/prisma.service';
+import { bootstrapSearchAll } from './db/bootstrap-search-all';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -13,6 +15,9 @@ async function bootstrap() {
       transform: true, // důležité pro @Transform
     }),
   );
+
+  const prisma = app.get(PrismaService);
+  await bootstrapSearchAll(prisma);
 
   const config = new DocumentBuilder()
     .setTitle('Test System API')

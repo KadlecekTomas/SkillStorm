@@ -85,14 +85,12 @@ export class SubjectsService {
 
   /** ---------- CREATE ---------- */
   async create(dto: CreateSubjectDto, user: JwtPayload) {
-    // učitel/ředitel ve stejné organizaci nebo superadmin
     assertTeacherOrDirectorInOrgOrSuperadmin(
       user,
       dto.organizationId,
       'předmět',
     );
 
-    // kontrola katalogu (pokud je nastaven)
     if (dto.catalogSubjectId) {
       const exists = await this.prisma.catalogSubject.findUnique({
         where: { id: dto.catalogSubjectId },
@@ -102,7 +100,6 @@ export class SubjectsService {
         throw new NotFoundException('Zvolený katalogový předmět neexistuje.');
     }
 
-    // duplicita názvu v rámci org (jen aktivní)
     const dup = await this.prisma.subject.findFirst({
       where: {
         organizationId: dto.organizationId,
@@ -122,6 +119,13 @@ export class SubjectsService {
         organizationId: dto.organizationId,
         catalogSubjectId: dto.catalogSubjectId ?? null,
       },
+      select: {
+        id: true,
+        name: true,
+        organizationId: true,
+        catalogSubjectId: true,
+        deletedAt: true,
+      },
     });
 
     await this.audit({
@@ -132,13 +136,11 @@ export class SubjectsService {
       changedFields: dto as any,
     });
 
-    // invalidace cache listů pro danou org
     await bumpOrgVersion(
       this.cache,
       cacheScopeForUser(user.systemRole, dto.organizationId),
     );
-
-    return created;
+    return created; // obsahuje organizationId → controller invaliduje scope
   }
 
   /** ---------- LIST (search + pagination + cache s verzí) ---------- */
@@ -185,7 +187,6 @@ export class SubjectsService {
           take: limit,
         }),
       ]);
-
       return {
         data,
         meta: {
@@ -214,7 +215,16 @@ export class SubjectsService {
 
   /** ---------- UPDATE ---------- */
   async update(id: string, dto: UpdateSubjectDto, user: JwtPayload) {
-    const current = await this.prisma.subject.findUnique({ where: { id } });
+    const current = await this.prisma.subject.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        name: true,
+        organizationId: true,
+        catalogSubjectId: true,
+        deletedAt: true,
+      },
+    });
     if (!current || current.deletedAt)
       throw new NotFoundException('Předmět nebyl nalezen');
 
@@ -255,6 +265,13 @@ export class SubjectsService {
         name: dto.name?.trim() ?? undefined,
         catalogSubjectId: dto.catalogSubjectId ?? undefined,
       },
+      select: {
+        id: true,
+        name: true,
+        organizationId: true,
+        catalogSubjectId: true,
+        deletedAt: true,
+      },
     });
 
     await this.audit({
@@ -269,12 +286,15 @@ export class SubjectsService {
       this.cache,
       cacheScopeForUser(user.systemRole, current.organizationId),
     );
-    return updated;
+    return updated; // obsahuje organizationId → controller invaliduje scope
   }
 
   /** ---------- DELETE (soft) ---------- */
   async remove(id: string, user: JwtPayload) {
-    const subject = await this.prisma.subject.findUnique({ where: { id } });
+    const subject = await this.prisma.subject.findUnique({
+      where: { id },
+      select: { id: true, name: true, organizationId: true },
+    });
     if (!subject) throw new NotFoundException('Předmět nebyl nalezen');
 
     assertTeacherOrDirectorInOrgOrSuperadmin(
@@ -286,6 +306,7 @@ export class SubjectsService {
     const deleted = await this.prisma.subject.update({
       where: { id },
       data: { deletedAt: new Date() },
+      select: { id: true, organizationId: true },
     });
 
     await this.audit({

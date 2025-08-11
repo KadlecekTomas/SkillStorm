@@ -7,7 +7,7 @@ import {
 import { PrismaService } from 'src/prisma/prisma.service';
 import { SetHomeroomDto } from './dto/set-homeroom.dto';
 import { JwtPayload } from 'src/auth/types/jwt-payload';
-import { SystemRole } from '@prisma/client';
+import { OrganizationRole, SystemRole } from '@prisma/client';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 import {
@@ -34,11 +34,10 @@ export class ClassSectionService {
     if (!cls) throw new NotFoundException('Třída nebyla nalezena.');
 
     const sameOrg = user.organizationId === cls.orgId;
+    const isDirector = user.organizationRole === OrganizationRole.DIRECTOR;
+
     if (
-      !(
-        user.systemRole === SystemRole.SUPERADMIN ||
-        (sameOrg && user.organizationRole === 'DIRECTOR')
-      )
+      !(user.systemRole === SystemRole.SUPERADMIN || (sameOrg && isDirector))
     ) {
       throw new ForbiddenException(
         'Pouze ředitel dané školy nebo superadmin může měnit třídnictví.',
@@ -48,7 +47,7 @@ export class ClassSectionService {
     const teacherId: string | null = dto.teacherId ?? null;
 
     if (teacherId) {
-      // ověř, že teacher existuje a patří do stejné organizace
+      // ověř, že teacher existuje, není smazaný a patří do stejné org
       const teacher = await this.prisma.teacher.findUnique({
         where: { id: teacherId },
         select: { id: true, organizationId: true, deletedAt: true },
@@ -66,16 +65,14 @@ export class ClassSectionService {
       where: { id: classSectionId },
       data: { teacherId },
       include: {
-        academicYear: true,
-        teacher: {
-          include: { membership: { include: { user: true } } },
-        },
+        academicYear: true, // obsahuje orgId → použije se pro InvalidateScopes
+        teacher: { include: { membership: { include: { user: true } } } },
       },
     });
 
-    // invalidace listů, které mohou zobrazovat třídnictví
+    // pro jistotu i service‑level bump (kontrolní síť)
     const scope = cacheScopeForUser(user.systemRole, cls.orgId);
-    await bumpOrgVersion(this.cache, scope); // např. teachers list/homeroom, classSections list apod.
+    await bumpOrgVersion(this.cache, scope);
 
     return updated;
   }

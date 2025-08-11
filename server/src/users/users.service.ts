@@ -1,22 +1,25 @@
+// src/users/users.service.ts
 import {
   Injectable,
   NotFoundException,
   ForbiddenException,
   ConflictException,
+  Inject,
 } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import type { Cache } from 'cache-manager';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Prisma, SystemRole, AuditEntityType } from '@prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
+
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-
-import { Inject } from '@nestjs/common';
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import type { Cache } from 'cache-manager';
 import { QueryUsersDto } from './dto/query-users.dto';
-import { makeUserSearch } from 'shared/cache/org-cache.utils';
+
+// pokud to máš jinde, nech cestu dle projektu
+import { makeUserSearch } from '../../shared/cache/org-cache.utils';
 
 type ListQuery = { page: number; limit: number; search?: string };
 
@@ -27,8 +30,8 @@ export class UsersService {
     @Inject(CACHE_MANAGER) private cache: Cache,
   ) {}
 
-  // ---- safe select (bez hashů) ----
-  private selectSafe = {
+  // -------- výběr bez citlivých polí --------
+  private readonly selectSafe = {
     id: true,
     email: true,
     username: true,
@@ -41,7 +44,7 @@ export class UsersService {
     deletedAt: true,
   } as const;
 
-  // ---- audit helper ----
+  // -------- audit helper --------
   private async audit(opts: {
     userId?: string | null;
     orgId?: string | null;
@@ -63,38 +66,44 @@ export class UsersService {
     });
   }
 
-  // ---- versioning keys ----
-  private GLOBAL_VER = 'users_version_global';
+  // -------- cache versioning --------
+  private readonly GLOBAL_VER = 'users_version_global';
   private userVerKey = (id: string) => `user_v:${id}`;
+  private detailKey = (id: string, ver: string | number) =>
+    `users:detail:${id}:v${ver}`;
 
   private async getGlobalVer() {
     const v = await this.cache.get<number>(this.GLOBAL_VER);
     return typeof v === 'number' ? v : 1;
-    // necháme implicitně 1, a první bump nastaví -> 2
   }
   private async bumpGlobal() {
     const v = await this.getGlobalVer();
+    // TTL musí být objekt; 0 = bez expirace
     await this.cache.set(this.GLOBAL_VER, v + 1, 0);
   }
+
+  private async getUserVer(id: string) {
+    const v = await this.cache.get<number>(this.userVerKey(id));
+    return typeof v === 'number' ? v : 1;
+  }
   private async bumpUser(id: string) {
-    const key = this.userVerKey(id);
-    const v = ((await this.cache.get<number>(key)) ?? 1) + 1;
-    await this.cache.set(key, v, 0);
+    const v = await this.getUserVer(id);
+    await this.cache.set(this.userVerKey(id), v + 1, 0);
   }
 
   private async cacheGetOrSet<T>(
     key: string,
-    ttlMs: number,
+    ttlSec: number,
     factory: () => Promise<T>,
   ): Promise<T> {
     const hit = await this.cache.get<T>(key);
     if (hit !== undefined && hit !== null) return hit;
     const fresh = await factory();
-    await this.cache.set(key, fresh, ttlMs);
+    await this.cache.set(key, fresh, ttlSec);
     return fresh;
   }
 
-  // -------- LIST (ADMIN) --------
+  // -------- LIST (jednoduchý; nepoužívá controller) --------
   async findAll(q: ListQuery) {
     const skip = (q.page - 1) * q.limit;
     const where: Prisma.UserWhereInput = {
@@ -114,7 +123,7 @@ export class UsersService {
     const ver = await this.getGlobalVer();
     const cacheKey = `users:list:v${ver}:p${q.page}:l${q.limit}:s=${q.search ?? ''}`;
 
-    return this.cacheGetOrSet(cacheKey, 60_000, async () => {
+    return this.cacheGetOrSet(cacheKey, 60, async () => {
       const [total, data] = await this.prisma.$transaction([
         this.prisma.user.count({ where }),
         this.prisma.user.findMany({
@@ -137,12 +146,12 @@ export class UsersService {
     });
   }
 
-  // -------- DETAIL --------
+  // -------- DETAIL (verzovaná cache) --------
   async findOneSafe(id: string) {
-    const ver = (await this.cache.get<number>(this.userVerKey(id))) ?? 1;
-    const cacheKey = `users:detail:${id}:v${ver}`;
+    const ver = await this.getUserVer(id);
+    const cacheKey = this.detailKey(id, ver);
 
-    return this.cacheGetOrSet(cacheKey, 60_000, async () => {
+    return this.cacheGetOrSet(cacheKey, 60, async () => {
       const user = await this.prisma.user.findUnique({
         where: { id },
         select: {
@@ -152,8 +161,9 @@ export class UsersService {
           },
         },
       });
-      if (!user || user.isAnonymized || user.deletedAt)
+      if (!user || user.isAnonymized || user.deletedAt) {
         throw new NotFoundException('User not found');
+      }
       return user;
     });
   }
@@ -179,19 +189,21 @@ export class UsersService {
         entityId: created.id,
         changedFields: { ...dto, password: '***' },
       });
-      await this.bumpGlobal(); // invaliduj listy
 
-      return created;
+      await this.bumpGlobal(); // invalidace listů
+      return { user: created, affectedOrgIds: [] as string[] };
     } catch (error) {
       if (
         error instanceof PrismaClientKnownRequestError &&
         error.code === 'P2002'
       ) {
         const target = (error.meta?.target as string[]) ?? [];
-        if (target.some((t) => t.includes('email')))
+        if (target.some((t) => t.includes('email'))) {
           throw new ConflictException('Email už existuje.');
-        if (target.some((t) => t.includes('username')))
+        }
+        if (target.some((t) => t.includes('username'))) {
           throw new ConflictException('Username už existuje.');
+        }
       }
       throw error;
     }
@@ -212,8 +224,9 @@ export class UsersService {
         deletedAt: true,
       },
     });
-    if (!current || current.isAnonymized || current.deletedAt)
+    if (!current || current.isAnonymized || current.deletedAt) {
       throw new NotFoundException('User not found');
+    }
 
     if (dto.systemRole !== undefined && !opts.requesterIsSuperadmin) {
       throw new ForbiddenException('Změnu systemRole smí jen SUPERADMIN.');
@@ -221,14 +234,11 @@ export class UsersService {
     if (
       opts.requesterIsSuperadmin &&
       opts.requesterId === id &&
-      dto.systemRole !== undefined
+      dto.systemRole !== undefined &&
+      current.systemRole === SystemRole.SUPERADMIN &&
+      dto.systemRole !== SystemRole.SUPERADMIN
     ) {
-      if (
-        current.systemRole === SystemRole.SUPERADMIN &&
-        dto.systemRole !== SystemRole.SUPERADMIN
-      ) {
-        throw new ForbiddenException('Nelze si odebrat roli SUPERADMIN.');
-      }
+      throw new ForbiddenException('Nelze si odebrat roli SUPERADMIN.');
     }
 
     const data: Prisma.UserUpdateInput = {
@@ -254,26 +264,37 @@ export class UsersService {
         changedFields: { ...dto, password: dto.password ? '***' : undefined },
       });
 
-      await this.bumpUser(id); // invaliduj detail
-      await this.bumpGlobal(); // a i listy (jméno/email se může projevit ve vyhledávání)
+      const memberships = await this.prisma.membership.findMany({
+        where: { userId: id },
+        select: { organizationId: true },
+      });
+      const affectedOrgIds = [
+        ...new Set(memberships.map((m) => m.organizationId)),
+      ];
 
-      return updated;
+      // invalidace listů + detailu (přes bump verze)
+      await this.bumpGlobal();
+      await this.bumpUser(id);
+
+      return { user: updated, affectedOrgIds };
     } catch (error) {
       if (
         error instanceof PrismaClientKnownRequestError &&
         error.code === 'P2002'
       ) {
         const target = (error.meta?.target as string[]) ?? [];
-        if (target.some((t) => t.includes('email')))
+        if (target.some((t) => t.includes('email'))) {
           throw new ConflictException('Email už existuje.');
-        if (target.some((t) => t.includes('username')))
+        }
+        if (target.some((t) => t.includes('username'))) {
           throw new ConflictException('Username už existuje.');
+        }
       }
       throw error;
     }
   }
 
-  // -------- DELETE (soft/anonymize) --------
+  // -------- DELETE / anonymizace --------
   async remove(id: string, requester: any) {
     const target = await this.prisma.user.findUnique({
       where: { id },
@@ -285,8 +306,9 @@ export class UsersService {
         memberships: { select: { organizationId: true } },
       },
     });
-    if (!target || target.isAnonymized || target.deletedAt)
+    if (!target || target.isAnonymized || target.deletedAt) {
       throw new NotFoundException('User not found');
+    }
 
     const requesterIsSuperadmin = requester.systemRole === 'SUPERADMIN';
     if (target.systemRole === SystemRole.SUPERADMIN && !requesterIsSuperadmin) {
@@ -297,11 +319,16 @@ export class UsersService {
         (m) => m.organizationId === requester.organizationId,
       );
       const isDirector = requester.organizationRole === 'DIRECTOR';
-      if (!(sameOrg && isDirector))
+      if (!(sameOrg && isDirector)) {
         throw new ForbiddenException(
           'Nemáš oprávnění smazat tohoto uživatele.',
         );
+      }
     }
+
+    const affectedOrgIds = [
+      ...new Set(target.memberships.map((m) => m.organizationId)),
+    ];
 
     const anonymizedEmail = `anonymized-${uuidv4()}@deleted.local`;
     const updated = await this.prisma.user.update({
@@ -318,61 +345,70 @@ export class UsersService {
     });
 
     await this.prisma.refreshToken.deleteMany({ where: { userId: id } });
+
     await this.audit({
       userId: requester.userId ?? null,
       action: 'USER_DELETE_SOFT',
       entityId: id,
+      metadata: { requesterOrgId: requester.organizationId ?? null },
     });
 
-    await this.bumpUser(id); // invaliduj detail
-    await this.bumpGlobal(); // invaliduj listy
+    // bump verze → další GET detailu sáhne na nový klíč a vrátí 404
+    await this.bumpGlobal();
+    await this.bumpUser(id);
 
-    return updated;
+    return { user: updated, affectedOrgIds };
   }
 
-  // -------- last login (bez cache, je to “hot path”) --------
+  // -------- last login (bez list cache; ať se hned projeví v detailu) --------
   async updateLastLogin(userId: string) {
-    return this.prisma.user.update({
+    const res = await this.prisma.user.update({
       where: { id: userId },
       data: { lastLoginAt: new Date() },
       select: this.selectSafe,
     });
+    await this.bumpUser(userId);
+    return res;
   }
 
+  // -------- LIST (plně filtrovaný/řazený; používá controller) --------
   async findAllQuery(requester: any, q: QueryUsersDto) {
     const page = q.page ?? 1;
     const limit = Math.min(200, q.limit ?? 50);
     const skip = (page - 1) * limit;
 
-    // base scope: jen neanonymizovaní a ne-smazaní
-    const base: Prisma.UserWhereInput = {
-      isAnonymized: false,
-      deletedAt: null,
-    };
+    let membershipsFilter: Prisma.MembershipWhereInput | undefined;
 
-    // RBAC: pokud není SUPERADMIN → omez na vlastní org přes memberships.some
-    const orgFilter: Prisma.UserWhereInput =
-      requester.systemRole === 'SUPERADMIN'
-        ? q.organizationId
-          ? { memberships: { some: { organizationId: q.organizationId } } }
-          : {}
-        : {
-            memberships: { some: { organizationId: requester.organizationId } },
-          };
+    if (requester.systemRole !== 'SUPERADMIN') {
+      membershipsFilter = {
+        ...(membershipsFilter ?? {}),
+        organizationId: requester.organizationId,
+      };
+    }
 
-    // filtr role v rámci organizace (přes memberships.some.role)
-    const roleFilter: Prisma.UserWhereInput = q.hasOrgRole
-      ? { memberships: { some: { role: q.hasOrgRole } } }
-      : {};
+    if (requester.systemRole === 'SUPERADMIN' && q.organizationId) {
+      membershipsFilter = {
+        ...(membershipsFilter ?? {}),
+        organizationId: q.organizationId,
+      };
+    }
+
+    if (q.hasOrgRole) {
+      membershipsFilter = {
+        ...(membershipsFilter ?? {}),
+        role: q.hasOrgRole,
+      };
+    }
 
     const where: Prisma.UserWhereInput = {
-      ...base,
-      ...orgFilter,
-      ...roleFilter,
+      isAnonymized: false,
+      deletedAt: null,
+      ...(membershipsFilter
+        ? { memberships: { some: membershipsFilter } }
+        : {}),
       ...(makeUserSearch(q.search) ?? {}),
     };
 
-    // orderBy bezpečně mapni na konkrétní pole
     const orderBy: Prisma.UserOrderByWithRelationInput =
       q.orderBy === 'email'
         ? { email: q.orderDir ?? 'asc' }
@@ -380,41 +416,51 @@ export class UsersService {
           ? { username: q.orderDir ?? 'asc' }
           : q.orderBy === 'lastLoginAt'
             ? { lastLoginAt: q.orderDir ?? 'asc' }
-            : { name: q.orderDir ?? 'asc' }; // default
+            : { name: q.orderDir ?? 'asc' };
 
-    // (volitelné) využij tvoji cache verzi pro listy – pokud už máš v UsersService
-    // const ver = await this.getGlobalVer();
-    // const cacheKey = `users:q:v${ver}:p${page}:l${limit}:s=${q.search ?? ''}:org=${q.organizationId ?? '-'}:role=${q.hasOrgRole ?? '-' }:ob=${q.orderBy}:${q.orderDir}`;
-    // return this.cacheGetOrSet(cacheKey, 60_000, async () => { ... });
+    const ver = await this.getGlobalVer();
+    const cacheKey = [
+      'users:q',
+      `v${ver}`,
+      `p${page}`,
+      `l${limit}`,
+      `s=${(q.search ?? '').trim().toLowerCase()}`,
+      `org=${q.organizationId ?? (requester.systemRole === 'SUPERADMIN' ? 'ALL' : (requester.organizationId ?? '-'))}`,
+      `role=${q.hasOrgRole ?? '-'}`,
+      `ob=${q.orderBy ?? 'name'}`,
+      `od=${q.orderDir ?? 'asc'}`,
+    ].join(':');
 
-    const [total, data] = await this.prisma.$transaction([
-      this.prisma.user.count({ where }),
-      this.prisma.user.findMany({
-        where,
-        select: {
-          ...this.selectSafe,
-          memberships: {
-            select: {
-              id: true,
-              role: true,
-              organization: { select: { id: true, name: true } },
+    return this.cacheGetOrSet(cacheKey, 60, async () => {
+      const [total, data] = await this.prisma.$transaction([
+        this.prisma.user.count({ where }),
+        this.prisma.user.findMany({
+          where,
+          select: {
+            ...this.selectSafe,
+            memberships: {
+              select: {
+                id: true,
+                role: true,
+                organization: { select: { id: true, name: true } },
+              },
             },
           },
-        },
-        orderBy,
-        skip,
-        take: limit,
-      }),
-    ]);
+          orderBy,
+          skip,
+          take: limit,
+        }),
+      ]);
 
-    return {
-      data,
-      meta: {
-        page,
-        limit,
-        total,
-        pages: Math.max(1, Math.ceil(total / limit)),
-      },
-    };
+      return {
+        data,
+        meta: {
+          page,
+          limit,
+          total,
+          pages: Math.max(1, Math.ceil(total / limit)),
+        },
+      };
+    });
   }
 }

@@ -1,0 +1,5 @@
+TODO: Přidat vylepšené vyhledávání pomocí PostgreSQL unaccent + pg_trgm
+- cílové tabulky: catalog_subjects, catalog_topics, subjects, learning_materials, organizations, students
+- přidat sloupec search_all (unaccent + lower) + GIN index (gin_trgm_ops)
+- vytvořit helper funkci searchWhere() pro jednotné použití ve všech vyhledávacích dotazech
+- nasadit až při větším objemu dat nebo požadavku na diakritika/fuzzy search

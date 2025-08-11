@@ -1,15 +1,14 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsOptional, IsUUID } from 'class-validator';
 
 export class SetHomeroomDto {
-  @ApiProperty({
+  @ApiPropertyOptional({
     example: 'teacher-uuid',
     description:
-      'Učitel, který bude třídní. Pokud null/undefined, třídnictví se zruší.',
-    required: false,
+      'Učitel, který bude třídní. Pokud undefined/null → třídnictví se zruší.',
     nullable: true,
   })
   @IsOptional()
-  @IsUUID()
+  @IsUUID('4')
   teacherId?: string | null;
 }

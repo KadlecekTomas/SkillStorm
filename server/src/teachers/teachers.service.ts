@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
   Inject,
+  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateTeacherDto } from './dto/create-teacher.dto';
@@ -15,6 +16,7 @@ import {
   AuditEntityType,
   SystemRole,
   OrganizationRole,
+  $Enums,
 } from '@prisma/client';
 
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
@@ -25,8 +27,7 @@ import {
   cacheGetOrSet,
   cacheScopeForUser,
   getOrgVersion,
-} from 'shared/cache/org-cache.utils';
-import { assertSameOrganization } from 'shared/access.utils';
+} from '../../shared/cache/org-cache.utils';
 import { AssignSubjectsDto } from './dto/assign-subjects.dto';
 
 function teacherSearch(search?: string): Prisma.TeacherWhereInput | undefined {
@@ -153,22 +154,63 @@ export class TeachersService {
   }
 
   // ---------- LIST (search + pagination + cache + soft delete) ----------
+  // teachers.service.ts
+
+  // ---------- LIST (search + pagination + cache + soft delete) ----------
   async findAll(user: JwtPayload, q: QueryTeachersDto) {
     const page = q.page ?? 1;
     const limit = q.limit ?? 20;
     const skip = (page - 1) * limit;
 
     const isSuper = user.systemRole === SystemRole.SUPERADMIN;
-    const where: Prisma.TeacherWhereInput = isSuper
-      ? { deletedAt: null }
-      : { deletedAt: null, organizationId: user.organizationId };
 
+    // 1) Urči efektivní org
+    let effectiveOrgId: string | null = null;
+
+    if (isSuper) {
+      if (!q.organizationId) {
+        throw new BadRequestException(
+          'organizationId is required for SUPERADMIN.',
+        );
+      }
+      effectiveOrgId = q.organizationId;
+    } else {
+      // pro nesuperadmina preferuj org z query (pokud přichází z UI), jinak z JWT
+      effectiveOrgId = q.organizationId ?? user.organizationId ?? null;
+      if (!effectiveOrgId) {
+        throw new ForbiddenException('Missing organization context.');
+      }
+
+      // 2) Ověř, že volající je v té org ředitelem (RBAC z controlleru neřeší org-scoping)
+      const member = await this.prisma.membership.findFirst({
+        where: {
+          userId: user.userId,
+          organizationId: effectiveOrgId,
+          role: OrganizationRole.DIRECTOR,
+          deletedAt: null,
+        },
+        select: { id: true },
+      });
+      if (!member) {
+        // nechceme vyzrazovat existenci → klidně NotFound; pro testy držíme 403
+        throw new ForbiddenException(
+          'Cross-organization listing is forbidden.',
+        );
+      }
+    }
+
+    // 3) Filtry
+    const where: Prisma.TeacherWhereInput = {
+      deletedAt: null,
+      organizationId: effectiveOrgId!,
+    };
     const t = teacherSearch(q.search);
     if (t) Object.assign(where, t);
 
     const include = this.teacherListInclude();
 
-    const scopeId = cacheScopeForUser(user.systemRole, user.organizationId);
+    // 4) Cache klíč (verzujeme podle org)
+    const scopeId = effectiveOrgId!;
     const ver = await getOrgVersion(this.cache, scopeId);
     const cacheKey = buildVersionedListKey({
       namespace: 'teachers',
@@ -182,7 +224,7 @@ export class TeachersService {
     });
 
     return cacheGetOrSet(this.cache, cacheKey, 600_000, async () => {
-      const [total, data] = await this.prisma.$transaction([
+      const [total, items] = await this.prisma.$transaction([
         this.prisma.teacher.count({ where }),
         this.prisma.teacher.findMany({
           where,
@@ -194,7 +236,7 @@ export class TeachersService {
       ]);
 
       return {
-        data,
+        items,
         meta: {
           page,
           limit,
@@ -206,14 +248,31 @@ export class TeachersService {
   }
 
   // ---------- DETAIL ----------
-  async findOne(id: string, user: JwtPayload) {
-    const teacher = await this.prisma.teacher.findUnique({
-      where: { id },
-      include: this.teacherDetailInclude(),
+  async findOne(id: string, user: any) {
+    const teacher = await this.prisma.teacher.findFirst({
+      where: { id, deletedAt: null },
+      include: { subjects: { select: { subjectId: true } } }, // aby test "změna je vidět hned" prošel
     });
-    if (!teacher || teacher.deletedAt)
-      throw new NotFoundException('Učitel nebyl nalezen');
-    assertSameOrganization(teacher.organizationId, user, 'učitel');
+    if (!teacher) throw new NotFoundException('Teacher not found');
+
+    // superadmin může vše
+    if (user?.systemRole === $Enums.SystemRole.SUPERADMIN) return teacher;
+
+    // uživatel musí mít membership v té samé organizaci
+    const member = await this.prisma.membership.findFirst({
+      where: {
+        userId: user?.userId ?? user?.sub,
+        organizationId: teacher.organizationId,
+        deletedAt: null,
+      },
+      select: { id: true },
+    });
+
+    if (!member) {
+      // pokud chceš maskovat existenci, můžeš dát místo 403 -> NotFoundException
+      throw new ForbiddenException('Access denied');
+    }
+
     return teacher;
   }
 
@@ -325,73 +384,86 @@ export class TeachersService {
     dto: AssignSubjectsDto,
     user: JwtPayload,
   ) {
+    // 1) Učitel existuje + není soft‑deleted
     const teacher = await this.prisma.teacher.findUnique({
       where: { id: teacherId },
       select: { id: true, organizationId: true, deletedAt: true },
     });
-    if (!teacher || teacher.deletedAt)
+    if (!teacher || teacher.deletedAt) {
       throw new NotFoundException('Učitel nebyl nalezen');
+    }
 
+    // 2) RBAC: SUPERADMIN nebo DIRECTOR téže organizace
     const sameOrg = user.organizationId === teacher.organizationId;
-    if (
-      !(
-        user.systemRole === SystemRole.SUPERADMIN ||
-        (sameOrg && user.organizationRole === OrganizationRole.DIRECTOR)
-      )
-    ) {
+    const isAllowed =
+      user.systemRole === SystemRole.SUPERADMIN ||
+      (sameOrg && user.organizationRole === OrganizationRole.DIRECTOR);
+
+    if (!isAllowed) {
       throw new ForbiddenException(
         'Pouze ředitel dané školy nebo superadmin může přiřazovat předměty.',
       );
     }
 
-    // validace subjectů a stejné organizace
-    const subjects = await this.prisma.subject.findMany({
-      where: {
-        id: { in: dto.subjectIds },
-        organizationId: teacher.organizationId,
-        deletedAt: null,
-      },
-      select: { id: true },
-    });
-    if (subjects.length !== dto.subjectIds.length) {
-      throw new NotFoundException(
-        'Některé zadané předměty neexistují nebo nepatří do stejné organizace.',
-      );
+    // 3) Normalizace inputu
+    const uniqueIds = Array.from(new Set(dto.subjectIds ?? []));
+    if (uniqueIds.length === 0) {
+      // replaceAll s prázdným polem = odstraní vše, add režim s prázdnem = no‑op
+      // necháme to projít – chování vyřešíme níž
     }
 
-    const scopeTeachers = cacheScopeForUser(
-      user.systemRole,
-      teacher.organizationId,
-    );
-    const scopeSubjects = scopeTeachers; // stejná org
+    // 4) Validace subjectů + org scoping
+    if (uniqueIds.length > 0) {
+      const subjectsAll = await this.prisma.subject.findMany({
+        where: { id: { in: uniqueIds }, deletedAt: null },
+        select: { id: true, organizationId: true },
+      });
 
-    if (dto.replaceAll) {
-      // replace režim
+      if (subjectsAll.length !== uniqueIds.length) {
+        // někdo neexistuje / smazán → 404
+        throw new NotFoundException('Některé zadané předměty neexistují.');
+      }
+
+      const foreign = subjectsAll.find(
+        (s) => s.organizationId !== teacher.organizationId,
+      );
+      if (foreign) {
+        // cross‑org pokus → 403 (pokud chceš maskovat, dej raději NotFound)
+        throw new ForbiddenException('Předmět patří do jiné organizace.');
+      }
+    }
+
+    // 5) Mutace (replaceAll / add‑missing)
+    if (dto.replaceAll === true) {
+      // REPLACE režim – atomicky, ať paralelní požadavky skončí konzistentně
       await this.prisma.$transaction(async (tx) => {
         await tx.teacherSubject.deleteMany({ where: { teacherId } });
-        if (subjects.length > 0) {
+        if (uniqueIds.length > 0) {
           await tx.teacherSubject.createMany({
-            data: subjects.map((s) => ({ teacherId, subjectId: s.id })),
+            data: uniqueIds.map((id) => ({ teacherId, subjectId: id })),
             skipDuplicates: true,
           });
         }
       });
     } else {
-      // pouze doplnit chybějící
-      const existing = await this.prisma.teacherSubject.findMany({
-        where: { teacherId, subjectId: { in: dto.subjectIds } },
-        select: { subjectId: true },
-      });
-      const existingIds = new Set(existing.map((e) => e.subjectId));
-      const toAdd = subjects.filter((s) => !existingIds.has(s.id));
-      if (toAdd.length > 0) {
-        await this.prisma.teacherSubject.createMany({
-          data: toAdd.map((s) => ({ teacherId, subjectId: s.id })),
-          skipDuplicates: true,
+      // ADD‑MISSING režim – jen doplní chybějící vazby
+      if (uniqueIds.length > 0) {
+        const existing = await this.prisma.teacherSubject.findMany({
+          where: { teacherId, subjectId: { in: uniqueIds } },
+          select: { subjectId: true },
         });
+        const existingIds = new Set(existing.map((e) => e.subjectId));
+        const toAdd = uniqueIds.filter((id) => !existingIds.has(id));
+        if (toAdd.length > 0) {
+          await this.prisma.teacherSubject.createMany({
+            data: toAdd.map((id) => ({ teacherId, subjectId: id })),
+            skipDuplicates: true,
+          });
+        }
       }
     }
 
+    // 6) Audit
     await this.audit({
       userId: user.userId,
       orgId: teacher.organizationId,
@@ -399,18 +471,14 @@ export class TeachersService {
         ? 'TEACHER_SUBJECTS_REPLACE'
         : 'TEACHER_SUBJECTS_ADD',
       entityId: teacherId,
-      metadata: { subjectIds: dto.subjectIds, replaceAll: !!dto.replaceAll },
+      metadata: { subjectIds: uniqueIds, replaceAll: !!dto.replaceAll },
     });
 
-    // invalidace listů (teachers & subjects — pro případ UI, které zobrazuje "kteří učitelé učí předmět")
-    await bumpOrgVersion(this.cache, scopeTeachers);
-    await bumpOrgVersion(this.cache, scopeSubjects);
+    // 7) Cache invalidace – stačí bumpnout verzi organizace
+    await bumpOrgVersion(this.cache, teacher.organizationId);
 
-    // vrať aktuální stav přiřazení
-    return this.prisma.teacher.findUnique({
-      where: { id: teacherId },
-      include: this.teacherDetailInclude(),
-    });
+    // 8) Vrať aktuální stav – přes centrální findOne (musí includovat subjects)
+    return this.findOne(teacherId, user);
   }
 
   /**

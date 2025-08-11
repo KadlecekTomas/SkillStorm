@@ -1,4 +1,3 @@
-// src/modules/students/utils/access.utils.ts
 import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import { JwtPayload } from 'src/auth/types/jwt-payload';
 import { OrganizationRole, SystemRole } from '@prisma/client';
@@ -6,27 +5,39 @@ import { OrganizationRole, SystemRole } from '@prisma/client';
 export function canAccessStudent(student: any, user: JwtPayload): void {
   if (user.systemRole === SystemRole.SUPERADMIN) return;
 
-  // Ředitel v rámci organizace
+  const jwtUserId =
+    (user as any).userId ?? (user as any).id ?? (user as any).sub ?? null;
+
+  // ✅ Self access – kontroluj 3 způsoby: membership.user.id, membership.userId i fallback na přímé porovnání, pokud je payload jinak pojmenovaný
+  const isSelf =
+    (student?.membership?.user?.id &&
+      String(student.membership.user.id) === String(jwtUserId)) ||
+    (student?.membership?.userId &&
+      String(student.membership.userId) === String(jwtUserId));
+
+  if (isSelf) return;
+
   if (
     user.organizationRole === OrganizationRole.DIRECTOR &&
     student.orgId === user.organizationId
-  )
+  ) {
     return;
+  }
 
-  // Učitel – přístup pokud je třídní u některého z jeho Enrollmentů (ideálně current year)
   if (user.organizationRole === OrganizationRole.TEACHER) {
     const teachesThisStudent = (student.enrollments ?? []).some(
       (enr: any) =>
-        enr.classSection?.teacher?.membership?.userId === user.userId &&
-        enr.academicYear?.isCurrent === true,
+        enr?.academicYear?.isCurrent === true &&
+        enr?.classSection?.teacher?.membership?.userId &&
+        String(enr.classSection.teacher.membership.userId) ===
+          String(jwtUserId),
     );
     if (teachesThisStudent) return;
     throw new ForbiddenException('Tento student není ve tvé třídě.');
   }
 
-  // Student – sám sobě
   if (user.organizationRole === OrganizationRole.STUDENT) {
-    if (student.membership?.user?.id === user.userId) return;
+    // student může jen sám sebe – když to neprošlo výše, tak zakázat
     throw new ForbiddenException('Nemáš oprávnění zobrazit jiného studenta.');
   }
 

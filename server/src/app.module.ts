@@ -1,11 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import {
-  CacheModule,
-  CacheModuleOptions,
-  CacheInterceptor,
-} from '@nestjs/cache-manager';
+import { CacheModule, CacheModuleOptions } from '@nestjs/cache-manager';
 import { APP_INTERCEPTOR } from '@nestjs/core';
+
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { TeachersModule } from './teachers/teachers.module';
@@ -17,6 +14,11 @@ import { SubjectsModule } from './subject/subject.module';
 import { ClassSectionModule } from './class-section/class-section.module';
 import { CatalogModule } from './catalog/catalog.module';
 
+import { UserScopedCacheInterceptor } from './common/cache/user-scoped-cache.interceptor';
+import { InvalidateInterceptor } from './common/cache/invalidate.interceptor';
+import { StudentsModule } from './student/student.module';
+import { TopicsModule } from './topic/topic.module';
+
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
@@ -24,18 +26,17 @@ import { CatalogModule } from './catalog/catalog.module';
       isGlobal: true,
       inject: [ConfigService],
       useFactory: async (cfg: ConfigService) => {
+        if (process.env.NODE_ENV === 'test') {
+          return { ttl: 0 }; // in-memory, bez expirace pro testy
+        }
         const url = cfg.get<string>('REDIS_URL');
-        const ttlSeconds = cfg.get<number>('CACHE_TTL_SECONDS') ?? 600; // 10 min
-        const ttl = ttlSeconds * 1000; // ms pro cache-manager v5
-
+        const ttlSeconds = cfg.get<number>('CACHE_TTL_SECONDS') ?? 600;
+        const ttl = ttlSeconds * 1000; // cache-manager v5: TTL v ms
         if (url) {
           const { redisStore } = await import('cache-manager-redis-yet');
-          return {
-            store: await redisStore({ url }),
-            ttl,
-          };
+          return { store: await redisStore({ url }), ttl };
         }
-        return { ttl }; // in-memory fallback
+        return { ttl }; // fallback in‑memory
       },
     }),
     PrismaModule,
@@ -46,9 +47,14 @@ import { CatalogModule } from './catalog/catalog.module';
     MembershipsModule,
     ClassroomModule,
     SubjectsModule,
+    StudentsModule,
+    TopicsModule,
     ClassSectionModule,
     CatalogModule,
   ],
-  providers: [{ provide: APP_INTERCEPTOR, useClass: CacheInterceptor }],
+  providers: [
+    { provide: APP_INTERCEPTOR, useClass: UserScopedCacheInterceptor },
+    { provide: APP_INTERCEPTOR, useClass: InvalidateInterceptor },
+  ],
 })
 export class AppModule {}

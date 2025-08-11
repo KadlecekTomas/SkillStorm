@@ -91,39 +91,109 @@ export class CatalogService {
     const page = q.page ?? 1;
     const limit = q.limit ?? 20;
     const skip = (page - 1) * limit;
-
-    const where: Prisma.CatalogSubjectWhereInput = q.search?.trim()
-      ? {
-          OR: [
-            { name: { contains: q.search.trim(), mode: 'insensitive' } },
-            { code: { contains: q.search.trim(), mode: 'insensitive' } },
-          ],
-        }
-      : {};
+    const term = (q.search ?? '').trim();
 
     const ver = await this.getGlobalVersion();
-    const cacheKey = `catalog:subjects:v${ver}:p${page}:l${limit}:s=${q.search ?? ''}`;
+    const cacheKey = `catalog:subjects:v${ver}:p${page}:l${limit}:s=${term}`;
 
     return this.cacheGetOrSet(cacheKey, 300_000, async () => {
-      const [total, data] = await this.prisma.$transaction([
-        this.prisma.catalogSubject.count({ where }),
-        this.prisma.catalogSubject.findMany({
-          where,
-          select: { id: true, code: true, name: true },
-          orderBy: [{ name: 'asc' }],
+      if (!term) {
+        const [total, data] = await this.prisma.$transaction([
+          this.prisma.catalogSubject.count(),
+          this.prisma.catalogSubject.findMany({
+            select: { id: true, code: true, name: true },
+            orderBy: [{ name: 'asc' }],
+            skip,
+            take: limit,
+          }),
+        ]);
+        return {
+          data,
+          meta: {
+            page,
+            limit,
+            total,
+            pages: Math.max(1, Math.ceil(total / limit)),
+          },
+        };
+      }
+
+      // DIACRITICS-TOLERANT SEARCH (requires CREATE EXTENSION unaccent; fallback na ILIKE)
+      try {
+        // 1) najdi matching IDs přes unaccent
+        const rows: Array<{ id: string }> = await this.prisma.$queryRawUnsafe(
+          `
+        SELECT cs.id
+        FROM catalog_subjects cs
+        WHERE unaccent(lower(cs.name)) LIKE '%' || unaccent(lower($1)) || '%'
+           OR unaccent(lower(cs.code)) LIKE '%' || unaccent(lower($1)) || '%'
+        ORDER BY cs.name ASC, cs.id ASC
+        OFFSET $2 LIMIT $3
+        `,
+          term,
           skip,
-          take: limit,
-        }),
-      ]);
-      return {
-        data,
-        meta: {
-          page,
           limit,
-          total,
-          pages: Math.max(1, Math.ceil(total / limit)),
-        },
-      };
+        );
+        const ids = rows.map((r) => r.id);
+
+        // total (bez limitu)
+        const totalRows: Array<{ count: string }> =
+          await this.prisma.$queryRawUnsafe(
+            `
+        SELECT COUNT(*)::text as count
+        FROM catalog_subjects cs
+        WHERE unaccent(lower(cs.name)) LIKE '%' || unaccent(lower($1)) || '%'
+           OR unaccent(lower(cs.code)) LIKE '%' || unaccent(lower($1)) || '%'
+        `,
+            term,
+          );
+        const total = parseInt(totalRows[0]?.count ?? '0', 10);
+
+        const data = ids.length
+          ? await this.prisma.catalogSubject.findMany({
+              where: { id: { in: ids } },
+              select: { id: true, code: true, name: true },
+              orderBy: [{ name: 'asc' }, { id: 'asc' }],
+            })
+          : [];
+
+        return {
+          data,
+          meta: {
+            page,
+            limit,
+            total,
+            pages: Math.max(1, Math.ceil(total / limit)),
+          },
+        };
+      } catch {
+        // Fallback, pokud unaccent není k dispozici
+        const where = {
+          OR: [
+            { name: { contains: term, mode: 'insensitive' as const } },
+            { code: { contains: term, mode: 'insensitive' as const } },
+          ],
+        };
+        const [total, data] = await this.prisma.$transaction([
+          this.prisma.catalogSubject.count({ where }),
+          this.prisma.catalogSubject.findMany({
+            where,
+            select: { id: true, code: true, name: true },
+            orderBy: [{ name: 'asc' }],
+            skip,
+            take: limit,
+          }),
+        ]);
+        return {
+          data,
+          meta: {
+            page,
+            limit,
+            total,
+            pages: Math.max(1, Math.ceil(total / limit)),
+          },
+        };
+      }
     });
   }
 
@@ -285,16 +355,27 @@ export class CatalogService {
       select: { id: true, subjectId: true },
     });
     if (!existing) throw new NotFoundException('CatalogTopic nenalezen.');
-    const updated = await this.prisma.catalogTopic.update({
-      where: { id },
-      data: {
-        subjectId: dto.subjectId ?? undefined, // pokud měníš subject, uniq constraint může padnout
-        name: dto.name?.trim(),
-      },
-      select: { id: true, subjectId: true, name: true },
-    });
-    await this.bumpGlobalVersion();
-    return updated;
+
+    try {
+      const updated = await this.prisma.catalogTopic.update({
+        where: { id },
+        data: {
+          subjectId: dto.subjectId ?? undefined,
+          name: dto.name?.trim(),
+        },
+        select: { id: true, subjectId: true, name: true },
+      });
+      await this.bumpGlobalVersion();
+      return updated;
+    } catch (e: any) {
+      if (e.code === 'P2002') {
+        // uniq constraint [subjectId, name]
+        throw new ConflictException(
+          'Pro cílový katalogový předmět už téma s tímto názvem existuje.',
+        );
+      }
+      throw e;
+    }
   }
 
   async deleteCatalogTopic(id: string) {
