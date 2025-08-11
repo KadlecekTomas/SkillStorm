@@ -3,6 +3,7 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConfigService } from '@nestjs/config';
+import type { Request } from 'express';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -33,9 +34,36 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         username: true,
         name: true,
         systemRole: true,
+        memberships: {
+          where: { deletedAt: null },
+          select: { organizationId: true, role: true },
+        },
       },
     });
     if (!user) throw new UnauthorizedException('User not found');
+
+    // Preferuj org z query/body (list/create), jinak nech payload, jinak první členství
+    const requestedOrgId =
+      (req.query?.organizationId as string) ??
+      (req.body as any)?.organizationId ??
+      null;
+
+    let organizationRole = payload.organizationRole ?? null;
+    let organizationId = payload.organizationId ?? null;
+
+    if (requestedOrgId) {
+      const m = user.memberships?.find(
+        (x) => x.organizationId === requestedOrgId,
+      );
+      if (m) {
+        organizationRole = m.role;
+        organizationId = m.organizationId;
+      }
+    }
+    if (!organizationRole && user.memberships?.length) {
+      organizationRole = user.memberships[0].role;
+      organizationId = user.memberships[0].organizationId;
+    }
 
     return {
       userId: user.id,
@@ -43,8 +71,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       username: user.username,
       name: user.name,
       systemRole: user.systemRole,
-      organizationRole: payload.organizationRole ?? null,
-      organizationId: payload.organizationId ?? null,
+      organizationRole: organizationRole ?? null,
+      organizationId: organizationId ?? null,
     };
   }
 }
