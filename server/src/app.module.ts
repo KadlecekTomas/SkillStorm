@@ -20,6 +20,7 @@ import { StudentsModule } from './student/student.module';
 import { TopicsModule } from './topic/topic.module';
 import { LearningMaterialsModule } from './learning-materials/learning-materials.module';
 import { TestsModule } from './tests/tests.module';
+import { StatsModule } from './stats/stats.module';
 
 @Module({
   imports: [
@@ -55,6 +56,7 @@ import { TestsModule } from './tests/tests.module';
     CatalogModule,
     LearningMaterialsModule,
     TestsModule,
+    StatsModule,
   ],
   providers: [
     { provide: APP_INTERCEPTOR, useClass: UserScopedCacheInterceptor },

@@ -6,4 +6,5 @@ export type JwtPayload = {
   systemRole?: SystemRole;
   organizationRole?: OrganizationRole;
   organizationId?: string;
+  membershipId?: string;
 };
