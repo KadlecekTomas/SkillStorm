@@ -18,6 +18,8 @@ import { UserScopedCacheInterceptor } from './common/cache/user-scoped-cache.int
 import { InvalidateInterceptor } from './common/cache/invalidate.interceptor';
 import { StudentsModule } from './student/student.module';
 import { TopicsModule } from './topic/topic.module';
+import { LearningMaterialsModule } from './learning-materials/learning-materials.module';
+import { TestsModule } from './tests/tests.module';
 
 @Module({
   imports: [
@@ -51,6 +53,8 @@ import { TopicsModule } from './topic/topic.module';
     TopicsModule,
     ClassSectionModule,
     CatalogModule,
+    LearningMaterialsModule,
+    TestsModule,
   ],
   providers: [
     { provide: APP_INTERCEPTOR, useClass: UserScopedCacheInterceptor },
