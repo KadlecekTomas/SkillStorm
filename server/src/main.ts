@@ -10,14 +10,26 @@ async function bootstrap() {
 
   app.useGlobalPipes(
     new ValidationPipe({
-      whitelist: true, // zahodí neznámá pole
-      forbidNonWhitelisted: true, // vyhodí 400 při neznámých polích
-      transform: true, // důležité pro @Transform
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
     }),
   );
 
   const prisma = app.get(PrismaService);
-  await bootstrapSearchAll(prisma);
+
+  // spusť jen mimo testy, nebo ovladatelné přes flag
+  if (
+    process.env.NODE_ENV !== 'test' &&
+    process.env.DISABLE_BOOTSTRAP_SEARCH !== '1'
+  ) {
+    try {
+      await bootstrapSearchAll(prisma);
+    } catch (e) {
+      console.error('bootstrapSearchAll failed:', e?.message || e);
+      // případně process.exit(1) pokud to považuješ za fatální
+    }
+  }
 
   const config = new DocumentBuilder()
     .setTitle('Test System API')
@@ -28,7 +40,6 @@ async function bootstrap() {
       scheme: 'bearer',
       bearerFormat: 'JWT',
       name: 'JWT',
-      description: 'Enter JWT token',
       in: 'header',
     })
     .build();
