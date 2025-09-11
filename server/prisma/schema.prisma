@@ -210,6 +210,8 @@ model Organization {
   academicYears     AcademicYear[]
   materialPurchases MaterialPurchase[]
 
+  assignments Assignment[]
+
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
   deletedAt DateTime? @map("deleted_at")
@@ -253,6 +255,10 @@ model Membership {
   submissions      Submission[]
   importedBatches  ImportBatch[]
   exportedLogs     ExportLog[]
+
+  //  :
+  createdAssignments Assignment[]        @relation("AssignmentCreatedBy")
+  assignmentStudents AssignmentStudent[] // back-relation k AssignmentStudent.student
 
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
@@ -429,6 +435,9 @@ model ClassSection {
   teacher      Teacher?     @relation("Homeroom", fields: [teacherId], references: [id], onDelete: SetNull)
   enrollments  Enrollment[]
 
+  //  : back-relation na Assignment.classSection
+  assignments Assignment[]
+
   @@unique([orgId, yearId, grade, section])
   @@index([orgId, grade])
   @@map("class_sections")
@@ -565,6 +574,8 @@ model TopicLevel {
   testAssignments     TestAssignment[]
   LearningMaterial    LearningMaterial[]
 
+  assignments Assignment[]
+
   @@unique([subjectLevelId, catalogTopicId, phase])
   @@index([catalogTopicId])
   @@map("topic_levels")
@@ -687,7 +698,9 @@ model Test {
   creator      Membership       @relation(fields: [creatorId], references: [id], onDelete: Cascade)
   questions    Question[]
   submissions  Submission[]
-  assignments  TestAssignment[]
+  assignments  TestAssignment[] // vazba na TopicLevel přes spojovací tabulku
+
+  scheduledAssignments Assignment[] @relation("TestToAssignments")
 
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
@@ -712,11 +725,16 @@ model TestAssignment {
 }
 
 model Question {
-  id     String       @id @default(uuid()) @map("question_id")
-  text   String
-  type   QuestionType
-  order  Int?
-  testId String       @map("test_id")
+  id             String       @id @default(uuid()) @map("question_id")
+  text           String
+  type           QuestionType
+  order          Int?
+  testId         String       @map("test_id")
+
+  // Auto-scoring fields
+  score          Int          @default(1)
+  correctAnswer  String?      // TF, FITB, MCQ single
+  correctAnswers String[]     // MCQ multiple
 
   test      Test       @relation(fields: [testId], references: [id], onDelete: Cascade)
   options   Option[]
@@ -751,23 +769,34 @@ model Answer {
 // =======================================================
 
 model Submission {
-  id          String           @id @default(uuid()) @map("submission_id")
-  studentId   String           @map("student_id")
-  testId      String           @map("test_id")
-  score       Float?
-  status      SubmissionStatus @default(PENDING)
-  submittedAt DateTime         @default(now()) @map("submitted_at")
+  id           String           @id @default(uuid()) @map("submission_id")
+  studentId    String           @map("student_id")
+  testId       String           @map("test_id")
+  assignmentId String?          @map("assignment_id")
 
-  student   Membership @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  test      Test       @relation(fields: [testId], references: [id], onDelete: Cascade)
-  responses Response[]
+  attemptNo    Int              @default(1) @map("attempt_no")
+  status       SubmissionStatus @default(PENDING)
+  score        Float?
+  submittedAt  DateTime?        @map("submitted_at")
+  createdAt    DateTime         @default(now()) @map("created_at")
+  updatedAt    DateTime         @updatedAt @map("updated_at")
+  deletedAt    DateTime?        @map("deleted_at")
 
-  deletedAt DateTime? @map("deleted_at")
+  student      Membership  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  test         Test        @relation(fields: [testId], references: [id], onDelete: Cascade)
+  assignment   Assignment? @relation(fields: [assignmentId], references: [id], onDelete: SetNull)
+  responses    Response[]
 
+  // PONECH pouze tenhle:
+  @@unique([assignmentId, studentId, attemptNo])
+
+  @@index([assignmentId])
   @@index([testId, status])
   @@index([studentId, submittedAt])
+
   @@map("submissions")
 }
+
 
 model Response {
   id            String   @id @default(uuid()) @map("response_id")
@@ -867,4 +896,55 @@ model vw_classroom_results {
   worst_score    Float
 
   @@ignore
+}
+
+model Assignment {
+  id             String @id @default(uuid()) @map("assignment_id")
+  organizationId String @map("organization_id")
+  testId         String @map("test_id")
+
+  // cíl zadání
+  targetType     String  @default("CLASS") // "CLASS" | "STUDENTS"
+  classSectionId String? @map("class_section_id")
+  topicLevelId   String? @map("topic_level_id") // volitelně, pro přehledy
+
+  // okno a pravidla
+  openAt       DateTime
+  closeAt      DateTime
+  maxAttempts  Int      @default(1)
+  timeLimitSec Int?     @map("time_limit_sec")
+  shuffle      Boolean  @default(true)
+  showExplain  String   @default("after_close") // "never"|"after_finish"|"after_close"
+
+  createdById String @map("created_by_id")
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  // Pojmenuju relaci, aby se nebila s Test.assignments (což je TestAssignment[])
+  test         Test          @relation("TestToAssignments", fields: [testId], references: [id], onDelete: Cascade)
+  classSection ClassSection? @relation(fields: [classSectionId], references: [id], onDelete: SetNull)
+  topicLevel   TopicLevel?   @relation(fields: [topicLevelId], references: [id], onDelete: SetNull)
+  createdBy    Membership    @relation("AssignmentCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
+
+  // back-relations
+  submissions Submission[]
+  students    AssignmentStudent[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([organizationId, classSectionId])
+  @@index([testId])
+  @@map("assignments")
+}
+
+model AssignmentStudent {
+  id           String @id @default(uuid()) @map("assignment_student_id")
+  assignmentId String @map("assignment_id")
+  studentId    String @map("student_id") // Membership.id studenta
+
+  assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  student    Membership @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([assignmentId, studentId])
+  @@index([studentId])
+  @@map("assignment_students")
 }

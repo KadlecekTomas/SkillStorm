@@ -22,6 +22,9 @@ import { LearningMaterialsModule } from './learning-materials/learning-materials
 import { TestsModule } from './tests/tests.module';
 import { StatsModule } from './stats/stats.module';
 
+import { AssignmentsModule } from './assignments/assignments.module';
+import { SubmissionsModule } from './submissions/submissions.module';
+
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
@@ -57,6 +60,8 @@ import { StatsModule } from './stats/stats.module';
     LearningMaterialsModule,
     TestsModule,
     StatsModule,
+    AssignmentsModule,
+    SubmissionsModule,
   ],
   providers: [
     { provide: APP_INTERCEPTOR, useClass: UserScopedCacheInterceptor },

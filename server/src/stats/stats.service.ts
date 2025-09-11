@@ -1,3 +1,4 @@
+// src/stats/stats.service.ts
 import {
   ForbiddenException,
   Injectable,
@@ -14,6 +15,7 @@ import {
   cacheGetOrSet,
   getOrgVersion,
 } from 'shared/cache/org-cache.utils';
+import { StatsOverviewResponse } from './dto/overview.dto';
 
 @Injectable()
 export class StatsService {
@@ -22,7 +24,7 @@ export class StatsService {
     @Inject(CACHE_MANAGER) private cache: Cache,
   ) {}
 
-  // ----- Audit helper (statické akce jen pro dohled) -----
+  // ----- Audit helper --------------------------------------------------------
   private audit(opts: {
     userId?: string;
     orgId?: string | null;
@@ -41,7 +43,7 @@ export class StatsService {
     });
   }
 
-  // ----- Helpers ---------------------------------------------------
+  // ----- Helpers -------------------------------------------------------------
   private async ensureOrgContext(
     user: JwtPayload,
     organizationId?: string | null,
@@ -57,92 +59,90 @@ export class StatsService {
     if (!member) throw new ForbiddenException('Access denied.');
   }
 
-  // ===== ORG OVERVIEW ==============================================
+  // ===== ORG OVERVIEW ========================================================
   async getOrgOverview(
     organizationId: string | null,
     user: JwtPayload,
     scope: 'evaluated' | 'all' = 'evaluated',
-  ) {
+  ): Promise<StatsOverviewResponse> {
     await this.ensureOrgContext(user, organizationId);
 
+    // TVRDÁ normalizace scope – cokoliv mimo 'all' => 'evaluated'
+    const safeScope: 'evaluated' | 'all' =
+      scope === 'all' ? 'all' : 'evaluated';
+
+    // v test prostředí nepoužívej cache
     const isTestEnv =
       process.env.NODE_ENV === 'test' || !!process.env.JEST_WORKER_ID;
     const useCache = !isTestEnv;
 
     const scopeId = organizationId ?? 'GLOBAL';
     const ver = await getOrgVersion(this.cache, scopeId);
-
     const baseTestWhere = {
       organizationId: organizationId ?? undefined,
       deletedAt: null,
     } as const;
-
-    // Robustní podpis dat: počty dle statusu + total + max(submittedAt)
-    const [approved, rejected, pending, all, maxAgg] =
-      await this.prisma.$transaction([
-        this.prisma.submission.count({
-          where: { test: baseTestWhere, status: SubmissionStatus.APPROVED },
-        }),
-        this.prisma.submission.count({
-          where: { test: baseTestWhere, status: SubmissionStatus.REJECTED },
-        }),
-        this.prisma.submission.count({
-          where: { test: baseTestWhere, status: SubmissionStatus.PENDING },
-        }),
-        this.prisma.submission.count({
-          where: { test: baseTestWhere },
-        }),
-        this.prisma.submission.aggregate({
-          where: { test: baseTestWhere },
-          _max: { submittedAt: true },
-        }),
-      ]);
-
-    const dataSig = `A:${approved}|R:${rejected}|P:${pending}|T:${all}|M:${
-      maxAgg._max.submittedAt?.getTime() ?? 0
-    }`;
-
     const cacheKey = buildVersionedListKey({
       namespace: 'stats:overview',
       scopeId,
       version: ver,
-      filters: { scope, dataSig },
+      // žádné proměnlivé filtry do klíče – ať se to nelepí na staré hodnoty
+      filters: {},
     });
 
-    const compute = async () => {
-      const [totalTests, avgAgg] = await Promise.all([
-        this.prisma.test.count({ where: baseTestWhere }),
-        this.prisma.submission.aggregate({
-          where: { test: baseTestWhere, score: { not: null } },
-          _avg: { score: true },
-        }),
-      ]);
+    const compute = async (): Promise<StatsOverviewResponse> => {
+      // žádný filtr na submittedAt – chceme současný stav
+      // OPRAVA: počítej všechny submission pokusy (všechny attemptNo), ne jen první
+      const [approved, rejected, pending, all, maxAgg, totalTests, avgAgg] =
+        await this.prisma.$transaction([
+          this.prisma.submission.count({
+            where: { test: baseTestWhere, status: SubmissionStatus.APPROVED },
+          }),
+          this.prisma.submission.count({
+            where: { test: baseTestWhere, status: SubmissionStatus.REJECTED },
+          }),
+          this.prisma.submission.count({
+            where: { test: baseTestWhere, status: SubmissionStatus.PENDING },
+          }),
+          this.prisma.submission.count({
+            where: { test: baseTestWhere },
+          }),
+          this.prisma.submission.aggregate({
+            where: { test: baseTestWhere, submittedAt: { not: null } },
+            _max: { submittedAt: true },
+          }),
+          this.prisma.test.count({ where: baseTestWhere }),
+          this.prisma.submission.aggregate({
+            // průměr jen ze skutečně vyhodnocených (score != null)
+            where: { test: baseTestWhere, score: { not: null } },
+            _avg: { score: true },
+          }),
+        ]);
 
-      if (scope === 'evaluated') {
-        const evaluatedCount = approved + rejected; // jen APPROVED + REJECTED
-        const passRate = evaluatedCount > 0 ? approved / evaluatedCount : 0;
+      // evaluated = všechny schválené + zamítnuté (všechny attempty)
+      const evaluated = approved + rejected;
+      const passRateEvaluated = evaluated > 0 ? approved / evaluated : 0;
+      const passRateAll = all > 0 ? approved / all : 0;
 
-        return {
-          scope,
-          totalTests,
-          totalSubmissions: evaluatedCount,
-          pendingSubmissions: pending,
-          avgScore: avgAgg._avg.score ?? null,
-          passRate,
-        };
-      } else {
-        // scope === 'all'
-        const passRate = all > 0 ? approved / all : 0;
+      return {
+        // preference z volání – už bezpečně normalizovaná
+        scope: safeScope,
 
-        return {
-          scope,
-          totalTests,
-          totalSubmissions: all,
-          pendingSubmissions: pending,
-          avgScore: avgAgg._avg.score ?? null,
-          passRate,
-        };
-      }
+        // základní sumáře
+        totalTests,
+        counts: { approved, rejected, pending, all },
+
+        // ALIASY pro zpětnou kompatibilitu (na to míří tvoje e2e testy)
+        totalSubmissions: safeScope === 'evaluated' ? evaluated : all,
+        pendingSubmissions: pending,
+
+        // primární hodnoty
+        passRate: safeScope === 'evaluated' ? passRateEvaluated : passRateAll,
+        passRateEvaluated,
+        passRateAll,
+        avgScore: avgAgg._avg.score ?? null,
+        lastSubmittedAt: maxAgg._max.submittedAt ?? null,
+      };
     };
 
     const data = useCache
@@ -153,25 +153,25 @@ export class StatsService {
       userId: user.userId,
       orgId: organizationId,
       action: 'STATS_ORG_OVERVIEW_READ',
-      meta: { scope },
+      meta: { scope: safeScope },
     });
 
     return data;
   }
 
-  // ===== STUDENT DASHBOARD =========================================
+  // ===== STUDENT DASHBOARD ===================================================
   async getStudentDashboard(
     ids: { membershipId?: string; organizationId: string | null },
     user: JwtPayload,
   ) {
-    // --- AUTH: self v rámci organizace (kromě SUPERADMIN) ---
+    // AUTH: self v rámci organizace (kromě SUPERADMIN)
     if (user.systemRole !== SystemRole.SUPERADMIN) {
       if (!ids.organizationId || user.organizationId !== ids.organizationId) {
         throw new ForbiddenException('Foreign organization.');
       }
     }
 
-    // --- Resolve membershipId: preferuj JWT, jinak dohledej z DB ---
+    // Resolve membershipId
     let effectiveMembershipId = ids.membershipId;
     if (!effectiveMembershipId) {
       const m = await this.prisma.membership.findFirst({
@@ -186,7 +186,7 @@ export class StatsService {
       effectiveMembershipId = m.id;
     }
 
-    // --- Self-check ---
+    // Self-check
     if (
       user.systemRole !== SystemRole.SUPERADMIN &&
       user.organizationId === ids.organizationId &&
@@ -196,7 +196,7 @@ export class StatsService {
       throw new ForbiddenException('Can view only own dashboard.');
     }
 
-    // --- Ověř existenci člena ---
+    // Ověř existenci člena
     const member = await this.prisma.membership.findFirst({
       where: {
         id: effectiveMembershipId,
@@ -207,7 +207,7 @@ export class StatsService {
     });
     if (!member) throw new NotFoundException('Membership not found.');
 
-    // --- Caching (org-scoped verze + člen) ---
+    // Caching
     const scopeId = ids.organizationId ?? 'GLOBAL';
     const ver = await getOrgVersion(this.cache, scopeId);
     const cacheKey = buildVersionedListKey({
@@ -235,26 +235,26 @@ export class StatsService {
           _avg: { score: true },
         }),
         this.prisma.submission.findMany({
-          where: baseSubmissionWhere,
+          where: { ...baseSubmissionWhere, submittedAt: { not: null } },
           include: { test: { select: { id: true, title: true } } },
           orderBy: { submittedAt: 'desc' },
           take: 5,
         }),
         this.prisma.submission.findMany({
-          where: baseSubmissionWhere,
+          where: { ...baseSubmissionWhere, submittedAt: { not: null } },
           select: { id: true, testId: true, score: true, submittedAt: true },
           orderBy: [{ testId: 'asc' }, { submittedAt: 'desc' }],
         }),
       ]);
 
-      // byTest: latest + best pro každý test
+      // byTest: latest + best
       const byTestMap = new Map<string, { latest?: any; best?: any }>();
       for (const s of allSubs) {
         const entry = byTestMap.get(s.testId) ?? {};
-        if (!entry.latest) entry.latest = s; // první pro daný test je nejnovější (desc)
+        if (!entry.latest) entry.latest = s; // první pro daný test je nejnovější (řadili jsme desc)
         if (
-          !entry.best ||
-          (s.score ?? -Infinity) > (entry.best.score ?? -Infinity)
+          typeof s.score === 'number' &&
+          (!entry.best || (entry.best.score ?? -Infinity) < s.score)
         ) {
           entry.best = s;
         }
@@ -263,7 +263,7 @@ export class StatsService {
       const byTest = Array.from(byTestMap.entries()).map(([testId, v]) => ({
         testId,
         latest: v.latest,
-        best: v.best,
+        best: v.best ?? null,
       }));
 
       return {
@@ -271,8 +271,8 @@ export class StatsService {
           id: member.id,
           name: member.user?.name ?? null,
           organization: member.organization?.name ?? null,
-          xp: member.xp,
-          level: member.level,
+          xp: (member as any).xp, // pokud používáš XP/level na membershipu
+          level: (member as any).level,
         },
         testsTaken,
         avgScore: agg._avg.score ?? null,
@@ -282,27 +282,25 @@ export class StatsService {
           testTitle: s.test.title,
           score: s.score,
           submittedAt: s.submittedAt,
-          status: s.status,
+          status: (s as any).status,
         })),
         byTest,
       };
     });
   }
 
-  // ===== TEACHER DASHBOARD ========================================
+  // ===== TEACHER DASHBOARD ===================================================
   async getTeacherDashboard(
     ids: { membershipId: string; organizationId: string | null },
     user: JwtPayload,
   ) {
     await this.ensureOrgContext(user, ids.organizationId);
 
+    // Neshoď 403, když Teacher záznam neexistuje – dashboard má fungovat
     const teacher = await this.prisma.teacher.findFirst({
       where: { membershipId: ids.membershipId },
       select: { id: true, organizationId: true },
     });
-    if (!teacher && user.systemRole !== SystemRole.SUPERADMIN) {
-      throw new ForbiddenException('Teacher entity not found.');
-    }
 
     const scopeId = ids.organizationId ?? 'GLOBAL';
     const ver = await getOrgVersion(this.cache, scopeId);

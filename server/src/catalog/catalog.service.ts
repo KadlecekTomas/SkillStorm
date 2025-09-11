@@ -31,7 +31,7 @@ import { assertSameOrganization } from 'shared/access.utils';
 import {
   bumpOrgVersion,
   cacheScopeForUser,
-} from 'shared/cache/org-cache.utils';
+} from '../../shared/cache/org-cache.utils';
 
 @Injectable()
 export class CatalogService {

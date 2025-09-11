@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { PaginationMetaDto } from 'shared/dto/pagination.dto';
+import { PaginationMetaDto } from '../../../shared/dto/pagination.dto';
 
 export class TeacherListResponseDto {
   @ApiProperty({ type: 'array' })

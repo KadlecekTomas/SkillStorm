@@ -1,5 +1,11 @@
-// src/stats/stats.controller.ts
-import { Controller, Get, UseGuards, Request, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  UseGuards,
+  Request,
+  Query,
+  UseInterceptors,
+} from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -10,12 +16,15 @@ import { AuthGuard } from '@nestjs/passport';
 import { Roles } from 'src/auth/decorators/roles.decorator';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { SystemRole, OrganizationRole } from '@prisma/client';
-import { CacheTTL } from '@nestjs/cache-manager';
+// ⚠️ odstraněn CacheTTL import
 import { StatsService } from './stats.service';
 import {
   OverviewScope,
   StatsOverviewQueryDto,
 } from './dto/stats-overview-query.dto';
+import { NoHttpCacheInterceptor } from 'src/common/interceptors/no-http-cache.interceptor';
+
+export const DEFAULT_STATS_OVERVIEW_SCOPE = 'evaluated' as const;
 
 @ApiTags('Stats')
 @ApiBearerAuth()
@@ -24,6 +33,7 @@ import {
 export class StatsController {
   constructor(private readonly service: StatsService) {}
 
+  @UseInterceptors(NoHttpCacheInterceptor)
   @Get('stats/overview')
   @Roles(
     SystemRole.SUPERADMIN,
@@ -36,21 +46,26 @@ export class StatsController {
   @ApiQuery({
     name: 'scope',
     required: false,
-    enum: Object.values(OverviewScope), // drží to sync s DTO
+    enum: Object.values(OverviewScope),
     description:
-      'How passRate is computed. "evaluated" = APPROVED/(APPROVED+REJECTED). "all" = APPROVED/all submissions (incl. PENDING). Default: evaluated.',
+      'How passRate is computed. "evaluated" = APPROVED/(APPROVED+REJECTED). "all" = APPROVED/ALL (incl. PENDING). Default: evaluated.',
   })
-  @CacheTTL(0)
+  // ⚠️ odstraněno @CacheTTL(0)
   overview(@Request() req, @Query() query: StatsOverviewQueryDto) {
     const { organizationId } = req.user;
-    const scope = query.scope ?? OverviewScope.EVALUATED; // sanitizované v DTO
+
+    // tvrdá sanitizace: cokoliv mimo 'all' => 'evaluated'
+    const raw = (query?.scope ?? '').toString().trim().toLowerCase();
+    const scope = (raw === 'all' ? 'all' : 'evaluated') as 'evaluated' | 'all';
+
     return this.service.getOrgOverview(organizationId, req.user, scope);
   }
 
+  @UseInterceptors(NoHttpCacheInterceptor)
   @Get('dashboards/student')
   @Roles(OrganizationRole.STUDENT, SystemRole.SUPERADMIN)
   @ApiOperation({ summary: 'Student dashboard (my progress)' })
-  @CacheTTL(0)
+  // ⚠️ odstraněno @CacheTTL(0)
   student(@Request() req) {
     const { membershipId, organizationId } = req.user;
     return this.service.getStudentDashboard(
@@ -59,6 +74,7 @@ export class StatsController {
     );
   }
 
+  @UseInterceptors(NoHttpCacheInterceptor)
   @Get('dashboards/teacher')
   @Roles(
     SystemRole.SUPERADMIN,
@@ -66,7 +82,7 @@ export class StatsController {
     OrganizationRole.TEACHER,
   )
   @ApiOperation({ summary: 'Teacher dashboard (my classes/tests/performance)' })
-  @CacheTTL(0)
+  // ⚠️ odstraněno @CacheTTL(0)
   teacher(@Request() req) {
     const { membershipId, organizationId } = req.user;
     return this.service.getTeacherDashboard(

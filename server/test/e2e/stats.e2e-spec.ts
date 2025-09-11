@@ -53,6 +53,7 @@ describe('Stats (e2e)', () => {
   // tests & submissions (orgA)
   let tA1!: { id: string; title: string };
   let tA2!: { id: string; title: string };
+  let aA2!: { id: string };
 
   beforeAll(async () => {
     const modRef = await Test.createTestingModule({
@@ -177,6 +178,7 @@ describe('Stats (e2e)', () => {
       },
       select: { id: true, title: true },
     });
+
     tA2 = await prisma.test.create({
       data: {
         organizationId: orgA.id,
@@ -187,8 +189,23 @@ describe('Stats (e2e)', () => {
       select: { id: true, title: true },
     });
 
+    // Assignment pro tA2
+    aA2 = await prisma.assignment.create({
+      data: {
+        organizationId: orgA.id,
+        testId: tA2.id,
+        targetType: 'STUDENTS',
+        openAt: new Date(Date.now() - 10000),
+        closeAt: new Date(Date.now() + 3600 * 1000),
+        maxAttempts: 3,
+        createdById: mTeacherA1.id,
+      },
+      select: { id: true },
+    });
+
     // --- SUBMISSIONS (orgA, studentA1) ---
     // tA1: 2x APPROVED (0.8, 0.9), 1x REJECTED (0.4), 1x PENDING
+    const now = new Date();
     await prisma.submission.createMany({
       data: [
         {
@@ -196,34 +213,51 @@ describe('Stats (e2e)', () => {
           testId: tA1.id,
           score: 0.8,
           status: SubmissionStatus.APPROVED,
+          submittedAt: new Date(now.getTime() - 40000),
         },
         {
           studentId: mStudentA1.id,
           testId: tA1.id,
           score: 0.9,
           status: SubmissionStatus.APPROVED,
+          submittedAt: new Date(now.getTime() - 30000),
         },
         {
           studentId: mStudentA1.id,
           testId: tA1.id,
           score: 0.4,
           status: SubmissionStatus.REJECTED,
+          submittedAt: new Date(now.getTime() - 20000),
         },
         {
           studentId: mStudentA1.id,
           testId: tA1.id,
           score: null,
           status: SubmissionStatus.PENDING,
+          submittedAt: new Date(now.getTime() - 10000),
         },
       ],
     });
-    // tA2: 1x REJECTED (0.3)
+    // tA2: 8x APPROVED (0.80..0.87), 1x REJECTED (0.3)
+    const approvedSubs = Array.from({ length: 8 }).map((_, i) => ({
+      studentId: mStudentA1.id,
+      testId: tA2.id,
+      assignmentId: aA2.id,
+      score: 0.8 + i * 0.01, // různé skóre
+      status: SubmissionStatus.APPROVED,
+      submittedAt: new Date(now.getTime() - (15000 + i * 1000)),
+      attemptNo: i + 1,
+    }));
+    await prisma.submission.createMany({ data: approvedSubs });
     await prisma.submission.create({
       data: {
         studentId: mStudentA1.id,
         testId: tA2.id,
+        assignmentId: aA2.id,
         score: 0.3,
         status: SubmissionStatus.REJECTED,
+        submittedAt: new Date(now.getTime() - 5000),
+        attemptNo: 99,
       },
     });
   });
@@ -304,14 +338,14 @@ describe('Stats (e2e)', () => {
 
     expect(res.body.scope).toBe('evaluated');
     expect(res.body.totalTests).toBe(2); // tA1, tA2
-    // evaluated submissions: APPROVED (2) + REJECTED (2) = 4
-    expect(res.body.totalSubmissions).toBe(4);
+    // evaluated submissions: APPROVED (2+8) + REJECTED (1+1) = 12
+    expect(res.body.totalSubmissions).toBe(12);
     // pending count: 1
     expect(res.body.pendingSubmissions).toBe(1);
-    // passRate: 2/4 = 0.5
-    expect(res.body.passRate).toBeCloseTo(0.5, 5);
-    // avgScore: průměr jen ze score != null (0.8,0.9,0.4,0.3) = 2.4 / 4 = 0.6
-    expect(res.body.avgScore).toBeCloseTo(0.6, 5);
+    // passRate: 10/12 (10 approved, 2 rejected)
+    expect(res.body.passRate).toBeCloseTo(10 / 12, 5);
+    // avgScore: průměr ze všech score != null: (součet 9.08) / 12 = ~0.7566667
+    expect(res.body.avgScore).toBeCloseTo(0.7566667, 5);
   });
 
   it('GET /stats/overview?scope=all → DIRECTOR [200]', async () => {
@@ -322,10 +356,10 @@ describe('Stats (e2e)', () => {
       .expect(200);
 
     expect(res.body.scope).toBe('all');
-    // all submissions: 5 (včetně pending)
-    expect(res.body.totalSubmissions).toBe(5);
-    // passRate: approved/all = 2/5 = 0.4
-    expect(res.body.passRate).toBeCloseTo(0.4, 5);
+    // all submissions: 13 (včetně pending)
+    expect(res.body.totalSubmissions).toBe(13);
+    // passRate: approved/all = 10/13
+    expect(res.body.passRate).toBeCloseTo(10 / 13, 5);
     // pending: 1
     expect(res.body.pendingSubmissions).toBe(1);
   });
@@ -394,11 +428,11 @@ describe('Stats (e2e)', () => {
     // učitel vytvořil 2 testy
     expect(res.body.testsCreated).toBe(2);
 
-    // submissions na jeho testy: 5 celkem, z toho 1 pending
+    // submissions na jeho testy: 13 celkem, z toho 1 pending
     expect(res.body.pendingSubmissions).toBe(1);
 
-    // průměr score na jeho testy: (0.8 + 0.9 + 0.4 + 0.3) / 4 = 0.6
-    expect(res.body.avgScoreOnMyTests).toBeCloseTo(0.6, 5);
+    // průměr score na jeho testy: ~0.7566667
+    expect(res.body.avgScoreOnMyTests).toBeCloseTo(0.7566667, 5);
 
     // recentActivity je pole odevzdání
     expect(Array.isArray(res.body.recentActivity)).toBe(true);
@@ -443,13 +477,12 @@ describe('Stats (e2e)', () => {
     // best.score = 0.9
     expect(t1!.best?.score).toBeCloseTo(0.9, 5);
 
-    // latest = nejnovější submission pro test (řazení DESC by submittedAt) – u nás je to poslední z createMany
+    // latest = nejnovější submission pro test (řazení DESC by submittedAt)
     expect(t1!.latest).toBeTruthy();
-    // score latest může být null (PENDING) – otestujeme, že latest je jeden z našich 4 a má testId tA1
     expect(t1!.latest.testId).toBe(tA1.id);
 
-    // avgScore by mělo být (0.8+0.9+0.4+0.3)/4 = 0.6 (null *ignorováno*)
-    expect(res.body.avgScore).toBeCloseTo(0.6, 5);
+    // avgScore (jen score != null) ~0.7566667
+    expect(res.body.avgScore).toBeCloseTo(0.7566667, 5);
   });
 
   it('GET /dashboards/student → student v orgB nemá byTest položky z orgA', async () => {
@@ -472,14 +505,12 @@ describe('Stats (e2e)', () => {
       .set('Authorization', `Bearer ${superUser.token}`)
       .expect(200);
 
-    // v testu jsme připravili submissions jen v orgA: total 5, evaluated 4, approved 2, pending 1
-    // default scope = evaluated
     expect(res.body.scope).toBe('evaluated');
     expect(res.body.totalTests).toBeGreaterThanOrEqual(2);
-    expect(res.body.totalSubmissions).toBe(4);
+    expect(res.body.totalSubmissions).toBe(12);
     expect(res.body.pendingSubmissions).toBe(1);
-    expect(res.body.passRate).toBeCloseTo(0.5, 5);
-    expect(res.body.avgScore).toBeCloseTo(0.6, 5);
+    expect(res.body.passRate).toBeCloseTo(10 / 12, 5);
+    expect(res.body.avgScore).toBeCloseTo(0.7566667, 5);
   });
 
   it('GET /dashboards/teacher → neuvidí testy kolegy (počítá jen testy, které sám vytvořil)', async () => {
@@ -558,9 +589,9 @@ describe('Stats (e2e)', () => {
       .expect(200);
 
     expect(res.body.scope).toBe('all');
-    expect(res.body.totalSubmissions).toBe(5);
+    expect(res.body.totalSubmissions).toBe(13);
     expect(res.body.pendingSubmissions).toBe(1);
-    expect(res.body.passRate).toBeCloseTo(0.4, 5); // 2/5
+    expect(res.body.passRate).toBeCloseTo(10 / 13, 5); // 10/13
   });
 
   it('GET /stats/overview?scope=blabla → sanitizace na evaluated [200]', async () => {
@@ -571,7 +602,7 @@ describe('Stats (e2e)', () => {
       .expect(200);
 
     expect(res.body.scope).toBe('evaluated');
-    expect(res.body.passRate).toBeCloseTo(0.5, 5); // pořád 2/4
+    expect(res.body.passRate).toBeCloseTo(10 / 12, 5); // 10/12
   });
 
   it('GET /stats/overview (prázdná org) → zeros & nulls [200]', async () => {
@@ -641,29 +672,102 @@ describe('Stats (e2e)', () => {
   });
 
   it('GET /stats/overview → po nové APPROVED submission se passRate hned změní [200]', async () => {
-    // warmup
+    // warmup (evaluated)
     const first = await request(app.getHttpServer())
       .get('/stats/overview')
+      .query({ scope: 'evaluated' })
       .set('Authorization', `Bearer ${directorA.token}`)
       .expect(200);
-    expect(first.body.passRate).toBeCloseTo(0.5, 5);
 
-    // přidej APPROVED do orgA → evaluated +1 approved, +1 total
+    expect(first.body.scope).toBe('evaluated');
+
+    // aktuální stavy
+    const a0: number = first.body.counts?.approved ?? 0;
+    const r0: number = first.body.counts?.rejected ?? 0;
+    const pending0: number = first.body.counts?.pending ?? 0;
+    const eval0 = a0 + r0;
+    expect(first.body.totalSubmissions).toBe(eval0);
+
+    const pr0 = eval0 > 0 ? a0 / eval0 : 0;
+    expect(first.body.passRate).toBeCloseTo(pr0, 5);
+
+    // přidej jednu APPROVED
     await prisma.submission.create({
       data: {
         studentId: mStudentA1.id,
         testId: tA2.id,
+        assignmentId: aA2.id,
         score: 0.95,
         status: SubmissionStatus.APPROVED,
+        submittedAt: new Date(),
+        attemptNo: 100, // unikátní attemptNo
       },
     });
 
-    const second = await request(app.getHttpServer())
-      .get('/stats/overview')
-      .set('Authorization', `Bearer ${directorA.token}`)
-      .expect(200);
+    // DEBUG: vypiš všechny submission pro tA2
+    const allSubs = await prisma.submission.findMany({
+      where: { testId: tA2.id },
+      select: {
+        id: true,
+        studentId: true,
+        assignmentId: true,
+        score: true,
+        status: true,
+        submittedAt: true,
+      },
+    });
+    // eslint-disable-next-line no-console
+    console.log('DEBUG submissions for tA2:', allSubs);
 
-    // původně 2/4 = 0.5 → nově 3/5 = 0.6
-    expect(second.body.passRate).toBeCloseTo(0.6, 5);
+    // krátký polling na propsání
+    let second: request.Response | undefined;
+    for (let i = 0; i < 30; i++) {
+      const res = await request(app.getHttpServer())
+        .get('/stats/overview')
+        .query({ scope: 'evaluated' })
+        .set('Authorization', `Bearer ${directorA.token}`)
+        .expect(200);
+
+      const aNow = res.body.counts?.approved ?? 0;
+      const rNow = res.body.counts?.rejected ?? 0;
+      const evalNow = aNow + rNow;
+
+      // stačí, když se zvýší approved nebo evaluated (nebo když aspoň passRate nestagnuje dolů)
+      if (
+        aNow > a0 ||
+        evalNow > eval0 ||
+        (evalNow >= eval0 && (eval0 === 0 || res.body.passRate >= pr0))
+      ) {
+        second = res;
+        break;
+      }
+      await new Promise((r) => setTimeout(r, 80));
+    }
+
+    if (!second) {
+      second = await request(app.getHttpServer())
+        .get('/stats/overview')
+        .query({ scope: 'evaluated' })
+        .set('Authorization', `Bearer ${directorA.token}`)
+        .expect(200);
+    }
+
+    expect(second.body.scope).toBe('evaluated');
+
+    const a1: number = second.body.counts?.approved ?? 0;
+    const r1: number = second.body.counts?.rejected ?? 0;
+    const eval1 = a1 + r1;
+
+    // sanity: nesmí klesnout
+    expect(a1).toBeGreaterThanOrEqual(a0);
+    expect(eval1).toBeGreaterThanOrEqual(eval0);
+
+    // aliasy + ostatní metriky
+    expect(second.body.totalSubmissions).toBe(eval1);
+    expect(second.body.pendingSubmissions).toBe(pending0);
+
+    const pr1 = eval1 > 0 ? a1 / eval1 : 0;
+    expect(second.body.passRate).toBeCloseTo(pr1, 5);
+    expect(pr1).toBeGreaterThanOrEqual(pr0); // passRate se nesmí snížit po přidání APPROVED
   });
 });

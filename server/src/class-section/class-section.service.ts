@@ -13,7 +13,7 @@ import type { Cache } from 'cache-manager';
 import {
   bumpOrgVersion,
   cacheScopeForUser,
-} from 'shared/cache/org-cache.utils';
+} from '../../shared/cache/org-cache.utils';
 
 @Injectable()
 export class ClassSectionService {

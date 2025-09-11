@@ -1,0 +1,4803 @@
+{
+    "openapi": "3.0.0",
+    "paths": {
+        "/auth/register": {
+            "post": {
+                "operationId": "AuthController_register",
+                "summary": "Register a new user",
+                "parameters": [],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RegisterDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "auth"
+                ]
+            }
+        },
+        "/auth/login": {
+            "post": {
+                "operationId": "AuthController_login",
+                "summary": "Login user",
+                "parameters": [],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/LoginDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "auth"
+                ]
+            }
+        },
+        "/auth/refresh": {
+            "post": {
+                "operationId": "AuthController_refresh",
+                "summary": "Refresh access token",
+                "parameters": [],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RefreshTokenDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "auth"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        },
+        "/auth/logout": {
+            "post": {
+                "operationId": "AuthController_logout",
+                "parameters": [],
+                "responses": {
+                    "201": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "auth"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        },
+        "/auth/me": {
+            "get": {
+                "operationId": "AuthController_me",
+                "summary": "Get current user profile",
+                "parameters": [],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "auth"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        },
+        "/teachers": {
+            "post": {
+                "operationId": "TeachersController_create",
+                "summary": "Create teacher (director or superadmin)",
+                "parameters": [],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateTeacherDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Teachers"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            },
+            "get": {
+                "operationId": "TeachersController_findAll",
+                "summary": "List teachers (org‑scoped for director)",
+                "parameters": [
+                    {
+                        "name": "organizationId",
+                        "required": false,
+                        "in": "query",
+                        "description": "ID organizace, ve které listujeme učitele",
+                        "schema": {
+                            "example": "3b1b9f1b-6a6f-4a0d-9a33-3a27f7f6b9c1",
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "page",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "example": 1,
+                            "type": "number"
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "example": 20,
+                            "type": "number"
+                        }
+                    },
+                    {
+                        "name": "search",
+                        "required": false,
+                        "in": "query",
+                        "description": "Fulltext (jméno, email, uživatelské jméno)",
+                        "schema": {
+                            "example": "Novák",
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Teachers"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        },
+        "/teachers/{id}": {
+            "get": {
+                "operationId": "TeachersController_findOne",
+                "summary": "Get teacher detail",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Teachers"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            },
+            "patch": {
+                "operationId": "TeachersController_update",
+                "summary": "Update teacher (director or superadmin)",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateTeacherDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Teachers"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            },
+            "delete": {
+                "operationId": "TeachersController_remove",
+                "summary": "Soft delete teacher (director or superadmin)",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Teachers"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        },
+        "/teachers/{id}/subjects": {
+            "post": {
+                "operationId": "TeachersController_assignSubjects",
+                "summary": "Přiřadit předměty učiteli (bulk add/replace)",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/AssignSubjectsDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Teachers"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        },
+        "/teachers/{id}/subjects/{subjectId}": {
+            "delete": {
+                "operationId": "TeachersController_removeSubject",
+                "summary": "Odebrat jedno přiřazení předmětu učiteli",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "subjectId",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Teachers"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        },
+        "/users": {
+            "get": {
+                "operationId": "UsersController_findAll",
+                "summary": "List users (search, filters, pagination, sorting)",
+                "parameters": [
+                    {
+                        "name": "page",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "example": 1,
+                            "type": "number"
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "example": 50,
+                            "type": "number"
+                        }
+                    },
+                    {
+                        "name": "search",
+                        "required": false,
+                        "in": "query",
+                        "description": "Fulltext: name, email, username",
+                        "schema": {
+                            "example": "john",
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "organizationId",
+                        "required": false,
+                        "in": "query",
+                        "description": "Filtrovat dle organizace (povoleno jen SUPERADMINovi). Ředitel má implicitně vlastní org.",
+                        "schema": {
+                            "example": "organization-uuid",
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "hasOrgRole",
+                        "required": false,
+                        "in": "query",
+                        "description": "Filtrovat dle organizační role (přes Memberships)",
+                        "schema": {
+                            "example": "TEACHER",
+                            "enum": [
+                                "STUDENT",
+                                "TEACHER",
+                                "DIRECTOR"
+                            ],
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "orderBy",
+                        "required": false,
+                        "in": "query",
+                        "description": "Řazení podle pole",
+                        "schema": {
+                            "example": "name",
+                            "enum": [
+                                "name",
+                                "email",
+                                "username",
+                                "lastLoginAt"
+                            ],
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "orderDir",
+                        "required": false,
+                        "in": "query",
+                        "description": "Směr řazení",
+                        "schema": {
+                            "example": "asc",
+                            "enum": [
+                                "asc",
+                                "desc"
+                            ],
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "users"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            },
+            "post": {
+                "operationId": "UsersController_create",
+                "summary": "Create user (SUPERADMIN only)",
+                "parameters": [],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateUserDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "users"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        },
+        "/users/{id}": {
+            "get": {
+                "operationId": "UsersController_findOne",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "users"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            },
+            "patch": {
+                "operationId": "UsersController_update",
+                "summary": "Update user (self or SUPERADMIN)",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateUserDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "users"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            },
+            "delete": {
+                "operationId": "UsersController_remove",
+                "summary": "Delete/anonymize user (SUPERADMIN or DIRECTOR of same org, not superadmin target)",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "users"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        },
+        "/organizations": {
+            "post": {
+                "operationId": "OrganizationsController_create",
+                "summary": "Create organization (PRIVATE/COMMUNITY: any user, SCHOOL: superadmin nebo aktuální director)",
+                "parameters": [],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateOrganizationDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "organizations"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            },
+            "get": {
+                "operationId": "OrganizationsController_findAll",
+                "summary": "Get organizations (only superadmin), s pagination + search",
+                "parameters": [
+                    {
+                        "name": "search",
+                        "required": false,
+                        "in": "query",
+                        "description": "Fulltext (název, město, země)",
+                        "schema": {
+                            "example": "Praha",
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "page",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "example": 1,
+                            "type": "number"
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "example": 20,
+                            "type": "number"
+                        }
+                    },
+                    {
+                        "name": "type",
+                        "required": false,
+                        "in": "query",
+                        "description": "Filtr podle typu organizace",
+                        "schema": {
+                            "enum": [
+                                "SCHOOL",
+                                "PRIVATE",
+                                "COMMUNITY"
+                            ],
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "organizations"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        },
+        "/organizations/{id}": {
+            "get": {
+                "operationId": "OrganizationsController_findOne",
+                "summary": "Get organization detail (director/teacher/student/superadmin)",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "organizations"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            },
+            "patch": {
+                "operationId": "OrganizationsController_update",
+                "summary": "Update organization (director or superadmin)",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateOrganizationDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "organizations"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            },
+            "delete": {
+                "operationId": "OrganizationsController_remove",
+                "summary": "Soft delete organization (only for superadmin)",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "organizations"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        },
+        "/memberships": {
+            "post": {
+                "operationId": "MembershipsController_create",
+                "summary": "Add user to organization (SUPERADMIN or DIRECTOR)",
+                "parameters": [],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateMembershipDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "memberships"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            },
+            "get": {
+                "operationId": "MembershipsController_findAll",
+                "summary": "List organization members (SUPERADMIN or DIRECTOR) + search/pagination",
+                "parameters": [
+                    {
+                        "name": "organizationId",
+                        "required": false,
+                        "in": "query",
+                        "description": "ID organizace, ve které listujeme členy",
+                        "schema": {
+                            "example": "3b1b9f1b-6a6f-4a0d-9a33-3a27f7f6b9c1",
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "page",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "example": 1,
+                            "type": "number"
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "example": 20,
+                            "type": "number"
+                        }
+                    },
+                    {
+                        "name": "search",
+                        "required": false,
+                        "in": "query",
+                        "description": "Fulltext přes uživatele (name, email, username)",
+                        "schema": {
+                            "example": "Novák",
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "role",
+                        "required": false,
+                        "in": "query",
+                        "description": "Filtr role v organizaci",
+                        "schema": {
+                            "example": "TEACHER",
+                            "enum": [
+                                "STUDENT",
+                                "TEACHER",
+                                "DIRECTOR"
+                            ],
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "memberships"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        },
+        "/memberships/{id}": {
+            "patch": {
+                "operationId": "MembershipsController_update",
+                "summary": "Update role of member (SUPERADMIN or DIRECTOR)",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateMembershipDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "memberships"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            },
+            "delete": {
+                "operationId": "MembershipsController_remove",
+                "summary": "Remove user from organization (SUPERADMIN or DIRECTOR)",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "memberships"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        },
+        "/class-sections": {
+            "post": {
+                "operationId": "ClassroomController_create",
+                "summary": "Vytvoření třídy (class section)",
+                "parameters": [],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateClassSectionDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Classroom"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            },
+            "get": {
+                "operationId": "ClassroomController_findAll",
+                "summary": "Seznam tříd dle školního roku (volitelně grade/search) s paginací",
+                "parameters": [
+                    {
+                        "name": "yearId",
+                        "required": true,
+                        "in": "query",
+                        "description": "Školní rok",
+                        "schema": {
+                            "example": "year-uuid",
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "grade",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "example": "PRIMARY_1",
+                            "enum": [
+                                "GRADE_1",
+                                "GRADE_2",
+                                "GRADE_3",
+                                "GRADE_4",
+                                "GRADE_5",
+                                "GRADE_6",
+                                "GRADE_7",
+                                "GRADE_8",
+                                "GRADE_9",
+                                "HIGH_SCHOOL_YEAR_1",
+                                "HIGH_SCHOOL_YEAR_2",
+                                "HIGH_SCHOOL_YEAR_3",
+                                "HIGH_SCHOOL_YEAR_4"
+                            ],
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "search",
+                        "required": false,
+                        "in": "query",
+                        "description": "Fulltext (label/section)",
+                        "schema": {
+                            "example": "1.A",
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "page",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "example": 1,
+                            "type": "number"
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "example": 50,
+                            "type": "number"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Classroom"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        },
+        "/class-sections/{id}": {
+            "get": {
+                "operationId": "ClassroomController_findOne",
+                "summary": "Detail třídy",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Classroom"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            },
+            "patch": {
+                "operationId": "ClassroomController_update",
+                "summary": "Úprava třídy",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateClassroomDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Classroom"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            },
+            "delete": {
+                "operationId": "ClassroomController_remove",
+                "summary": "Smazání třídy",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Classroom"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        },
+        "/subjects": {
+            "post": {
+                "operationId": "SubjectsController_create",
+                "summary": "Vytvoření předmětu",
+                "parameters": [],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateSubjectDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Subjects"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            },
+            "get": {
+                "operationId": "SubjectsController_findAll",
+                "summary": "Získat předměty (search, pagination, includeLevels)",
+                "parameters": [
+                    {
+                        "name": "page",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "example": 1,
+                            "type": "number"
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "example": 20,
+                            "type": "number"
+                        }
+                    },
+                    {
+                        "name": "search",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "example": "mat",
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "includeLevels",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "example": false,
+                            "type": "boolean"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Subjects"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        },
+        "/subjects/{id}": {
+            "get": {
+                "operationId": "SubjectsController_findOne",
+                "summary": "Detail předmětu",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Subjects"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            },
+            "patch": {
+                "operationId": "SubjectsController_update",
+                "summary": "Úprava předmětu",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateSubjectDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Subjects"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            },
+            "delete": {
+                "operationId": "SubjectsController_remove",
+                "summary": "Soft smazání předmětu",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Subjects"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        },
+        "/subjects/{id}/levels": {
+            "get": {
+                "operationId": "SubjectsController_findLevels",
+                "summary": "Seznam SubjectLevel pro daný předmět",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Subjects"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        },
+        "/subjects/{id}/topics": {
+            "get": {
+                "operationId": "SubjectsController_findTopicsBySubject",
+                "summary": "Všechna TopicLevel pro daný předmět (přes SubjectLevel)",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Subjects"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        },
+        "/students/export": {
+            "get": {
+                "operationId": "StudentsController_export",
+                "parameters": [
+                    {
+                        "name": "format",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "example": "xlsx",
+                            "enum": [
+                                "csv",
+                                "xlsx"
+                            ],
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "filename",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "example": "students_export",
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "search",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "example": "Novák",
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "yearId",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "example": "academic-year-uuid",
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "classSectionId",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "example": "class-section-uuid",
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "batchSize",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "example": 1000,
+                            "type": "number"
+                        }
+                    },
+                    {
+                        "name": "columns",
+                        "required": false,
+                        "in": "query",
+                        "description": "Volitelné: vybrané sloupce",
+                        "schema": {
+                            "example": [
+                                "userName",
+                                "userEmail",
+                                "classLabel",
+                                "yearLabel"
+                            ],
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    {
+                        "name": "includeEnrollments",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "example": true,
+                            "type": "boolean"
+                        }
+                    },
+                    {
+                        "name": "template",
+                        "required": false,
+                        "in": "query",
+                        "description": "Přednastavené sloupce/formát/volby",
+                        "schema": {
+                            "example": "tridni",
+                            "enum": [
+                                "tridni",
+                                "kontakty",
+                                "lms",
+                                "reditel"
+                            ],
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "mode",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "example": "light",
+                            "enum": [
+                                "light",
+                                "full"
+                            ],
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Students"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        },
+        "/students": {
+            "post": {
+                "operationId": "StudentsController_create",
+                "summary": "Create new student",
+                "parameters": [],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateStudentDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Students"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            },
+            "get": {
+                "operationId": "StudentsController_findAll",
+                "summary": "List students (pagination + filters)",
+                "parameters": [
+                    {
+                        "name": "page",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "example": 1,
+                            "type": "number"
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "example": 20,
+                            "type": "number"
+                        }
+                    },
+                    {
+                        "name": "search",
+                        "required": false,
+                        "in": "query",
+                        "description": "Fulltext: jméno, studentNumber, externalId",
+                        "schema": {
+                            "example": "Novák",
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "yearId",
+                        "required": false,
+                        "in": "query",
+                        "description": "Filtrovat podle aktuálního školního roku",
+                        "schema": {
+                            "example": "academic-year-uuid",
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "classSectionId",
+                        "required": false,
+                        "in": "query",
+                        "description": "Filtrovat podle třídy",
+                        "schema": {
+                            "example": "class-section-uuid",
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Students"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        },
+        "/students/{id}": {
+            "get": {
+                "operationId": "StudentsController_findOne",
+                "summary": "Get student by ID",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Students"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            },
+            "patch": {
+                "operationId": "StudentsController_update",
+                "summary": "Update student by ID",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateStudentDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Students"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            },
+            "delete": {
+                "operationId": "StudentsController_remove",
+                "summary": "Soft delete student by ID",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Students"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        },
+        "/topics/catalog/subjects": {
+            "get": {
+                "operationId": "TopicsController_listCatalogSubjects",
+                "summary": "CatalogSubject list (pro picker)",
+                "parameters": [],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Topics"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        },
+        "/topics/catalog/subjects/{id}/topics": {
+            "get": {
+                "operationId": "TopicsController_listCatalogTopics",
+                "summary": "CatalogTopic list by CatalogSubject (pro picker)",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "search",
+                        "required": true,
+                        "in": "query",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Topics"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        },
+        "/topics/by-subject/{subjectId}": {
+            "get": {
+                "operationId": "TopicsController_getBySubject",
+                "summary": "TopicLevel podle Subject ID",
+                "parameters": [
+                    {
+                        "name": "subjectId",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Topics"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        },
+        "/topics": {
+            "get": {
+                "operationId": "TopicsController_findAll",
+                "summary": "Seznam TopicLevel s filtry (subjectId / subjectLevelId / search)",
+                "parameters": [
+                    {
+                        "name": "subjectId",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "example": "subject-id-uuid",
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "subjectLevelId",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "example": "subject-level-id-uuid",
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "search",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "example": "zlom",
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "page",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "example": 1,
+                            "type": "number"
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "example": 20,
+                            "type": "number"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Topics"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            },
+            "post": {
+                "operationId": "TopicsController_create",
+                "summary": "Vytvoření TopicLevel (téma)",
+                "parameters": [],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateTopicDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Topics"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        },
+        "/topics/{id}": {
+            "get": {
+                "operationId": "TopicsController_findOne",
+                "summary": "Detail TopicLevel",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Topics"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            },
+            "patch": {
+                "operationId": "TopicsController_update",
+                "summary": "Upravit TopicLevel",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateTopicDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Topics"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            },
+            "delete": {
+                "operationId": "TopicsController_remove",
+                "summary": "Smazat TopicLevel",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Topics"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        },
+        "/topics/{id}/materials": {
+            "post": {
+                "operationId": "TopicsController_assignMaterials",
+                "summary": "Přiřadit (bulk) materiály k TopicLevel",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/AssignMaterialsDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Topics"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        },
+        "/topics/{id}/materials/{materialId}": {
+            "delete": {
+                "operationId": "TopicsController_removeMaterial",
+                "summary": "Odebrat materiál z TopicLevel",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "materialId",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Topics"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        },
+        "/topics/{id}/tests": {
+            "post": {
+                "operationId": "TopicsController_assignTests",
+                "summary": "Přiřadit (bulk) testy k TopicLevel",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/AssignTestsDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Topics"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        },
+        "/topics/{id}/tests/{testId}": {
+            "delete": {
+                "operationId": "TopicsController_removeTest",
+                "summary": "Odebrat test z TopicLevel",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "testId",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Topics"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        },
+        "/class-sections/{id}/homeroom": {
+            "patch": {
+                "operationId": "ClassSectionController_setHomeroom",
+                "summary": "Nastavit/odstranit třídnictví (homeroom teacher)",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SetHomeroomDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "ClassSections"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        },
+        "/catalog/subjects": {
+            "get": {
+                "operationId": "CatalogController_listSubjects",
+                "summary": "CatalogSubject list (search + pagination, cached)",
+                "parameters": [
+                    {
+                        "name": "search",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "example": "mat",
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "page",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "example": 1,
+                            "type": "number"
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "example": 20,
+                            "type": "number"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Catalog"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            },
+            "post": {
+                "operationId": "CatalogController_createCatalogSubject",
+                "summary": "Create CatalogSubject (SUPERADMIN)",
+                "parameters": [],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateCatalogSubjectDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Catalog"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        },
+        "/catalog/subjects/{id}": {
+            "get": {
+                "operationId": "CatalogController_getSubject",
+                "summary": "CatalogSubject detail (cached)",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Catalog"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            },
+            "patch": {
+                "operationId": "CatalogController_updateCatalogSubject",
+                "summary": "Update CatalogSubject (SUPERADMIN)",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateCatalogSubjectDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Catalog"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            },
+            "delete": {
+                "operationId": "CatalogController_deleteCatalogSubject",
+                "summary": "Delete CatalogSubject (SUPERADMIN)",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Catalog"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        },
+        "/catalog/subjects/{id}/topics": {
+            "get": {
+                "operationId": "CatalogController_listTopics",
+                "summary": "CatalogTopic list by CatalogSubject (cached)",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "search",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "example": "mat",
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "page",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "example": 1,
+                            "type": "number"
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "example": 50,
+                            "type": "number"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Catalog"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            },
+            "post": {
+                "operationId": "CatalogController_createCatalogTopic",
+                "summary": "Create CatalogTopic under CatalogSubject (SUPERADMIN)",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateCatalogTopicDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Catalog"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        },
+        "/catalog/topics/{id}": {
+            "get": {
+                "operationId": "CatalogController_getTopic",
+                "summary": "CatalogTopic detail (cached)",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Catalog"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            },
+            "patch": {
+                "operationId": "CatalogController_updateCatalogTopic",
+                "summary": "Update CatalogTopic (SUPERADMIN)",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateCatalogTopicDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Catalog"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            },
+            "delete": {
+                "operationId": "CatalogController_deleteCatalogTopic",
+                "summary": "Delete CatalogTopic (SUPERADMIN)",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Catalog"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        },
+        "/catalog/subjects/{id}/materialize-to-org": {
+            "post": {
+                "operationId": "CatalogController_materializeSubject",
+                "summary": "Vytvoř Subject (+levels) v org z CatalogSubject",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/MaterializeSubjectDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Catalog"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        },
+        "/catalog/topics/{id}/materialize-to-subject-level": {
+            "post": {
+                "operationId": "CatalogController_materializeTopic",
+                "summary": "Vytvoř TopicLevel v SubjectLevel z CatalogTopic",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/MaterializeTopicDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Catalog"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        },
+        "/catalog/subjects/{id}/materialize-topics": {
+            "post": {
+                "operationId": "CatalogController_materializeTopicsBulk",
+                "summary": "Bulk materializace více CatalogTopic do SubjectLevel",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/MaterializeTopicsBulkDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Catalog"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        },
+        "/learning-materials": {
+            "post": {
+                "operationId": "LearningMaterialsController_create",
+                "summary": "Create learning material",
+                "parameters": [],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateLearningMaterialDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "LearningMaterials"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            },
+            "get": {
+                "operationId": "LearningMaterialsController_findAll",
+                "summary": "List learning materials",
+                "parameters": [
+                    {
+                        "name": "page",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "example": 1,
+                            "type": "number"
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "example": 20,
+                            "type": "number"
+                        }
+                    },
+                    {
+                        "name": "search",
+                        "required": false,
+                        "in": "query",
+                        "description": "Fulltext (title, description)",
+                        "schema": {
+                            "example": "Zlomky",
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "educationLevel",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "example": "PRIMARY_2",
+                            "enum": [
+                                "PRIMARY_1",
+                                "PRIMARY_2",
+                                "SECONDARY_MATURITA",
+                                "SECONDARY_VOCATIONAL"
+                            ],
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "schoolGrade",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "example": "GRADE_5",
+                            "enum": [
+                                "GRADE_1",
+                                "GRADE_2",
+                                "GRADE_3",
+                                "GRADE_4",
+                                "GRADE_5",
+                                "GRADE_6",
+                                "GRADE_7",
+                                "GRADE_8",
+                                "GRADE_9",
+                                "HIGH_SCHOOL_YEAR_1",
+                                "HIGH_SCHOOL_YEAR_2",
+                                "HIGH_SCHOOL_YEAR_3",
+                                "HIGH_SCHOOL_YEAR_4"
+                            ],
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "scope",
+                        "required": false,
+                        "in": "query",
+                        "description": "Scope filtr (GLOBAL/ORGANIZATION/SHARED)",
+                        "schema": {
+                            "enum": [
+                                "GLOBAL",
+                                "ORGANIZATION",
+                                "SHARED"
+                            ],
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "contentType",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "example": "MATERIAL",
+                            "enum": [
+                                "MATERIAL",
+                                "PRACTICE",
+                                "TEST",
+                                "VIDEO",
+                                "LINK"
+                            ],
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "organizationId",
+                        "required": false,
+                        "in": "query",
+                        "description": "Org ID – povinné pro nesuperadmina při ORG obsahu",
+                        "schema": {
+                            "example": "3b1b9f1b-6a6f-4a0d-9a33-3a27f7f6b9c1",
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "subjectId",
+                        "required": false,
+                        "in": "query",
+                        "description": "Subject ID (volitelné) – zúžení",
+                        "schema": {
+                            "example": "subject-uuid",
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "topicLevelId",
+                        "required": false,
+                        "in": "query",
+                        "description": "TopicLevel ID (volitelné) – zúžení",
+                        "schema": {
+                            "example": "topic-level-uuid",
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "LearningMaterials"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        },
+        "/learning-materials/{id}": {
+            "get": {
+                "operationId": "LearningMaterialsController_findOne",
+                "summary": "Get material detail",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "LearningMaterials"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            },
+            "patch": {
+                "operationId": "LearningMaterialsController_update",
+                "summary": "Update learning material",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateLearningMaterialDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "LearningMaterials"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            },
+            "delete": {
+                "operationId": "LearningMaterialsController_remove",
+                "summary": "Soft delete material",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "LearningMaterials"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        },
+        "/learning-materials/{id}/file": {
+            "post": {
+                "operationId": "LearningMaterialsController_upload",
+                "summary": "Upload PDF file for material",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "LearningMaterials"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        },
+        "/tests": {
+            "post": {
+                "operationId": "TestsController_create",
+                "summary": "Create test",
+                "parameters": [],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateTestDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Tests"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            },
+            "get": {
+                "operationId": "TestsController_findAll",
+                "summary": "List tests",
+                "parameters": [
+                    {
+                        "name": "page",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "example": 1,
+                            "type": "number"
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "example": 20,
+                            "type": "number"
+                        }
+                    },
+                    {
+                        "name": "search",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "example": "zlomky",
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "status",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "enum": [
+                                "DRAFT",
+                                "PUBLISHED",
+                                "ARCHIVED"
+                            ],
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "organizationId",
+                        "required": false,
+                        "in": "query",
+                        "schema": {
+                            "example": "uuid",
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Tests"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        },
+        "/tests/{id}": {
+            "get": {
+                "operationId": "TestsController_findOne",
+                "summary": "Get test detail",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Tests"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            },
+            "patch": {
+                "operationId": "TestsController_update",
+                "summary": "Update test",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateTestDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Tests"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            },
+            "delete": {
+                "operationId": "TestsController_remove",
+                "summary": "Soft delete test",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Tests"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        },
+        "/tests/{id}/questions/reorder": {
+            "patch": {
+                "operationId": "TestsController_reorderQuestions",
+                "summary": "Reorder questions",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ReorderQuestionsDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Tests"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        },
+        "/tests/{id}/questions": {
+            "post": {
+                "operationId": "TestsController_addQuestion",
+                "summary": "Add question to test",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateQuestionDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Tests"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        },
+        "/tests/{id}/questions/{questionId}": {
+            "patch": {
+                "operationId": "TestsController_updateQuestion",
+                "summary": "Update question",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "questionId",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateQuestionDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Tests"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            },
+            "delete": {
+                "operationId": "TestsController_removeQuestion",
+                "summary": "Remove question",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "questionId",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Tests"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        },
+        "/tests/{id}/questions/{questionId}/options": {
+            "post": {
+                "operationId": "TestsController_addOption",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "questionId",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateOptionDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Tests"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        },
+        "/tests/{id}/questions/{questionId}/options/{optionId}": {
+            "patch": {
+                "operationId": "TestsController_updateOption",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "questionId",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "optionId",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateOptionDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Tests"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            },
+            "delete": {
+                "operationId": "TestsController_removeOption",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "questionId",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "optionId",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Tests"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        },
+        "/tests/{id}/questions/{questionId}/answers": {
+            "post": {
+                "operationId": "TestsController_addAnswer",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "questionId",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateAnswerDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Tests"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        },
+        "/tests/{id}/questions/{questionId}/answers/{answerId}": {
+            "patch": {
+                "operationId": "TestsController_updateAnswer",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "questionId",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "answerId",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateAnswerDto"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Tests"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            },
+            "delete": {
+                "operationId": "TestsController_removeAnswer",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "questionId",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "answerId",
+                        "required": true,
+                        "in": "path",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Tests"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        },
+        "/stats/overview": {
+            "get": {
+                "operationId": "StatsController_overview",
+                "summary": "Organization overview (tests, submissions, averages)",
+                "parameters": [
+                    {
+                        "name": "scope",
+                        "required": false,
+                        "in": "query",
+                        "description": "How passRate is computed. \"evaluated\" = APPROVED/(APPROVED+REJECTED). \"all\" = APPROVED/all submissions (incl. PENDING). Default: evaluated.",
+                        "schema": {
+                            "enum": [
+                                "evaluated",
+                                "all"
+                            ],
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Stats"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        },
+        "/dashboards/student": {
+            "get": {
+                "operationId": "StatsController_student",
+                "summary": "Student dashboard (my progress)",
+                "parameters": [],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Stats"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        },
+        "/dashboards/teacher": {
+            "get": {
+                "operationId": "StatsController_teacher",
+                "summary": "Teacher dashboard (my classes/tests/performance)",
+                "parameters": [],
+                "responses": {
+                    "200": {
+                        "description": ""
+                    }
+                },
+                "tags": [
+                    "Stats"
+                ],
+                "security": [
+                    {
+                        "bearer": []
+                    }
+                ]
+            }
+        }
+    },
+    "info": {
+        "title": "Test System API",
+        "description": "The test system API description",
+        "version": "1.0",
+        "contact": {}
+    },
+    "tags": [],
+    "servers": [],
+    "components": {
+        "securitySchemes": {
+            "bearer": {
+                "scheme": "bearer",
+                "bearerFormat": "JWT",
+                "type": "http",
+                "name": "JWT",
+                "in": "header"
+            }
+        },
+        "schemas": {
+            "RegisterDto": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "Jméno uživatele",
+                        "example": "Jan Novák",
+                        "minLength": 2
+                    },
+                    "email": {
+                        "type": "string",
+                        "description": "E-mail (volitelné – může být null)",
+                        "example": "jan.novak@example.com"
+                    },
+                    "username": {
+                        "type": "string",
+                        "description": "Uživatelské jméno (volitelné; když nepřijde, vygeneruje se)",
+                        "example": "novakj"
+                    },
+                    "password": {
+                        "type": "string",
+                        "description": "Heslo",
+                        "example": "password123",
+                        "minLength": 6
+                    },
+                    "systemRole": {
+                        "type": "string",
+                        "description": "Systémová role",
+                        "enum": [
+                            "SUPERADMIN"
+                        ],
+                        "example": "SUPERADMIN"
+                    }
+                },
+                "required": [
+                    "name",
+                    "password"
+                ]
+            },
+            "LoginDto": {
+                "type": "object",
+                "properties": {
+                    "login": {
+                        "type": "string",
+                        "description": "Username nebo e-mail",
+                        "example": "novakj | novak@zs-nova.cz"
+                    },
+                    "password": {
+                        "type": "string",
+                        "description": "Heslo",
+                        "example": "password123"
+                    }
+                },
+                "required": [
+                    "login",
+                    "password"
+                ]
+            },
+            "RefreshTokenDto": {
+                "type": "object",
+                "properties": {
+                    "refreshToken": {
+                        "type": "string",
+                        "description": "The refresh token issued during login",
+                        "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                    }
+                },
+                "required": [
+                    "refreshToken"
+                ]
+            },
+            "CreateTeacherDto": {
+                "type": "object",
+                "properties": {
+                    "membershipId": {
+                        "type": "string",
+                        "example": "membership-uuid"
+                    },
+                    "organizationId": {
+                        "type": "string",
+                        "example": "organization-uuid"
+                    }
+                },
+                "required": [
+                    "membershipId",
+                    "organizationId"
+                ]
+            },
+            "UpdateTeacherDto": {
+                "type": "object",
+                "properties": {
+                    "membershipId": {
+                        "type": "string",
+                        "example": "membership-uuid"
+                    },
+                    "organizationId": {
+                        "type": "string",
+                        "example": "organization-uuid"
+                    }
+                }
+            },
+            "AssignSubjectsDto": {
+                "type": "object",
+                "properties": {
+                    "subjectIds": {
+                        "example": [
+                            "subject-uuid-1",
+                            "subject-uuid-2"
+                        ],
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "replaceAll": {
+                        "type": "boolean",
+                        "description": "Pokud true: nahradí existující přiřazení (tj. odstraní ostatní). Pokud false/nezadáno: pouze přidá chybějící.",
+                        "example": false
+                    }
+                },
+                "required": [
+                    "subjectIds"
+                ]
+            },
+            "CreateUserDto": {
+                "type": "object",
+                "properties": {
+                    "email": {
+                        "type": "string",
+                        "example": "john.doe@example.com"
+                    },
+                    "username": {
+                        "type": "string",
+                        "example": "jdoe"
+                    },
+                    "name": {
+                        "type": "string",
+                        "example": "John Doe"
+                    },
+                    "password": {
+                        "type": "string",
+                        "example": "password123",
+                        "minLength": 6
+                    },
+                    "systemRole": {
+                        "type": "string",
+                        "enum": [
+                            "SUPERADMIN"
+                        ],
+                        "example": "SUPERADMIN",
+                        "description": "Povoleno nastavovat pouze SUPERADMINovi"
+                    },
+                    "preferredLang": {
+                        "type": "string",
+                        "example": "cs-CZ"
+                    }
+                },
+                "required": [
+                    "email",
+                    "name",
+                    "password"
+                ]
+            },
+            "UpdateUserDto": {
+                "type": "object",
+                "properties": {
+                    "email": {
+                        "type": "string",
+                        "example": "john.doe@example.com"
+                    },
+                    "username": {
+                        "type": "string",
+                        "example": "jdoe"
+                    },
+                    "name": {
+                        "type": "string",
+                        "example": "John Doe"
+                    },
+                    "password": {
+                        "type": "string",
+                        "example": "newpassword123",
+                        "minLength": 6
+                    },
+                    "systemRole": {
+                        "type": "string",
+                        "enum": [
+                            "SUPERADMIN"
+                        ],
+                        "example": "SUPERADMIN",
+                        "description": "Povoleno měnit pouze SUPERADMINovi"
+                    },
+                    "preferredLang": {
+                        "type": "string",
+                        "example": "en-US"
+                    }
+                }
+            },
+            "CreateOrganizationDto": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "example": "ZŠ Palackého"
+                    },
+                    "address": {
+                        "type": "string",
+                        "example": "Palackého 12"
+                    },
+                    "city": {
+                        "type": "string",
+                        "example": "Praha"
+                    },
+                    "country": {
+                        "type": "string",
+                        "example": "Česko"
+                    },
+                    "type": {
+                        "type": "string",
+                        "enum": [
+                            "SCHOOL",
+                            "PRIVATE",
+                            "COMMUNITY"
+                        ],
+                        "example": "SCHOOL",
+                        "description": "Typ organizace (SCHOOL, PRIVATE, COMMUNITY)"
+                    }
+                },
+                "required": [
+                    "name"
+                ]
+            },
+            "UpdateOrganizationDto": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "example": "ZŠ Komenského",
+                        "description": "Nový název organizace"
+                    },
+                    "address": {
+                        "type": "string",
+                        "example": "Komenského 99"
+                    },
+                    "city": {
+                        "type": "string",
+                        "example": "Brno"
+                    },
+                    "country": {
+                        "type": "string",
+                        "example": "Česko"
+                    },
+                    "type": {
+                        "type": "string",
+                        "enum": [
+                            "SCHOOL",
+                            "PRIVATE",
+                            "COMMUNITY"
+                        ],
+                        "example": "COMMUNITY",
+                        "description": "Změna typu organizace (SCHOOL, PRIVATE, COMMUNITY)"
+                    }
+                }
+            },
+            "CreateMembershipDto": {
+                "type": "object",
+                "properties": {
+                    "userId": {
+                        "type": "string",
+                        "example": "user-id-uuid"
+                    },
+                    "organizationId": {
+                        "type": "string",
+                        "example": "organization-id-uuid"
+                    },
+                    "role": {
+                        "type": "string",
+                        "enum": [
+                            "STUDENT",
+                            "TEACHER",
+                            "DIRECTOR"
+                        ],
+                        "example": "STUDENT"
+                    }
+                },
+                "required": [
+                    "userId",
+                    "organizationId",
+                    "role"
+                ]
+            },
+            "UpdateMembershipDto": {
+                "type": "object",
+                "properties": {
+                    "role": {
+                        "type": "string",
+                        "enum": [
+                            "STUDENT",
+                            "TEACHER",
+                            "DIRECTOR"
+                        ],
+                        "example": "TEACHER"
+                    }
+                },
+                "required": [
+                    "role"
+                ]
+            },
+            "CreateClassSectionDto": {
+                "type": "object",
+                "properties": {
+                    "yearId": {
+                        "type": "string",
+                        "example": "year-uuid",
+                        "description": "ID školního roku (AcademicYear)"
+                    },
+                    "grade": {
+                        "type": "string",
+                        "example": "PRIMARY_1",
+                        "description": "Ročník třídy (např. PRIMARY_1, PRIMARY_2...)"
+                    },
+                    "section": {
+                        "type": "string",
+                        "example": "A",
+                        "description": "Označení sekce (A, B, C...)"
+                    },
+                    "label": {
+                        "type": "string",
+                        "example": "1.A",
+                        "description": "Celé označení třídy"
+                    },
+                    "studyField": {
+                        "type": "string",
+                        "example": "Informatika",
+                        "description": "Studijní obor (volitelné)"
+                    },
+                    "teacherId": {
+                        "type": "string",
+                        "example": "teacher-uuid",
+                        "description": "Učitel třídní (volitelné)"
+                    }
+                },
+                "required": [
+                    "yearId",
+                    "grade",
+                    "section",
+                    "label"
+                ]
+            },
+            "UpdateClassroomDto": {
+                "type": "object",
+                "properties": {
+                    "yearId": {
+                        "type": "string",
+                        "example": "year-uuid",
+                        "description": "ID školního roku (AcademicYear)"
+                    },
+                    "grade": {
+                        "type": "string",
+                        "example": "PRIMARY_1",
+                        "description": "Ročník třídy (např. PRIMARY_1, PRIMARY_2...)"
+                    },
+                    "section": {
+                        "type": "string",
+                        "example": "A",
+                        "description": "Označení sekce (A, B, C...)"
+                    },
+                    "label": {
+                        "type": "string",
+                        "example": "1.A",
+                        "description": "Celé označení třídy"
+                    },
+                    "studyField": {
+                        "type": "string",
+                        "example": "Informatika",
+                        "description": "Studijní obor (volitelné)"
+                    },
+                    "teacherId": {
+                        "type": "string",
+                        "example": "teacher-uuid",
+                        "description": "Učitel třídní (volitelné)"
+                    }
+                }
+            },
+            "CreateSubjectDto": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "example": "Matematika"
+                    },
+                    "organizationId": {
+                        "type": "string",
+                        "example": "organization-id-uuid"
+                    },
+                    "catalogSubjectId": {
+                        "type": "string",
+                        "example": "catalog-subject-id-uuid"
+                    }
+                },
+                "required": [
+                    "name",
+                    "organizationId"
+                ]
+            },
+            "UpdateSubjectDto": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "example": "Matematika – rozšířená"
+                    },
+                    "catalogSubjectId": {
+                        "type": "string",
+                        "example": "catalog-subject-id-uuid"
+                    }
+                }
+            },
+            "CreateStudentDto": {
+                "type": "object",
+                "properties": {
+                    "membershipId": {
+                        "type": "string",
+                        "example": "membership-uuid"
+                    },
+                    "orgId": {
+                        "type": "string",
+                        "example": "organization-uuid"
+                    },
+                    "studentNumber": {
+                        "type": "string",
+                        "example": "2025-00123"
+                    },
+                    "externalId": {
+                        "type": "string",
+                        "example": "BK-778899"
+                    }
+                },
+                "required": [
+                    "membershipId",
+                    "orgId"
+                ]
+            },
+            "UpdateStudentDto": {
+                "type": "object",
+                "properties": {
+                    "studentNumber": {
+                        "type": "string",
+                        "example": "2025-00123"
+                    },
+                    "externalId": {
+                        "type": "string",
+                        "example": "BK-778899"
+                    }
+                }
+            },
+            "CreateTopicDto": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "example": "Zlomky"
+                    },
+                    "subjectLevelId": {
+                        "type": "string",
+                        "example": "subject-level-id-uuid",
+                        "description": "ID SubjectLevel (předmět × ročník)"
+                    },
+                    "catalogTopicId": {
+                        "type": "string",
+                        "example": "catalog-topic-id-uuid",
+                        "description": "ID CatalogTopic (globální katalog)"
+                    },
+                    "phase": {
+                        "type": "string",
+                        "enum": [
+                            "INTRO",
+                            "DEEPEN",
+                            "RECAP",
+                            "EXTENSION"
+                        ],
+                        "example": "INTRO"
+                    },
+                    "difficulty": {
+                        "type": "string",
+                        "enum": [
+                            "BASIC",
+                            "INTERMEDIATE",
+                            "ADVANCED"
+                        ],
+                        "example": "BASIC"
+                    },
+                    "order": {
+                        "type": "number",
+                        "example": 1
+                    }
+                },
+                "required": [
+                    "name",
+                    "subjectLevelId",
+                    "catalogTopicId"
+                ]
+            },
+            "UpdateTopicDto": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "example": "Zlomky"
+                    },
+                    "subjectLevelId": {
+                        "type": "string",
+                        "example": "subject-level-id-uuid",
+                        "description": "ID SubjectLevel (předmět × ročník)"
+                    },
+                    "catalogTopicId": {
+                        "type": "string",
+                        "example": "catalog-topic-id-uuid",
+                        "description": "ID CatalogTopic (globální katalog)"
+                    },
+                    "phase": {
+                        "type": "string",
+                        "enum": [
+                            "INTRO",
+                            "DEEPEN",
+                            "RECAP",
+                            "EXTENSION"
+                        ],
+                        "example": "INTRO"
+                    },
+                    "difficulty": {
+                        "type": "string",
+                        "enum": [
+                            "BASIC",
+                            "INTERMEDIATE",
+                            "ADVANCED"
+                        ],
+                        "example": "BASIC"
+                    },
+                    "order": {
+                        "type": "number",
+                        "example": 1
+                    }
+                }
+            },
+            "AssignMaterialsDto": {
+                "type": "object",
+                "properties": {
+                    "materialIds": {
+                        "example": [
+                            "material-uuid-1",
+                            "material-uuid-2"
+                        ],
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "replaceAll": {
+                        "type": "boolean",
+                        "description": "true = nahradí existující přiřazení",
+                        "example": false
+                    }
+                },
+                "required": [
+                    "materialIds"
+                ]
+            },
+            "AssignTestsDto": {
+                "type": "object",
+                "properties": {
+                    "testIds": {
+                        "example": [
+                            "test-uuid-1",
+                            "test-uuid-2"
+                        ],
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "replaceAll": {
+                        "type": "boolean",
+                        "description": "true = nahradí existující přiřazení",
+                        "example": false
+                    }
+                },
+                "required": [
+                    "testIds"
+                ]
+            },
+            "SetHomeroomDto": {
+                "type": "object",
+                "properties": {
+                    "teacherId": {
+                        "type": "string",
+                        "example": "teacher-uuid",
+                        "description": "Učitel, který bude třídní. Pokud undefined/null → třídnictví se zruší.",
+                        "nullable": true
+                    }
+                }
+            },
+            "MaterializeSubjectDto": {
+                "type": "object",
+                "properties": {
+                    "organizationId": {
+                        "type": "string",
+                        "example": "organization-id-uuid"
+                    },
+                    "nameOverride": {
+                        "type": "string",
+                        "example": "Matematika pro ZŠ"
+                    },
+                    "createLevelsForGrades": {
+                        "type": "array",
+                        "example": [
+                            "GRADE_6",
+                            "GRADE_7"
+                        ],
+                        "items": {
+                            "type": "string",
+                            "enum": [
+                                "GRADE_1",
+                                "GRADE_2",
+                                "GRADE_3",
+                                "GRADE_4",
+                                "GRADE_5",
+                                "GRADE_6",
+                                "GRADE_7",
+                                "GRADE_8",
+                                "GRADE_9",
+                                "HIGH_SCHOOL_YEAR_1",
+                                "HIGH_SCHOOL_YEAR_2",
+                                "HIGH_SCHOOL_YEAR_3",
+                                "HIGH_SCHOOL_YEAR_4"
+                            ]
+                        }
+                    }
+                },
+                "required": [
+                    "organizationId"
+                ]
+            },
+            "MaterializeTopicDto": {
+                "type": "object",
+                "properties": {
+                    "subjectLevelId": {
+                        "type": "string",
+                        "example": "subject-level-id-uuid"
+                    },
+                    "phase": {
+                        "type": "string",
+                        "enum": [
+                            "INTRO",
+                            "DEEPEN",
+                            "RECAP",
+                            "EXTENSION"
+                        ],
+                        "example": "INTRO"
+                    },
+                    "difficulty": {
+                        "type": "string",
+                        "enum": [
+                            "BASIC",
+                            "INTERMEDIATE",
+                            "ADVANCED"
+                        ],
+                        "example": "BASIC"
+                    },
+                    "order": {
+                        "type": "number",
+                        "example": 10
+                    }
+                },
+                "required": [
+                    "subjectLevelId"
+                ]
+            },
+            "MaterializeTopicsBulkDto": {
+                "type": "object",
+                "properties": {
+                    "catalogSubjectId": {
+                        "type": "string",
+                        "example": "catalog-subject-id-uuid"
+                    },
+                    "subjectLevelId": {
+                        "type": "string",
+                        "example": "subject-level-id-uuid"
+                    },
+                    "catalogTopicIds": {
+                        "example": [
+                            "catalog-topic-id-1",
+                            "catalog-topic-id-2"
+                        ],
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "defaultPhase": {
+                        "type": "string",
+                        "enum": [
+                            "INTRO",
+                            "DEEPEN",
+                            "RECAP",
+                            "EXTENSION"
+                        ],
+                        "example": "INTRO"
+                    },
+                    "defaultDifficulty": {
+                        "type": "string",
+                        "enum": [
+                            "BASIC",
+                            "INTERMEDIATE",
+                            "ADVANCED"
+                        ],
+                        "example": "BASIC"
+                    },
+                    "appendAfter": {
+                        "type": "number",
+                        "example": 100
+                    }
+                },
+                "required": [
+                    "catalogSubjectId",
+                    "subjectLevelId",
+                    "catalogTopicIds"
+                ]
+            },
+            "CreateCatalogSubjectDto": {
+                "type": "object",
+                "properties": {
+                    "code": {
+                        "type": "string",
+                        "example": "MATH"
+                    },
+                    "name": {
+                        "type": "string",
+                        "example": "Matematika"
+                    }
+                },
+                "required": [
+                    "code",
+                    "name"
+                ]
+            },
+            "UpdateCatalogSubjectDto": {
+                "type": "object",
+                "properties": {
+                    "code": {
+                        "type": "string",
+                        "example": "MATH"
+                    },
+                    "name": {
+                        "type": "string",
+                        "example": "Matematika"
+                    }
+                }
+            },
+            "CreateCatalogTopicDto": {
+                "type": "object",
+                "properties": {
+                    "subjectId": {
+                        "type": "string",
+                        "example": "catalog-subject-id-uuid"
+                    },
+                    "name": {
+                        "type": "string",
+                        "example": "Zlomky"
+                    }
+                },
+                "required": [
+                    "subjectId",
+                    "name"
+                ]
+            },
+            "UpdateCatalogTopicDto": {
+                "type": "object",
+                "properties": {
+                    "subjectId": {
+                        "type": "string",
+                        "example": "catalog-subject-id-uuid"
+                    },
+                    "name": {
+                        "type": "string",
+                        "example": "Zlomky"
+                    }
+                }
+            },
+            "CreateLearningMaterialDto": {
+                "type": "object",
+                "properties": {
+                    "title": {
+                        "type": "string",
+                        "example": "Zlomky – úvod"
+                    },
+                    "description": {
+                        "type": "string",
+                        "example": "Materiál vysvětluje základy zlomků."
+                    },
+                    "contentType": {
+                        "type": "string",
+                        "enum": [
+                            "MATERIAL",
+                            "PRACTICE",
+                            "TEST",
+                            "VIDEO",
+                            "LINK"
+                        ],
+                        "example": "MATERIAL"
+                    },
+                    "educationLevel": {
+                        "type": "string",
+                        "enum": [
+                            "PRIMARY_1",
+                            "PRIMARY_2",
+                            "SECONDARY_MATURITA",
+                            "SECONDARY_VOCATIONAL"
+                        ],
+                        "example": "PRIMARY_2"
+                    },
+                    "schoolGrade": {
+                        "type": "string",
+                        "enum": [
+                            "GRADE_1",
+                            "GRADE_2",
+                            "GRADE_3",
+                            "GRADE_4",
+                            "GRADE_5",
+                            "GRADE_6",
+                            "GRADE_7",
+                            "GRADE_8",
+                            "GRADE_9",
+                            "HIGH_SCHOOL_YEAR_1",
+                            "HIGH_SCHOOL_YEAR_2",
+                            "HIGH_SCHOOL_YEAR_3",
+                            "HIGH_SCHOOL_YEAR_4"
+                        ],
+                        "example": "GRADE_5"
+                    },
+                    "subjectId": {
+                        "type": "string",
+                        "description": "Subject ID (volitelné)",
+                        "example": "subject-uuid"
+                    },
+                    "topicLevelId": {
+                        "type": "string",
+                        "description": "TopicLevel ID (volitelné)",
+                        "example": "topic-level-uuid"
+                    },
+                    "scope": {
+                        "type": "string",
+                        "enum": [
+                            "GLOBAL",
+                            "ORGANIZATION",
+                            "SHARED"
+                        ],
+                        "example": "ORGANIZATION",
+                        "default": "ORGANIZATION"
+                    },
+                    "organizationId": {
+                        "type": "string",
+                        "description": "Organization ID – povinné, pokud scope=ORGANIZATION",
+                        "example": "organization-uuid"
+                    },
+                    "accessLevel": {
+                        "type": "string",
+                        "enum": [
+                            "FREE",
+                            "SCHOOL_ONLY",
+                            "PAID"
+                        ],
+                        "example": "FREE"
+                    },
+                    "price": {
+                        "type": "number",
+                        "example": 99
+                    },
+                    "isDownloadable": {
+                        "type": "boolean",
+                        "example": true
+                    }
+                },
+                "required": [
+                    "title",
+                    "contentType",
+                    "educationLevel"
+                ]
+            },
+            "UpdateLearningMaterialDto": {
+                "type": "object",
+                "properties": {
+                    "title": {
+                        "type": "string",
+                        "example": "Zlomky – úvod"
+                    },
+                    "description": {
+                        "type": "string",
+                        "example": "Materiál vysvětluje základy zlomků."
+                    },
+                    "contentType": {
+                        "type": "string",
+                        "enum": [
+                            "MATERIAL",
+                            "PRACTICE",
+                            "TEST",
+                            "VIDEO",
+                            "LINK"
+                        ],
+                        "example": "MATERIAL"
+                    },
+                    "educationLevel": {
+                        "type": "string",
+                        "enum": [
+                            "PRIMARY_1",
+                            "PRIMARY_2",
+                            "SECONDARY_MATURITA",
+                            "SECONDARY_VOCATIONAL"
+                        ],
+                        "example": "PRIMARY_2"
+                    },
+                    "schoolGrade": {
+                        "type": "string",
+                        "enum": [
+                            "GRADE_1",
+                            "GRADE_2",
+                            "GRADE_3",
+                            "GRADE_4",
+                            "GRADE_5",
+                            "GRADE_6",
+                            "GRADE_7",
+                            "GRADE_8",
+                            "GRADE_9",
+                            "HIGH_SCHOOL_YEAR_1",
+                            "HIGH_SCHOOL_YEAR_2",
+                            "HIGH_SCHOOL_YEAR_3",
+                            "HIGH_SCHOOL_YEAR_4"
+                        ],
+                        "example": "GRADE_5"
+                    },
+                    "subjectId": {
+                        "type": "string",
+                        "description": "Subject ID (volitelné)",
+                        "example": "subject-uuid"
+                    },
+                    "topicLevelId": {
+                        "type": "string",
+                        "description": "TopicLevel ID (volitelné)",
+                        "example": "topic-level-uuid"
+                    },
+                    "scope": {
+                        "type": "string",
+                        "enum": [
+                            "GLOBAL",
+                            "ORGANIZATION",
+                            "SHARED"
+                        ],
+                        "example": "ORGANIZATION",
+                        "default": "ORGANIZATION"
+                    },
+                    "organizationId": {
+                        "type": "string",
+                        "description": "Organization ID – povinné, pokud scope=ORGANIZATION",
+                        "example": "organization-uuid"
+                    },
+                    "accessLevel": {
+                        "type": "string",
+                        "enum": [
+                            "FREE",
+                            "SCHOOL_ONLY",
+                            "PAID"
+                        ],
+                        "example": "FREE"
+                    },
+                    "price": {
+                        "type": "number",
+                        "example": 99
+                    },
+                    "isDownloadable": {
+                        "type": "boolean",
+                        "example": true
+                    }
+                }
+            },
+            "CreateTestDto": {
+                "type": "object",
+                "properties": {
+                    "title": {
+                        "type": "string",
+                        "example": "Písemka – Zlomky"
+                    },
+                    "description": {
+                        "type": "string",
+                        "example": "Krátká prověrka na zlomky"
+                    },
+                    "organizationId": {
+                        "type": "string",
+                        "description": "Cílová organizace",
+                        "example": "uuid"
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "DRAFT",
+                            "PUBLISHED",
+                            "ARCHIVED"
+                        ],
+                        "example": "DRAFT"
+                    }
+                },
+                "required": [
+                    "title",
+                    "organizationId"
+                ]
+            },
+            "UpdateTestDto": {
+                "type": "object",
+                "properties": {
+                    "title": {
+                        "type": "string"
+                    },
+                    "description": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "DRAFT",
+                            "PUBLISHED",
+                            "ARCHIVED"
+                        ]
+                    }
+                }
+            },
+            "ReorderQuestionsDto": {
+                "type": "object",
+                "properties": {}
+            },
+            "CreateQuestionDto": {
+                "type": "object",
+                "properties": {
+                    "text": {
+                        "type": "string"
+                    },
+                    "type": {
+                        "type": "string",
+                        "enum": [
+                            "FILL_IN_THE_BLANK",
+                            "MULTIPLE_CHOICE",
+                            "TRUE_FALSE"
+                        ]
+                    },
+                    "order": {
+                        "type": "number",
+                        "example": 1
+                    }
+                },
+                "required": [
+                    "text",
+                    "type"
+                ]
+            },
+            "UpdateQuestionDto": {
+                "type": "object",
+                "properties": {
+                    "text": {
+                        "type": "string"
+                    },
+                    "type": {
+                        "type": "string",
+                        "enum": [
+                            "FILL_IN_THE_BLANK",
+                            "MULTIPLE_CHOICE",
+                            "TRUE_FALSE"
+                        ]
+                    },
+                    "order": {
+                        "type": "number",
+                        "example": 2
+                    }
+                }
+            },
+            "CreateOptionDto": {
+                "type": "object",
+                "properties": {
+                    "text": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "text"
+                ]
+            },
+            "UpdateOptionDto": {
+                "type": "object",
+                "properties": {
+                    "text": {
+                        "type": "string"
+                    }
+                }
+            },
+            "CreateAnswerDto": {
+                "type": "object",
+                "properties": {
+                    "text": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "text"
+                ]
+            },
+            "UpdateAnswerDto": {
+                "type": "object",
+                "properties": {
+                    "text": {
+                        "type": "string"
+                    }
+                }
+            }
+        }
+    }
+}

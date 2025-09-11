@@ -27,7 +27,7 @@ import {
   cacheGetOrSet,
   cacheScopeForUser,
   getOrgVersion,
-} from 'shared/cache/org-cache.utils';
+} from '../../shared/cache/org-cache.utils';
 
 function toPrismaSearch(search?: string): Prisma.StudentWhereInput | undefined {
   const s = (search ?? '').trim();
