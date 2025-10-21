@@ -1,33 +1,51 @@
+version: "3.9"
+
 services:
   postgres:
     image: postgres:15
     restart: always
+    env_file:
+      - .env
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: user
-      POSTGRES_DB: skillstormdb
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-skillstormdb}
     volumes:
       - pgdata:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
 
   backend:
     build:
       context: ./server
       dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: development
+      PORT: ${BACKEND_PORT:-3000}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/skillstormdb}
+      JWT_SECRET: ${JWT_SECRET:-change-me}
+      CACHE_TTL_SECONDS: ${CACHE_TTL_SECONDS:-600}
+      REDIS_URL: ${REDIS_URL:-}
+    volumes:
+      - ./server:/app
+      - /app/node_modules
     ports:
-      - "3000:3000"
+      - "${BACKEND_PORT:-3000}:${BACKEND_PORT:-3000}"
     depends_on:
       - postgres
-    environment:
-      DATABASE_URL: postgresql://postgres:user@localhost:5432/skillstormdb
 
   client:
     build:
       context: ./client
       dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3000}
     ports:
-      - "3001:3001"
+      - "${CLIENT_PORT:-3001}:3000"
     volumes:
       - ./client:/app
       - /app/node_modules

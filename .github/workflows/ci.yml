@@ -3,23 +3,49 @@ name: SkillStorm CI
 on:
   push:
     branches: [main]
+  pull_request:
 
 jobs:
-  build:
+  ci:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: skillstormdb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/skillstormdb
+      JWT_SECRET: ci-secret
+      NODE_ENV: test
+      DISABLE_BOOTSTRAP_SEARCH: 1
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: "npm"
 
       - name: Install frontend dependencies
         working-directory: ./client
-        run: npm install
+        run: npm ci
+
+      - name: Lint frontend
+        working-directory: ./client
+        run: npm run lint
 
       - name: Build frontend
         working-directory: ./client
@@ -27,7 +53,27 @@ jobs:
 
       - name: Install backend dependencies
         working-directory: ./server
-        run: npm install
+        run: npm ci
+
+      - name: Lint backend
+        working-directory: ./server
+        run: npm run lint -- --no-fix
+
+      - name: Generate Prisma client
+        working-directory: ./server
+        run: npx prisma generate
+
+      - name: Run database migrations
+        working-directory: ./server
+        run: npx prisma migrate deploy
+
+      - name: Seed database
+        working-directory: ./server
+        run: npm run prisma:seed
+
+      - name: Run backend tests
+        working-directory: ./server
+        run: npm run test -- --runInBand --detectOpenHandles
 
       - name: Build backend
         working-directory: ./server
