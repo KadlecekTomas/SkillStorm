@@ -8,7 +8,6 @@ import {
   Post,
   Query,
   Request,
-  UseGuards,
   ParseUUIDPipe,
 } from '@nestjs/common';
 import {
@@ -17,10 +16,8 @@ import {
   ApiQuery,
   ApiTags,
 } from '@nestjs/swagger';
-import { AuthGuard } from '@nestjs/passport';
-import { RolesGuard } from 'src/auth/guards/roles.guard';
-import { Roles } from 'src/auth/decorators/roles.decorator';
-import { OrganizationRole, SystemRole } from '@prisma/client';
+import { SystemRole, PermissionKey } from '@prisma/client';
+import { Permission } from 'src/modules/rbac/permission.decorator';
 
 import { QueryCatalogDto } from './dto/query-catalog.dto';
 import { CreateCatalogSubjectDto } from './dto/create-catalog-subject.dto';
@@ -34,18 +31,13 @@ import { CatalogService } from './catalog.service';
 
 @ApiTags('Catalog')
 @ApiBearerAuth()
-@UseGuards(AuthGuard('jwt'), RolesGuard)
 @Controller('catalog')
 export class CatalogController {
   constructor(private readonly service: CatalogService) {}
 
   // ---------- READ (teacher/director/superadmin) ----------
   @Get('subjects')
-  @Roles(
-    SystemRole.SUPERADMIN,
-    OrganizationRole.DIRECTOR,
-    OrganizationRole.TEACHER,
-  )
+  @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({
     summary: 'CatalogSubject list (search + pagination, cached)',
   })
@@ -57,22 +49,14 @@ export class CatalogController {
   }
 
   @Get('subjects/:id')
-  @Roles(
-    SystemRole.SUPERADMIN,
-    OrganizationRole.DIRECTOR,
-    OrganizationRole.TEACHER,
-  )
+  @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'CatalogSubject detail (cached)' })
   getSubject(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.getSubject(id);
   }
 
   @Get('subjects/:id/topics')
-  @Roles(
-    SystemRole.SUPERADMIN,
-    OrganizationRole.DIRECTOR,
-    OrganizationRole.TEACHER,
-  )
+  @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'CatalogTopic list by CatalogSubject (cached)' })
   @ApiQuery({ name: 'search', required: false, type: String })
   @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
@@ -85,11 +69,7 @@ export class CatalogController {
   }
 
   @Get('topics/:id')
-  @Roles(
-    SystemRole.SUPERADMIN,
-    OrganizationRole.DIRECTOR,
-    OrganizationRole.TEACHER,
-  )
+  @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'CatalogTopic detail (cached)' })
   getTopic(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.getTopic(id);
@@ -97,11 +77,7 @@ export class CatalogController {
 
   // ---------- MATERIALIZE (teacher/director in org, or superadmin) ----------
   @Post('subjects/:id/materialize-to-org')
-  @Roles(
-    SystemRole.SUPERADMIN,
-    OrganizationRole.DIRECTOR,
-    OrganizationRole.TEACHER,
-  )
+  @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'Vytvoř Subject (+levels) v org z CatalogSubject' })
   materializeSubject(
     @Param('id', new ParseUUIDPipe()) catalogSubjectId: string,
@@ -112,11 +88,7 @@ export class CatalogController {
   }
 
   @Post('topics/:id/materialize-to-subject-level')
-  @Roles(
-    SystemRole.SUPERADMIN,
-    OrganizationRole.DIRECTOR,
-    OrganizationRole.TEACHER,
-  )
+  @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'Vytvoř TopicLevel v SubjectLevel z CatalogTopic' })
   materializeTopic(
     @Param('id', new ParseUUIDPipe()) catalogTopicId: string,
@@ -127,11 +99,7 @@ export class CatalogController {
   }
 
   @Post('subjects/:id/materialize-topics')
-  @Roles(
-    SystemRole.SUPERADMIN,
-    OrganizationRole.DIRECTOR,
-    OrganizationRole.TEACHER,
-  )
+  @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({
     summary: 'Bulk materializace více CatalogTopic do SubjectLevel',
   })
@@ -145,14 +113,14 @@ export class CatalogController {
 
   // ---------- CRUD (superadmin only) ----------
   @Post('subjects')
-  @Roles(SystemRole.SUPERADMIN)
+  @Permission(SystemRole.SUPERADMIN)
   @ApiOperation({ summary: 'Create CatalogSubject (SUPERADMIN)' })
   createCatalogSubject(@Body() dto: CreateCatalogSubjectDto) {
     return this.service.createCatalogSubject(dto);
   }
 
   @Patch('subjects/:id')
-  @Roles(SystemRole.SUPERADMIN)
+  @Permission(SystemRole.SUPERADMIN)
   @ApiOperation({ summary: 'Update CatalogSubject (SUPERADMIN)' })
   updateCatalogSubject(
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -162,14 +130,14 @@ export class CatalogController {
   }
 
   @Delete('subjects/:id')
-  @Roles(SystemRole.SUPERADMIN)
+  @Permission(SystemRole.SUPERADMIN)
   @ApiOperation({ summary: 'Delete CatalogSubject (SUPERADMIN)' })
   deleteCatalogSubject(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.deleteCatalogSubject(id);
   }
 
   @Post('subjects/:id/topics')
-  @Roles(SystemRole.SUPERADMIN)
+  @Permission(SystemRole.SUPERADMIN)
   @ApiOperation({
     summary: 'Create CatalogTopic under CatalogSubject (SUPERADMIN)',
   })
@@ -181,7 +149,7 @@ export class CatalogController {
   }
 
   @Patch('topics/:id')
-  @Roles(SystemRole.SUPERADMIN)
+  @Permission(SystemRole.SUPERADMIN)
   @ApiOperation({ summary: 'Update CatalogTopic (SUPERADMIN)' })
   updateCatalogTopic(
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -191,7 +159,7 @@ export class CatalogController {
   }
 
   @Delete('topics/:id')
-  @Roles(SystemRole.SUPERADMIN)
+  @Permission(SystemRole.SUPERADMIN)
   @ApiOperation({ summary: 'Delete CatalogTopic (SUPERADMIN)' })
   deleteCatalogTopic(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.deleteCatalogTopic(id);

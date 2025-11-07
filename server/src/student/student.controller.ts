@@ -7,7 +7,6 @@ import {
   Patch,
   Param,
   Delete,
-  UseGuards,
   Request,
   ParseUUIDPipe,
   Query,
@@ -18,20 +17,17 @@ import { CacheTTL } from '@nestjs/cache-manager';
 
 import { CreateStudentDto } from './dto/create-student.dto';
 import { UpdateStudentDto } from './dto/update-student.dto';
-import { Roles } from 'src/auth/decorators/roles.decorator';
-import { RolesGuard } from 'src/auth/guards/roles.guard';
-import { AuthGuard } from '@nestjs/passport';
-import { OrganizationRole, SystemRole } from '@prisma/client';
+import { OrganizationRole, SystemRole, PermissionKey } from '@prisma/client';
 import { StudentsService } from './student.service';
 import { QueryStudentsDto } from './dto/query-students.dto';
 import { ExportStudentsDto } from './dto/export-students.dto';
 import { Response } from 'express';
 
 import { InvalidateScopes } from 'src/common/cache/invalidate.decorator';
+import { Permission } from 'src/modules/rbac/permission.decorator';
 
 @ApiTags('Students')
 @ApiBearerAuth()
-@UseGuards(AuthGuard('jwt'), RolesGuard)
 @Controller('students')
 export class StudentsController {
   constructor(private readonly service: StudentsService) {}
@@ -39,7 +35,7 @@ export class StudentsController {
   // ---------- EXPORT ----------
   // src/modules/students/student.controller.ts
   @Get('export')
-  @Roles(SystemRole.SUPERADMIN, OrganizationRole.DIRECTOR)
+  @Permission(SystemRole.SUPERADMIN, OrganizationRole.DIRECTOR)
   async export(
     @Request() req,
     @Query() q: ExportStudentsDto,
@@ -68,11 +64,7 @@ export class StudentsController {
 
   // ---------- CREATE ----------
   @Post()
-  @Roles(
-    SystemRole.SUPERADMIN,
-    OrganizationRole.DIRECTOR,
-    OrganizationRole.TEACHER,
-  )
+  @Permission(PermissionKey.MANAGE_STUDENTS)
   @ApiOperation({ summary: 'Create new student' })
   @InvalidateScopes(({ result }) => (result?.orgId ? [result.orgId] : []))
   create(@Body() dto: CreateStudentDto, @Request() req) {
@@ -80,9 +72,9 @@ export class StudentsController {
   }
 
   // ---------- LIST ----------
-  // Pozn.: Učitel v cizí org → 403 (RolesGuard ho sem ani nepustí)
+  // Pozn.: Učitel v cizí org → 403 (RbacGuard ho sem nepustí)
   @Get()
-  @Roles(SystemRole.SUPERADMIN, OrganizationRole.DIRECTOR)
+  @Permission(SystemRole.SUPERADMIN, OrganizationRole.DIRECTOR)
   @ApiOperation({ summary: 'List students (pagination + filters)' })
   @CacheTTL(0)
   findAll(@Request() req, @Query() q: QueryStudentsDto) {
@@ -91,12 +83,7 @@ export class StudentsController {
 
   // ---------- DETAIL ----------
   @Get(':id')
-  @Roles(
-    SystemRole.SUPERADMIN,
-    OrganizationRole.DIRECTOR,
-    OrganizationRole.TEACHER,
-    OrganizationRole.STUDENT, // ⬅️ důležité pro self‑access
-  )
+  @Permission(PermissionKey.MANAGE_STUDENTS, OrganizationRole.STUDENT)
   @ApiOperation({ summary: 'Get student by ID' })
   @CacheTTL(0)
   findOne(@Param('id', new ParseUUIDPipe()) id: string, @Request() req) {
@@ -105,11 +92,7 @@ export class StudentsController {
 
   // ---------- UPDATE ----------
   @Patch(':id')
-  @Roles(
-    SystemRole.SUPERADMIN,
-    OrganizationRole.DIRECTOR,
-    OrganizationRole.TEACHER,
-  )
+  @Permission(PermissionKey.MANAGE_STUDENTS)
   @ApiOperation({ summary: 'Update student by ID' })
   @InvalidateScopes(({ result }) => (result?.orgId ? [result.orgId] : []))
   update(
@@ -122,7 +105,7 @@ export class StudentsController {
 
   // ---------- DELETE (soft) ----------
   @Delete(':id')
-  @Roles(SystemRole.SUPERADMIN, OrganizationRole.DIRECTOR)
+  @Permission(SystemRole.SUPERADMIN, OrganizationRole.DIRECTOR)
   @ApiOperation({ summary: 'Soft delete student by ID' })
   @InvalidateScopes(({ result }) => (result?.orgId ? [result.orgId] : []))
   remove(@Param('id', new ParseUUIDPipe()) id: string, @Request() req) {

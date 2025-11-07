@@ -4,6 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ArrowUpRight } from "lucide-react";
 import { motion } from "framer-motion";
+import { useRouter } from "next/navigation";
 
 type TeacherOverviewProps = {
   actions?: { label: string; href: string }[];
@@ -12,12 +13,31 @@ type TeacherOverviewProps = {
     description: string;
     metric: string;
   };
+  onAction?: (href: string, label: string) => void;
 };
 
 export const TeacherOverview = ({
   actions = [],
   highlight,
-}: TeacherOverviewProps) => (
+  onAction,
+}: TeacherOverviewProps) => {
+  const router = useRouter();
+
+  const navigate = (href: string, label: string) => {
+    if (onAction) {
+      onAction(href, label);
+      return;
+    }
+    if (href.startsWith("http")) {
+      if (typeof window !== "undefined") {
+        window.open(href, "_blank");
+      }
+    } else {
+      router.push(href);
+    }
+  };
+
+  return (
   <motion.div whileHover={{ y: -4 }}>
     <Card className="space-y-4">
       <div className="flex items-start justify-between gap-3">
@@ -28,7 +48,17 @@ export const TeacherOverview = ({
           </p>
           <p className="text-sm text-slate-600">{highlight.description}</p>
         </div>
-        <Button variant="outline" size="icon" className="rounded-2xl">
+        <Button
+          variant="outline"
+          size="icon"
+          className="rounded-2xl"
+          onClick={() => {
+            console.log("CLICKED: teacher insight cta");
+            if (actions[0]) {
+              navigate(actions[0].href, actions[0].label);
+            }
+          }}
+        >
           <ArrowUpRight className="h-4 w-4" />
         </Button>
       </div>
@@ -38,6 +68,10 @@ export const TeacherOverview = ({
             key={action.label}
             variant="ghost"
             className="rounded-full border border-slate-200 px-4 py-2 text-xs"
+            onClick={() => {
+              console.log("CLICKED:", action.label);
+              navigate(action.href, action.label);
+            }}
           >
             {action.label}
           </Button>
@@ -46,3 +80,4 @@ export const TeacherOverview = ({
     </Card>
   </motion.div>
 );
+};

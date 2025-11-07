@@ -3,12 +3,14 @@
 import { MainLayout } from "@/components/layout/main-layout";
 import { useRoleView } from "@/hooks/use-role-view";
 import { Badge } from "@/components/ui/badge";
+import { useProtectedRoute } from "@/hooks/use-protected-route";
 
 type DashboardLayoutProps = {
   children: React.ReactNode;
 };
 
 export const DashboardLayout = ({ children }: DashboardLayoutProps) => {
+  useProtectedRoute();
   const role = useRoleView();
 
   return (

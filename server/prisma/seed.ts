@@ -17,6 +17,7 @@ import {
 } from '@prisma/client';
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import 'dotenv/config';
 
 const prisma = new PrismaClient();
 const classKey = (grade: SchoolGrade, section: string) => `${grade}-${section}`;

@@ -9,7 +9,6 @@ import {
   Param,
   Query,
   Req,
-  UseGuards,
   ForbiddenException,
   ParseUUIDPipe,
 } from '@nestjs/common';
@@ -26,23 +25,20 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { QueryUsersDto } from './dto/query-users.dto';
 
-import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
-import { RolesGuard } from 'src/auth/guards/roles.guard';
-import { Roles } from 'src/auth/decorators/roles.decorator';
-import { $Enums } from '@prisma/client';
+import { OrganizationRole, SystemRole } from '@prisma/client';
 import { InvalidateScopes } from 'src/common/cache/invalidate.decorator';
 import { NoHttpCache } from 'src/common/cache/no-http-cache.decorator';
+import { Permission } from 'src/modules/rbac/permission.decorator';
 
 @ApiTags('users')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   // -------- LIST (SUPERADMIN: všichni; DIRECTOR: jen jeho org) --------
   @Get()
-  @Roles($Enums.SystemRole.SUPERADMIN, $Enums.OrganizationRole.DIRECTOR)
+  @Permission(SystemRole.SUPERADMIN, OrganizationRole.DIRECTOR)
   @ApiOperation({
     summary: 'List users (search, filters, pagination, sorting)',
   })
@@ -69,7 +65,7 @@ export class UsersController {
 
   // -------- CREATE (SUPERADMIN) --------
   @Post()
-  @Roles($Enums.SystemRole.SUPERADMIN)
+  @Permission(SystemRole.SUPERADMIN)
   @ApiOperation({ summary: 'Create user (SUPERADMIN only)' })
   @InvalidateScopes(({ result }) =>
     // očekává se, že service vrátí { affectedOrgIds: string[] } pokud rovnou vzniklo členství
@@ -110,7 +106,7 @@ export class UsersController {
 
   // -------- DELETE/ANONYMIZE (SUPERADMIN nebo DIRECTOR v téže org; nikdy ne mazat superadmina) --------
   @Delete(':id')
-  @Roles($Enums.SystemRole.SUPERADMIN, $Enums.OrganizationRole.DIRECTOR)
+  @Permission(SystemRole.SUPERADMIN, OrganizationRole.DIRECTOR)
   @ApiOperation({
     summary:
       'Delete/anonymize user (SUPERADMIN or DIRECTOR of same org, not superadmin target)',

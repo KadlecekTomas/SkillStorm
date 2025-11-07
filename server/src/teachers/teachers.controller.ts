@@ -7,7 +7,6 @@ import {
   Patch,
   Param,
   Delete,
-  UseGuards,
   Request,
   Query,
   ParseUUIDPipe,
@@ -26,23 +25,20 @@ import { UpdateTeacherDto } from './dto/update-teacher.dto';
 import { QueryTeachersDto } from './dto/query-teachers.dto';
 import { AssignSubjectsDto } from './dto/assign-subjects.dto';
 
-import { Roles } from 'src/auth/decorators/roles.decorator';
-import { RolesGuard } from 'src/auth/guards/roles.guard';
-import { AuthGuard } from '@nestjs/passport';
-import { SystemRole, OrganizationRole } from '@prisma/client';
+import { Permission } from 'src/modules/rbac/permission.decorator';
+import { PermissionKey } from '@prisma/client';
 
 import { InvalidateScopes } from 'src/common/cache/invalidate.decorator';
 
 @ApiTags('Teachers')
 @ApiBearerAuth()
-@UseGuards(AuthGuard('jwt'), RolesGuard)
 @Controller('teachers')
 export class TeachersController {
   constructor(private readonly service: TeachersService) {}
 
   // ---------- CREATE ----------
   @Post()
-  @Roles(SystemRole.SUPERADMIN, OrganizationRole.DIRECTOR)
+  @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'Create teacher (director or superadmin)' })
   @InvalidateScopes(({ req }) => [req.body?.organizationId].filter(Boolean))
   create(@Body() dto: CreateTeacherDto, @Request() req) {
@@ -51,7 +47,7 @@ export class TeachersController {
 
   // ---------- LIST ----------
   @Get()
-  @Roles(SystemRole.SUPERADMIN, OrganizationRole.DIRECTOR)
+  @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'List teachers (org‑scoped for director)' })
   @ApiQuery({ name: 'organizationId', required: false, type: String })
   @CacheTTL(0) // čtecí endpoint: vypnout HTTP response cache, používáme verzovanou cache v service
@@ -61,11 +57,7 @@ export class TeachersController {
 
   // ---------- DETAIL ----------
   @Get(':id')
-  @Roles(
-    SystemRole.SUPERADMIN,
-    OrganizationRole.DIRECTOR,
-    OrganizationRole.TEACHER,
-  )
+  @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'Get teacher detail' })
   @CacheTTL(0) // čtecí endpoint: viz výše
   findOne(@Param('id', new ParseUUIDPipe()) id: string, @Request() req) {
@@ -74,7 +66,7 @@ export class TeachersController {
 
   // ---------- UPDATE ----------
   @Patch(':id')
-  @Roles(SystemRole.SUPERADMIN, OrganizationRole.DIRECTOR)
+  @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'Update teacher (director or superadmin)' })
   @InvalidateScopes(({ result }) =>
     result?.organizationId ? [result.organizationId] : [],
@@ -89,7 +81,7 @@ export class TeachersController {
 
   // ---------- DELETE (soft) ----------
   @Delete(':id')
-  @Roles(SystemRole.SUPERADMIN, OrganizationRole.DIRECTOR)
+  @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'Soft delete teacher (director or superadmin)' })
   @InvalidateScopes(({ result }) =>
     result?.organizationId ? [result.organizationId] : [],
@@ -100,7 +92,7 @@ export class TeachersController {
 
   // ---------- SUBJECTS: bulk add/replace ----------
   @Post(':id/subjects')
-  @Roles(SystemRole.SUPERADMIN, OrganizationRole.DIRECTOR)
+  @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'Přiřadit předměty učiteli (bulk add/replace)' })
   @InvalidateScopes(({ result }) =>
     result?.organizationId ? [result.organizationId] : [],
@@ -115,7 +107,7 @@ export class TeachersController {
 
   // ---------- SUBJECTS: remove single link ----------
   @Delete(':id/subjects/:subjectId')
-  @Roles(SystemRole.SUPERADMIN, OrganizationRole.DIRECTOR)
+  @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'Odebrat jedno přiřazení předmětu učiteli' })
   @InvalidateScopes(({ result }) =>
     result?.organizationId ? [result.organizationId] : [],

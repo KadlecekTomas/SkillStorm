@@ -10,8 +10,10 @@ import { Input } from "@/components/ui/input";
 import { Alert } from "@/components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useState } from "react";
-import { useAuthStore } from "@/store/use-auth-store";
+import { useAuth } from "@/hooks/use-auth";
 import { AxiosError } from "axios";
+import { toast } from "react-toastify";
+import { Loader2 } from "lucide-react";
 
 const loginSchema = z.object({
   email: z.string().email({ message: "Enter a valid email" }),
@@ -33,7 +35,8 @@ type AuthFormProps = {
 export const AuthForm = ({ mode }: AuthFormProps) => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const setUser = useAuthStore((state) => state.setUser);
+  const [registering, setRegistering] = useState(false);
+  const { login, loading: authLoading } = useAuth();
 
   const schema = mode === "login" ? loginSchema : registerSchema;
   const form = useForm<LoginValues | RegisterValues>({
@@ -48,19 +51,16 @@ export const AuthForm = ({ mode }: AuthFormProps) => {
     try {
       setError(null);
       setSuccess(null);
-      const endpoint = mode === "login" ? "/auth/login" : "/auth/register";
-      const payload =
-        mode === "login"
-          ? { login: values.email, password: values.password }
-          : values;
-      const { data } = await apiClient.post(endpoint, payload);
+      if (mode === "login") {
+        await login({ login: values.email, password: values.password });
+        setSuccess("Přihlašuji…");
+        return;
+      }
+      setRegistering(true);
+      const { data } = await apiClient.post("/auth/register", values);
       if (data?.user) {
-        setUser(data.user, data.token);
-        setSuccess(
-          mode === "login"
-            ? "Welcome back! Redirecting to dashboard..."
-            : "Account created. You can continue to dashboard.",
-        );
+        toast.success("Účet byl vytvořen. Pokračuj na přihlášení.");
+        setSuccess("Account created. Continue to dashboard.");
       } else {
         setError("Unexpected response from server.");
       }
@@ -72,6 +72,15 @@ export const AuthForm = ({ mode }: AuthFormProps) => {
       setError(
         message ?? (mode === "login" ? "Invalid credentials." : "Unable to register user."),
       );
+      if (mode === "login") {
+        toast.error(
+          message ?? "Neplatné přihlašovací údaje ❌",
+        );
+      } else {
+        toast.error(message ?? "Registrace se nezdařila.");
+      }
+    } finally {
+      if (mode === "register") setRegistering(false);
     }
   };
 
@@ -135,7 +144,14 @@ export const AuthForm = ({ mode }: AuthFormProps) => {
         </div>
       )}
 
-      <Button type="submit" className="w-full h-12 text-base">
+      <Button
+        type="submit"
+        className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl text-base"
+        disabled={mode === "login" ? authLoading : registering}
+      >
+        {(mode === "login" ? authLoading : registering) && (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        )}
         {mode === "login" ? "Sign in" : "Create account"}
       </Button>
 

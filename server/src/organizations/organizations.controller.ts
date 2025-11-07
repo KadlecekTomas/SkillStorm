@@ -15,10 +15,7 @@ import {
 } from '@nestjs/common';
 import { CreateOrganizationDto } from './dto/create-organization.dto';
 import { UpdateOrganizationDto } from './dto/update-organization.dto';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
-import { $Enums, OrganizationType } from '@prisma/client';
+import { OrganizationType, OrganizationRole, SystemRole } from '@prisma/client';
 import { OrganizationsService } from './organizations.service';
 import {
   ApiBearerAuth,
@@ -30,10 +27,10 @@ import { SchoolAccessGuard } from '../auth/guards/school-access.guard';
 import { QueryOrganizationsDto } from './dto/query-organizations.dto';
 import { CacheTTL } from '@nestjs/cache-manager';
 import { InvalidateScopes } from 'src/common/cache/invalidate.decorator';
+import { Permission } from 'src/modules/rbac/permission.decorator';
 
 @ApiTags('organizations')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('organizations')
 export class OrganizationsController {
   constructor(private readonly service: OrganizationsService) {}
@@ -46,7 +43,7 @@ export class OrganizationsController {
   @InvalidateScopes(() => ['ALL']) // globální list → invaliduj ALL
   async create(@Body() dto: CreateOrganizationDto, @Req() req: any) {
     const userId = req.user?.userId;
-    const isSuper = req.user?.systemRole === $Enums.SystemRole.SUPERADMIN;
+    const isSuper = req.user?.systemRole === SystemRole.SUPERADMIN;
 
     if (dto.type === OrganizationType.SCHOOL && !isSuper) {
       const isDirectorSomewhere = await this.service.userIsDirector(userId);
@@ -61,7 +58,7 @@ export class OrganizationsController {
   }
 
   @Get()
-  @Roles($Enums.SystemRole.SUPERADMIN)
+  @Permission(SystemRole.SUPERADMIN)
   @ApiOperation({
     summary: 'Get organizations (only superadmin), s pagination + search',
   })
@@ -76,11 +73,11 @@ export class OrganizationsController {
 
   @Get(':id')
   @UseGuards(SchoolAccessGuard)
-  @Roles(
-    $Enums.OrganizationRole.DIRECTOR,
-    $Enums.OrganizationRole.TEACHER,
-    $Enums.OrganizationRole.STUDENT,
-    $Enums.SystemRole.SUPERADMIN,
+  @Permission(
+    OrganizationRole.DIRECTOR,
+    OrganizationRole.TEACHER,
+    OrganizationRole.STUDENT,
+    SystemRole.SUPERADMIN,
   )
   @ApiOperation({
     summary: 'Get organization detail (director/teacher/student/superadmin)',
@@ -92,7 +89,7 @@ export class OrganizationsController {
 
   @Patch(':id')
   @UseGuards(SchoolAccessGuard)
-  @Roles($Enums.OrganizationRole.DIRECTOR, $Enums.SystemRole.SUPERADMIN)
+  @Permission(OrganizationRole.DIRECTOR, SystemRole.SUPERADMIN)
   @ApiOperation({ summary: 'Update organization (director or superadmin)' })
   @InvalidateScopes(() => ['ALL'])
   update(
@@ -112,7 +109,7 @@ export class OrganizationsController {
   }
 
   @Delete(':id')
-  @Roles($Enums.SystemRole.SUPERADMIN)
+  @Permission(SystemRole.SUPERADMIN)
   @ApiOperation({ summary: 'Soft delete organization (only for superadmin)' })
   @InvalidateScopes(() => ['ALL'])
   remove(@Param('id', new ParseUUIDPipe()) id: string) {

@@ -1,7 +1,6 @@
 import {
   Controller,
   Get,
-  UseGuards,
   Request,
   Query,
   UseInterceptors,
@@ -12,10 +11,8 @@ import {
   ApiQuery,
   ApiTags,
 } from '@nestjs/swagger';
-import { AuthGuard } from '@nestjs/passport';
-import { Roles } from 'src/auth/decorators/roles.decorator';
-import { RolesGuard } from 'src/auth/guards/roles.guard';
-import { SystemRole, OrganizationRole } from '@prisma/client';
+import { Permission } from 'src/modules/rbac/permission.decorator';
+import { PermissionKey } from '@prisma/client';
 // ⚠️ odstraněn CacheTTL import
 import { StatsService } from './stats.service';
 import {
@@ -28,18 +25,13 @@ export const DEFAULT_STATS_OVERVIEW_SCOPE = 'evaluated' as const;
 
 @ApiTags('Stats')
 @ApiBearerAuth()
-@UseGuards(AuthGuard('jwt'), RolesGuard)
 @Controller()
 export class StatsController {
   constructor(private readonly service: StatsService) {}
 
   @UseInterceptors(NoHttpCacheInterceptor)
   @Get('stats/overview')
-  @Roles(
-    SystemRole.SUPERADMIN,
-    OrganizationRole.DIRECTOR,
-    OrganizationRole.TEACHER,
-  )
+  @Permission(PermissionKey.VIEW_RESULTS)
   @ApiOperation({
     summary: 'Organization overview (tests, submissions, averages)',
   })
@@ -63,7 +55,7 @@ export class StatsController {
 
   @UseInterceptors(NoHttpCacheInterceptor)
   @Get('dashboards/student')
-  @Roles(OrganizationRole.STUDENT, SystemRole.SUPERADMIN)
+  @Permission(PermissionKey.VIEW_RESULTS)
   @ApiOperation({ summary: 'Student dashboard (my progress)' })
   // ⚠️ odstraněno @CacheTTL(0)
   student(@Request() req) {
@@ -76,11 +68,7 @@ export class StatsController {
 
   @UseInterceptors(NoHttpCacheInterceptor)
   @Get('dashboards/teacher')
-  @Roles(
-    SystemRole.SUPERADMIN,
-    OrganizationRole.DIRECTOR,
-    OrganizationRole.TEACHER,
-  )
+  @Permission(PermissionKey.VIEW_RESULTS)
   @ApiOperation({ summary: 'Teacher dashboard (my classes/tests/performance)' })
   // ⚠️ odstraněno @CacheTTL(0)
   teacher(@Request() req) {

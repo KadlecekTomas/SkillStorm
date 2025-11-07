@@ -7,7 +7,6 @@ import {
   Patch,
   Param,
   Delete,
-  UseGuards,
   Request,
   ParseUUIDPipe,
   Query,
@@ -20,10 +19,8 @@ import {
 } from '@nestjs/swagger';
 import { CacheTTL } from '@nestjs/cache-manager';
 
-import { RolesGuard } from 'src/auth/guards/roles.guard';
-import { Roles } from 'src/auth/decorators/roles.decorator';
-import { SystemRole, OrganizationRole } from '@prisma/client';
-import { AuthGuard } from '@nestjs/passport';
+import { SystemRole, OrganizationRole, PermissionKey } from '@prisma/client';
+import { Permission } from 'src/modules/rbac/permission.decorator';
 
 import { CreateSubjectDto } from './dto/create-subject.dto';
 import { UpdateSubjectDto } from './dto/update-subject.dto';
@@ -34,18 +31,13 @@ import { InvalidateScopes } from 'src/common/cache/invalidate.decorator';
 
 @ApiTags('Subjects')
 @ApiBearerAuth()
-@UseGuards(AuthGuard('jwt'), RolesGuard)
 @Controller('subjects')
 export class SubjectsController {
   constructor(private readonly service: SubjectsService) {}
 
   // ---------- CREATE ----------
   @Post()
-  @Roles(
-    SystemRole.SUPERADMIN,
-    OrganizationRole.DIRECTOR,
-    OrganizationRole.TEACHER,
-  )
+  @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'Vytvoření předmětu' })
   @InvalidateScopes(({ req }) => [req.body?.organizationId].filter(Boolean))
   create(@Body() dto: CreateSubjectDto, @Request() req) {
@@ -54,11 +46,7 @@ export class SubjectsController {
 
   // ---------- LIST ----------
   @Get()
-  @Roles(
-    SystemRole.SUPERADMIN,
-    OrganizationRole.DIRECTOR,
-    OrganizationRole.TEACHER,
-  )
+  @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({
     summary: 'Získat předměty (search, pagination, includeLevels)',
   })
@@ -73,11 +61,7 @@ export class SubjectsController {
 
   // ---------- DETAIL ----------
   @Get(':id')
-  @Roles(
-    SystemRole.SUPERADMIN,
-    OrganizationRole.DIRECTOR,
-    OrganizationRole.TEACHER,
-  )
+  @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'Detail předmětu' })
   @CacheTTL(0)
   findOne(@Param('id', new ParseUUIDPipe()) id: string, @Request() req) {
@@ -86,11 +70,7 @@ export class SubjectsController {
 
   // ---------- UPDATE ----------
   @Patch(':id')
-  @Roles(
-    SystemRole.SUPERADMIN,
-    OrganizationRole.DIRECTOR,
-    OrganizationRole.TEACHER,
-  )
+  @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'Úprava předmětu' })
   @InvalidateScopes(({ result }) =>
     result?.organizationId ? [result.organizationId] : [],
@@ -105,7 +85,7 @@ export class SubjectsController {
 
   // ---------- DELETE (soft) ----------
   @Delete(':id')
-  @Roles(SystemRole.SUPERADMIN, OrganizationRole.DIRECTOR)
+  @Permission(SystemRole.SUPERADMIN, OrganizationRole.DIRECTOR)
   @ApiOperation({ summary: 'Soft smazání předmětu' })
   @InvalidateScopes(({ result }) =>
     result?.organizationId ? [result.organizationId] : [],
@@ -116,11 +96,7 @@ export class SubjectsController {
 
   // ---------- Subject → Levels ----------
   @Get(':id/levels')
-  @Roles(
-    SystemRole.SUPERADMIN,
-    OrganizationRole.DIRECTOR,
-    OrganizationRole.TEACHER,
-  )
+  @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'Seznam SubjectLevel pro daný předmět' })
   @CacheTTL(0)
   findLevels(
@@ -132,11 +108,7 @@ export class SubjectsController {
 
   // ---------- Subject → TopicLevels (přes Levels) ----------
   @Get(':id/topics')
-  @Roles(
-    SystemRole.SUPERADMIN,
-    OrganizationRole.DIRECTOR,
-    OrganizationRole.TEACHER,
-  )
+  @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({
     summary: 'Všechna TopicLevel pro daný předmět (přes SubjectLevel)',
   })

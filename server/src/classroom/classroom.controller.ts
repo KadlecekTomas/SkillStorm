@@ -8,15 +8,11 @@ import {
   Param,
   Delete,
   Query,
-  UseGuards,
   Request,
   ParseUUIDPipe,
 } from '@nestjs/common';
-import { Roles } from 'src/auth/decorators/roles.decorator';
 import { OrganizationRole, SystemRole } from '@prisma/client';
 import { ApiBearerAuth, ApiTags, ApiOperation } from '@nestjs/swagger';
-import { RolesGuard } from 'src/auth/guards/roles.guard';
-import { AuthGuard } from '@nestjs/passport';
 import { CacheTTL } from '@nestjs/cache-manager';
 
 import { CreateClassSectionDto } from './dto/create-classroom.dto';
@@ -24,16 +20,16 @@ import { UpdateClassroomDto } from './dto/update-classroom.dto';
 import { QueryClassSectionsDto } from './dto/query-class-sections.dto';
 import { ClassroomService } from './classroom.service';
 import { InvalidateScopes } from 'src/common/cache/invalidate.decorator';
+import { Permission } from 'src/modules/rbac/permission.decorator';
 
 @ApiTags('Classroom')
 @ApiBearerAuth()
-@UseGuards(AuthGuard('jwt'), RolesGuard)
 @Controller('class-sections')
 export class ClassroomController {
   constructor(private readonly classSectionService: ClassroomService) {}
 
   @Post()
-  @Roles(SystemRole.SUPERADMIN, OrganizationRole.DIRECTOR)
+  @Permission(SystemRole.SUPERADMIN, OrganizationRole.DIRECTOR)
   @ApiOperation({ summary: 'Vytvoření třídy (class section)' })
   @InvalidateScopes(({ result }) => (result?.orgId ? [result.orgId] : []))
   create(@Body() dto: CreateClassSectionDto, @Request() req) {
@@ -58,7 +54,7 @@ export class ClassroomController {
   }
 
   @Patch(':id')
-  @Roles(SystemRole.SUPERADMIN, OrganizationRole.DIRECTOR)
+  @Permission(SystemRole.SUPERADMIN, OrganizationRole.DIRECTOR)
   @ApiOperation({ summary: 'Úprava třídy' })
   @InvalidateScopes(({ result }) => (result?.orgId ? [result.orgId] : []))
   update(
@@ -70,7 +66,7 @@ export class ClassroomController {
   }
 
   @Delete(':id')
-  @Roles(SystemRole.SUPERADMIN, OrganizationRole.DIRECTOR)
+  @Permission(SystemRole.SUPERADMIN, OrganizationRole.DIRECTOR)
   @ApiOperation({ summary: 'Smazání třídy' })
   @InvalidateScopes(({ result }) => (result?.orgId ? [result.orgId] : []))
   remove(@Param('id', new ParseUUIDPipe()) id: string, @Request() req) {

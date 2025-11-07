@@ -7,29 +7,26 @@ import {
   Delete,
   Param,
   Body,
-  UseGuards,
   Req,
   ForbiddenException,
 } from '@nestjs/common';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
+import { PermissionKey, OrganizationRole } from '@prisma/client';
 import { CreateAssignmentDto, UpdateAssignmentDto } from './dto';
 import { AssignmentsService } from './assignments.service';
+import { Permission } from 'src/modules/rbac/permission.decorator';
 
 @Controller('assignments')
-@UseGuards(JwtAuthGuard, RolesGuard)
 export class AssignmentsController {
   constructor(private readonly assignmentsService: AssignmentsService) {}
 
   @Post()
-  @Roles('TEACHER', 'DIRECTOR')
+  @Permission(PermissionKey.MANAGE_TEACHERS)
   create(@Body() dto: CreateAssignmentDto) {
     return this.assignmentsService.create(dto);
   }
 
   @Get(':id')
-  @Roles('TEACHER', 'DIRECTOR', 'STUDENT', 'SUPERADMIN')
+  @Permission(PermissionKey.MANAGE_TEACHERS, OrganizationRole.STUDENT)
   async findOne(@Param('id') id: string, @Req() req) {
     const assignment = await this.assignmentsService.findOneOrThrow(id);
 
@@ -40,12 +37,12 @@ export class AssignmentsController {
       }
     }
 
-    // Učitel/Direktor: (RolesGuard typicky zajistí org v claimu)
+    // Učitel/Direktor: RbacGuard + JWT claim drží scope organizace
     return assignment;
   }
 
   @Patch(':id')
-  @Roles('TEACHER', 'DIRECTOR')
+  @Permission(PermissionKey.MANAGE_TEACHERS)
   async update(
     @Param('id') id: string,
     @Body() dto: UpdateAssignmentDto,
@@ -59,7 +56,7 @@ export class AssignmentsController {
   }
 
   @Delete(':id')
-  @Roles('TEACHER', 'DIRECTOR')
+  @Permission(PermissionKey.MANAGE_TEACHERS)
   async remove(@Param('id') id: string, @Req() req) {
     const assignment = await this.assignmentsService.findOneOrThrow(id);
     if (assignment.organizationId !== req.user.organizationId) {

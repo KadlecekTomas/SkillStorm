@@ -8,7 +8,6 @@ import {
   Param,
   Query,
   Req,
-  UseGuards,
   ParseUUIDPipe,
 } from '@nestjs/common';
 import {
@@ -17,20 +16,17 @@ import {
   ApiOperation,
   ApiQuery,
 } from '@nestjs/swagger';
-import { $Enums } from '@prisma/client';
+import { OrganizationRole, SystemRole } from '@prisma/client';
 import { MembershipsService } from './memberships.service';
 import { CreateMembershipDto } from './dto/create-membership.dto';
 import { UpdateMembershipDto } from './dto/update-membership.dto';
 import { QueryMembershipsDto } from './dto/query-memberships.dto';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
 import { CacheTTL } from '@nestjs/cache-manager';
 import { InvalidateScopes } from 'src/common/cache/invalidate.decorator';
+import { Permission } from 'src/modules/rbac/permission.decorator';
 
 @ApiTags('memberships')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('memberships')
 export class MembershipsController {
   constructor(private readonly service: MembershipsService) {}
@@ -40,7 +36,7 @@ export class MembershipsController {
   @ApiOperation({
     summary: 'Add user to organization (SUPERADMIN or DIRECTOR)',
   })
-  @Roles($Enums.SystemRole.SUPERADMIN, $Enums.OrganizationRole.DIRECTOR)
+  @Permission(SystemRole.SUPERADMIN, OrganizationRole.DIRECTOR)
   @InvalidateScopes(({ req }) => [req.body?.organizationId].filter(Boolean))
   async create(@Body() dto: CreateMembershipDto, @Req() req) {
     // org‑scope kontrola probíhá v service (effectiveOrgId)
@@ -58,7 +54,7 @@ export class MembershipsController {
   @ApiQuery({ name: 'role', required: false })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
-  @Roles($Enums.SystemRole.SUPERADMIN, $Enums.OrganizationRole.DIRECTOR)
+  @Permission(SystemRole.SUPERADMIN, OrganizationRole.DIRECTOR)
   @CacheTTL(0)
   async findAll(@Query() q: QueryMembershipsDto, @Req() req) {
     return this.service.findAll(req.user, q);
@@ -66,7 +62,7 @@ export class MembershipsController {
 
   // UPDATE
   @Patch(':id')
-  @Roles($Enums.SystemRole.SUPERADMIN, $Enums.OrganizationRole.DIRECTOR)
+  @Permission(SystemRole.SUPERADMIN, OrganizationRole.DIRECTOR)
   @ApiOperation({ summary: 'Update role of member (SUPERADMIN or DIRECTOR)' })
   @InvalidateScopes(({ result }) =>
     result?.organizationId ? [result.organizationId] : [],
@@ -84,7 +80,7 @@ export class MembershipsController {
   @ApiOperation({
     summary: 'Remove user from organization (SUPERADMIN or DIRECTOR)',
   })
-  @Roles($Enums.SystemRole.SUPERADMIN, $Enums.OrganizationRole.DIRECTOR)
+  @Permission(SystemRole.SUPERADMIN, OrganizationRole.DIRECTOR)
   @InvalidateScopes(({ result }) =>
     result?.organizationId ? [result.organizationId] : [],
   )

@@ -6,7 +6,6 @@ import {
   Patch,
   Param,
   Delete,
-  UseGuards,
   Request,
   Query,
   ParseUUIDPipe,
@@ -29,27 +28,20 @@ import { CreateLearningMaterialDto } from './dto/create-learning-material.dto';
 import { UpdateLearningMaterialDto } from './dto/update-learning-material.dto';
 import { QueryLearningMaterialsDto } from './dto/query-learning-materials.dto';
 
-import { Roles } from 'src/auth/decorators/roles.decorator';
-import { RolesGuard } from 'src/auth/guards/roles.guard';
-import { AuthGuard } from '@nestjs/passport';
-import { SystemRole, OrganizationRole } from '@prisma/client';
+import { Permission } from 'src/modules/rbac/permission.decorator';
+import { PermissionKey } from '@prisma/client';
 
 import { InvalidateScopes } from 'src/common/cache/invalidate.decorator';
 import type { File as MulterFile } from 'multer';
 
 @ApiTags('LearningMaterials')
 @ApiBearerAuth()
-@UseGuards(AuthGuard('jwt'), RolesGuard)
 @Controller('learning-materials')
 export class LearningMaterialsController {
   constructor(private readonly service: LearningMaterialsService) {}
 
   @Post()
-  @Roles(
-    SystemRole.SUPERADMIN,
-    OrganizationRole.DIRECTOR,
-    OrganizationRole.TEACHER,
-  )
+  @Permission(PermissionKey.EDIT_TEST)
   @ApiOperation({ summary: 'Create learning material' })
   @InvalidateScopes(({ req }) => [req.body?.organizationId].filter(Boolean))
   create(@Body() dto: CreateLearningMaterialDto, @Request() req) {
@@ -57,12 +49,7 @@ export class LearningMaterialsController {
   }
 
   @Get()
-  @Roles(
-    SystemRole.SUPERADMIN,
-    OrganizationRole.DIRECTOR,
-    OrganizationRole.TEACHER,
-    OrganizationRole.STUDENT,
-  )
+  @Permission(PermissionKey.VIEW_RESULTS)
   @ApiOperation({ summary: 'List learning materials' })
   @ApiQuery({ name: 'organizationId', required: false, type: String })
   @CacheTTL(0)
@@ -71,12 +58,7 @@ export class LearningMaterialsController {
   }
 
   @Get(':id')
-  @Roles(
-    SystemRole.SUPERADMIN,
-    OrganizationRole.DIRECTOR,
-    OrganizationRole.TEACHER,
-    OrganizationRole.STUDENT,
-  )
+  @Permission(PermissionKey.VIEW_RESULTS)
   @ApiOperation({ summary: 'Get material detail' })
   @CacheTTL(0)
   findOne(@Param('id', new ParseUUIDPipe()) id: string, @Request() req) {
@@ -84,11 +66,7 @@ export class LearningMaterialsController {
   }
 
   @Patch(':id')
-  @Roles(
-    SystemRole.SUPERADMIN,
-    OrganizationRole.DIRECTOR,
-    OrganizationRole.TEACHER,
-  )
+  @Permission(PermissionKey.EDIT_TEST)
   @ApiOperation({ summary: 'Update learning material' })
   @InvalidateScopes(({ result }) =>
     result?.organizationId ? [result.organizationId] : [],
@@ -102,7 +80,7 @@ export class LearningMaterialsController {
   }
 
   @Delete(':id')
-  @Roles(SystemRole.SUPERADMIN, OrganizationRole.DIRECTOR)
+  @Permission(PermissionKey.DELETE_TEST)
   @ApiOperation({ summary: 'Soft delete material' })
   @InvalidateScopes(({ result }) =>
     result?.organizationId ? [result.organizationId] : [],
@@ -112,11 +90,7 @@ export class LearningMaterialsController {
   }
 
   @Post(':id/file')
-  @Roles(
-    SystemRole.SUPERADMIN,
-    OrganizationRole.DIRECTOR,
-    OrganizationRole.TEACHER,
-  )
+  @Permission(PermissionKey.EDIT_TEST)
   @ApiOperation({ summary: 'Upload PDF file for material' })
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(FileInterceptor('file'))

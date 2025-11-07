@@ -1,3 +1,7 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { OverviewCard } from "@/components/cards/overview-card";
 import { TestCard } from "@/components/cards/test-card";
 import { ClassroomList } from "@/components/content/classroom-list";
@@ -5,30 +9,55 @@ import { StudentProgress } from "@/components/content/student-progress";
 import { TeacherOverview } from "@/components/content/teacher-overview";
 import { Card } from "@/components/ui/card";
 import { apiClient } from "@/utils/api-client";
-import {
-  classroomSamples,
-  testSamples,
-} from "@/utils/sample-data";
+import { classroomSamples, testSamples } from "@/utils/sample-data";
 import type { Classroom, TestSummary } from "@/types";
 import { BookOpenCheck, NotebookTabs, Users2 } from "lucide-react";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
-async function fetchDashboardSnapshot() {
-  try {
-    const [{ data: classrooms }, { data: tests }] = await Promise.all([
-      apiClient.get<Classroom[]>("/classrooms"),
-      apiClient.get<TestSummary[]>("/tests"),
-    ]);
-    return {
-      classrooms: classrooms ?? classroomSamples,
-      tests: tests ?? testSamples,
+export default function DashboardPage() {
+  const router = useRouter();
+  const [classrooms, setClassrooms] = useState<Classroom[]>(classroomSamples);
+  const [tests, setTests] = useState<TestSummary[]>(testSamples);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    const fetchDashboardSnapshot = async () => {
+      try {
+        const [{ data: classroomsData }, { data: testsData }] = await Promise.all([
+          apiClient.get<Classroom[]>("/classrooms"),
+          apiClient.get<TestSummary[]>("/tests"),
+        ]);
+        if (!active) return;
+        if (classroomsData?.length) setClassrooms(classroomsData);
+        if (testsData?.length) setTests(testsData);
+      } catch (error) {
+        console.warn("Dashboard data fallback:", error);
+      } finally {
+        if (active) setLoading(false);
+      }
     };
-  } catch {
-    return { classrooms: classroomSamples, tests: testSamples };
-  }
-}
 
-export default async function DashboardPage() {
-  const { classrooms, tests } = await fetchDashboardSnapshot();
+    fetchDashboardSnapshot();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleViewTest = (testId: string) => {
+    console.log("CLICKED: test details", testId);
+    router.push(`/dashboard/tests?test=${testId}`);
+  };
+
+  const handleManageClassroom = (classroom: Classroom) => {
+    console.log("CLICKED: manage classroom", classroom.id);
+    router.push(`/dashboard/classrooms?class=${classroom.id}`);
+  };
+
+  const handleTeacherAction = (href: string) => {
+    console.log("CLICKED: teacher action", href);
+    router.push(href);
+  };
 
   return (
     <div className="space-y-8">
@@ -66,11 +95,15 @@ export default async function DashboardPage() {
               </p>
             </div>
           </div>
-          <div className="grid gap-4 md:grid-cols-2">
-            {tests.map((test) => (
-              <TestCard key={test.id} test={test} />
-            ))}
-          </div>
+          {loading ? (
+            <LoadingSpinner label="Loading tests" className="py-8" />
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2">
+              {tests.map((test) => (
+                <TestCard key={test.id} test={test} onView={handleViewTest} />
+              ))}
+            </div>
+          )}
         </Card>
         <StudentProgress
           items={[
@@ -89,12 +122,13 @@ export default async function DashboardPage() {
           metric: "Next sprint: STEM focus",
         }}
         actions={[
-          { label: "View roadmap", href: "#" },
-          { label: "Invite co-teacher", href: "#" },
+          { label: "View roadmap", href: "/dashboard/tests" },
+          { label: "Invite co-teacher", href: "/dashboard/classrooms" },
         ]}
+        onAction={handleTeacherAction}
       />
 
-      <ClassroomList classrooms={classrooms} />
+      <ClassroomList classrooms={classrooms} onManage={handleManageClassroom} />
     </div>
   );
 }

@@ -17,7 +17,9 @@ datasource db {
 // =======================================================
 
 enum SystemRole {
-  SUPERADMIN
+  SUPERADMIN // plný přístup ke všemu, včetně administrace škol
+  DEVOPS // technická správa, CI/CD, systémové migrace
+  SUPPORT // přístup jen k auditům, statistikám a logům
 }
 
 enum UserStatus {
@@ -33,9 +35,11 @@ enum MaterialAccessLevel {
 }
 
 enum OrganizationRole {
-  STUDENT
-  TEACHER
-  DIRECTOR
+  OWNER // má všechna práva v rámci své školy
+  DIRECTOR // může řídit učitele a správu školy
+  TEACHER // běžný učitel, vytváří testy, materiály, hodnotí
+  STUDENT // přistupuje k výukovým materiálům a výsledkům
+  PARENT // pouze náhled na výsledky studenta
 }
 
 enum PermissionKey {
@@ -212,6 +216,9 @@ model Organization {
 
   assignments Assignment[]
 
+  rolePermissions RolePermission[]
+  userPermissions UserPermission[]
+
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
   deletedAt DateTime? @map("deleted_at")
@@ -280,6 +287,10 @@ model Permission {
   description  String?
   allowedTypes OrganizationType[]
 
+  // ✨ nové:
+  category     String? @db.VarChar(100)
+  isDeprecated Boolean @default(false) @map("is_deprecated")
+
   rolePermissions RolePermission[]
   userPermissions UserPermission[]
 
@@ -287,27 +298,31 @@ model Permission {
 }
 
 model RolePermission {
-  id           String           @id @default(uuid()) @map("role_permission_id")
-  role         OrganizationRole
-  permissionId String           @map("permission_id")
+  id             String           @id @default(uuid()) @map("role_permission_id")
+  organizationId String?          @map("organization_id")
+  role           OrganizationRole
+  permissionId   String           @map("permission_id")
+  allowed        Boolean          @default(true)
 
-  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
-  allowed    Boolean    @default(true)
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  permission   Permission    @relation(fields: [permissionId], references: [id], onDelete: Cascade)
 
-  @@unique([role, permissionId])
+  @@unique([organizationId, role, permissionId])
   @@map("role_permissions")
 }
 
 model UserPermission {
-  id           String  @id @default(uuid()) @map("user_permission_id")
-  userId       String  @map("user_id")
-  permissionId String  @map("permission_id")
-  allowed      Boolean @default(true)
+  id             String  @id @default(uuid()) @map("user_permission_id")
+  userId         String  @map("user_id")
+  organizationId String? @map("organization_id")
+  permissionId   String  @map("permission_id")
+  allowed        Boolean @default(true)
 
-  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  permission   Permission    @relation(fields: [permissionId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, permissionId])
+  @@unique([userId, organizationId, permissionId])
   @@map("user_permissions")
 }
 
@@ -371,7 +386,7 @@ model RevokedToken {
   token     String   @unique
   revokedAt DateTime @default(now())
 
-  @@map("RevokedToken")
+  @@map("revoked_tokens") // dříve "RevokedToken"
 }
 
 // =======================================================
@@ -725,16 +740,16 @@ model TestAssignment {
 }
 
 model Question {
-  id             String       @id @default(uuid()) @map("question_id")
-  text           String
-  type           QuestionType
-  order          Int?
-  testId         String       @map("test_id")
+  id     String       @id @default(uuid()) @map("question_id")
+  text   String
+  type   QuestionType
+  order  Int?
+  testId String       @map("test_id")
 
   // Auto-scoring fields
-  score          Int          @default(1)
-  correctAnswer  String?      // TF, FITB, MCQ single
-  correctAnswers String[]     // MCQ multiple
+  score          Int      @default(1)
+  correctAnswer  String? // TF, FITB, MCQ single
+  correctAnswers String[] // MCQ multiple
 
   test      Test       @relation(fields: [testId], references: [id], onDelete: Cascade)
   options   Option[]
@@ -769,34 +784,31 @@ model Answer {
 // =======================================================
 
 model Submission {
-  id           String           @id @default(uuid()) @map("submission_id")
-  studentId    String           @map("student_id")
-  testId       String           @map("test_id")
-  assignmentId String?          @map("assignment_id")
+  id           String  @id @default(uuid()) @map("submission_id")
+  studentId    String  @map("student_id")
+  testId       String  @map("test_id")
+  assignmentId String? @map("assignment_id")
 
-  attemptNo    Int              @default(1) @map("attempt_no")
-  status       SubmissionStatus @default(PENDING)
-  score        Float?
-  submittedAt  DateTime?        @map("submitted_at")
-  createdAt    DateTime         @default(now()) @map("created_at")
-  updatedAt    DateTime         @updatedAt @map("updated_at")
-  deletedAt    DateTime?        @map("deleted_at")
+  attemptNo   Int              @default(1) @map("attempt_no")
+  status      SubmissionStatus @default(PENDING)
+  score       Float?
+  submittedAt DateTime?        @map("submitted_at")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+  deletedAt   DateTime?        @map("deleted_at")
 
-  student      Membership  @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  test         Test        @relation(fields: [testId], references: [id], onDelete: Cascade)
-  assignment   Assignment? @relation(fields: [assignmentId], references: [id], onDelete: SetNull)
-  responses    Response[]
+  student    Membership  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  test       Test        @relation(fields: [testId], references: [id], onDelete: Cascade)
+  assignment Assignment? @relation(fields: [assignmentId], references: [id], onDelete: SetNull)
+  responses  Response[]
 
   // PONECH pouze tenhle:
   @@unique([assignmentId, studentId, attemptNo])
-
   @@index([assignmentId])
   @@index([testId, status])
   @@index([studentId, submittedAt])
-
   @@map("submissions")
 }
-
 
 model Response {
   id            String   @id @default(uuid()) @map("response_id")

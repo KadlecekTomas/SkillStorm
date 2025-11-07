@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { CacheModule, CacheModuleOptions } from '@nestjs/cache-manager';
-import { APP_INTERCEPTOR } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
@@ -24,6 +24,9 @@ import { StatsModule } from './stats/stats.module';
 
 import { AssignmentsModule } from './assignments/assignments.module';
 import { SubmissionsModule } from './submissions/submissions.module';
+import { RbacModule } from './modules/rbac/rbac.module';
+import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
+import { RbacGuard } from './modules/rbac/rbac.guard';
 
 @Module({
   imports: [
@@ -62,8 +65,11 @@ import { SubmissionsModule } from './submissions/submissions.module';
     StatsModule,
     AssignmentsModule,
     SubmissionsModule,
+    RbacModule,
   ],
   providers: [
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: RbacGuard },
     { provide: APP_INTERCEPTOR, useClass: UserScopedCacheInterceptor },
     { provide: APP_INTERCEPTOR, useClass: InvalidateInterceptor },
   ],

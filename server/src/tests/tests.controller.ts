@@ -8,7 +8,6 @@ import {
   Param,
   Body,
   Query,
-  UseGuards,
   Request,
   ParseUUIDPipe,
 } from '@nestjs/common';
@@ -18,10 +17,8 @@ import {
   ApiQuery,
   ApiTags,
 } from '@nestjs/swagger';
-import { AuthGuard } from '@nestjs/passport';
-import { Roles } from 'src/auth/decorators/roles.decorator';
-import { RolesGuard } from 'src/auth/guards/roles.guard';
-import { SystemRole, OrganizationRole } from '@prisma/client';
+import { Permission } from 'src/modules/rbac/permission.decorator';
+import { PermissionKey } from '@prisma/client';
 import { CacheTTL } from '@nestjs/cache-manager';
 import { InvalidateScopes } from 'src/common/cache/invalidate.decorator';
 
@@ -39,18 +36,13 @@ import { UpdateAnswerDto } from './dto/update-answer.dto';
 
 @ApiTags('Tests')
 @ApiBearerAuth()
-@UseGuards(AuthGuard('jwt'), RolesGuard)
 @Controller('tests')
 export class TestsController {
   constructor(private readonly service: TestsService) {}
 
   // TESTS ------------------------------------------------
   @Post()
-  @Roles(
-    SystemRole.SUPERADMIN,
-    OrganizationRole.DIRECTOR,
-    OrganizationRole.TEACHER,
-  )
+  @Permission(PermissionKey.CREATE_TEST)
   @ApiOperation({ summary: 'Create test' })
   @InvalidateScopes(({ req }) => [req.body?.organizationId].filter(Boolean))
   create(@Body() dto: CreateTestDto, @Request() req) {
@@ -58,12 +50,7 @@ export class TestsController {
   }
 
   @Get()
-  @Roles(
-    SystemRole.SUPERADMIN,
-    OrganizationRole.DIRECTOR,
-    OrganizationRole.TEACHER,
-    OrganizationRole.STUDENT,
-  )
+  @Permission(PermissionKey.VIEW_RESULTS)
   @ApiOperation({ summary: 'List tests' })
   @ApiQuery({ name: 'organizationId', required: false, type: String })
   @CacheTTL(0)
@@ -72,12 +59,7 @@ export class TestsController {
   }
 
   @Get(':id')
-  @Roles(
-    SystemRole.SUPERADMIN,
-    OrganizationRole.DIRECTOR,
-    OrganizationRole.TEACHER,
-    OrganizationRole.STUDENT,
-  )
+  @Permission(PermissionKey.VIEW_RESULTS)
   @ApiOperation({ summary: 'Get test detail' })
   @CacheTTL(0)
   findOne(@Param('id', new ParseUUIDPipe()) id: string, @Request() req) {
@@ -85,11 +67,7 @@ export class TestsController {
   }
 
   @Patch(':id')
-  @Roles(
-    SystemRole.SUPERADMIN,
-    OrganizationRole.DIRECTOR,
-    OrganizationRole.TEACHER,
-  )
+  @Permission(PermissionKey.EDIT_TEST)
   @ApiOperation({ summary: 'Update test' })
   @InvalidateScopes(({ result }) =>
     result?.organizationId ? [result.organizationId] : [],
@@ -103,7 +81,7 @@ export class TestsController {
   }
 
   @Delete(':id')
-  @Roles(SystemRole.SUPERADMIN, OrganizationRole.DIRECTOR)
+  @Permission(PermissionKey.DELETE_TEST)
   @ApiOperation({ summary: 'Soft delete test' })
   @InvalidateScopes(({ result }) =>
     result?.organizationId ? [result.organizationId] : [],
@@ -117,11 +95,7 @@ export class TestsController {
   // Reorder MUSÍ být nad ':id/questions/:questionId'
   @Patch(':id/questions/reorder')
   @Patch(':id/questions/reorder')
-  @Roles(
-    SystemRole.SUPERADMIN,
-    OrganizationRole.DIRECTOR,
-    OrganizationRole.TEACHER,
-  )
+  @Permission(PermissionKey.EDIT_TEST)
   @ApiOperation({ summary: 'Reorder questions' })
   reorderQuestions(
     @Param('id', new ParseUUIDPipe()) testId: string,
@@ -132,11 +106,7 @@ export class TestsController {
   }
 
   @Post(':id/questions')
-  @Roles(
-    SystemRole.SUPERADMIN,
-    OrganizationRole.DIRECTOR,
-    OrganizationRole.TEACHER,
-  )
+  @Permission(PermissionKey.EDIT_TEST)
   @ApiOperation({ summary: 'Add question to test' })
   addQuestion(
     @Param('id', new ParseUUIDPipe()) testId: string,
@@ -147,11 +117,7 @@ export class TestsController {
   }
 
   @Patch(':id/questions/:questionId([0-9a-fA-F-]{36})')
-  @Roles(
-    SystemRole.SUPERADMIN,
-    OrganizationRole.DIRECTOR,
-    OrganizationRole.TEACHER,
-  )
+  @Permission(PermissionKey.EDIT_TEST)
   @ApiOperation({ summary: 'Update question' })
   updateQuestion(
     @Param('id', new ParseUUIDPipe()) testId: string,
@@ -163,11 +129,7 @@ export class TestsController {
   }
 
   @Delete(':id/questions/:questionId([0-9a-fA-F-]{36})')
-  @Roles(
-    SystemRole.SUPERADMIN,
-    OrganizationRole.DIRECTOR,
-    OrganizationRole.TEACHER,
-  )
+  @Permission(PermissionKey.EDIT_TEST)
   @ApiOperation({ summary: 'Remove question' })
   removeQuestion(
     @Param('id', new ParseUUIDPipe()) testId: string,
@@ -179,11 +141,7 @@ export class TestsController {
 
   // OPTIONS ---------------------------------------------
   @Post(':id/questions/:questionId([0-9a-fA-F-]{36})/options')
-  @Roles(
-    SystemRole.SUPERADMIN,
-    OrganizationRole.DIRECTOR,
-    OrganizationRole.TEACHER,
-  )
+  @Permission(PermissionKey.EDIT_TEST)
   addOption(
     @Param('id', new ParseUUIDPipe()) testId: string,
     @Param('questionId', new ParseUUIDPipe()) questionId: string,
@@ -196,11 +154,7 @@ export class TestsController {
   @Patch(
     ':id/questions/:questionId([0-9a-fA-F-]{36})/options/:optionId([0-9a-fA-F-]{36})',
   )
-  @Roles(
-    SystemRole.SUPERADMIN,
-    OrganizationRole.DIRECTOR,
-    OrganizationRole.TEACHER,
-  )
+  @Permission(PermissionKey.EDIT_TEST)
   updateOption(
     @Param('id', new ParseUUIDPipe()) testId: string,
     @Param('questionId', new ParseUUIDPipe()) questionId: string,
@@ -220,11 +174,7 @@ export class TestsController {
   @Delete(
     ':id/questions/:questionId([0-9a-fA-F-]{36})/options/:optionId([0-9a-fA-F-]{36})',
   )
-  @Roles(
-    SystemRole.SUPERADMIN,
-    OrganizationRole.DIRECTOR,
-    OrganizationRole.TEACHER,
-  )
+  @Permission(PermissionKey.EDIT_TEST)
   removeOption(
     @Param('id', new ParseUUIDPipe()) testId: string,
     @Param('questionId', new ParseUUIDPipe()) questionId: string,
@@ -236,11 +186,7 @@ export class TestsController {
 
   // ANSWERS (správné odpovědi) --------------------------
   @Post(':id/questions/:questionId([0-9a-fA-F-]{36})/answers')
-  @Roles(
-    SystemRole.SUPERADMIN,
-    OrganizationRole.DIRECTOR,
-    OrganizationRole.TEACHER,
-  )
+  @Permission(PermissionKey.EDIT_TEST)
   addAnswer(
     @Param('id', new ParseUUIDPipe()) testId: string,
     @Param('questionId', new ParseUUIDPipe()) questionId: string,
@@ -253,11 +199,7 @@ export class TestsController {
   @Patch(
     ':id/questions/:questionId([0-9a-fA-F-]{36})/answers/:answerId([0-9a-fA-F-]{36})',
   )
-  @Roles(
-    SystemRole.SUPERADMIN,
-    OrganizationRole.DIRECTOR,
-    OrganizationRole.TEACHER,
-  )
+  @Permission(PermissionKey.EDIT_TEST)
   updateAnswer(
     @Param('id', new ParseUUIDPipe()) testId: string,
     @Param('questionId', new ParseUUIDPipe()) questionId: string,
@@ -277,11 +219,7 @@ export class TestsController {
   @Delete(
     ':id/questions/:questionId([0-9a-fA-F-]{36})/answers/:answerId([0-9a-fA-F-]{36})',
   )
-  @Roles(
-    SystemRole.SUPERADMIN,
-    OrganizationRole.DIRECTOR,
-    OrganizationRole.TEACHER,
-  )
+  @Permission(PermissionKey.EDIT_TEST)
   removeAnswer(
     @Param('id', new ParseUUIDPipe()) testId: string,
     @Param('questionId', new ParseUUIDPipe()) questionId: string,

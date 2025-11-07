@@ -1,0 +1,52 @@
+name: E2E
+on:
+  push:
+    branches: ["main", "develop"]
+  pull_request:
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    env:
+      BASE_URL: http://localhost:3001
+      NEXT_PUBLIC_API_URL: http://localhost:4200
+      PORT: 4200
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install root deps
+        run: npm ci || npm i
+
+      - name: Install server deps
+        working-directory: server
+        run: npm ci || npm i
+
+      - name: Install client deps
+        working-directory: client
+        run: npm ci || npm i
+
+      - name: Start backend
+        working-directory: server
+        run: npm run start:dev &
+
+      - name: Wait for backend
+        run: npx wait-on -t 120000 http://localhost:4200/health
+
+      - name: Start frontend
+        working-directory: client
+        run: npm run dev &
+
+      - name: Wait for frontend
+        run: npx wait-on -t 120000 http://localhost:3001
+
+      - name: Install Playwright browsers
+        working-directory: client
+        run: npx playwright install --with-deps
+
+      - name: Run Playwright tests
+        working-directory: client
+        run: npm run test:e2e

@@ -1,4 +1,6 @@
 import axios from "axios";
+import { useAuthStore } from "@/store/use-auth-store";
+import { toast } from "react-toastify";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api";
@@ -23,6 +25,8 @@ apiClient.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401 && typeof window !== "undefined") {
       localStorage.removeItem("skillstorm_token");
+      useAuthStore.getState().logout();
+      toast.error("Relace vypršela. Přihlas se znovu.");
     }
     return Promise.reject(error);
   },
