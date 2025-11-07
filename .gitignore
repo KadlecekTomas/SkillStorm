@@ -1,3 +1,6 @@
 node_modules/
 dist/
 .env
+client/.env
+server/.env
+audit-report.json

@@ -115,6 +115,7 @@ export class AssignmentsService {
     } else {
       // CLASS: bez students
       const { studentIds, ...rest } = dto;
+      void studentIds;
       return this.prisma.assignment.create({ data: rest });
     }
   }

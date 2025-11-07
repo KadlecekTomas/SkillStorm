@@ -1,0 +1,7 @@
+{
+  "name": "skillstorm-monorepo",
+  "private": true,
+  "scripts": {
+    "audit": "node scripts/audit-project.js"
+  }
+}
