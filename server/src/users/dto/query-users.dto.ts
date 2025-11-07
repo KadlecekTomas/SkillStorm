@@ -8,7 +8,7 @@ import {
   Min,
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
-import { $Enums } from '@prisma/client';
+import { OrganizationRole } from '@prisma/client';
 
 export class QueryUsersDto {
   @ApiPropertyOptional({ example: 1 })
@@ -45,12 +45,12 @@ export class QueryUsersDto {
 
   @ApiPropertyOptional({
     description: 'Filtrovat dle organizační role (přes Memberships)',
-    enum: $Enums.OrganizationRole,
-    example: $Enums.OrganizationRole.TEACHER,
+    enum: OrganizationRole,
+    example: OrganizationRole.TEACHER,
   })
   @IsOptional()
-  @IsEnum($Enums.OrganizationRole)
-  hasOrgRole?: $Enums.OrganizationRole;
+  @IsEnum(OrganizationRole)
+  hasOrgRole?: OrganizationRole;
 
   @ApiPropertyOptional({
     description: 'Řazení podle pole',

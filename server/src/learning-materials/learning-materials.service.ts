@@ -12,10 +12,11 @@ import { QueryLearningMaterialsDto } from './dto/query-learning-materials.dto';
 import { JwtPayload } from 'src/auth/types/jwt-payload';
 import {
   Prisma,
-  $Enums,
   AuditEntityType,
   SystemRole,
   OrganizationRole,
+  ContentScope,
+  MaterialAccessLevel,
 } from '@prisma/client';
 
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
@@ -100,12 +101,12 @@ export class LearningMaterialsService {
     user: JwtPayload,
     ctx?: { ip?: string; ua?: string },
   ) {
-    const scope = dto.scope ?? $Enums.ContentScope.ORGANIZATION;
+    const scope = dto.scope ?? ContentScope.ORGANIZATION;
     const orgId = dto.organizationId ?? null;
     const uid = user.userId;
 
     // 1) Org context + membership autora
-    if (scope === $Enums.ContentScope.GLOBAL && orgId) {
+    if (scope === ContentScope.GLOBAL && orgId) {
       throw new BadRequestException(
         'Pro GLOBAL scope nesmí být vyplněn organizationId.',
       );
@@ -129,7 +130,7 @@ export class LearningMaterialsService {
     // pro GLOBAL (kvůli možnému NOT NULL na createdById) použij libovolné existující členství uživatele
     let authorMembershipId: string | null = null;
 
-    if (scope === $Enums.ContentScope.ORGANIZATION) {
+    if (scope === ContentScope.ORGANIZATION) {
       const authorMembership = await this.prisma.membership.findFirst({
         where: {
           userId: uid,
@@ -174,7 +175,7 @@ export class LearningMaterialsService {
 
     // accessLevel PAID ⇒ price vyžadována (zajištěno i v DTO přes ValidateIf)
     if (
-      dto.accessLevel === $Enums.MaterialAccessLevel.PAID &&
+      dto.accessLevel === MaterialAccessLevel.PAID &&
       (dto.price === undefined || dto.price === null)
     ) {
       throw new BadRequestException(
@@ -194,7 +195,7 @@ export class LearningMaterialsService {
         scope,
         organizationId: orgId,
         createdById: authorMembershipId, // pro GLOBAL fallback na libovolné členství
-        accessLevel: dto.accessLevel ?? $Enums.MaterialAccessLevel.FREE,
+        accessLevel: dto.accessLevel ?? MaterialAccessLevel.FREE,
         price: dto.price ?? null,
         isDownloadable: dto.isDownloadable ?? true,
       },
@@ -213,7 +214,7 @@ export class LearningMaterialsService {
 
     await bumpOrgVersion(
       this.cache,
-      scope === $Enums.ContentScope.GLOBAL
+      scope === ContentScope.GLOBAL
         ? 'GLOBAL'
         : cacheScopeForUser(user.systemRole, orgId!),
     );
@@ -253,11 +254,11 @@ export class LearningMaterialsService {
         where.organizationId = effectiveOrgId;
       } else {
         // ⬇️ NOVÉ: bez orgId ukaž jen GLOBAL
-        where.scope = $Enums.ContentScope.GLOBAL;
+        where.scope = ContentScope.GLOBAL;
       }
     } else {
       where.OR = [
-        { scope: $Enums.ContentScope.GLOBAL },
+        { scope: ContentScope.GLOBAL },
         { organizationId: effectiveOrgId },
       ];
     }
@@ -321,7 +322,7 @@ export class LearningMaterialsService {
     if (!m) throw new NotFoundException('LearningMaterial not found');
 
     if (user.systemRole === SystemRole.SUPERADMIN) return m;
-    if (m.scope === $Enums.ContentScope.GLOBAL) return m;
+    if (m.scope === ContentScope.GLOBAL) return m;
 
     const member = await this.prisma.membership.findFirst({
       where: {
@@ -408,7 +409,7 @@ export class LearningMaterialsService {
     });
     await bumpOrgVersion(
       this.cache,
-      current.scope === $Enums.ContentScope.GLOBAL
+      current.scope === ContentScope.GLOBAL
         ? 'GLOBAL'
         : cacheScopeForUser(
             user.systemRole,
@@ -457,7 +458,7 @@ export class LearningMaterialsService {
     });
     await bumpOrgVersion(
       this.cache,
-      current.scope === $Enums.ContentScope.GLOBAL
+      current.scope === ContentScope.GLOBAL
         ? 'GLOBAL'
         : cacheScopeForUser(
             user.systemRole,
@@ -527,7 +528,7 @@ export class LearningMaterialsService {
     });
 
     const scopeId =
-      m.scope === $Enums.ContentScope.GLOBAL
+      m.scope === ContentScope.GLOBAL
         ? 'GLOBAL'
         : (m.organizationId ?? 'GLOBAL');
     await bumpOrgVersion(this.cache, scopeId);

@@ -16,7 +16,7 @@ import {
 } from '../../shared/cache/org-cache.utils';
 
 @Injectable()
-export class ClassSectionService {
+export class ClassSectionsService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(CACHE_MANAGER) private readonly cache: Cache,

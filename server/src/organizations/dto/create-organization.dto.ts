@@ -1,5 +1,5 @@
 import { IsEnum, IsOptional, IsString, Length } from 'class-validator';
-import { $Enums, OrganizationType } from '@prisma/client';
+import { OrganizationType } from '@prisma/client';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 
@@ -38,5 +38,5 @@ export class CreateOrganizationDto {
     message: 'Typ organizace musí být SCHOOL, PRIVATE nebo COMMUNITY',
   })
   @Transform(({ value }) => value?.toUpperCase())
-  type?: $Enums.OrganizationType; // typově přes $Enums
+  type?: OrganizationType;
 }

@@ -9,7 +9,7 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { OrganizationRole, SystemRole } from '@prisma/client';
 import { SetHomeroomDto } from './dto/set-homeroom.dto';
-import { ClassSectionService } from './class-section.service';
+import { ClassSectionsService } from './class-section.service';
 import { InvalidateScopes } from 'src/common/cache/invalidate.decorator';
 import { Permission } from 'src/modules/rbac/permission.decorator';
 
@@ -17,7 +17,7 @@ import { Permission } from 'src/modules/rbac/permission.decorator';
 @ApiBearerAuth()
 @Controller('class-sections')
 export class ClassSectionController {
-  constructor(private readonly service: ClassSectionService) {}
+  constructor(private readonly service: ClassSectionsService) {}
 
   @Patch(':id/homeroom')
   @Permission(SystemRole.SUPERADMIN, OrganizationRole.DIRECTOR)

@@ -7,7 +7,7 @@ import {
   MinLength,
   MaxLength,
 } from 'class-validator';
-import { $Enums } from '@prisma/client';
+import { SystemRole } from '@prisma/client';
 
 export class UpdateUserDto {
   @ApiPropertyOptional({ example: 'john.doe@example.com' })
@@ -34,13 +34,13 @@ export class UpdateUserDto {
   password?: string;
 
   @ApiPropertyOptional({
-    enum: $Enums.SystemRole,
-    example: $Enums.SystemRole.SUPERADMIN,
+    enum: SystemRole,
+    example: SystemRole.SUPERADMIN,
     description: 'Povoleno měnit pouze SUPERADMINovi',
   })
   @IsOptional()
-  @IsEnum($Enums.SystemRole)
-  systemRole?: $Enums.SystemRole;
+  @IsEnum(SystemRole)
+  systemRole?: SystemRole;
 
   @ApiPropertyOptional({ example: 'en-US' })
   @IsOptional()

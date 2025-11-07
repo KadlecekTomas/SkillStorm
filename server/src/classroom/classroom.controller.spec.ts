@@ -1,11 +1,13 @@
 import { Test } from '@nestjs/testing';
 import { SchoolGrade } from '@prisma/client';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { PrismaService } from 'src/prisma/prisma.service';
 import { ClassSectionController } from 'src/class-section/class-section.controller';
-import { ClassSectionService } from 'src/class-section/class-section.service';
+import { ClassSectionsService } from 'src/class-section/class-section.service';
 
 describe('ClassSectionController', () => {
   let controller: ClassSectionController;
-  let service: ClassSectionService;
+  let service: ClassSectionsService;
 
   const mockService = {
     create: jest.fn(),
@@ -19,11 +21,15 @@ describe('ClassSectionController', () => {
   beforeEach(async () => {
     const module = await Test.createTestingModule({
       controllers: [ClassSectionController],
-      providers: [{ provide: ClassSectionService, useValue: mockService }],
+      providers: [
+        { provide: ClassSectionsService, useValue: mockService },
+        { provide: PrismaService, useValue: {} },
+        { provide: CACHE_MANAGER, useValue: {} },
+      ],
     }).compile();
 
     controller = module.get(ClassSectionController);
-    service = module.get(ClassSectionService);
+    service = module.get(ClassSectionsService);
   });
 
   afterEach(() => jest.resetAllMocks());

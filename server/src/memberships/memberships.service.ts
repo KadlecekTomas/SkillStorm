@@ -10,7 +10,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateMembershipDto } from './dto/create-membership.dto';
 import { UpdateMembershipDto } from './dto/update-membership.dto';
 import { QueryMembershipsDto } from './dto/query-memberships.dto';
-import { Prisma, $Enums, SystemRole, OrganizationRole } from '@prisma/client';
+import { Prisma, SystemRole, OrganizationRole } from '@prisma/client';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 import {
@@ -255,7 +255,7 @@ export class MembershipsService {
     if (!isSuper) {
       if (!sameOrg)
         throw new ForbiddenException('Cross-organization update is forbidden.');
-      if (current.role === $Enums.OrganizationRole.DIRECTOR) {
+      if (current.role === OrganizationRole.DIRECTOR) {
         throw new ForbiddenException('Ředitele může upravit pouze SUPERADMIN.');
       }
       if (current.userId === (user?.userId ?? user?.sub)) {
@@ -291,7 +291,7 @@ export class MembershipsService {
     if (!isSuper) {
       if (!sameOrg)
         throw new ForbiddenException('Cross-organization delete is forbidden.');
-      if (current.role === $Enums.OrganizationRole.DIRECTOR) {
+      if (current.role === OrganizationRole.DIRECTOR) {
         throw new ForbiddenException('Ředitele může upravit pouze SUPERADMIN.');
       }
       if (current.userId === (user?.userId ?? user?.sub)) {

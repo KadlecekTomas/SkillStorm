@@ -7,9 +7,9 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ROLES_KEY } from '../decorators/roles.decorator';
-import type { $Enums } from '@prisma/client';
+import type { OrganizationRole, SystemRole } from '@prisma/client';
 
-type AnyRole = $Enums.SystemRole | $Enums.OrganizationRole;
+type AnyRole = SystemRole | OrganizationRole;
 
 @Injectable()
 export class RolesGuard implements CanActivate {

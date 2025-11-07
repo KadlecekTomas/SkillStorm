@@ -16,7 +16,6 @@ import {
   AuditEntityType,
   SystemRole,
   OrganizationRole,
-  $Enums,
 } from '@prisma/client';
 
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
@@ -256,7 +255,7 @@ export class TeachersService {
     if (!teacher) throw new NotFoundException('Teacher not found');
 
     // superadmin může vše
-    if (user?.systemRole === $Enums.SystemRole.SUPERADMIN) return teacher;
+    if (user?.systemRole === SystemRole.SUPERADMIN) return teacher;
 
     // uživatel musí mít membership v té samé organizaci
     const member = await this.prisma.membership.findFirst({

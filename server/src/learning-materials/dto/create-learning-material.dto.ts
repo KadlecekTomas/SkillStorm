@@ -9,7 +9,13 @@ import {
   IsNumber,
   ValidateIf,
 } from 'class-validator';
-import { $Enums } from '@prisma/client';
+import {
+  ContentType,
+  EducationLevel,
+  SchoolGrade,
+  ContentScope,
+  MaterialAccessLevel,
+} from '@prisma/client';
 
 export class CreateLearningMaterialDto {
   @ApiProperty({ example: 'Zlomky – úvod' })
@@ -23,26 +29,26 @@ export class CreateLearningMaterialDto {
   description?: string;
 
   @ApiProperty({
-    enum: $Enums.ContentType,
-    example: $Enums.ContentType.MATERIAL,
+    enum: ContentType,
+    example: ContentType.MATERIAL,
   })
-  @IsEnum($Enums.ContentType)
-  contentType!: $Enums.ContentType;
+  @IsEnum(ContentType)
+  contentType!: ContentType;
 
   @ApiProperty({
-    enum: $Enums.EducationLevel,
-    example: $Enums.EducationLevel.PRIMARY_2,
+    enum: EducationLevel,
+    example: EducationLevel.PRIMARY_2,
   })
-  @IsEnum($Enums.EducationLevel)
-  educationLevel!: $Enums.EducationLevel;
+  @IsEnum(EducationLevel)
+  educationLevel!: EducationLevel;
 
   @ApiPropertyOptional({
-    enum: $Enums.SchoolGrade,
-    example: $Enums.SchoolGrade.GRADE_5,
+    enum: SchoolGrade,
+    example: SchoolGrade.GRADE_5,
   })
   @IsOptional()
-  @IsEnum($Enums.SchoolGrade)
-  schoolGrade?: $Enums.SchoolGrade;
+  @IsEnum(SchoolGrade)
+  schoolGrade?: SchoolGrade;
 
   @ApiPropertyOptional({
     description: 'Subject ID (volitelné)',
@@ -61,13 +67,13 @@ export class CreateLearningMaterialDto {
   topicLevelId?: string;
 
   @ApiPropertyOptional({
-    enum: $Enums.ContentScope,
-    example: $Enums.ContentScope.ORGANIZATION,
-    default: $Enums.ContentScope.ORGANIZATION,
+    enum: ContentScope,
+    example: ContentScope.ORGANIZATION,
+    default: ContentScope.ORGANIZATION,
   })
   @IsOptional()
-  @IsEnum($Enums.ContentScope)
-  scope?: $Enums.ContentScope;
+  @IsEnum(ContentScope)
+  scope?: ContentScope;
 
   // organizationId je povinné pouze, pokud je scope ORGANIZATION (nechceme měnit DB)
   @ApiPropertyOptional({
@@ -75,24 +81,22 @@ export class CreateLearningMaterialDto {
     example: 'organization-uuid',
   })
   @ValidateIf(
-    (o) =>
-      (o.scope ?? $Enums.ContentScope.ORGANIZATION) ===
-      $Enums.ContentScope.ORGANIZATION,
+    (o) => (o.scope ?? ContentScope.ORGANIZATION) === ContentScope.ORGANIZATION,
   )
   @IsUUID('4')
   organizationId?: string;
 
   @ApiPropertyOptional({
-    enum: $Enums.MaterialAccessLevel,
-    example: $Enums.MaterialAccessLevel.FREE,
+    enum: MaterialAccessLevel,
+    example: MaterialAccessLevel.FREE,
   })
   @IsOptional()
-  @IsEnum($Enums.MaterialAccessLevel)
-  accessLevel?: $Enums.MaterialAccessLevel;
+  @IsEnum(MaterialAccessLevel)
+  accessLevel?: MaterialAccessLevel;
 
   // price jen když accessLevel=PAID
   @ApiPropertyOptional({ example: 99.0 })
-  @ValidateIf((o) => o.accessLevel === $Enums.MaterialAccessLevel.PAID)
+  @ValidateIf((o) => o.accessLevel === MaterialAccessLevel.PAID)
   @IsNumber()
   price?: number;
 

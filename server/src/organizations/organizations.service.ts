@@ -4,10 +4,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateOrganizationDto } from './dto/create-organization.dto';
 import { UpdateOrganizationDto } from './dto/update-organization.dto';
 import {
-  $Enums,
   OrganizationType,
   Prisma,
   AuditEntityType,
+  OrganizationRole,
 } from '@prisma/client';
 import { QueryOrganizationsDto } from './dto/query-organizations.dto';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
@@ -140,7 +140,7 @@ export class OrganizationsService {
     const count = await this.prisma.membership.count({
       where: {
         userId,
-        role: $Enums.OrganizationRole.DIRECTOR,
+        role: OrganizationRole.DIRECTOR,
         deletedAt: null,
       },
     });
@@ -174,7 +174,7 @@ export class OrganizationsService {
         data: {
           userId: creatorUserId,
           organizationId: org.id,
-          role: $Enums.OrganizationRole.DIRECTOR,
+          role: OrganizationRole.DIRECTOR,
         },
       });
     }

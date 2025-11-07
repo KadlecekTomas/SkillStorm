@@ -1,15 +1,21 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { PrismaService } from 'src/prisma/prisma.service';
 import { TeachersService } from './teachers.service';
 
-describe('TeacherService', () => {
+describe('TeachersService', () => {
   let service: TeachersService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [TeacherService],
+      providers: [
+        TeachersService,
+        { provide: PrismaService, useValue: {} },
+        { provide: CACHE_MANAGER, useValue: {} },
+      ],
     }).compile();
 
-    service = module.get<TeacherService>(TeacherService);
+    service = module.get<TeachersService>(TeachersService);
   });
 
   it('should be defined', () => {

@@ -10,7 +10,13 @@ import * as bcrypt from 'bcrypt';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ConfigService } from '@nestjs/config';
-import { Membership, User, $Enums, Prisma } from '@prisma/client';
+import {
+  Membership,
+  User,
+  Prisma,
+  SystemRole,
+  OrganizationRole,
+} from '@prisma/client';
 import { randomBytes, randomUUID } from 'crypto';
 import { addDays } from 'date-fns';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
@@ -19,8 +25,8 @@ type JwtClaims = {
   sub: string;
   email: string | null;
   username: string | null;
-  systemRole: $Enums.SystemRole | null;
-  organizationRole: $Enums.OrganizationRole | null;
+  systemRole: SystemRole | null;
+  organizationRole: OrganizationRole | null;
   organizationId: string | null;
 };
 

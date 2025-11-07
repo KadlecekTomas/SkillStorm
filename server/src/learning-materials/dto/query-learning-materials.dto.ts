@@ -8,7 +8,12 @@ import {
   Min,
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
-import { $Enums } from '@prisma/client';
+import {
+  EducationLevel,
+  SchoolGrade,
+  ContentScope,
+  ContentType,
+} from '@prisma/client';
 
 export class QueryLearningMaterialsDto {
   @ApiPropertyOptional({ example: 1 })
@@ -35,36 +40,36 @@ export class QueryLearningMaterialsDto {
   search?: string;
 
   @ApiPropertyOptional({
-    enum: $Enums.EducationLevel,
-    example: $Enums.EducationLevel.PRIMARY_2,
+    enum: EducationLevel,
+    example: EducationLevel.PRIMARY_2,
   })
   @IsOptional()
-  @IsEnum($Enums.EducationLevel)
-  educationLevel?: $Enums.EducationLevel;
+  @IsEnum(EducationLevel)
+  educationLevel?: EducationLevel;
 
   @ApiPropertyOptional({
-    enum: $Enums.SchoolGrade,
-    example: $Enums.SchoolGrade.GRADE_5,
+    enum: SchoolGrade,
+    example: SchoolGrade.GRADE_5,
   })
   @IsOptional()
-  @IsEnum($Enums.SchoolGrade)
-  schoolGrade?: $Enums.SchoolGrade;
+  @IsEnum(SchoolGrade)
+  schoolGrade?: SchoolGrade;
 
   @ApiPropertyOptional({
     description: 'Scope filtr (GLOBAL/ORGANIZATION/SHARED)',
-    enum: $Enums.ContentScope,
+    enum: ContentScope,
   })
   @IsOptional()
-  @IsEnum($Enums.ContentScope)
-  scope?: $Enums.ContentScope;
+  @IsEnum(ContentScope)
+  scope?: ContentScope;
 
   @ApiPropertyOptional({
-    enum: $Enums.ContentType,
-    example: $Enums.ContentType.MATERIAL,
+    enum: ContentType,
+    example: ContentType.MATERIAL,
   })
   @IsOptional()
-  @IsEnum($Enums.ContentType)
-  contentType?: $Enums.ContentType;
+  @IsEnum(ContentType)
+  contentType?: ContentType;
 
   @ApiPropertyOptional({
     description: 'Org ID – povinné pro nesuperadmina při ORG obsahu',

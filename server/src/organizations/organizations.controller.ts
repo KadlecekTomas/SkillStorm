@@ -99,7 +99,7 @@ export class OrganizationsController {
   ) {
     if (
       dto.type === OrganizationType.SCHOOL &&
-      req.user?.systemRole !== $Enums.SystemRole.SUPERADMIN
+      req.user?.systemRole !== SystemRole.SUPERADMIN
     ) {
       throw new ForbiddenException(
         'Pouze superadmin může změnit typ organizace na SCHOOL.',

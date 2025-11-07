@@ -1,5 +1,5 @@
 import { IsEnum, IsOptional, IsString, Length } from 'class-validator';
-import { $Enums, OrganizationType } from '@prisma/client';
+import { OrganizationType } from '@prisma/client';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 
@@ -39,5 +39,5 @@ export class UpdateOrganizationDto {
   })
   @IsOptional()
   @IsEnum(OrganizationType)
-  type?: $Enums.OrganizationType;
+  type?: OrganizationType;
 }
