@@ -35,6 +35,81 @@ The bachelor thesis aims to:
 
 ---
 
+## 🚀 Quick Start (Full Stack)
+
+> The repo is split into `/client` (Next.js frontend) and `/server` (NestJS backend).  
+> The root `package.json` only exposes the `npm run audit` helper.
+
+### 1. Clone & Install
+
+```bash
+git clone https://github.com/skillstorm/app.git
+cd app
+
+# frontend deps
+cd client && npm install
+
+# backend deps
+cd ../server && npm install
+```
+
+### 2. Prepare Environment Variables
+
+- Root: `.env` (template in `.env.example`) – contains shared ports, DB creds, Redis, etc.
+- Frontend: `client/.env` (template provided) – sets `NEXT_PUBLIC_API_URL`.
+- Backend: `server/.env` (template provided) – sets `DATABASE_URL`, `JWT_SECRET`, `PORT`.
+
+Copy the examples and adjust to your local stack if needed.
+
+### 3. Run the Stack
+
+```bash
+# Terminal 1 – NestJS API
+cd server
+npx prisma db seed   # optional: populate demo data
+npm run start:dev
+
+# Terminal 2 – Next.js App Router (Turbopack dev server)
+cd client
+npm run dev
+```
+
+- Frontend dev server: http://localhost:3001 (falls back if :3000 busy)
+- Backend API: http://localhost:3000
+
+### 4. Quality Gates
+
+```bash
+# Frontend
+cd client
+npm run lint
+npm run build
+
+# Backend
+cd server
+npm run lint
+npm run build
+
+# Repo-wide audit (lint + build + env checks)
+cd ..
+npm run audit
+```
+
+All three (`lint`, `build`, `audit`) must complete without errors to consider the project healthy.
+
+### 5. Demo Accounts
+
+Seeding creates these ready-to-use accounts:
+
+- Superadmin: `admin@example.com` / `admin123`
+- Director: `director@example.com` / `director123`
+- Teachers: `teacher@example.com`, `eva.novakova@skillstorm.test` (password `teacher123`)
+- Students: `student@example.com`, `nela.studentova@skillstorm.test` (password `student123`)
+
+Feel free to duplicate or reset them via `cd server && npx prisma db seed`.
+
+---
+
 ## 🧩 Architecture
 
 | Layer | Technology | Description |

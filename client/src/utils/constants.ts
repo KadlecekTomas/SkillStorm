@@ -29,5 +29,10 @@ export const roleBadges: Record<string, { label: string; tone: string }> = {
   admin: { label: "Admin", tone: "warning" },
 };
 
-export const gradeFilters = ["All", "1st Grade", "2nd Grade", "3rd Grade"];
+export const gradeFilters = [
+  { label: "All grades", value: "All" },
+  { label: "7th Grade", value: "GRADE_7" },
+  { label: "8th Grade", value: "GRADE_8" },
+  { label: "9th Grade", value: "GRADE_9" },
+];
 export const subjectFilters = ["Mathematics", "Science", "Languages"];

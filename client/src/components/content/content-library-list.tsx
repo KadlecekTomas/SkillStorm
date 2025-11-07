@@ -13,21 +13,35 @@ type ContentLibraryListProps = {
 export const ContentLibraryList = ({ items }: ContentLibraryListProps) => (
   <div className="grid gap-4 md:grid-cols-2">
     {items.map((item) => (
-      <motion.div key={item.id} whileHover={{ y: -4 }}>
-        <Card className="space-y-3">
+      <motion.div
+        key={item.id}
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, ease: "easeOut" }}
+      >
+        <Card className="space-y-3 rounded-2xl border border-slate-100 p-5 shadow-soft">
           <div className="flex items-center justify-between text-xs text-slate-500">
-            <span>{item.updatedAt ?? "Recently added"}</span>
-            <Badge variant="neutral">{item.grade}</Badge>
+            <span className="truncate">
+              {item.updatedAt ?? "Recently synced"}
+            </span>
+            <Badge variant="neutral">
+              {item.scope === "GLOBAL" ? "Global" : "Org"}
+            </Badge>
           </div>
           <div>
-            <p className="text-sm text-slate-500">{item.subject}</p>
-            <p className="text-lg font-semibold text-slate-900">
+            <p className="text-sm text-slate-500">{item.subject ?? "General"}</p>
+            <p className="text-lg font-semibold text-slate-900 line-clamp-2">
               {item.title}
             </p>
+            {item.description && (
+              <p className="text-sm text-slate-500 line-clamp-2">
+                {item.description}
+              </p>
+            )}
           </div>
           <div className="flex items-center justify-between text-sm text-slate-500">
-            <span>Curriculum ready</span>
-            <Button variant="outline" size="sm">
+            <span className="capitalize">{item.contentType.toLowerCase()}</span>
+            <Button variant="outline" size="sm" className="rounded-full px-4">
               Open
             </Button>
           </div>

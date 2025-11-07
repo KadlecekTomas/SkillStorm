@@ -3,6 +3,7 @@
 import { Card, CardHeader, CardContent, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import type { TestSummary } from "@/types";
 import { motion } from "framer-motion";
 import { ArrowRight } from "lucide-react";
@@ -16,9 +17,14 @@ export const TestCard = ({ test, onView }: TestCardProps) => (
   <motion.div whileHover={{ y: -4 }}>
     <Card>
       <CardHeader className="mb-0">
-        <div>
+        <div className="space-y-1">
           <CardTitle>{test.title}</CardTitle>
-          <p className="text-sm text-slate-500">{test.subject}</p>
+          <p className="text-sm text-slate-500">
+            {test.subject ?? "General subject"}
+          </p>
+          <Badge variant="neutral" className="capitalize">
+            {test.status.toLowerCase()}
+          </Badge>
         </div>
         <Button variant="outline" size="sm" onClick={() => onView?.(test.id)}>
           Details

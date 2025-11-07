@@ -6,16 +6,36 @@ import { BaseModal } from "@/components/modals/base-modal";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { DataTable, type Column } from "@/components/ui/table";
-import { Classroom } from "@/types";
+import type { Classroom } from "@/types";
 import { apiClient } from "@/utils/api-client";
 import { classroomSamples } from "@/utils/sample-data";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 const columns: Column<Classroom>[] = [
-  { key: "name", label: "Classroom" },
-  { key: "grade", label: "Grade" },
-  { key: "subject", label: "Subject" },
-  { key: "students", label: "Students" },
-  { key: "updatedAt", label: "Updated" },
+  {
+    key: "label",
+    label: "Classroom",
+  },
+  {
+    key: "gradeLabel",
+    label: "Grade",
+    render: (row) => row.gradeLabel ?? row.grade,
+  },
+  {
+    key: "teacherName",
+    label: "Teacher",
+    render: (row) => row.teacherName ?? "TBD",
+  },
+  {
+    key: "studentsCount",
+    label: "Students",
+    render: (row) => row.studentsCount,
+  },
+  {
+    key: "updatedAt",
+    label: "Updated",
+    render: (row) => row.updatedAt ?? "—",
+  },
 ];
 
 export default function ClassroomsPage() {
@@ -41,10 +61,12 @@ export default function ClassroomsPage() {
     setClassrooms((prev) => [
       {
         id: crypto.randomUUID(),
-        name: newName,
-        grade: "Custom",
-        students: 0,
-        subject: "General",
+        label: newName,
+        grade: "GRADE_CUSTOM",
+        section: "A",
+        gradeLabel: "Custom",
+        teacherName: "Pending assignment",
+        studentsCount: 0,
         updatedAt: "just now",
       },
       ...prev,
@@ -56,12 +78,16 @@ export default function ClassroomsPage() {
   return (
     <div className="space-y-6">
       <ClassroomList classrooms={classrooms.slice(0, 4)} onCreate={() => setOpen(true)} />
-      <DataTable
-        data={classrooms}
-        columns={columns}
-        loading={loading}
-        emptyState="No classrooms yet"
-      />
+      {loading ? (
+        <LoadingSpinner label="Loading classrooms" />
+      ) : (
+        <DataTable
+          data={classrooms}
+          columns={columns}
+          loading={loading}
+          emptyState="No classrooms yet"
+        />
+      )}
 
       <BaseModal
         title="Create classroom"
@@ -75,7 +101,7 @@ export default function ClassroomsPage() {
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
           />
-          <Button className="w-full" onClick={handleCreate}>
+          <Button className="w-full rounded-2xl" onClick={handleCreate}>
             Save classroom
           </Button>
         </div>

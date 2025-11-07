@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 export const Sidebar = () => {
   const pathname = usePathname();
   const user = useAuthStore((state) => state.user);
+  const displayName = user?.fullName ?? user?.name ?? "Guest Educator";
 
   return (
     <aside className="glass-panel hidden min-h-screen w-72 flex-col justify-between rounded-3xl p-6 lg:flex">
@@ -59,12 +60,12 @@ export const Sidebar = () => {
         <div className="flex items-center gap-3">
           <Avatar className="h-12 w-12">
             {user?.avatarUrl ? (
-              <AvatarImage src={user.avatarUrl} alt={user.fullName} />
+              <AvatarImage src={user.avatarUrl} alt={displayName} />
             ) : (
               <AvatarFallback>
-                {user?.fullName
-                  ?.split(" ")
-                  .map((n) => n[0])
+                {displayName
+                  .split(" ")
+                  .map((n) => n[0] ?? "")
                   .join("")
                   .slice(0, 2)
                   .toUpperCase() ?? "SS"}
@@ -73,11 +74,13 @@ export const Sidebar = () => {
           </Avatar>
           <div className="space-y-1">
             <p className="text-sm font-semibold text-slate-900">
-              {user?.fullName ?? "Guest Educator"}
+              {displayName}
             </p>
-            <Badge variant="success" className="w-fit">
-              {user?.role ?? "teacher"}
-            </Badge>
+            {user?.organizationRole && (
+              <Badge variant="success" className="w-fit capitalize">
+                {user.organizationRole.toLowerCase()}
+              </Badge>
+            )}
           </div>
         </div>
       </div>

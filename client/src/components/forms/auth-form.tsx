@@ -49,7 +49,11 @@ export const AuthForm = ({ mode }: AuthFormProps) => {
       setError(null);
       setSuccess(null);
       const endpoint = mode === "login" ? "/auth/login" : "/auth/register";
-      const { data } = await apiClient.post(endpoint, values);
+      const payload =
+        mode === "login"
+          ? { login: values.email, password: values.password }
+          : values;
+      const { data } = await apiClient.post(endpoint, payload);
       if (data?.user) {
         setUser(data.user, data.token);
         setSuccess(

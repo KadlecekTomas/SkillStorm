@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import { Suspense } from "react";
+import { AppErrorBoundary } from "@/components/layout/app-error-boundary";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -21,7 +24,11 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${inter.variable} bg-secondary text-slate-900`}>
-        {children}
+        <AppErrorBoundary>
+          <Suspense fallback={<LoadingSpinner fullScreen />}>
+            {children}
+          </Suspense>
+        </AppErrorBoundary>
       </body>
     </html>
   );

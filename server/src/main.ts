@@ -83,6 +83,25 @@ export async function createApp(): Promise<INestApplication> {
     logger: process.env.NODE_ENV === 'test' ? false : undefined,
   });
 
+  const corsOrigins =
+    process.env.CORS_ORIGINS ?? 'http://localhost:4200,http://localhost:3000';
+  const allowedOrigins = corsOrigins
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+  app.enableCors({
+    origin: allowedOrigins.length ? allowedOrigins : '*',
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Requested-With',
+      'Accept',
+    ],
+  });
+
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,

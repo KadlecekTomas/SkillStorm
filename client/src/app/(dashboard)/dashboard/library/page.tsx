@@ -14,7 +14,7 @@ export default function LibraryPage() {
 
   const filtered = useMemo(() => {
     return contentSamples.filter((item) => {
-      const matchGrade = grade === "All" || item.grade === grade;
+      const matchGrade = grade === "All" || item.schoolGrade === grade;
       const matchSubject = subject === "All" || item.subject === subject;
       const matchSearch = item.title.toLowerCase().includes(search.toLowerCase());
       return matchGrade && matchSubject && matchSearch;
@@ -37,8 +37,8 @@ export default function LibraryPage() {
             </SelectTrigger>
             <SelectContent>
               {gradeFilters.map((option) => (
-                <SelectItem key={option} value={option}>
-                  {option}
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
                 </SelectItem>
               ))}
             </SelectContent>

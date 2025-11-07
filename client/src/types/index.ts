@@ -1,27 +1,52 @@
+export type SystemRole = "SUPERADMIN" | "ADMIN" | "USER";
+
+export type OrganizationRole = "STUDENT" | "TEACHER" | "DIRECTOR";
+
+export type PublishStatus = "DRAFT" | "PUBLISHED" | "ARCHIVED";
+
+export type ContentType =
+  | "MATERIAL"
+  | "PRACTICE"
+  | "TEST"
+  | "VIDEO"
+  | "LINK";
+
+export type ContentScope = "GLOBAL" | "ORGANIZATION" | "SHARED";
+
 export type Classroom = {
   id: string;
-  name: string;
+  label?: string | null;
   grade: string;
-  subject: string;
-  students: number;
-  updatedAt?: string;
+  section: string;
+  gradeLabel?: string | null;
+  teacherName?: string | null;
+  teacherEmail?: string | null;
+  studentsCount: number;
+  updatedAt?: string | null;
 };
 
 export type TestSummary = {
   id: string;
   title: string;
-  subject: string;
-  avgScore: number;
+  description?: string | null;
+  subject?: string | null;
+  status: PublishStatus;
+  version: number;
   completionRate: number;
   submissions: number;
+  avgScore: number;
 };
 
 export type ContentItem = {
   id: string;
   title: string;
-  grade: string;
-  subject: string;
-  updatedAt?: string;
+  description?: string | null;
+  subject?: string | null;
+  contentType: ContentType;
+  scope: ContentScope;
+  educationLevel?: string | null;
+  schoolGrade?: string | null;
+  updatedAt?: string | null;
 };
 
 export type ResultInsight = {
@@ -33,9 +58,13 @@ export type ResultInsight = {
 
 export type User = {
   id: string;
-  fullName: string;
-  email: string;
-  role: "teacher" | "student" | "admin";
-  avatarUrl?: string;
-  organization?: string;
+  email?: string | null;
+  username?: string | null;
+  name: string;
+  fullName?: string | null;
+  systemRole?: SystemRole | null;
+  organizationRole?: OrganizationRole | null;
+  organizationId?: string | null;
+  lastLoginAt?: string | null;
+  avatarUrl?: string | null;
 };

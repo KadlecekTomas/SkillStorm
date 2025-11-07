@@ -1,4 +1,5 @@
 import { IsString } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class LoginDto {
@@ -6,6 +7,7 @@ export class LoginDto {
     description: 'Username nebo e-mail',
     example: 'novakj | novak@zs-nova.cz',
   })
+  @Transform(({ value, obj }) => value ?? obj.email)
   @IsString()
   login: string;
 

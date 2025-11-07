@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import type { TestSummary } from "@/types";
 import { apiClient } from "@/utils/api-client";
 import { testSamples } from "@/utils/sample-data";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 const columns: Column<TestSummary>[] = [
   { key: "title", label: "Test" },
@@ -55,6 +56,9 @@ export default function TestsPage() {
         avgScore: 0,
         completionRate: 0,
         submissions: 0,
+        description: null,
+        status: "DRAFT",
+        version: 1,
       },
       ...prev,
     ]);
@@ -73,12 +77,16 @@ export default function TestsPage() {
         </div>
         <Button onClick={() => setOpen(true)}>New test</Button>
       </div>
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {tests.slice(0, 3).map((test) => (
           <TestCard key={test.id} test={test} />
         ))}
       </div>
-      <DataTable data={tests} columns={columns} loading={loading} />
+      {loading ? (
+        <LoadingSpinner label="Loading tests" />
+      ) : (
+        <DataTable data={tests} columns={columns} loading={loading} />
+      )}
 
       <BaseModal
         title="Create test"
