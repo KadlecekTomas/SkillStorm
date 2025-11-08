@@ -51,8 +51,9 @@ jobs:
         run: npm ci
 
       - name: 🏗️ Build backend
-        working-directory: ./server
-        run: npx nest build
+        run: |
+          cd server
+          ./node_modules/.bin/nest build
 
       - name: 🔍 Verify build output
         run: |

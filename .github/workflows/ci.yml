@@ -49,6 +49,10 @@ jobs:
         working-directory: ./client
         run: npm ci
 
+      - name: 🧩 Install TS deps (Next.js lint fix)
+        working-directory: ./client
+        run: npm install --save-dev typescript @types/node
+
       - name: 🧹 Lint frontend
         working-directory: ./client
         run: npm run lint
@@ -83,8 +87,9 @@ jobs:
         run: npm run test -- --runInBand --detectOpenHandles
 
       - name: 🏗️ Build backend
-        working-directory: ./server
-        run: npx nest build
+        run: |
+          cd server
+          ./node_modules/.bin/nest build
 
       - name: 🔍 Verify build output
         run: |
