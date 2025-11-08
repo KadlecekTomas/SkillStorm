@@ -5,7 +5,7 @@ import { persist } from "zustand/middleware";
 import type { User, PermissionKey } from "@/types";
 import { derivePermissions } from "@/utils/permissions";
 
-type AuthState = {
+export type AuthState = {
   user: User | null;
   token: string | null;
   loading: boolean;

@@ -28,6 +28,8 @@ import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { RbacGuard } from './modules/rbac/rbac.guard';
 import { HealthModule } from './health/health.module';
 import { MetricsModule } from './metrics/metrics.module';
+import { GamificationModule } from './gamification/gamification.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 
 @Module({
   imports: [
@@ -68,6 +70,8 @@ import { MetricsModule } from './metrics/metrics.module';
     RbacModule,
     HealthModule,
     MetricsModule,
+    GamificationModule,
+    AnalyticsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

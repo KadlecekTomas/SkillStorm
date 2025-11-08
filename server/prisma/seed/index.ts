@@ -6,8 +6,10 @@ import { seed as seedSubjects } from './subjects.seed';
 import { seed as seedMaterials } from './materials.seed';
 import { seed as seedTests } from './tests.seed';
 import { seed as seedAssignments } from './assignments.seed';
+import { seed as seedLevels } from './levels.seed';
 
 export async function runSeedPipeline(prisma: PrismaClient) {
+  await seedLevels(prisma);
   await seedRbac(prisma);
   await seedOrgs(prisma);
   await seedUsers(prisma);

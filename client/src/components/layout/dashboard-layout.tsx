@@ -4,6 +4,9 @@ import { MainLayout } from "@/components/layout/main-layout";
 import { useRoleView } from "@/hooks/use-role-view";
 import { Badge } from "@/components/ui/badge";
 import { useProtectedRoute } from "@/hooks/use-protected-route";
+import { useAnalytics } from "@/hooks/use-analytics";
+import { usePathname } from "next/navigation";
+import { useEffect } from "react";
 
 type DashboardLayoutProps = {
   children: React.ReactNode;
@@ -12,6 +15,13 @@ type DashboardLayoutProps = {
 export const DashboardLayout = ({ children }: DashboardLayoutProps) => {
   useProtectedRoute();
   const role = useRoleView();
+  const { logEvent } = useAnalytics();
+  const pathname = usePathname();
+
+  useEffect(() => {
+    if (!pathname) return;
+    logEvent("navigation", "page_view", { path: pathname });
+  }, [pathname, logEvent]);
 
   return (
     <MainLayout>

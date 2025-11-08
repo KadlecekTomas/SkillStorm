@@ -49,6 +49,7 @@ enum PermissionKey {
   VIEW_RESULTS
   MANAGE_STUDENTS
   MANAGE_TEACHERS
+  VIEW_ANALYTICS
 }
 
 enum QuestionType {
@@ -161,6 +162,13 @@ enum ImportStatus {
   FAILED
 }
 
+enum XpEventType {
+  LOGIN
+  TEST_COMPLETION
+  MATERIAL_VIEW
+  CUSTOM
+}
+
 // =======================================================
 // CORE USER / ORGANIZATION / MEMBERSHIP
 // =======================================================
@@ -186,6 +194,7 @@ model User {
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
   deletedAt DateTime? @map("deleted_at")
+  analyticsEvents AnalyticsEvent[]  
 
   @@index([username])
   @@map("users")
@@ -222,6 +231,7 @@ model Organization {
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
   deletedAt DateTime? @map("deleted_at")
+  analyticsEvents AnalyticsEvent[]  
 
   @@index([name])
   @@index([city])
@@ -266,6 +276,8 @@ model Membership {
   //  :
   createdAssignments Assignment[]        @relation("AssignmentCreatedBy")
   assignmentStudents AssignmentStudent[] // back-relation k AssignmentStudent.student
+  xpEvents           XpEvent[]
+  achievements       MembershipAchievement[]
 
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
@@ -275,6 +287,58 @@ model Membership {
   @@index([organizationId, role])
   @@index([userId])
   @@map("memberships")
+}
+
+model Level {
+  id        String   @id @default(uuid()) @map("level_id")
+  levelNo   Int      @unique @map("level_no")
+  minXp     Int      @map("min_xp")
+  badgeUrl  String?  @map("badge_url")
+  rewards   Json?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("levels")
+}
+
+model XpEvent {
+  id           String      @id @default(uuid()) @map("xp_event_id")
+  membershipId String      @map("membership_id")
+  type         XpEventType @map("event_type")
+  value        Int
+  description  String?
+  createdAt    DateTime    @default(now()) @map("created_at")
+
+  membership Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+
+  @@index([membershipId, type])
+  @@map("xp_events")
+}
+
+model Achievement {
+  id          String  @id @default(uuid()) @map("achievement_id")
+  title       String
+  description String?
+  iconUrl     String? @map("icon_url")
+  condition   Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  memberships MembershipAchievement[]
+
+  @@map("achievements")
+}
+
+model MembershipAchievement {
+  id            String   @id @default(uuid()) @map("membership_achievement_id")
+  membershipId  String   @map("membership_id")
+  achievementId String   @map("achievement_id")
+  achievedAt    DateTime @default(now()) @map("achieved_at")
+
+  membership  Membership  @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  achievement Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+
+  @@unique([membershipId, achievementId])
+  @@map("membership_achievements")
 }
 
 // =======================================================
@@ -413,6 +477,22 @@ model AuditLog {
   @@index([organizationId])
   @@index([entityType])
   @@map("audit_logs")
+}
+
+model AnalyticsEvent {
+  id             String   @id @default(uuid()) @map("analytics_event_id")
+  userId         String?  @map("user_id")
+  organizationId String?  @map("organization_id")
+  category       String   @db.VarChar(100)
+  action         String   @db.VarChar(100)
+  metadata       Json?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  user         User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, category])
+  @@map("analytics_events")
 }
 
 // =======================================================

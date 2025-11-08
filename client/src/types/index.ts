@@ -1,6 +1,10 @@
 export type { SystemRole, OrganizationRole } from "./permissions";
 export { PermissionKey } from "./permissions";
-import type { PermissionKey } from "./permissions";
+import type {
+  PermissionKey,
+  SystemRole,
+  OrganizationRole,
+} from "./permissions";
 
 export type PublishStatus = "DRAFT" | "PUBLISHED" | "ARCHIVED";
 

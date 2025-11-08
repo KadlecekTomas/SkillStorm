@@ -3,6 +3,7 @@ import { render, screen, act } from "@testing-library/react";
 import { PermissionGate } from "@/components/access/permission-gate";
 import { PermissionKey } from "@/types";
 import { useAuthStore } from "@/store/use-auth-store";
+import type { AuthState } from "@/store/use-auth-store";
 
 describe("PermissionGate", () => {
   beforeEach(() => {
@@ -12,7 +13,7 @@ describe("PermissionGate", () => {
         user: null,
         token: null,
         loading: false,
-      } as any);
+      } satisfies Partial<AuthState>);
     });
   });
 
@@ -33,7 +34,7 @@ describe("PermissionGate", () => {
     act(() => {
       useAuthStore.setState({
         permissions: [PermissionKey.CREATE_TEST],
-      } as any);
+      } satisfies Partial<AuthState>);
     });
 
     render(

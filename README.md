@@ -301,6 +301,49 @@ These safeguards ensure every route stays permission-aware, any missing decorato
 
 ---
 
+## 🕹️ Gamification API
+
+```bash
+# Prisma migration
+npx prisma migrate dev --name phase4_gamification_analytics
+
+# Level seed
+npx ts-node prisma/seed/levels.seed.ts
+
+# Add XP event (teacher/director)
+POST /gamification/xp
+{
+  "membershipId": "me",
+  "type": "TEST_COMPLETION",
+  "value": 50,
+  "description": "Test XYZ dokončen"
+}
+
+# Fetch player summary
+GET /gamification/summary/me
+```
+
+- XP loguje tabulka `xp_events`, levely se řídí referencí `levels`.
+- Achievements se ukládají v `membership_achievements` a zobrazují na dashboardu.
+
+## 📊 Analytics API
+
+```bash
+# Fire-and-forget log
+POST /analytics/log
+{
+  "category": "navigation",
+  "action": "page_view",
+  "metadata": { "path": "/dashboard/tests" }
+}
+
+# Directors see summary
+GET /analytics/summary?days=7
+```
+
+- Události se ukládají do `analytics_events`.
+- Souhrn vrací top kombinace category/action za posledních N dní (default 7).
+
 ## 🧠 Future Enhancements
 
 - Gamification system (XP, badges, progress levels)

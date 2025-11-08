@@ -52,6 +52,12 @@ export const dashboardNav: NavItem[] = [
     icon: Settings,
     permission: PermissionKey.MANAGE_TEACHERS,
   },
+  {
+    title: "Analytics",
+    href: "/dashboard/analytics",
+    icon: LineChart,
+    permission: PermissionKey.VIEW_ANALYTICS,
+  },
 ];
 
 export const roleBadges: Record<string, { label: string; tone: string }> = {

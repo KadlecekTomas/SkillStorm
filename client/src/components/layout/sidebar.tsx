@@ -102,7 +102,7 @@ export const Sidebar = () => {
               </Badge>
             )}
             {!permissions.length && (
-              <Badge variant="outline" className="w-fit border-amber-300 text-amber-600">
+              <Badge variant="warning" className="w-fit border-amber-300 text-amber-600">
                 Omezený přístup
               </Badge>
             )}

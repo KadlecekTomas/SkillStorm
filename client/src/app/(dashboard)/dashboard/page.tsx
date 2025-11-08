@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { OverviewCard } from "@/components/cards/overview-card";
 import { TestCard } from "@/components/cards/test-card";
@@ -17,6 +17,9 @@ import { usePermissions } from "@/hooks/use-permissions";
 import { PermissionKey } from "@/types";
 import { PermissionGate } from "@/components/access/permission-gate";
 import { RestrictedView } from "@/components/access/restricted-view";
+import { useGamification } from "@/hooks/use-gamification";
+import { GamificationPanel } from "@/components/gamification/gamification-panel";
+import { LevelUpModal } from "@/components/gamification/level-up-modal";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -25,10 +28,23 @@ export default function DashboardPage() {
   const [testsLoading, setTestsLoading] = useState(false);
   const [classroomsLoading, setClassroomsLoading] = useState(false);
   const { can } = usePermissions();
+  const { summary: gamification } = useGamification();
+  const [levelModalOpen, setLevelModalOpen] = useState(false);
+  const previousLevelRef = useRef<number | null>(null);
 
   const canSeeTests = can(PermissionKey.VIEW_RESULTS);
   const canManageStudents = can(PermissionKey.MANAGE_STUDENTS);
 
+  useEffect(() => {
+    if (gamification?.level && previousLevelRef.current !== null) {
+      if (gamification.level > previousLevelRef.current) {
+        setLevelModalOpen(true);
+      }
+    }
+    if (gamification?.level !== undefined) {
+      previousLevelRef.current = gamification.level ?? null;
+    }
+  }, [gamification]);
   useEffect(() => {
     let cancelled = false;
     if (!canSeeTests) {
@@ -89,6 +105,7 @@ export default function DashboardPage() {
   };
 
   return (
+    <>
     <div className="space-y-8">
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {/* ✅ Fixed server/client separation – no function props passed */}
@@ -156,6 +173,15 @@ export default function DashboardPage() {
         </PermissionGate>
       </div>
 
+      {gamification && (
+        <GamificationPanel
+          xp={gamification.xp}
+          level={gamification.level}
+          nextLevelXp={gamification.nextLevelXp ?? null}
+          achievements={gamification.achievements}
+        />
+      )}
+
       <PermissionGate
         permission={PermissionKey.MANAGE_TEACHERS}
         fallback={
@@ -189,5 +215,11 @@ export default function DashboardPage() {
         )}
       </PermissionGate>
     </div>
+    <LevelUpModal
+      open={levelModalOpen}
+      level={gamification?.level ?? 1}
+      onOpenChange={setLevelModalOpen}
+    />
+    </>
   );
 }

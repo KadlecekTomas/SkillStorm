@@ -13,6 +13,7 @@ export const PERMISSION_DESCRIPTIONS: Record<PermissionKey, string> = {
     'Allows inviting students, editing enrollments, and assigning work.',
   [PermissionKey.MANAGE_TEACHERS]:
     'Allows inviting teachers and adjusting their organization roles.',
+  [PermissionKey.VIEW_ANALYTICS]: 'View analytics',
 };
 
 export function buildPermissionMarkdownTable(): string {
