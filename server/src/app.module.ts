@@ -11,7 +11,6 @@ import { OrganizationsModule } from './organizations/organizations.module';
 import { MembershipsModule } from './memberships/memberships.module';
 import { ClassroomModule } from './classroom/classroom.module';
 import { SubjectsModule } from './subject/subject.module';
-import { ClassSectionModule } from './class-section/class-section.module';
 import { CatalogModule } from './catalog/catalog.module';
 
 import { UserScopedCacheInterceptor } from './common/cache/user-scoped-cache.interceptor';
@@ -58,7 +57,6 @@ import { RbacGuard } from './modules/rbac/rbac.guard';
     SubjectsModule,
     StudentsModule,
     TopicsModule,
-    ClassSectionModule,
     CatalogModule,
     LearningMaterialsModule,
     TestsModule,

@@ -2,11 +2,11 @@ import { Test } from '@nestjs/testing';
 import { SchoolGrade } from '@prisma/client';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { ClassSectionController } from 'src/class-section/class-section.controller';
-import { ClassSectionsService } from 'src/class-section/class-section.service';
+import { ClassSectionsController } from './class-sections.controller';
+import { ClassSectionsService } from './class-sections.service';
 
-describe('ClassSectionController', () => {
-  let controller: ClassSectionController;
+describe('ClassSectionsController', () => {
+  let controller: ClassSectionsController;
   let service: ClassSectionsService;
 
   const mockService = {
@@ -20,7 +20,7 @@ describe('ClassSectionController', () => {
 
   beforeEach(async () => {
     const module = await Test.createTestingModule({
-      controllers: [ClassSectionController],
+      controllers: [ClassSectionsController],
       providers: [
         { provide: ClassSectionsService, useValue: mockService },
         { provide: PrismaService, useValue: {} },
@@ -28,7 +28,7 @@ describe('ClassSectionController', () => {
       ],
     }).compile();
 
-    controller = module.get(ClassSectionController);
+    controller = module.get(ClassSectionsController);
     service = module.get(ClassSectionsService);
   });
 
