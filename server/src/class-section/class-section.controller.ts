@@ -1,8 +1,10 @@
 import {
   Body,
   Controller,
+  Get,
   Param,
   Patch,
+  Post,
   Request,
   ParseUUIDPipe,
 } from '@nestjs/common';
@@ -18,6 +20,16 @@ import { Permission } from 'src/modules/rbac/permission.decorator';
 @Controller('class-sections')
 export class ClassSectionController {
   constructor(private readonly service: ClassSectionsService) {}
+
+  @Post()
+  async create(@Body() dto: any) {
+    return this.service.create(dto);
+  }
+
+  @Get()
+  async findAll() {
+    return this.service.findAll();
+  }
 
   @Patch(':id/homeroom')
   @Permission(SystemRole.SUPERADMIN, OrganizationRole.DIRECTOR)

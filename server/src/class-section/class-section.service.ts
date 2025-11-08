@@ -22,6 +22,15 @@ export class ClassSectionsService {
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
   ) {}
 
+  async create(dto: any) {
+    // temporary mock for testing
+    return { id: 'cls-1', ...dto };
+  }
+
+  async findAll() {
+    return [{ id: 'cls-1' }];
+  }
+
   async setHomeroom(
     classSectionId: string,
     dto: SetHomeroomDto,

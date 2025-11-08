@@ -92,14 +92,20 @@ export async function seed(prisma: PrismaClient) {
         },
       });
     } else {
-      await prisma.user.create({
-        data: {
+      await prisma.user.upsert({
+        where: { email: userSeed.email },
+        update: {
+          name: userSeed.name,
+          systemRole: userSeed.systemRole,
+        },
+        create: {
           email: userSeed.email,
           name: userSeed.name,
           passwordHash,
           systemRole: userSeed.systemRole,
         },
       });
+
       createdUsers += 1;
     }
   }
