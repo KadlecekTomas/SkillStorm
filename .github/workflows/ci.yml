@@ -82,51 +82,27 @@ jobs:
         working-directory: ./server
         run: npm run prisma:seed
 
-      - name: 🧪 Run backend tests
-        working-directory: ./server
-        run: npm run test -- --runInBand --detectOpenHandles
-
       - name: 🏗️ Build backend
         working-directory: ./server
-        run: |
-          npm install -D @nestjs/cli
-          npx nest build
-
-      - name: 🔍 Verify build output
-        run: |
-          ls -R server/dist || echo "❌ No build output found"
-
-      - name: 🕓 Wait for Postgres
-        run: |
-          until pg_isready -h localhost -p 5432 -U postgres; do
-            echo "Waiting for Postgres..."
-            sleep 2
-          done
+        run: npm run build
 
       - name: 🚀 Start backend
-        run: |
-          cd server
-          nohup node dist/main.js > server.log 2>&1 &
+        working-directory: ./server
+        run: nohup node dist/main.js > server.log 2>&1 &
 
-      - name: 🧾 Tail backend log for debug
+      - name: ⏳ Wait for backend
         run: |
-          echo "===== INITIAL BACKEND LOG ====="
-          sleep 5
-          cat server/server.log || echo "server.log not found"
-
-      - name: ⏳ Wait for backend to be ready
-        run: |
-          echo "⏳ Waiting for backend to be ready..."
-          npx wait-on -t 120000 http://localhost:4200/health
-          echo "✅ Backend is up!"
+          echo "⏳ Waiting for backend to start..."
+          sleep 15
 
       - name: 🔍 Verify /health endpoint
         run: |
+          echo "🔍 Checking /health..."
           curl -f http://localhost:4200/health | grep '"status":"ok"'
 
-      - name: 🧾 Show backend logs (for debug if failed)
-        if: failure()
-        run: cat server/server.log || true
+      - name: 🧪 Run backend tests
+        working-directory: ./server
+        run: npm run test -- --runInBand --detectOpenHandles
 
       - name: ✅ CI completed
         run: echo "✅ CI pipeline completed successfully."
