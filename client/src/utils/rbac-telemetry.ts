@@ -1,5 +1,5 @@
 import type { AxiosError } from "axios";
-import { API_BASE_URL } from "@/utils/api-client";
+import { API_BASE_URL } from "@/utils/env";
 import { useAuthStore } from "@/store/use-auth-store";
 
 type ForbiddenPayload = {

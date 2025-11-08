@@ -2,9 +2,7 @@ import axios from "axios";
 import { useAuthStore } from "@/store/use-auth-store";
 import { toast } from "react-toastify";
 import { reportForbiddenAccess } from "@/utils/rbac-telemetry";
-
-export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api";
+import { API_BASE_URL } from "@/utils/env";
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
