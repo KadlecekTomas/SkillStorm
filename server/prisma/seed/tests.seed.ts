@@ -92,6 +92,7 @@ const TEST_DEFINITIONS = [
 export async function seed(prisma: PrismaClient) {
   logStep('Tests > creating sample tests');
 
+  // ✅ Vyčištění tabulek (jen pro CI/test DB)
   await prisma.testAssignment.deleteMany({});
   await prisma.option.deleteMany({});
   await prisma.answer.deleteMany({});
@@ -104,7 +105,7 @@ export async function seed(prisma: PrismaClient) {
   );
 
   for (const testDef of TEST_DEFINITIONS) {
-    // Najdi příslušný topicLevel
+    // 🔍 Najdi příslušný topicLevel
     const topicLevel = await prisma.topicLevel.findFirst({
       where: {
         catalogTopicId: testDef.catalogTopicId,
@@ -122,6 +123,7 @@ export async function seed(prisma: PrismaClient) {
 
     let test;
 
+    // ✅ Vytvoření nebo update testu
     try {
       test = await prisma.test.create({
         data: {
@@ -157,31 +159,37 @@ export async function seed(prisma: PrismaClient) {
             status: PublishStatus.PUBLISHED,
           },
         });
-        console.log(
-          `⚠️ Tests > Duplicate test found, updated instead: ${testDef.title}`,
-        );
+        console.log(`⚠️ Tests > Duplicate test found, updated instead: ${testDef.title}`);
       } else {
         throw err;
       }
     }
 
-    // 🔗 Vazba na topicLevel
-    await prisma.testAssignment.upsert({
-      where: {
-        topicLevelId_testId: {
-          topicLevelId: topicLevel.id,
-          testId: test.id,
+    // 🔗 Vazba test ↔ topicLevel (bez pádu při duplicitě)
+    try {
+      await prisma.testAssignment.upsert({
+        where: {
+          topicLevelId_testId: {
+            topicLevelId: topicLevel.id,
+            testId: test.id,
+          },
         },
-      },
-      update: {},
-      create: {
-        testId: test.id,
-        topicLevelId: topicLevel.id,
-        isPrimary: true,
-      },
-    });
+        update: {},
+        create: {
+          testId: test.id,
+          topicLevelId: topicLevel.id,
+          isPrimary: true,
+        },
+      });
 
-    console.log(`✅ Tests > Linked ${testDef.title} to topic level ${topicLevel.id}`);
+      console.log(`✅ Tests > Linked ${testDef.title} to topic level ${topicLevel.id}`);
+    } catch (err: any) {
+      if (err.code === 'P2002') {
+        console.warn(`⚠️ Duplicate link detected for ${testDef.title}, skipping.`);
+      } else {
+        throw err;
+      }
+    }
   }
 
   logDone('Tests ready');
