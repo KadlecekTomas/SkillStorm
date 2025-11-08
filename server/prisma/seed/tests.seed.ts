@@ -92,6 +92,11 @@ const TEST_DEFINITIONS = [
 export async function seed(prisma: PrismaClient) {
   logStep('Tests > creating sample tests');
 
+  await prisma.testAssignment.deleteMany({});
+  await prisma.option.deleteMany({});
+  await prisma.answer.deleteMany({});
+  await prisma.question.deleteMany({});
+
   const teacherMembershipId = await getMembershipId(
     prisma,
     SEED_USERS.teacher,
@@ -99,7 +104,7 @@ export async function seed(prisma: PrismaClient) {
   );
 
   for (const testDef of TEST_DEFINITIONS) {
-    // Najdi topic level podle tématu
+    // Najdi příslušný topicLevel
     const topicLevel = await prisma.topicLevel.findFirst({
       where: {
         catalogTopicId: testDef.catalogTopicId,
@@ -115,40 +120,52 @@ export async function seed(prisma: PrismaClient) {
       continue;
     }
 
-    // Upsert test (bez pádu na duplicitní test_id)
-    const test = await prisma.test.upsert({
-      where: { id: testDef.id },
-      update: {
-        title: testDef.title,
-        description: `${testDef.title} – aktualizováno`,
-        status: PublishStatus.PUBLISHED,
-      },
-      create: {
-        id: testDef.id,
-        organizationId: ORG_IDS.chodovicka,
-        title: testDef.title,
-        description: `Ukázkový test pro téma ${testDef.title}`,
-        status: PublishStatus.PUBLISHED,
-        creatorId: teacherMembershipId,
-        questions: {
-          create: testDef.questions.map((q, i) => ({
-            text: q.text,
-            type: q.type,
-            order: i + 1,
-            score: q.score,
-            correctAnswer: q.correctAnswer,
-            correctAnswers: q.correctAnswers,
-            options: q.options
-              ? { create: q.options.map((opt) => ({ text: opt })) }
-              : undefined,
-          })),
+    let test;
+
+    try {
+      test = await prisma.test.create({
+        data: {
+          id: testDef.id,
+          organizationId: ORG_IDS.chodovicka,
+          title: testDef.title,
+          description: `Ukázkový test pro téma ${testDef.title}`,
+          status: PublishStatus.PUBLISHED,
+          creatorId: teacherMembershipId,
+          questions: {
+            create: testDef.questions.map((q, i) => ({
+              text: q.text,
+              type: q.type,
+              order: i + 1,
+              score: q.score,
+              correctAnswer: q.correctAnswer,
+              correctAnswers: q.correctAnswers,
+              options: q.options
+                ? { create: q.options.map((opt) => ({ text: opt })) }
+                : undefined,
+            })),
+          },
         },
-      },
-    });
+      });
+      console.log(`✅ Tests > Created new test: ${testDef.title}`);
+    } catch (err: any) {
+      if (err?.code === 'P2002') {
+        test = await prisma.test.update({
+          where: { id: testDef.id },
+          data: {
+            title: testDef.title,
+            description: `${testDef.title} – refreshed`,
+            status: PublishStatus.PUBLISHED,
+          },
+        });
+        console.log(
+          `⚠️ Tests > Duplicate test found, updated instead: ${testDef.title}`,
+        );
+      } else {
+        throw err;
+      }
+    }
 
-    console.log(`ℹ️ Tests > Synced test: ${testDef.title}`);
-
-    // Vazba na topic level (bez duplikátů)
+    // 🔗 Vazba na topicLevel
     await prisma.testAssignment.upsert({
       where: {
         topicLevelId_testId: {

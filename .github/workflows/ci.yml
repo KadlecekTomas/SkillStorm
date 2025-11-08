@@ -82,3 +82,17 @@ jobs:
       - name: Build backend
         working-directory: ./server
         run: npm run build
+        
+      - name: Start backend
+        working-directory: ./server
+        run: |
+          echo "Starting SkillStorm backend..."
+          npm run build
+          node dist/main.js &
+      
+      - name: Wait for backend
+        run: |
+          echo "Waiting for http://localhost:${{ env.PORT }}/health ..."
+          npx wait-on -t 300000 http://localhost:${{ env.PORT }}/health
+        env:
+          PORT: 4200

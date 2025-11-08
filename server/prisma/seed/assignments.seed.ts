@@ -132,19 +132,25 @@ export async function seed(prisma: PrismaClient) {
 
     // --- Enroll both demo students ---
     for (const studentId of [studentAId, studentBId]) {
-      await prisma.assignmentStudent.upsert({
-        where: {
-          assignmentId_studentId: {
+      try {
+        await prisma.assignmentStudent.create({
+          data: {
             assignmentId: assignment.id,
             studentId,
           },
-        },
-        update: {},
-        create: {
-          assignmentId: assignment.id,
-          studentId,
-        },
-      });
+        });
+        console.log(
+          `✅ Assignments > Linked student ${studentId} to assignment ${assignment.id}`,
+        );
+      } catch (err: any) {
+        if (err?.code === 'P2002') {
+          console.log(
+            `⚠️ Assignments > Duplicate link (${assignment.id}, ${studentId}), skipping.`,
+          );
+          continue;
+        }
+        throw err;
+      }
     }
   }
 
