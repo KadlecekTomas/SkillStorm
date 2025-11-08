@@ -1,0 +1,38 @@
+"use client";
+
+import type { ReactNode } from "react";
+import { PermissionKey } from "@/types";
+import { usePermissions } from "@/hooks/use-permissions";
+import { RestrictedView } from "@/components/access/restricted-view";
+
+type PermissionGateProps = {
+  permission?: PermissionKey | PermissionKey[];
+  fallback?: ReactNode;
+  children: ReactNode;
+};
+
+export const PermissionGate = ({
+  permission,
+  fallback,
+  children,
+}: PermissionGateProps) => {
+  const { can } = usePermissions();
+
+  if (!permission) {
+    return <>{children}</>;
+  }
+
+  const permissions = Array.isArray(permission) ? permission : [permission];
+  const allowed = permissions.some((perm) => can(perm));
+
+  if (!allowed) {
+    if (fallback) {
+      return <>{fallback}</>;
+    }
+    return (
+      <RestrictedView description="Tento modul je dostupný jen pro role s vyšším oprávněním." />
+    );
+  }
+
+  return <>{children}</>;
+};

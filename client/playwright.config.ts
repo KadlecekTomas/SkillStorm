@@ -7,7 +7,7 @@ export default defineConfig({
   reporter: "list",
   snapshotDir: "./tests/snapshots",
   use: {
-    baseURL: process.env.BASE_URL || "http://localhost:3001",
+    baseURL: process.env.BASE_URL || "http://localhost:3000",
     headless: true,
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
@@ -18,4 +18,10 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"] },
     },
   ],
+  webServer: {
+    command: "npm run dev -- --hostname 127.0.0.1 --port 3000",
+    url: process.env.BASE_URL || "http://127.0.0.1:3000",
+    reuseExistingServer: !process.env.CI,
+    stdout: "pipe",
+  },
 });

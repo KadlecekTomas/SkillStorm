@@ -7,6 +7,7 @@ import { apiClient } from "@/utils/api-client";
 import { useAuthStore } from "@/store/use-auth-store";
 import type { User } from "@/types";
 import { AxiosError } from "axios";
+import { getRoleHomePath } from "@/utils/permissions";
 
 type LoginPayload = {
   login: string;
@@ -15,13 +16,21 @@ type LoginPayload = {
 
 export const useAuth = () => {
   const router = useRouter();
-  const { user, setUser, logout: clearStore, loading, setLoading } = useAuthStore(
+  const {
+    user,
+    setUser,
+    logout: clearStore,
+    loading,
+    setLoading,
+    permissions,
+  } = useAuthStore(
     (state) => ({
       user: state.user,
       setUser: state.setUser,
       logout: state.logout,
       loading: state.loading,
       setLoading: state.setLoading,
+      permissions: state.permissions,
     }),
   );
   const [initializing, setInitializing] = useState(true);
@@ -31,8 +40,14 @@ export const useAuth = () => {
       setLoading(true);
       const { data } = await apiClient.get<User>("/auth/me");
       if (data) {
-        setUser(data);
-        return data;
+        const normalized: User = {
+          ...user,
+          ...data,
+          organizationRole: data.organizationRole ?? user?.organizationRole ?? null,
+          organizationId: data.organizationId ?? user?.organizationId ?? null,
+        };
+        setUser(normalized);
+        return normalized;
       }
     } catch (error) {
       clearStore();
@@ -41,7 +56,7 @@ export const useAuth = () => {
       setLoading(false);
       setInitializing(false);
     }
-  }, [setUser, setLoading, clearStore]);
+  }, [setUser, setLoading, clearStore, user]);
 
   const login = useCallback(
     async (payload: LoginPayload) => {
@@ -52,9 +67,13 @@ export const useAuth = () => {
         if (token && typeof window !== "undefined") {
           localStorage.setItem("skillstorm_token", token);
         }
-        await fetchProfile();
+        if (data?.user) {
+          setUser(data.user, token);
+        }
+        const profile = await fetchProfile();
         toast.success("Přihlášení proběhlo úspěšně! 🎉");
-        router.replace("/dashboard");
+        const destination = getRoleHomePath(profile ?? data?.user ?? null);
+        router.replace(destination);
       } catch (error: unknown) {
         const message =
           error instanceof AxiosError
@@ -69,7 +88,7 @@ export const useAuth = () => {
         setLoading(false);
       }
     },
-    [fetchProfile, router, setLoading],
+    [fetchProfile, router, setLoading, setUser],
   );
 
   const logout = useCallback(async () => {
@@ -108,6 +127,7 @@ export const useAuth = () => {
     isAuthenticated,
     initializing,
     loading,
+    permissions,
     login,
     logout,
   };

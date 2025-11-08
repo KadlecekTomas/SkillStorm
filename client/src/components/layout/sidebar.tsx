@@ -9,11 +9,26 @@ import { GraduationCap } from "lucide-react";
 import { useAuthStore } from "@/store/use-auth-store";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { usePermissions } from "@/hooks/use-permissions";
+import { useMemo } from "react";
 
 export const Sidebar = () => {
   const pathname = usePathname();
   const user = useAuthStore((state) => state.user);
+  const { can, permissions } = usePermissions();
   const displayName = user?.fullName ?? user?.name ?? "Guest Educator";
+
+  const accessibleNav = useMemo(
+    () =>
+      dashboardNav.filter((item) => {
+        if (!item.permission) return true;
+        const required = Array.isArray(item.permission)
+          ? item.permission
+          : [item.permission];
+        return required.some((perm) => can(perm));
+      }),
+    [can],
+  );
 
   return (
     <aside className="glass-panel hidden min-h-screen w-72 flex-col justify-between rounded-3xl p-6 lg:flex">
@@ -29,7 +44,7 @@ export const Sidebar = () => {
         </Link>
 
         <nav className="space-y-2">
-          {dashboardNav.map((item) => {
+          {accessibleNav.map((item) => {
             const active = pathname.startsWith(item.href);
             return (
               <Link
@@ -53,6 +68,11 @@ export const Sidebar = () => {
               </Link>
             );
           })}
+          {accessibleNav.length === 0 && (
+            <div className="rounded-2xl border border-dashed border-rose-200 bg-rose-50/70 px-4 py-3 text-sm text-rose-600">
+              Žádný modul zatím nemáš k dispozici. Požádej správce o přidání oprávnění.
+            </div>
+          )}
         </nav>
       </div>
 
@@ -79,6 +99,11 @@ export const Sidebar = () => {
             {user?.organizationRole && (
               <Badge variant="success" className="w-fit capitalize">
                 {user.organizationRole.toLowerCase()}
+              </Badge>
+            )}
+            {!permissions.length && (
+              <Badge variant="outline" className="w-fit border-amber-300 text-amber-600">
+                Omezený přístup
               </Badge>
             )}
           </div>

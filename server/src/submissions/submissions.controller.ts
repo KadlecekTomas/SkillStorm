@@ -12,6 +12,8 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { Permission } from 'src/modules/rbac/permission.decorator';
+import { PermissionKey } from '@prisma/client';
 import {
   CreateSubmissionDto,
   FinishSubmissionDto,
@@ -25,11 +27,13 @@ export class SubmissionsController {
   constructor(private readonly submissionsService: SubmissionsService) {}
 
   @Post()
+  @Permission(PermissionKey.VIEW_RESULTS, PermissionKey.MANAGE_STUDENTS)
   create(@Body() dto: CreateSubmissionDto, @Req() req) {
     return this.submissionsService.create(dto, req.user);
   }
 
   @Patch(':id/responses')
+  @Permission(PermissionKey.VIEW_RESULTS, PermissionKey.MANAGE_STUDENTS)
   updateResponses(
     @Param('id') id: string,
     @Body() dto: UpdateSubmissionDto,
@@ -40,6 +44,7 @@ export class SubmissionsController {
 
   @Post(':id/finish')
   @HttpCode(HttpStatus.OK)
+  @Permission(PermissionKey.VIEW_RESULTS, PermissionKey.MANAGE_STUDENTS)
   finish(
     @Param('id') id: string,
     @Body() dto: FinishSubmissionDto,
@@ -49,6 +54,7 @@ export class SubmissionsController {
   }
 
   @Get()
+  @Permission(PermissionKey.VIEW_RESULTS, PermissionKey.MANAGE_STUDENTS)
   findAll(
     @Query('assignmentId') assignmentId: string,
     @Query('studentId') studentId: string,
@@ -61,6 +67,7 @@ export class SubmissionsController {
   }
 
   @Get(':id')
+  @Permission(PermissionKey.VIEW_RESULTS, PermissionKey.MANAGE_STUDENTS)
   findOne(@Param('id') id: string, @Req() req) {
     return this.submissionsService.findOne(id, req.user);
   }

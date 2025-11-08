@@ -5,6 +5,8 @@ import { Bell, Plus } from "lucide-react";
 import { motion } from "framer-motion";
 import { usePathname } from "next/navigation";
 import { dashboardNav } from "@/utils/constants";
+import { PermissionGate } from "@/components/access/permission-gate";
+import { PermissionKey } from "@/types";
 
 export const AppHeader = () => {
   const pathname = usePathname();
@@ -26,10 +28,20 @@ export const AppHeader = () => {
         <Button variant="outline" size="icon" className="rounded-2xl">
           <Bell className="h-4 w-4" />
         </Button>
-        <Button className="rounded-2xl">
-          <Plus className="h-4 w-4" />
-          <span className="hidden sm:inline">Create</span>
-        </Button>
+        <PermissionGate
+          permission={PermissionKey.CREATE_TEST}
+          fallback={
+            <Button className="rounded-2xl opacity-60" variant="outline" disabled>
+              <Plus className="h-4 w-4" />
+              <span className="hidden sm:inline">Limited</span>
+            </Button>
+          }
+        >
+          <Button className="rounded-2xl">
+            <Plus className="h-4 w-4" />
+            <span className="hidden sm:inline">Create</span>
+          </Button>
+        </PermissionGate>
       </div>
     </motion.header>
   );

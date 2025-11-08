@@ -27,6 +27,7 @@ import { RbacModule } from './modules/rbac/rbac.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { RbacGuard } from './modules/rbac/rbac.guard';
 import { HealthModule } from './health/health.module';
+import { MetricsModule } from './metrics/metrics.module';
 
 @Module({
   imports: [
@@ -66,6 +67,7 @@ import { HealthModule } from './health/health.module';
     SubmissionsModule,
     RbacModule,
     HealthModule,
+    MetricsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

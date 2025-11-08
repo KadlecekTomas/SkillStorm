@@ -55,5 +55,16 @@ jobs:
           npm run build
           npm run prisma:seed
 
+      - name: 🔐 RBAC server tests
+        working-directory: ./server
+        run: npm run test -- rbac
+
+      - name: 🔐 RBAC frontend tests
+        working-directory: ./client
+        run: npm run test:rbac:client
+
+      - name: RBAC – controller decorator check
+        run: npm run check:rbac
+
       - name: ✅ Done
         run: echo "✅ Build + Seed passed successfully"

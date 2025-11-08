@@ -1,6 +1,6 @@
-export type SystemRole = "SUPERADMIN" | "ADMIN" | "USER";
-
-export type OrganizationRole = "STUDENT" | "TEACHER" | "DIRECTOR";
+export type { SystemRole, OrganizationRole } from "./permissions";
+export { PermissionKey } from "./permissions";
+import type { PermissionKey } from "./permissions";
 
 export type PublishStatus = "DRAFT" | "PUBLISHED" | "ARCHIVED";
 
@@ -67,4 +67,5 @@ export type User = {
   organizationId?: string | null;
   lastLoginAt?: string | null;
   avatarUrl?: string | null;
+  permissions?: PermissionKey[];
 };

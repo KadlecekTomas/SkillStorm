@@ -13,36 +13,65 @@ import { classroomSamples, testSamples } from "@/utils/sample-data";
 import type { Classroom, TestSummary } from "@/types";
 import { BookOpenCheck, NotebookTabs, Users2 } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { usePermissions } from "@/hooks/use-permissions";
+import { PermissionKey } from "@/types";
+import { PermissionGate } from "@/components/access/permission-gate";
+import { RestrictedView } from "@/components/access/restricted-view";
 
 export default function DashboardPage() {
   const router = useRouter();
   const [classrooms, setClassrooms] = useState<Classroom[]>(classroomSamples);
   const [tests, setTests] = useState<TestSummary[]>(testSamples);
-  const [loading, setLoading] = useState(true);
+  const [testsLoading, setTestsLoading] = useState(false);
+  const [classroomsLoading, setClassroomsLoading] = useState(false);
+  const { can } = usePermissions();
+
+  const canSeeTests = can(PermissionKey.VIEW_RESULTS);
+  const canManageStudents = can(PermissionKey.MANAGE_STUDENTS);
 
   useEffect(() => {
-    let active = true;
-    const fetchDashboardSnapshot = async () => {
-      try {
-        const [{ data: classroomsData }, { data: testsData }] = await Promise.all([
-          apiClient.get<Classroom[]>("/classrooms"),
-          apiClient.get<TestSummary[]>("/tests"),
-        ]);
-        if (!active) return;
-        if (classroomsData?.length) setClassrooms(classroomsData);
-        if (testsData?.length) setTests(testsData);
-      } catch (error) {
-        console.warn("Dashboard data fallback:", error);
-      } finally {
-        if (active) setLoading(false);
-      }
-    };
-
-    fetchDashboardSnapshot();
+    let cancelled = false;
+    if (!canSeeTests) {
+      setTestsLoading(false);
+      return;
+    }
+    setTestsLoading(true);
+    apiClient
+      .get<TestSummary[]>("/tests")
+      .then(({ data }) => {
+        if (cancelled) return;
+        if (data?.length) setTests(data);
+      })
+      .catch((error) => console.warn("Dashboard tests fallback:", error))
+      .finally(() => {
+        if (!cancelled) setTestsLoading(false);
+      });
     return () => {
-      active = false;
+      cancelled = true;
     };
-  }, []);
+  }, [canSeeTests]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!canManageStudents) {
+      setClassroomsLoading(false);
+      return;
+    }
+    setClassroomsLoading(true);
+    apiClient
+      .get<Classroom[]>("/classrooms")
+      .then(({ data }) => {
+        if (cancelled) return;
+        if (data?.length) setClassrooms(data);
+      })
+      .catch((error) => console.warn("Dashboard classrooms fallback:", error))
+      .finally(() => {
+        if (!cancelled) setClassroomsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [canManageStudents]);
 
   const handleViewTest = (testId: string) => {
     console.log("CLICKED: test details", testId);
@@ -86,49 +115,79 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[3fr_2fr]">
-        <Card className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-slate-500">Latest tests</p>
-              <p className="text-lg font-semibold text-slate-900">
-                Completion & averages
-              </p>
+        <PermissionGate
+          permission={PermissionKey.VIEW_RESULTS}
+          fallback={
+            <RestrictedView className="col-span-full" description="Výsledky testů jsou dostupné pouze učitelům a vedení." />
+          }
+        >
+          <Card className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-500">Latest tests</p>
+                <p className="text-lg font-semibold text-slate-900">
+                  Completion & averages
+                </p>
+              </div>
             </div>
-          </div>
-          {loading ? (
-            <LoadingSpinner label="Loading tests" className="py-8" />
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2">
-              {tests.map((test) => (
-                <TestCard key={test.id} test={test} onView={handleViewTest} />
-              ))}
-            </div>
-          )}
-        </Card>
-        <StudentProgress
-          items={[
-            { id: "s1", name: "Emily Park", progress: 78, trend: 6 },
-            { id: "s2", name: "Joshua Chen", progress: 64, trend: -2 },
-            { id: "s3", name: "Sara Patel", progress: 88, trend: 4 },
-            { id: "s4", name: "Leo Kramer", progress: 59, trend: 3 },
-          ]}
-        />
+            {testsLoading ? (
+              <LoadingSpinner label="Loading tests" className="py-8" />
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2">
+                {tests.map((test) => (
+                  <TestCard key={test.id} test={test} onView={handleViewTest} />
+                ))}
+              </div>
+            )}
+          </Card>
+        </PermissionGate>
+        <PermissionGate
+          permission={PermissionKey.VIEW_RESULTS}
+          fallback={<RestrictedView description="Výukový pokrok je dostupný jen s oprávněním k výsledkům." />}
+        >
+          <StudentProgress
+            items={[
+              { id: "s1", name: "Emily Park", progress: 78, trend: 6 },
+              { id: "s2", name: "Joshua Chen", progress: 64, trend: -2 },
+              { id: "s3", name: "Sara Patel", progress: 88, trend: 4 },
+              { id: "s4", name: "Leo Kramer", progress: 59, trend: 3 },
+            ]}
+          />
+        </PermissionGate>
       </div>
 
-      <TeacherOverview
-        highlight={{
-          title: "Teacher health",
-          description: "4 lessons planned for next week. Shareable agenda ready.",
-          metric: "Next sprint: STEM focus",
-        }}
-        actions={[
-          { label: "View roadmap", href: "/dashboard/tests" },
-          { label: "Invite co-teacher", href: "/dashboard/classrooms" },
-        ]}
-        onAction={handleTeacherAction}
-      />
+      <PermissionGate
+        permission={PermissionKey.MANAGE_TEACHERS}
+        fallback={
+          <RestrictedView description="Pouze vedení může plánovat týmové akce a spravovat učitele." />
+        }
+      >
+        <TeacherOverview
+          highlight={{
+            title: "Teacher health",
+            description: "4 lessons planned for next week. Shareable agenda ready.",
+            metric: "Next sprint: STEM focus",
+          }}
+          actions={[
+            { label: "View roadmap", href: "/dashboard/tests" },
+            { label: "Invite co-teacher", href: "/dashboard/classrooms" },
+          ]}
+          onAction={handleTeacherAction}
+        />
+      </PermissionGate>
 
-      <ClassroomList classrooms={classrooms} onManage={handleManageClassroom} />
+      <PermissionGate
+        permission={PermissionKey.MANAGE_STUDENTS}
+        fallback={<RestrictedView description="Správa tříd je dostupná pouze uživatelům s oprávněním MANAGE_STUDENTS." />}
+      >
+        {classroomsLoading ? (
+          <Card className="p-6">
+            <LoadingSpinner label="Načítám třídy" />
+          </Card>
+        ) : (
+          <ClassroomList classrooms={classrooms} onManage={handleManageClassroom} />
+        )}
+      </PermissionGate>
     </div>
   );
 }

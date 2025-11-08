@@ -277,6 +277,30 @@ These permissions mirror the backend `PermissionKey` enum and should stay in syn
 
 ---
 
+## 🔐 RBAC Phase 3 – Tests & CLI
+
+Commands:
+
+```bash
+# Backend RBAC test pack (guards, cache, audit side-effects)
+cd server && npm run test -- rbac
+
+# Frontend RBAC tests (Vitest + Playwright with auto-started dev server)
+cd client && npm run test:rbac:client
+
+# Controller decorator checker
+npm run check:rbac
+```
+
+Telemetry:
+- Axios automatically POSTs `403` events to `/metrics/rbac`, which stores audit logs with `entityType=PERMISSION`.
+- Aggregate metrics (last 7 days) available via `GET /metrics/summary`.
+- QA route `/qa/rbac-check` renders a permission gate used by Playwright to assert student-facing restrictions without touching production flows.
+
+These safeguards ensure every route stays permission-aware, any missing decorator fails CI, and operators can monitor RBAC denials over time.
+
+---
+
 ## 🧠 Future Enhancements
 
 - Gamification system (XP, badges, progress levels)
