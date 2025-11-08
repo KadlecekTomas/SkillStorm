@@ -23,14 +23,14 @@ import {
   TopicPhase,
 } from '@prisma/client';
 
-import { assertSameOrganization } from 'shared/access.utils';
+import { assertSameOrganization } from 'src/shared/access.utils';
 import {
   bumpOrgVersion,
   cacheScopeForUser,
   getOrgVersion,
   buildVersionedListKey,
   cacheGetOrSet,
-} from '../../shared/cache/org-cache.utils';
+} from '../shared/cache/org-cache.utils';
 
 @Injectable()
 export class TopicsService {

@@ -18,12 +18,12 @@ import {
   cacheGetOrSet,
   cacheScopeForUser,
   getOrgVersion,
-} from '../../shared/cache/org-cache.utils';
+} from '../shared/cache/org-cache.utils';
 import {
   assertReadScope,
   assertTeacherOrDirectorInOrgOrSuperadmin,
   makeSubjectSearch,
-} from 'shared/access.utils';
+} from 'src/shared/access.utils';
 
 @Injectable()
 export class SubjectsService {

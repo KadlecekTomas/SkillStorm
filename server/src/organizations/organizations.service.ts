@@ -17,7 +17,7 @@ import {
   bumpOrgVersion,
   cacheGetOrSet,
   getOrgVersion,
-} from '../../shared/cache/org-cache.utils';
+} from '../shared/cache/org-cache.utils';
 
 @Injectable()
 export class OrganizationsService {

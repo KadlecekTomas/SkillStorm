@@ -19,7 +19,7 @@ import {
   getOrgVersion,
   bumpOrgVersion,
   makeUserSearch,
-} from '../../shared/cache/org-cache.utils';
+} from '../shared/cache/org-cache.utils';
 
 @Injectable()
 export class MembershipsService {

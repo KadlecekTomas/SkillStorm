@@ -14,7 +14,7 @@ import {
   buildVersionedListKey,
   cacheGetOrSet,
   getOrgVersion,
-} from 'shared/cache/org-cache.utils';
+} from 'src/shared/cache/org-cache.utils';
 import { StatsOverviewResponse } from './dto/overview.dto';
 
 @Injectable()

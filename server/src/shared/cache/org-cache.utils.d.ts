@@ -1,0 +1,20 @@
+import type { Cache } from 'cache-manager';
+import { Prisma, SystemRole } from '@prisma/client';
+export declare function cacheScopeForUser(systemRole?: SystemRole | null, orgId?: string | null): string;
+export declare function makeUserSearch(search?: string): Prisma.UserWhereInput | undefined;
+export declare function orgVersionKey(scopeId: string): string;
+export declare function getOrgVersion(cache: Cache, scopeId: string): Promise<number>;
+export declare function bumpOrgVersion(cache: Cache, scopeId: string): Promise<void>;
+export declare function stableStringify(obj: unknown): string;
+export declare function buildVersionedListKey(opts: {
+    namespace: string;
+    scopeId: string;
+    version: number;
+    page?: number;
+    limit?: number;
+    search?: string;
+    includeLevels?: boolean;
+    order?: unknown;
+    filters?: unknown;
+}): string;
+export declare function cacheGetOrSet<T>(cache: Cache, key: string, ttlMs: number, fetcher: () => Promise<T>): Promise<T>;

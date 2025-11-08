@@ -34,7 +34,7 @@ import {
   cacheGetOrSet,
   cacheScopeForUser,
   getOrgVersion,
-} from '../../shared/cache/org-cache.utils';
+} from '../shared/cache/org-cache.utils';
 
 function searchExpr(search?: string): Prisma.TestWhereInput | undefined {
   const s = search?.trim();

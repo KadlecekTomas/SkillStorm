@@ -9,7 +9,7 @@ import {
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateClassSectionDto } from './dto/create-classroom.dto';
 import { JwtPayload } from 'src/auth/types/jwt-payload';
-import { assertSameOrganization } from 'shared/access.utils';
+import { assertSameOrganization } from 'src/shared/access.utils';
 import { UpdateClassroomDto } from './dto/update-classroom.dto';
 import { QueryClassSectionsDto } from './dto/query-class-sections.dto';
 import { SetHomeroomDto } from './dto/set-homeroom.dto';
@@ -23,7 +23,7 @@ import {
   cacheScopeForUser,
   getOrgVersion,
   bumpOrgVersion,
-} from '../../shared/cache/org-cache.utils';
+} from '../shared/cache/org-cache.utils';
 
 @Injectable()
 export class ClassSectionsService {

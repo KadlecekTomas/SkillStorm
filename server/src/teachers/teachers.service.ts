@@ -26,7 +26,7 @@ import {
   cacheGetOrSet,
   cacheScopeForUser,
   getOrgVersion,
-} from '../../shared/cache/org-cache.utils';
+} from '../shared/cache/org-cache.utils';
 import { AssignSubjectsDto } from './dto/assign-subjects.dto';
 
 function teacherSearch(search?: string): Prisma.TeacherWhereInput | undefined {

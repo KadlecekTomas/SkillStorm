@@ -27,11 +27,11 @@ import { JwtPayload } from 'src/auth/types/jwt-payload';
 
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
-import { assertSameOrganization } from 'shared/access.utils';
+import { assertSameOrganization } from 'src/shared/access.utils';
 import {
   bumpOrgVersion,
   cacheScopeForUser,
-} from '../../shared/cache/org-cache.utils';
+} from '../shared/cache/org-cache.utils';
 
 @Injectable()
 export class CatalogService {

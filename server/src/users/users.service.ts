@@ -19,7 +19,7 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { QueryUsersDto } from './dto/query-users.dto';
 
 // pokud to máš jinde, nech cestu dle projektu
-import { makeUserSearch } from '../../shared/cache/org-cache.utils';
+import { makeUserSearch } from '../shared/cache/org-cache.utils';
 
 type ListQuery = { page: number; limit: number; search?: string };
 
