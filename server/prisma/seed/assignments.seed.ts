@@ -1,23 +1,11 @@
-import {
-  PrismaClient,
-  SubmissionStatus,
-  SchoolGrade,
-} from '@prisma/client';
+import { PrismaClient, SubmissionStatus, SchoolGrade } from '@prisma/client';
 import {
   ASSIGNMENT_IDS,
-  CLASS_SECTION_IDS,
   ORG_IDS,
-  SUBMISSION_IDS,
   TEST_IDS,
-  ACADEMIC_YEAR_ID,
   RESPONSE_IDS,
 } from './seed-constants';
-import {
-  getMembershipId,
-  logDone,
-  logStep,
-  SEED_USERS,
-} from './seed-helpers';
+import { getMembershipId, logDone, logStep, SEED_USERS } from './seed-helpers';
 
 const ASSIGNMENT_CONFIGS = [
   {
@@ -59,33 +47,84 @@ export async function seed(prisma: PrismaClient) {
     ORG_IDS.chodovicka,
   );
 
+  const ACADEMIC_YEAR_LABEL = '2024/2025';
   // --- Academic year ---
-  const academicYear = await prisma.academicYear.upsert({
-    where: { id: ACADEMIC_YEAR_ID },
-    update: {},
-    create: {
-      id: ACADEMIC_YEAR_ID,
-      orgId: ORG_IDS.chodovicka,
-      label: '2024/2025',
-      startsAt: new Date('2024-09-01'),
-      endsAt: new Date('2025-06-30'),
-      isCurrent: true,
-    },
+  let academicYear = await prisma.academicYear.findFirst({
+    where: { orgId: ORG_IDS.chodovicka, label: ACADEMIC_YEAR_LABEL },
   });
+  if (academicYear) {
+    console.log(
+      `⚠️ AcademicYear '${academicYear.label}' already exists, skipping create.`,
+    );
+  } else {
+    try {
+      academicYear = await prisma.academicYear.create({
+        data: {
+          orgId: ORG_IDS.chodovicka,
+          label: ACADEMIC_YEAR_LABEL,
+          startsAt: new Date('2024-09-01'),
+          endsAt: new Date('2025-06-30'),
+          isCurrent: true,
+        },
+      });
+      console.log(`✅ AcademicYear '${ACADEMIC_YEAR_LABEL}' created.`);
+    } catch (err: any) {
+      if (err?.code === 'P2002') {
+        academicYear = await prisma.academicYear.findFirstOrThrow({
+          where: { orgId: ORG_IDS.chodovicka, label: ACADEMIC_YEAR_LABEL },
+        });
+        console.log(
+          `⚠️ AcademicYear '${ACADEMIC_YEAR_LABEL}' already exists (caught P2002), reusing.`,
+        );
+      } else {
+        throw err;
+      }
+    }
+  }
 
   // --- Class section ---
-  const classSection = await prisma.classSection.upsert({
-    where: { id: CLASS_SECTION_IDS.chodovickaA },
-    update: { label: '6.A' },
-    create: {
-      id: CLASS_SECTION_IDS.chodovickaA,
+  let classSection = await prisma.classSection.findFirst({
+    where: {
       orgId: ORG_IDS.chodovicka,
       yearId: academicYear.id,
       grade: SchoolGrade.GRADE_6,
       section: 'A',
-      label: '6.A',
     },
   });
+  if (classSection) {
+    console.log(
+      `⚠️ ClassSection '${classSection.label}' already exists, skipping create.`,
+    );
+  } else {
+    try {
+      classSection = await prisma.classSection.create({
+        data: {
+          orgId: ORG_IDS.chodovicka,
+          yearId: academicYear.id,
+          grade: SchoolGrade.GRADE_6,
+          section: 'A',
+          label: '6.A',
+        },
+      });
+      console.log(`✅ ClassSection '6.A' created.`);
+    } catch (err: any) {
+      if (err?.code === 'P2002') {
+        classSection = await prisma.classSection.findFirstOrThrow({
+          where: {
+            orgId: ORG_IDS.chodovicka,
+            yearId: academicYear.id,
+            grade: SchoolGrade.GRADE_6,
+            section: 'A',
+          },
+        });
+        console.log(
+          `⚠️ ClassSection '6.A' already exists (caught P2002), reusing.`,
+        );
+      } else {
+        throw err;
+      }
+    }
+  }
 
   // --- Pull existing tests safely ---
   const tests = await prisma.test.findMany({
@@ -95,40 +134,67 @@ export async function seed(prisma: PrismaClient) {
 
   const testByKey = new Map(tests.map((t) => [t.id, t]));
 
-  const assignments: any[] = [];
+  const assignmentsByKey = new Map<
+    string,
+    Awaited<ReturnType<typeof prisma.assignment.create>>
+  >();
 
   for (const config of ASSIGNMENT_CONFIGS) {
     const test = testByKey.get(config.testKey);
     if (!test) {
-      console.warn(`⚠️ Assignments > Test ${config.testKey} not found, skipping.`);
+      console.warn(
+        `⚠️ Assignments > Test ${config.testKey} not found, skipping.`,
+      );
       continue;
     }
 
     const now = new Date();
-    const openAt = new Date(now.getTime() + config.openOffsetMinutes * 60 * 1000);
-    const closeAt = new Date(now.getTime() + config.closeOffsetMinutes * 60 * 1000);
+    const openAt = new Date(
+      now.getTime() + config.openOffsetMinutes * 60 * 1000,
+    );
+    const closeAt = new Date(
+      now.getTime() + config.closeOffsetMinutes * 60 * 1000,
+    );
 
-    // --- Safe upsert (no FK errors) ---
-    const assignment = await prisma.assignment.upsert({
-      where: { id: config.id },
-      update: { openAt, closeAt },
-      create: {
-        id: config.id,
+    const existingAssignment = await prisma.assignment.findFirst({
+      where: {
         organizationId: ORG_IDS.chodovicka,
-        testId: test.id, // ✅ reference real test
-        targetType: 'CLASS',
+        testId: test.id,
         classSectionId: classSection.id,
-        openAt,
-        closeAt,
-        maxAttempts: 2,
-        timeLimitSec: 1800,
-        shuffle: true,
-        showExplain: 'after_close',
-        createdById: teacherMembershipId,
       },
     });
 
-    assignments.push(assignment);
+    let assignment;
+    if (existingAssignment) {
+      assignment = await prisma.assignment.update({
+        where: { id: existingAssignment.id },
+        data: { openAt, closeAt },
+      });
+      console.log(
+        `⚠️ Assignments > Reusing assignment for test ${config.testKey}`,
+      );
+    } else {
+      assignment = await prisma.assignment.create({
+        data: {
+          organizationId: ORG_IDS.chodovicka,
+          testId: test.id,
+          targetType: 'CLASS',
+          classSectionId: classSection.id,
+          openAt,
+          closeAt,
+          maxAttempts: 2,
+          timeLimitSec: 1800,
+          shuffle: true,
+          showExplain: 'after_close',
+          createdById: teacherMembershipId,
+        },
+      });
+      console.log(
+        `✅ Assignments > Created assignment for test ${config.testKey}`,
+      );
+    }
+
+    assignmentsByKey.set(config.id, assignment);
 
     // --- Enroll both demo students ---
     for (const studentId of [studentAId, studentBId]) {
@@ -155,7 +221,7 @@ export async function seed(prisma: PrismaClient) {
   }
 
   // --- Demo submission for Math assignment ---
-  const mathAssignment = assignments.find((a) => a.id === ASSIGNMENT_IDS.math);
+  const mathAssignment = assignmentsByKey.get(ASSIGNMENT_IDS.math);
   const mathTest = tests.find((t) => t.id === TEST_IDS.math);
 
   if (mathAssignment && mathTest) {
@@ -182,7 +248,6 @@ export async function seed(prisma: PrismaClient) {
         testId: mathAssignment.testId,
       },
     });
-
 
     // --- Add responses ---
     const [question1, question2] = mathTest.questions;
@@ -218,7 +283,9 @@ export async function seed(prisma: PrismaClient) {
       });
     }
   } else {
-    console.warn('⚠️ Assignments > Math test or assignment missing – no submission created.');
+    console.warn(
+      '⚠️ Assignments > Math test or assignment missing – no submission created.',
+    );
   }
 
   logDone('Assignments & submissions ready');

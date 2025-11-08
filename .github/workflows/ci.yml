@@ -88,6 +88,16 @@ jobs:
         working-directory: ./server
         run: nohup npm run start:dev &
 
+      - name: Wait for backend to boot
+        run: |
+          echo "⏳ Waiting for backend to start..."
+          sleep 10
+
+      - name: Verify health endpoint
+        run: |
+          echo "🔍 Checking /health endpoint..."
+          curl -f http://localhost:4200/health | grep '"status":"ok"'
+
       - name: Wait for backend to be ready
         run: npx wait-on -t 120000 http://localhost:4200/health
 
