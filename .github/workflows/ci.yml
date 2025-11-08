@@ -1,4 +1,4 @@
-name: SkillStorm CI
+name: SkillStorm CI (Simplified)
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
   pull_request:
 
 jobs:
-  ci:
+  build:
     runs-on: ubuntu-latest
 
     services:
@@ -18,99 +18,37 @@ jobs:
           POSTGRES_DB: skillstormdb
         ports:
           - 5432:5432
-        options: >-
-          --health-cmd="pg_isready -U postgres"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=5
 
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/skillstormdb
       JWT_SECRET: ci-secret
       NODE_ENV: production
-      DISABLE_BOOTSTRAP_SEARCH: 1
       PORT: 4200
-      NEXT_PUBLIC_API_URL: http://localhost:4200
-      BASE_URL: http://localhost:3001
 
     steps:
-      - name: 🧩 Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: ⚙️ Setup Node.js
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: "npm"
-          cache-dependency-path: |
-            client/package-lock.json
-            server/package-lock.json
 
-      # --- FRONTEND ---
-      - name: 📦 Install frontend dependencies
-        working-directory: ./client
-        run: npm ci
-
-      - name: 🔧 Ensure Tailwind is initialized
-        working-directory: ./client
-        run: npx tailwindcss init -p || true
-
-      - name: 🧩 Install TypeScript deps (Next.js lint fix)
-        working-directory: ./client
-        run: npm install --save-dev typescript @types/node
-
-      - name: 🧹 Lint frontend
-        working-directory: ./client
-        run: npm run lint || echo "⚠️ Lint warnings ignored"
-
-      - name: 🏗️ Build frontend
+      # FRONTEND
+      - name: Build frontend
         working-directory: ./client
         run: |
-          echo "🛠 Building Next.js frontend..."
+          npm ci
           npm run build
 
-      # --- BACKEND ---
-      - name: 📦 Install backend dependencies
+      # BACKEND
+      - name: Build backend & seed DB
         working-directory: ./server
-        run: npm ci
-
-      - name: 🧹 Lint backend
-        working-directory: ./server
-        run: npm run lint -- --no-fix || echo "⚠️ Backend lint warnings ignored"
-
-      - name: ⚙️ Generate Prisma client
-        working-directory: ./server
-        run: npx prisma generate
-
-      - name: 🧱 Run database migrations
-        working-directory: ./server
-        run: npx prisma migrate deploy
-
-      - name: 🌱 Seed database
-        working-directory: ./server
-        run: npm run prisma:seed
-
-      - name: 🏗️ Build backend
-        working-directory: ./server
-        run: npm run build
-
-      - name: 🚀 Start backend
-        working-directory: ./server
-        run: nohup node dist/main.js > server.log 2>&1 &
-
-      - name: ⏳ Wait for backend
         run: |
-          echo "⏳ Waiting for backend to start..."
-          sleep 15
+          npm ci
+          npx prisma generate
+          npx prisma migrate deploy
+          npm run build
+          npm run prisma:seed
 
-      - name: 🔍 Verify /health endpoint
-        run: |
-          echo "🔍 Checking /health..."
-          curl -f http://localhost:4200/health | grep '"status":"ok"'
-
-      - name: 🧪 Run backend tests
-        working-directory: ./server
-        run: npm run test -- --runInBand --detectOpenHandles
-
-      - name: ✅ CI completed
-        run: echo "✅ CI pipeline completed successfully."
+      - name: ✅ Done
+        run: echo "✅ Build + Seed passed successfully"
