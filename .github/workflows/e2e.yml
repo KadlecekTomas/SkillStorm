@@ -27,7 +27,7 @@ jobs:
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/skillstormdb
       JWT_SECRET: ci-secret
-      NODE_ENV: test
+      NODE_ENV: production
       DISABLE_BOOTSTRAP_SEARCH: 1
       PORT: 4200
       NEXT_PUBLIC_API_URL: http://localhost:4200
@@ -49,13 +49,26 @@ jobs:
         working-directory: ./server
         run: npm ci
 
-      - name: 🧱 Build backend
+      - name: 🏗️ Build backend
         working-directory: ./server
         run: npm run build
+
+      - name: 🕓 Wait for Postgres
+        run: |
+          until pg_isready -h localhost -p 5432 -U postgres; do
+            echo "Waiting for Postgres..."
+            sleep 2
+          done
 
       - name: 🚀 Start backend
         working-directory: ./server
         run: nohup node dist/main.js > server.log 2>&1 &
+
+      - name: 🧾 Tail backend log
+        run: |
+          echo "===== BACKEND START LOG ====="
+          sleep 5
+          tail -n 40 server/server.log || echo "server.log not found"
 
       - name: 🩺 Wait for backend to start
         run: |
@@ -85,6 +98,10 @@ jobs:
       - name: 🧪 Run Playwright E2E tests
         working-directory: ./client
         run: npm run test:e2e
+
+      - name: 🧾 Show backend logs (if failed)
+        if: failure()
+        run: cat server/server.log
 
       - name: ✅ CI completed
         run: echo "✅ E2E pipeline completed successfully."
