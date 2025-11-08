@@ -44,6 +44,7 @@ jobs:
             client/package-lock.json
             server/package-lock.json
 
+      # --- Frontend ---
       - name: 📦 Install frontend dependencies
         working-directory: ./client
         run: npm ci
@@ -56,6 +57,7 @@ jobs:
         working-directory: ./client
         run: npm run build
 
+      # --- Backend ---
       - name: 📦 Install backend dependencies
         working-directory: ./server
         run: npm ci
@@ -82,7 +84,7 @@ jobs:
 
       - name: 🏗️ Build backend
         working-directory: ./server
-        run: npm run build
+        run: npx nest build
 
       - name: 🔍 Verify build output
         run: |

@@ -45,13 +45,14 @@ jobs:
             client/package-lock.json
             server/package-lock.json
 
+      # --- Backend setup ---
       - name: 📦 Install backend dependencies
         working-directory: ./server
         run: npm ci
 
       - name: 🏗️ Build backend
         working-directory: ./server
-        run: npm run build
+        run: npx nest build
 
       - name: 🔍 Verify build output
         run: |
@@ -81,6 +82,7 @@ jobs:
           npx wait-on -t 120000 http://localhost:4200/health
           echo "✅ Backend is up!"
 
+      # --- Frontend setup ---
       - name: 📦 Install frontend dependencies
         working-directory: ./client
         run: npm ci
