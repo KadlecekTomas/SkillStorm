@@ -9,7 +9,6 @@ import {
   Post,
   Request,
   ParseUUIDPipe,
-  Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CacheTTL } from '@nestjs/cache-manager';
