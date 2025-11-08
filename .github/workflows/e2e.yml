@@ -53,6 +53,10 @@ jobs:
         working-directory: ./server
         run: npm run build
 
+      - name: 🔍 Verify build output
+        run: |
+          ls -R server/dist || echo "❌ No build output found"
+
       - name: 🕓 Wait for Postgres
         run: |
           until pg_isready -h localhost -p 5432 -U postgres; do
@@ -61,14 +65,15 @@ jobs:
           done
 
       - name: 🚀 Start backend
-        working-directory: ./server
-        run: nohup node dist/main.js > server.log 2>&1 &
+        run: |
+          cd server
+          nohup node dist/main.js > server.log 2>&1 &
 
       - name: 🧾 Tail backend log
         run: |
           echo "===== BACKEND START LOG ====="
           sleep 5
-          tail -n 40 server/server.log || echo "server.log not found"
+          cat server/server.log || echo "server.log not found"
 
       - name: 🩺 Wait for backend to start
         run: |
@@ -85,8 +90,9 @@ jobs:
         run: npm run build
 
       - name: 🚀 Start frontend
-        working-directory: ./client
-        run: nohup npm run start > client.log 2>&1 &
+        run: |
+          cd client
+          nohup npm run start > client.log 2>&1 &
 
       - name: ⏳ Wait for frontend
         run: npx wait-on -t 120000 http://localhost:3001
@@ -101,7 +107,7 @@ jobs:
 
       - name: 🧾 Show backend logs (if failed)
         if: failure()
-        run: cat server/server.log
+        run: cat server/server.log || true
 
-      - name: ✅ CI completed
+      - name: ✅ E2E completed
         run: echo "✅ E2E pipeline completed successfully."
