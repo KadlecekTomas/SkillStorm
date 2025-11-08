@@ -28,20 +28,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: ⚙️ Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      # FRONTEND
-      - name: Build frontend
+      # === FRONTEND ===
+      - name: 🧱 Build frontend
         working-directory: ./client
         run: |
           npm ci
           npm run build
 
-      # BACKEND
-      - name: Build backend & seed DB
+      # === BACKEND ===
+      - name: 🧩 Ensure Nest CLI available
+        working-directory: ./server
+        run: npm install --save-dev @nestjs/cli
+
+      - name: 🧱 Build backend & seed DB
         working-directory: ./server
         run: |
           npm ci
