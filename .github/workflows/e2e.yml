@@ -1,20 +1,42 @@
-name: E2E
+name: SkillStorm CI + E2E
+
 on:
   push:
-    branches: ["main", "develop"]
+    branches: [main, develop]
   pull_request:
 
 jobs:
   e2e:
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: skillstormdb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
     env:
-      BASE_URL: http://localhost:3001
-      NEXT_PUBLIC_API_URL: http://localhost:4200
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/skillstormdb
+      JWT_SECRET: ci-secret
+      NODE_ENV: test
+      DISABLE_BOOTSTRAP_SEARCH: 1
       PORT: 4200
+      NEXT_PUBLIC_API_URL: http://localhost:4200
+      BASE_URL: http://localhost:3001
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: ⚙️ Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -23,35 +45,46 @@ jobs:
             client/package-lock.json
             server/package-lock.json
 
-      - name: Install root deps
-        run: npm ci || npm i
+      - name: 📦 Install backend dependencies
+        working-directory: ./server
+        run: npm ci
 
-      - name: Install server deps
-        working-directory: server
-        run: npm ci || npm i
+      - name: 🧱 Build backend
+        working-directory: ./server
+        run: npm run build
 
-      - name: Install client deps
-        working-directory: client
-        run: npm ci || npm i
+      - name: 🚀 Start backend
+        working-directory: ./server
+        run: nohup node dist/main.js > server.log 2>&1 &
 
-      - name: Start backend
-        working-directory: server
-        run: npm run start:dev &
+      - name: 🩺 Wait for backend to start
+        run: |
+          echo "⏳ Waiting for backend..."
+          npx wait-on -t 120000 http://localhost:4200/health
+          echo "✅ Backend is up!"
 
-      - name: Wait for backend
-        run: npx wait-on -t 120000 http://localhost:4200/health
+      - name: 📦 Install frontend dependencies
+        working-directory: ./client
+        run: npm ci
 
-      - name: Start frontend
-        working-directory: client
-        run: npm run dev &
+      - name: ⚙️ Build frontend
+        working-directory: ./client
+        run: npm run build
 
-      - name: Wait for frontend
+      - name: 🚀 Start frontend
+        working-directory: ./client
+        run: nohup npm run start > client.log 2>&1 &
+
+      - name: ⏳ Wait for frontend
         run: npx wait-on -t 120000 http://localhost:3001
 
-      - name: Install Playwright browsers
-        working-directory: client
+      - name: 🎭 Install Playwright browsers
+        working-directory: ./client
         run: npx playwright install --with-deps
 
-      - name: Run Playwright tests
-        working-directory: client
+      - name: 🧪 Run Playwright E2E tests
+        working-directory: ./client
         run: npm run test:e2e
+
+      - name: ✅ CI completed
+        run: echo "✅ E2E pipeline completed successfully."

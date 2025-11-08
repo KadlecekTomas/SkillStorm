@@ -8,6 +8,7 @@ on:
 jobs:
   ci:
     runs-on: ubuntu-latest
+
     services:
       postgres:
         image: postgres:15
@@ -18,10 +19,10 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
 
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/skillstormdb
@@ -31,10 +32,10 @@ jobs:
       PORT: 4200
 
     steps:
-      - name: Checkout repository
+      - name: 🧩 Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: ⚙️ Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -43,61 +44,63 @@ jobs:
             client/package-lock.json
             server/package-lock.json
 
-
-      - name: Install frontend dependencies
+      - name: 📦 Install frontend dependencies
         working-directory: ./client
         run: npm ci
 
-      - name: Lint frontend
+      - name: 🧹 Lint frontend
         working-directory: ./client
         run: npm run lint
 
-      - name: Build frontend
+      - name: 🏗️ Build frontend
         working-directory: ./client
         run: npm run build
 
-      - name: Install backend dependencies
+      - name: 📦 Install backend dependencies
         working-directory: ./server
         run: npm ci
 
-      - name: Lint backend
+      - name: 🧹 Lint backend
         working-directory: ./server
         run: npm run lint -- --no-fix
 
-      - name: Generate Prisma client
+      - name: ⚙️ Generate Prisma client
         working-directory: ./server
         run: npx prisma generate
 
-      - name: Run database migrations
+      - name: 🧱 Run database migrations
         working-directory: ./server
         run: npx prisma migrate deploy
 
-      - name: Seed database
+      - name: 🌱 Seed database
         working-directory: ./server
         run: npm run prisma:seed
 
-      - name: Run backend tests
+      - name: 🧪 Run backend tests
         working-directory: ./server
         run: npm run test -- --runInBand --detectOpenHandles
 
-      - name: Build backend
+      - name: 🏗️ Build backend
         working-directory: ./server
         run: npm run build
 
-      - name: Start backend
+      - name: 🚀 Start backend
         working-directory: ./server
-        run: |
-          nohup node dist/main.js > server.log 2>&1 &
+        run: nohup node dist/main.js > server.log 2>&1 &
 
-      - name: Wait for backend to start
+      - name: ⏳ Wait for backend to be ready
         run: |
-          echo "⏳ Waiting for backend to start..."
-          sleep 10
+          echo "⏳ Waiting for backend to be ready..."
+          npx wait-on -t 120000 http://localhost:4200/health
+          echo "✅ Backend is up!"
 
-      - name: Verify health endpoint
+      - name: 🔍 Verify /health endpoint
         run: |
-          echo "🔍 Checking /health endpoint..."
           curl -f http://localhost:4200/health | grep '"status":"ok"'
 
-      - name: CI completed
+      - name: 🧾 Show backend logs (for debug if failed)
+        if: failure()
+        run: cat server/server.log
+
+      - name: ✅ CI completed
         run: echo "✅ CI pipeline completed successfully."
