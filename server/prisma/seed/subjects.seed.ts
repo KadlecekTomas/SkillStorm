@@ -40,14 +40,36 @@ const CATALOG_SUBJECTS = [
 export async function seed(prisma: PrismaClient) {
   logStep('Subjects > catalog & local subjects');
 
-  // === 1) Katalogové předměty + témata ===
+  // === 1️⃣ Katalogové předměty + témata ===
   for (const subject of CATALOG_SUBJECTS) {
-    const created = await prisma.catalogSubject.upsert({
-      where: { id: subject.id },
-      update: { name: subject.name, code: subject.code },
-      create: { id: subject.id, code: subject.code, name: subject.name },
-    });
+    let created;
 
+    try {
+      created = await prisma.catalogSubject.upsert({
+        where: { code: subject.code },
+        update: { name: subject.name },
+        create: {
+          id: subject.id,
+          code: subject.code,
+          name: subject.name,
+        },
+      });
+    } catch (err: any) {
+      if (err.code === 'P2002') {
+        created = await prisma.catalogSubject.findUnique({
+          where: { code: subject.code },
+        });
+        console.warn(
+          `⚠️ Subjects > CatalogSubject "${subject.code}" already exists, skipping creation.`,
+        );
+      } else {
+        throw err;
+      }
+    }
+
+    if (!created) continue;
+
+    // === Témata ===
     for (const topic of subject.topics) {
       const existingTopic = await prisma.catalogTopic.findFirst({
         where: { subjectId: created.id, name: topic.name },
@@ -59,27 +81,25 @@ export async function seed(prisma: PrismaClient) {
           data: { name: topic.name },
         });
         console.log(
-          `ℹ️ Subjects > CatalogTopic '${topic.name}' already exists for ${subject.name}, updating name if needed.`,
+          `ℹ️ Subjects > CatalogTopic '${topic.name}' already exists for ${subject.name}, updated name if needed.`,
         );
         continue;
       }
 
       try {
         await prisma.catalogTopic.create({
-          data: { id: topic.id, subjectId: created.id, name: topic.name },
+          data: {
+            id: topic.id,
+            subjectId: created.id,
+            name: topic.name,
+          },
         });
+        console.log(`✅ Subjects > Created topic '${topic.name}' for ${subject.name}`);
       } catch (err: any) {
-        if (err?.code === 'P2002') {
-          const fallback = await prisma.catalogTopic.findFirst({
-            where: { subjectId: created.id, name: topic.name },
-          });
-          if (fallback) {
-            console.log(
-              `⚠️ Subjects > CatalogTopic '${topic.name}' hit P2002 but exists already, skipping create.`,
-            );
-          } else {
-            throw err;
-          }
+        if (err.code === 'P2002') {
+          console.warn(
+            `⚠️ Subjects > CatalogTopic '${topic.name}' already exists, skipping.`,
+          );
         } else {
           throw err;
         }
@@ -87,7 +107,7 @@ export async function seed(prisma: PrismaClient) {
     }
   }
 
-  // === 2) Všechny organizace ===
+  // === 2️⃣ Všechny organizace ===
   const organizations = await prisma.organization.findMany({
     where: { id: { in: Object.values(ORG_IDS) } },
     select: { id: true },
@@ -146,7 +166,7 @@ export async function seed(prisma: PrismaClient) {
         });
       }
 
-      // === 3) Vazba učitel <-> předmět (jen Chodovická) ===
+      // === 3️⃣ Vazba učitel <-> předmět (jen Chodovická) ===
       if (org.id === ORG_IDS.chodovicka) {
         const teacher = await prisma.teacher.findFirst({
           where: {
@@ -165,23 +185,21 @@ export async function seed(prisma: PrismaClient) {
           continue;
         }
 
-        const linkKey = {
-          teacherId_subjectId: {
-            teacherId: teacher.id,
-            subjectId: subjectRecord.id,
+        const existingLink = await prisma.teacherSubject.findUnique({
+          where: {
+            teacherId_subjectId: {
+              teacherId: teacher.id,
+              subjectId: subjectRecord.id,
+            },
           },
-        };
+        });
 
-        try {
-          const existing = await prisma.teacherSubject.findUnique({
-            where: linkKey,
-          });
-
-          if (existing) {
-            console.log(
-              `ℹ️ Subjects > Teacher already linked to ${subjectRecord.name}`,
-            );
-          } else {
+        if (existingLink) {
+          console.log(
+            `ℹ️ Subjects > Teacher already linked to ${subjectRecord.name}`,
+          );
+        } else {
+          try {
             await prisma.teacherSubject.create({
               data: {
                 teacherId: teacher.id,
@@ -191,17 +209,17 @@ export async function seed(prisma: PrismaClient) {
             console.log(
               `✅ Subjects > Linked teacher ${teacher.id} to ${subjectRecord.name}`,
             );
-          }
-        } catch (err: any) {
-          if (err.code === 'P2002') {
-            console.log(
-              `⚠️ Subjects > Duplicate link detected for ${subjectRecord.name}, skipping.`,
-            );
-          } else {
-            console.error(
-              `❌ Subjects > Unexpected error linking teacher to ${subjectRecord.name}:`,
-              err,
-            );
+          } catch (err: any) {
+            if (err.code === 'P2002') {
+              console.log(
+                `⚠️ Subjects > Duplicate link detected for ${subjectRecord.name}, skipping.`,
+              );
+            } else {
+              console.error(
+                `❌ Subjects > Unexpected error linking teacher to ${subjectRecord.name}:`,
+                err,
+              );
+            }
           }
         }
       }
