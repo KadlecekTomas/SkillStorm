@@ -1,8 +1,4 @@
-import {
-  PrismaClient,
-  SchoolGrade,
-  TopicPhase,
-} from '@prisma/client';
+import { PrismaClient, SchoolGrade, TopicPhase } from '@prisma/client';
 import {
   CATALOG_SUBJECT_IDS,
   CATALOG_TOPIC_IDS,

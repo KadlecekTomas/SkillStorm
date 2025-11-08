@@ -83,12 +83,13 @@ jobs:
       - name: Build backend
         working-directory: ./server
         run: npm run build
-        
+
       - name: Start backend
         working-directory: ./server
-        run: nohup npm run start:dev &
+        run: |
+          nohup node dist/main.js > server.log 2>&1 &
 
-      - name: Wait for backend to boot
+      - name: Wait for backend to start
         run: |
           echo "⏳ Waiting for backend to start..."
           sleep 10
@@ -97,9 +98,6 @@ jobs:
         run: |
           echo "🔍 Checking /health endpoint..."
           curl -f http://localhost:4200/health | grep '"status":"ok"'
-
-      - name: Wait for backend to be ready
-        run: npx wait-on -t 120000 http://localhost:4200/health
 
       - name: CI completed
         run: echo "✅ CI pipeline completed successfully."
