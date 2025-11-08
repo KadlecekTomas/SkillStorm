@@ -53,11 +53,41 @@ export async function seed(prisma: PrismaClient) {
     });
 
     for (const topic of subject.topics) {
-      await prisma.catalogTopic.upsert({
-        where: { id: topic.id },
-        update: { name: topic.name },
-        create: { id: topic.id, subjectId: created.id, name: topic.name },
+      const existingTopic = await prisma.catalogTopic.findFirst({
+        where: { subjectId: created.id, name: topic.name },
       });
+
+      if (existingTopic) {
+        await prisma.catalogTopic.update({
+          where: { id: existingTopic.id },
+          data: { name: topic.name },
+        });
+        console.log(
+          `ℹ️ Subjects > CatalogTopic '${topic.name}' already exists for ${subject.name}, updating name if needed.`,
+        );
+        continue;
+      }
+
+      try {
+        await prisma.catalogTopic.create({
+          data: { id: topic.id, subjectId: created.id, name: topic.name },
+        });
+      } catch (err: any) {
+        if (err?.code === 'P2002') {
+          const fallback = await prisma.catalogTopic.findFirst({
+            where: { subjectId: created.id, name: topic.name },
+          });
+          if (fallback) {
+            console.log(
+              `⚠️ Subjects > CatalogTopic '${topic.name}' hit P2002 but exists already, skipping create.`,
+            );
+          } else {
+            throw err;
+          }
+        } else {
+          throw err;
+        }
+      }
     }
   }
 
