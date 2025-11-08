@@ -92,20 +92,14 @@ export async function seed(prisma: PrismaClient) {
         },
       });
     } else {
-      await prisma.user.upsert({
-        where: { email: userSeed.email },
-        update: {
-          name: userSeed.name,
-          systemRole: userSeed.systemRole,
-        },
-        create: {
+      await prisma.user.create({
+        data: {
           email: userSeed.email,
           name: userSeed.name,
           passwordHash,
           systemRole: userSeed.systemRole,
         },
       });
-
       createdUsers += 1;
     }
   }
@@ -131,27 +125,42 @@ export async function seed(prisma: PrismaClient) {
       },
     });
 
+    // --- Teacher role ---
     if (membershipSeed.asTeacher) {
-      await prisma.teacher.upsert({
-        where: { membershipId: membership.id },
-        update: {}, // nebo můžeš doplnit update pole, pokud chceš syncovat data
-        create: {
-          membershipId: membership.id,
-          organizationId: membership.organizationId,
-        },
-      });
+      try {
+        await prisma.teacher.create({
+          data: {
+            membershipId: membership.id,
+            organizationId: membership.organizationId,
+          },
+        });
+        console.log(`✅ Users > Created teacher for ${membership.id}`);
+      } catch (err: any) {
+        if (err.code === 'P2002') {
+          console.log(`⚠️ Users > Teacher for membership ${membership.id} already exists, skipping.`);
+        } else {
+          throw err;
+        }
+      }
     }
 
-
+    // --- Student role ---
     if (membershipSeed.asStudent) {
-      await prisma.student.upsert({
-        where: { membershipId: membership.id },
-        update: {},
-        create: {
-          membershipId: membership.id,
-          orgId: membershipSeed.organizationId,
-        },
-      });
+      try {
+        await prisma.student.create({
+          data: {
+            membershipId: membership.id,
+            orgId: membership.organizationId,
+          },
+        });
+        console.log(`✅ Users > Created student for ${membership.id}`);
+      } catch (err: any) {
+        if (err.code === 'P2002') {
+          console.log(`⚠️ Users > Student for membership ${membership.id} already exists, skipping.`);
+        } else {
+          throw err;
+        }
+      }
     }
   }
 
