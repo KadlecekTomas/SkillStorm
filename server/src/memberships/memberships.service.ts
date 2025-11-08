@@ -10,7 +10,12 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateMembershipDto } from './dto/create-membership.dto';
 import { UpdateMembershipDto } from './dto/update-membership.dto';
 import { QueryMembershipsDto } from './dto/query-memberships.dto';
-import { Prisma, SystemRole, OrganizationRole } from '@prisma/client';
+import {
+  Prisma,
+  SystemRole,
+  OrganizationRole,
+  AuditEntityType,
+} from '@prisma/client';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 import {
@@ -20,6 +25,7 @@ import {
   bumpOrgVersion,
   makeUserSearch,
 } from '../shared/cache/org-cache.utils';
+import { emitRbacInvalidation } from 'src/modules/rbac/rbac.events';
 
 @Injectable()
 export class MembershipsService {
@@ -64,7 +70,21 @@ export class MembershipsService {
     const created = await this.prisma.membership.create({ data: dto });
 
     // invalidace listů v rámci org
-    await bumpOrgVersion(this.cache, dto.organizationId);
+    await Promise.all([
+      bumpOrgVersion(this.cache, dto.organizationId),
+      this.auditMembershipChange({
+        action: 'MEMBERSHIP_CREATE',
+        membershipId: created.id,
+        organizationId: dto.organizationId,
+        actorId: user?.userId ?? user?.sub ?? null,
+        metadata: { userId: created.userId, role: created.role },
+      }),
+    ]);
+    emitRbacInvalidation({
+      userId: created.userId,
+      organizationId: created.organizationId,
+      reason: 'MEMBERSHIP_CREATE',
+    });
     return created;
   }
 
@@ -276,7 +296,25 @@ export class MembershipsService {
       },
     });
 
-    await bumpOrgVersion(this.cache, current.organizationId);
+    await Promise.all([
+      bumpOrgVersion(this.cache, current.organizationId),
+      this.auditMembershipChange({
+        action: 'MEMBERSHIP_ROLE_CHANGE',
+        membershipId: updated.id,
+        organizationId: current.organizationId,
+        actorId: user?.userId ?? user?.sub ?? null,
+        metadata: {
+          previousRole: current.role,
+          nextRole: updated.role,
+          userId: updated.userId,
+        },
+      }),
+    ]);
+    emitRbacInvalidation({
+      userId: updated.userId,
+      organizationId: updated.organizationId,
+      reason: 'MEMBERSHIP_ROLE_CHANGE',
+    });
     return updated;
   }
 
@@ -301,7 +339,43 @@ export class MembershipsService {
 
     const deleted = await this.prisma.membership.delete({ where: { id } });
 
-    await bumpOrgVersion(this.cache, current.organizationId);
+    await Promise.all([
+      bumpOrgVersion(this.cache, current.organizationId),
+      this.auditMembershipChange({
+        action: 'MEMBERSHIP_DELETE',
+        membershipId: current.id,
+        organizationId: current.organizationId,
+        actorId: user?.userId ?? user?.sub ?? null,
+        metadata: {
+          userId: current.userId,
+          role: current.role,
+        },
+      }),
+    ]);
+    emitRbacInvalidation({
+      userId: current.userId,
+      organizationId: current.organizationId,
+      reason: 'MEMBERSHIP_DELETE',
+    });
     return { ...deleted, organizationId: current.organizationId };
+  }
+
+  private auditMembershipChange(opts: {
+    action: string;
+    membershipId: string;
+    organizationId: string;
+    actorId?: string | null;
+    metadata?: Record<string, any>;
+  }) {
+    return this.prisma.auditLog.create({
+      data: {
+        userId: opts.actorId ?? null,
+        organizationId: opts.organizationId,
+        entityType: AuditEntityType.PERMISSION,
+        entityId: opts.membershipId,
+        action: opts.action,
+        metadata: opts.metadata ?? null,
+      },
+    });
   }
 }

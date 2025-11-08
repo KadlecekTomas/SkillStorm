@@ -63,6 +63,21 @@ export function assertReadScope(
   }
 }
 
+export function assertSameOrganizationIds(
+  referenceOrgId: string,
+  targetOrgId?: string | null,
+  context = 'zdroj',
+) {
+  if (!referenceOrgId || !targetOrgId) {
+    throw new ForbiddenException(
+      `Organizace ${context} nelze ověřit (missing organization context).`,
+    );
+  }
+  if (referenceOrgId !== targetOrgId) {
+    throw new ForbiddenException(`Cross-organization přístup k ${context} není povolen.`);
+  }
+}
+
 /**
  * Full‑text pro Subject list.
  * – trim

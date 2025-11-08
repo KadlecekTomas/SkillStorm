@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { Prisma, QuestionType, SubmissionStatus } from '@prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { assertSameOrganizationIds } from 'src/shared/access.utils';
 
 type JwtUser = {
   id: string; // user.id
@@ -54,11 +55,6 @@ export class SubmissionsService {
     return m;
   }
 
-  private assertSameOrg(orgA: string, orgB?: string | null) {
-    if (orgA && orgB && orgA === orgB) return;
-    throw new ForbiddenException('Cross-org access denied');
-  }
-
   private normalizeFitb(s?: string | null) {
     return (
       (s ?? '')
@@ -87,7 +83,11 @@ export class SubmissionsService {
     const membership = await this.getActiveMembership(user);
 
     // 3) multitenancy
-    this.assertSameOrg(assignment.organizationId, membership.organizationId);
+    assertSameOrganizationIds(
+      assignment.organizationId,
+      membership.organizationId,
+      'assignment',
+    );
 
     // 4) přístup studenta podle targetType
     const isStudent = String(membership.role) === 'STUDENT';
@@ -165,9 +165,10 @@ export class SubmissionsService {
 
     // přístup – student může editovat jen vlastní draft v rámci org
     const membership = await this.getActiveMembership(user);
-    this.assertSameOrg(
+    assertSameOrganizationIds(
       submission.assignment.organizationId,
       membership.organizationId,
+      'submission',
     );
 
     if (submission.studentId !== membership.id) {
@@ -256,9 +257,10 @@ export class SubmissionsService {
     if (!submission) throw new NotFoundException('Submission nenalezena');
 
     const membership = await this.getActiveMembership(user);
-    this.assertSameOrg(
+    assertSameOrganizationIds(
       submission.assignment.organizationId,
       membership.organizationId,
+      'submission',
     );
 
     if (submission.studentId !== membership.id) {
@@ -420,9 +422,10 @@ export class SubmissionsService {
     });
     if (!submission) throw new NotFoundException('Submission nenalezena');
 
-    this.assertSameOrg(
+    assertSameOrganizationIds(
       submission.assignment.organizationId,
       membership.organizationId,
+      'submission',
     );
 
     if (

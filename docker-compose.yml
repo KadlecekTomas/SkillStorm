@@ -2,14 +2,20 @@ version: "3.9"
 
 services:
   postgres:
-    image: postgres:15
-    restart: always
+    image: postgres:15-alpine
+    restart: unless-stopped
+    profiles: ["dev", "staging", "prod"]
     env_file:
       - .env
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_DB: ${POSTGRES_DB:-skillstormdb}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     volumes:
       - pgdata:/var/lib/postgresql/data
     ports:
@@ -19,38 +25,37 @@ services:
     build:
       context: ./server
       dockerfile: Dockerfile
+      target: runner
+    profiles: ["dev", "staging", "prod"]
     env_file:
       - .env
     environment:
-      NODE_ENV: development
-      PORT: ${BACKEND_PORT:-3000}
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: ${BACKEND_PORT:-3001}
       DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/skillstormdb}
       JWT_SECRET: ${JWT_SECRET:-change-me}
-      CACHE_TTL_SECONDS: ${CACHE_TTL_SECONDS:-600}
-      REDIS_URL: ${REDIS_URL:-}
-    volumes:
-      - ./server:/app
-      - /app/node_modules
-    ports:
-      - "${BACKEND_PORT:-3000}:${BACKEND_PORT:-3000}"
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${BACKEND_PORT:-3001}:3001"
 
-  client:
+  frontend:
     build:
       context: ./client
       dockerfile: Dockerfile
+      target: runner
+    profiles: ["dev", "staging", "prod"]
     env_file:
       - .env
     environment:
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3000}
-    ports:
-      - "${CLIENT_PORT:-3001}:3000"
-    volumes:
-      - ./client:/app
-      - /app/node_modules
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001}
+      NODE_ENV: ${NODE_ENV:-production}
     depends_on:
-      - backend
+      backend:
+        condition: service_started
+    ports:
+      - "${CLIENT_PORT:-3000}:3000"
 
 volumes:
   pgdata:

@@ -26,7 +26,7 @@ import { SubmissionsModule } from './submissions/submissions.module';
 import { RbacModule } from './modules/rbac/rbac.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { RbacGuard } from './modules/rbac/rbac.guard';
-import { HealthController } from './health/health.controller';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
@@ -65,8 +65,8 @@ import { HealthController } from './health/health.controller';
     AssignmentsModule,
     SubmissionsModule,
     RbacModule,
+    HealthModule,
   ],
-  controllers: [HealthController],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RbacGuard },

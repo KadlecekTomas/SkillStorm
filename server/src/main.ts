@@ -8,12 +8,12 @@ import {
   INestApplication,
   ValidationPipe,
 } from '@nestjs/common';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { PrismaService } from './prisma/prisma.service';
 import { Prisma } from '@prisma/client';
 import { ZodError } from 'zod';
 import { bootstrapSearchAll } from './db/bootstrap-search-all';
+import { setupSwagger } from './swagger.config';
 
 /**
  * Jednotný exception filter:
@@ -137,23 +137,7 @@ async function bootstrap() {
   const app = await createApp();
 
   if (process.env.NODE_ENV !== 'test') {
-    // Swagger jen mimo testy
-    const config = new DocumentBuilder()
-      .setTitle('Test System API')
-      .setDescription('The test system API description')
-      .setVersion('1.0')
-      .addBearerAuth({
-        type: 'http',
-        scheme: 'bearer',
-        bearerFormat: 'JWT',
-        name: 'JWT',
-        in: 'header',
-      })
-      .build();
-
-    const document = SwaggerModule.createDocument(app, config);
-    SwaggerModule.setup('api', app, document);
-
+    setupSwagger(app);
     await app.listen(process.env.PORT ?? 3001);
   } else {
     // e2e: pouze inicializace bez otevření portu

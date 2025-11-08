@@ -262,6 +262,21 @@ Frontend test structure is prepared under `client/__tests__/`.
 
 ---
 
+## 🔐 RBAC Overview
+
+| Permission | Description |
+| --- | --- |
+| CREATE_TEST | Allows creating new tests and assessments within the organization. |
+| EDIT_TEST | Allows editing and reordering questions for existing tests. |
+| DELETE_TEST | Allows archiving or deleting tests and their questions. |
+| VIEW_RESULTS | Allows viewing aggregated results and individual submissions. |
+| MANAGE_STUDENTS | Allows inviting students, editing enrollments, and assigning work. |
+| MANAGE_TEACHERS | Allows inviting teachers and adjusting their organization roles. |
+
+These permissions mirror the backend `PermissionKey` enum and should stay in sync with Swagger docs (`/docs` → RBAC Overview).
+
+---
+
 ## 🧠 Future Enhancements
 
 - Gamification system (XP, badges, progress levels)

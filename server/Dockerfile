@@ -1,20 +1,30 @@
-FROM node:20
-
-# Set working directory
+FROM node:20-slim AS base
 WORKDIR /app
+ENV NODE_ENV=production
 
-# Copy package files and install deps
+FROM node:20-slim AS deps
+WORKDIR /app
 COPY package*.json ./
-RUN npm install
+COPY prisma ./prisma
+RUN npm ci
 
-# Copy rest of app
+FROM node:20-slim AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-
-# Build app
 RUN npm run build
+RUN npm prune --omit=dev
 
-# Expose port
-EXPOSE 3000
+FROM node:20-slim AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+ENV PORT=3001
 
-# Start app
-CMD ["npm", "run", "start:prod"]
+COPY package*.json ./
+COPY prisma ./prisma
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/dist ./dist
+
+EXPOSE 3001
+
+CMD ["node", "dist/main.js"]
