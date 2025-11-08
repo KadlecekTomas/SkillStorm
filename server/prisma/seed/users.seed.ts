@@ -134,13 +134,14 @@ export async function seed(prisma: PrismaClient) {
     if (membershipSeed.asTeacher) {
       await prisma.teacher.upsert({
         where: { membershipId: membership.id },
-        update: {},
+        update: {}, // nebo můžeš doplnit update pole, pokud chceš syncovat data
         create: {
           membershipId: membership.id,
-          organizationId: membershipSeed.organizationId,
+          organizationId: membership.organizationId,
         },
       });
     }
+
 
     if (membershipSeed.asStudent) {
       await prisma.student.upsert({
