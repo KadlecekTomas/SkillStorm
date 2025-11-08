@@ -92,15 +92,25 @@ export async function seed(prisma: PrismaClient) {
         },
       });
     } else {
-      await prisma.user.create({
-        data: {
-          email: userSeed.email,
-          name: userSeed.name,
-          passwordHash,
-          systemRole: userSeed.systemRole,
-        },
-      });
-      createdUsers += 1;
+      try {
+        await prisma.user.create({
+          data: {
+            email: userSeed.email,
+            name: userSeed.name,
+            passwordHash,
+            systemRole: userSeed.systemRole,
+          },
+        });
+        createdUsers += 1;
+      } catch (err: any) {
+        if (err?.code === 'P2002') {
+          console.log(
+            `⚠️ Users > Duplicate email detected (${userSeed.email}), skipping creation.`,
+          );
+        } else {
+          throw err;
+        }
+      }
     }
   }
 

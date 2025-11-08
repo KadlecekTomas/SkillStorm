@@ -28,6 +28,7 @@ jobs:
       JWT_SECRET: ci-secret
       NODE_ENV: test
       DISABLE_BOOTSTRAP_SEARCH: 1
+      PORT: 4200
 
     steps:
       - name: Checkout repository
@@ -85,14 +86,10 @@ jobs:
         
       - name: Start backend
         working-directory: ./server
-        run: |
-          echo "Starting SkillStorm backend..."
-          npm run build
-          node dist/main.js &
-      
-      - name: Wait for backend
-        run: |
-          echo "Waiting for http://localhost:${{ env.PORT }}/health ..."
-          npx wait-on -t 300000 http://localhost:${{ env.PORT }}/health
-        env:
-          PORT: 4200
+        run: nohup npm run start:dev &
+
+      - name: Wait for backend to be ready
+        run: npx wait-on -t 120000 http://localhost:4200/health
+
+      - name: CI completed
+        run: echo "✅ CI pipeline completed successfully."
