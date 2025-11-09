@@ -1,13 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import { toast } from "react-toastify";
+import { usePathname, useRouter } from "next/navigation";
 import { apiClient } from "@/utils/api-client";
 import { useAuthStore } from "@/store/use-auth-store";
 import type { User } from "@/types";
 import { AxiosError } from "axios";
 import { getRoleHomePath } from "@/utils/permissions";
+import { showToastOnce } from "@/utils/toast";
 
 type LoginPayload = {
   login: string;
@@ -16,6 +16,7 @@ type LoginPayload = {
 
 export const useAuth = () => {
   const router = useRouter();
+  const pathname = usePathname();
   const {
     user,
     setUser,
@@ -34,6 +35,8 @@ export const useAuth = () => {
     }),
   );
   const [initializing, setInitializing] = useState(true);
+  const isAuthPage =
+    pathname?.startsWith("/login") || pathname?.startsWith("/register");
 
   const fetchProfile = useCallback(async () => {
     try {
@@ -41,14 +44,14 @@ export const useAuth = () => {
       const { data } = await apiClient.get<User>("/auth/me");
       if (data) {
         const normalized: User = {
-          ...user,
           ...data,
-          organizationRole: data.organizationRole ?? user?.organizationRole ?? null,
-          organizationId: data.organizationId ?? user?.organizationId ?? null,
+          organizationRole: data.organizationRole ?? null,
+          organizationId: data.organizationId ?? null,
         };
         setUser(normalized);
         return normalized;
       }
+      return null;
     } catch (error) {
       clearStore();
       throw error;
@@ -56,22 +59,18 @@ export const useAuth = () => {
       setLoading(false);
       setInitializing(false);
     }
-  }, [setUser, setLoading, clearStore, user]);
+  }, [setUser, setLoading, clearStore]);
 
   const login = useCallback(
     async (payload: LoginPayload) => {
       try {
         setLoading(true);
         const { data } = await apiClient.post("/auth/login", payload);
-        const token = data?.accessToken ?? data?.token;
-        if (token && typeof window !== "undefined") {
-          localStorage.setItem("skillstorm_token", token);
-        }
         if (data?.user) {
-          setUser(data.user, token);
+          setUser(data.user);
         }
         const profile = await fetchProfile();
-        toast.success("Přihlášení proběhlo úspěšně! 🎉");
+        showToastOnce("Přihlášení proběhlo úspěšně! 🎉", { type: "success" });
         const destination = getRoleHomePath(profile ?? data?.user ?? null);
         router.replace(destination);
       } catch (error: unknown) {
@@ -82,7 +81,7 @@ export const useAuth = () => {
             : error instanceof Error
               ? error.message
               : "Neplatné přihlašovací údaje ❌";
-        toast.error(message);
+        showToastOnce(message, { type: "error" });
         throw error;
       } finally {
         setLoading(false);
@@ -93,13 +92,13 @@ export const useAuth = () => {
 
   const logout = useCallback(async () => {
     try {
-      await apiClient.post("/auth/logout").catch(() => undefined);
+      await apiClient.post("/auth/logout");
     } catch {
-      // ignore
+      // ignore server errors on logout
     } finally {
       clearStore();
-      toast.success("Byl jsi úspěšně odhlášen 👋");
-      router.replace("/auth/login");
+      showToastOnce("Byl jsi úspěšně odhlášen 👋", { type: "info" });
+      router.replace("/login");
     }
   }, [clearStore, router]);
 
@@ -108,17 +107,19 @@ export const useAuth = () => {
       setInitializing(false);
       return;
     }
-    if (typeof window === "undefined") return;
-    const token = localStorage.getItem("skillstorm_token");
-    if (!token) {
+    if (isAuthPage) {
       setInitializing(false);
       return;
     }
     fetchProfile().catch(() => {
-      toast.error("Relace vypršela. Přihlas se znovu.");
-      router.replace("/auth/login");
+      if (!isAuthPage) {
+        showToastOnce("Relace vypršela. Přihlas se znovu.", { type: "error" });
+        router.replace("/login");
+      } else {
+        setInitializing(false);
+      }
     });
-  }, [user, fetchProfile, router]);
+  }, [user, fetchProfile, router, isAuthPage]);
 
   const isAuthenticated = useMemo(() => !!user, [user]);
 

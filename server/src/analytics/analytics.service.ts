@@ -16,6 +16,8 @@ export class AnalyticsService {
         category: dto.category,
         action: dto.action,
         metadata: dto.metadata ?? null,
+        label: dto.label ?? null,
+        value: dto.value ?? null,
       },
     });
   }

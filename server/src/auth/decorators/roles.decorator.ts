@@ -1,8 +1,11 @@
 import { SetMetadata } from '@nestjs/common';
-import type { OrganizationRole, SystemRole } from '@prisma/client';
+import { OrganizationRole, SystemRole } from '@prisma/client';
 
-export const ROLES_KEY = 'roles';
+export const ROLES_KEY = 'auth_roles';
 
-type AnyRole = SystemRole | OrganizationRole;
+export type AllowedRoles = {
+  system?: SystemRole[];
+  organization?: OrganizationRole[];
+};
 
-export const Roles = (...roles: AnyRole[]) => SetMetadata(ROLES_KEY, roles);
+export const Roles = (roles: AllowedRoles) => SetMetadata(ROLES_KEY, roles);

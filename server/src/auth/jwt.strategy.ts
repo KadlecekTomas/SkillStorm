@@ -1,33 +1,40 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
-import { PrismaService } from '../prisma/prisma.service';
 import { ConfigService } from '@nestjs/config';
 import type { Request } from 'express';
+
+import { PrismaService } from '../prisma/prisma.service';
+import type { JwtPayload } from './types/jwt-payload';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
-    private prisma: PrismaService,
-    private configService: ConfigService,
+    private readonly prisma: PrismaService,
+    @Inject(ConfigService)
+    private readonly configService: ConfigService,
   ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
-      secretOrKey: configService.get<string>('JWT_SECRET'),
+      secretOrKey: configService.get<string>('JWT_SECRET') || 'dev',
       ignoreExpiration: false,
       passReqToCallback: true,
     });
   }
 
-  async validate(req: Request, payload: any) {
+  async validate(req: Request, payload: JwtPayload & { sub?: string; role?: string }) {
     const token = ExtractJwt.fromAuthHeaderAsBearerToken()(req);
+    if (!token) {
+      throw new UnauthorizedException('Missing authorization token');
+    }
+
     const revoked = await this.prisma.revokedToken.findUnique({
       where: { token },
     });
     if (revoked) throw new UnauthorizedException('Token has been revoked');
 
     const user = await this.prisma.user.findUnique({
-      where: { id: payload.sub },
+      where: { id: payload.userId ?? payload.sub },
       select: {
         id: true,
         email: true,
@@ -48,7 +55,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       (req.body as any)?.organizationId ??
       null;
 
-    let organizationRole = payload.organizationRole ?? null;
+    let organizationRole = payload.organizationRole ?? payload.role ?? null;
     let organizationId = payload.organizationId ?? null;
 
     if (requestedOrgId) {
@@ -68,6 +75,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     return {
       userId: user.id,
       email: user.email,
+      role: organizationRole ?? null,
       username: user.username,
       name: user.name,
       systemRole: user.systemRole,

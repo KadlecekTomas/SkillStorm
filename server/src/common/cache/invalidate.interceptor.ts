@@ -15,8 +15,8 @@ import { bumpMany } from './versioned-cache';
 @Injectable()
 export class InvalidateInterceptor implements NestInterceptor {
   constructor(
-    private reflector: Reflector,
-    @Inject(CACHE_MANAGER) private cache: Cache,
+    @Inject(CACHE_MANAGER) private readonly cache: Cache,
+    private readonly reflector: Reflector,
   ) {}
 
   intercept(ctx: ExecutionContext, next: CallHandler): Observable<any> {

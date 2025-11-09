@@ -7,6 +7,14 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { AddXpEventDto } from './dto/add-xp-event.dto';
 import { AchievementsService } from './achievements.service';
 import { JwtPayload } from 'src/auth/types/jwt-payload';
+import { OrganizationRole, Prisma, XpEventType } from '@prisma/client';
+import { emitXpAwarded } from './events/xp.events';
+
+const XP_ALLOWED_ROLES = new Set<OrganizationRole>([
+  OrganizationRole.STUDENT,
+  OrganizationRole.TEACHER,
+  OrganizationRole.DIRECTOR,
+]);
 
 @Injectable()
 export class GamificationService {
@@ -20,35 +28,89 @@ export class GamificationService {
       dto.membershipId,
       actor,
     );
-    const [, level] = await Promise.all([
-      this.prisma.xpEvent.create({
-        data: {
-          membershipId: membership.id,
-          type: dto.type,
-          value: dto.value,
-          description: dto.description ?? null,
-        },
-      }),
-      this.resolveLevel(membership.xp + dto.value),
-    ]);
+    const mergedMetadata =
+      dto.metadata || dto.description
+        ? {
+            ...(dto.metadata ?? {}),
+            ...(dto.description ? { description: dto.description } : {}),
+          }
+        : undefined;
+    const updated = await this.awardXpForEvent(
+      membership.id,
+      dto.type,
+      dto.value,
+      mergedMetadata,
+    );
+    return updated ?? membership;
+  }
 
-    const updated = await this.prisma.membership.update({
-      where: { id: membership.id },
-      data: {
-        xp: membership.xp + dto.value,
-        level: level?.levelNo ?? undefined,
-      },
-      select: {
-        id: true,
-        xp: true,
-        level: true,
-        userId: true,
-        organizationId: true,
-      },
+  async awardXpForEvent(
+    membershipId: string,
+    type: XpEventType,
+    amount: number,
+    metadata?: Record<string, any>,
+  ) {
+    if (!amount || amount <= 0) return null;
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const membership = await tx.membership.findUnique({
+        where: { id: membershipId },
+        select: {
+          id: true,
+          xp: true,
+          level: true,
+          userId: true,
+          organizationId: true,
+          role: true,
+        },
+      });
+      if (!membership) return null;
+      if (!XP_ALLOWED_ROLES.has(membership.role)) {
+        return null;
+      }
+
+      const totalXp = membership.xp + amount;
+      const resolvedLevel = await this.resolveLevelWithClient(tx, totalXp);
+      await tx.xpEvent.create({
+        data: {
+          membershipId,
+          type,
+          value: amount,
+          description: metadata?.description ?? null,
+          metadata: metadata ?? null,
+        },
+      });
+      const updatedMembership = await tx.membership.update({
+        where: { id: membershipId },
+        data: {
+          xp: totalXp,
+          level: resolvedLevel?.levelNo ?? membership.level,
+        },
+        select: {
+          id: true,
+          xp: true,
+          level: true,
+          userId: true,
+          organizationId: true,
+          role: true,
+        },
+      });
+      return updatedMembership;
     });
 
-    await this.achievements.evaluateProgress(updated.id, updated.xp);
-    return updated;
+    if (!result) return null;
+
+    await this.achievements.evaluateProgress(result.id, result.xp);
+    emitXpAwarded({
+      membershipId: result.id,
+      userId: result.userId,
+      organizationId: result.organizationId,
+      type,
+      amount,
+      metadata,
+    });
+
+    return result;
   }
 
   async getSummary(membershipId: string, actor: JwtPayload) {
@@ -104,7 +166,14 @@ export class GamificationService {
   }
 
   private async resolveLevel(totalXp: number) {
-    return this.prisma.level.findFirst({
+    return this.resolveLevelWithClient(this.prisma, totalXp);
+  }
+
+  private async resolveLevelWithClient(
+    client: Prisma.TransactionClient | PrismaService,
+    totalXp: number,
+  ) {
+    return client.level.findFirst({
       where: { minXp: { lte: totalXp } },
       orderBy: { minXp: 'desc' },
     });
@@ -129,6 +198,7 @@ export class GamificationService {
       userId: true,
       organizationId: true,
       xp: true,
+      level: true,
     };
     if (membershipId === 'me') {
       const record = await this.prisma.membership.findFirst({

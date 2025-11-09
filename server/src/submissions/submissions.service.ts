@@ -5,9 +5,10 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, QuestionType, SubmissionStatus } from '@prisma/client';
+import { Prisma, QuestionType, SubmissionStatus, XpEventType } from '@prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { assertSameOrganizationIds } from 'src/shared/access.utils';
+import { GamificationService } from 'src/gamification/gamification.service';
 
 type JwtUser = {
   id: string; // user.id
@@ -21,7 +22,10 @@ type RespInDto = { questionId: string; givenText: any };
 
 @Injectable()
 export class SubmissionsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly gamification: GamificationService,
+  ) {}
 
   // ---- helpers -------------------------------------------------------------
 
@@ -380,6 +384,17 @@ export class SubmissionsService {
         score: normalizedScore,
       },
     });
+
+    await this.gamification.awardXpForEvent(
+      submission.studentId,
+      XpEventType.TEST_COMPLETED,
+      50,
+      {
+        assignmentId: submission.assignment.id,
+        testId: submission.test.id,
+        submissionId: submission.id,
+      },
+    );
 
     return finished;
   }

@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { CacheModule, CacheModuleOptions } from '@nestjs/cache-manager';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
@@ -26,6 +27,7 @@ import { SubmissionsModule } from './submissions/submissions.module';
 import { RbacModule } from './modules/rbac/rbac.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { RbacGuard } from './modules/rbac/rbac.guard';
+import { RolesGuard } from './auth/guards/roles.guard';
 import { HealthModule } from './health/health.module';
 import { MetricsModule } from './metrics/metrics.module';
 import { GamificationModule } from './gamification/gamification.module';
@@ -51,6 +53,12 @@ import { AnalyticsModule } from './analytics/analytics.module';
         return { ttl }; // fallback in‑memory
       },
     }),
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60,
+        limit: 20,
+      },
+    ]),
     PrismaModule,
     AuthModule,
     TeachersModule,
@@ -74,8 +82,10 @@ import { AnalyticsModule } from './analytics/analytics.module';
     AnalyticsModule,
   ],
   providers: [
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RbacGuard },
+    { provide: APP_GUARD, useClass: RolesGuard },
     { provide: APP_INTERCEPTOR, useClass: UserScopedCacheInterceptor },
     { provide: APP_INTERCEPTOR, useClass: InvalidateInterceptor },
   ],

@@ -13,8 +13,8 @@ import { RbacService } from './rbac.service';
 @Injectable()
 export class RbacGuard implements CanActivate {
   constructor(
-    private readonly reflector: Reflector,
     private readonly rbac: RbacService,
+    private readonly reflector: Reflector,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {

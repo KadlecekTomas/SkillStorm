@@ -1,47 +1,46 @@
-// src/auth/guards/roles.guard.ts
 import {
-  Injectable,
   CanActivate,
   ExecutionContext,
-  ForbiddenException,
+  Injectable,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { ROLES_KEY } from '../decorators/roles.decorator';
-import type { OrganizationRole, SystemRole } from '@prisma/client';
-
-type AnyRole = SystemRole | OrganizationRole;
+import { ROLES_KEY, AllowedRoles } from '../decorators/roles.decorator';
+import { JwtPayload } from 'src/auth/types/jwt-payload';
 
 @Injectable()
 export class RolesGuard implements CanActivate {
-  constructor(private reflector: Reflector) {}
+  constructor(private readonly reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
-    const requiredRoles = this.reflector.getAllAndOverride<AnyRole[]>(
+    const requirements = this.reflector.getAllAndOverride<AllowedRoles>(
       ROLES_KEY,
       [context.getHandler(), context.getClass()],
     );
-
-    if (!requiredRoles || requiredRoles.length === 0) {
+    if (!requirements) {
       return true;
     }
 
-    const { user } = context.switchToHttp().getRequest();
-
+    const request = context.switchToHttp().getRequest();
+    const user = request.user as JwtPayload | undefined;
     if (!user) {
-      throw new ForbiddenException('No user found in request');
+      throw new UnauthorizedException();
     }
 
-    const userRoles: AnyRole[] = [];
+    if (
+      requirements.system &&
+      requirements.system.length > 0 &&
+      !requirements.system.includes(user.systemRole ?? null)
+    ) {
+      return false;
+    }
 
-    if (user.systemRole) userRoles.push(user.systemRole);
-    if (user.organizationRole) userRoles.push(user.organizationRole);
-
-    const hasRole = requiredRoles.some((role) => userRoles.includes(role));
-
-    if (!hasRole) {
-      throw new ForbiddenException(
-        `Access denied. Required: ${requiredRoles.join(', ')} | Found: ${userRoles.join(', ')}`,
-      );
+    if (
+      requirements.organization &&
+      requirements.organization.length > 0 &&
+      !requirements.organization.includes(user.organizationRole ?? null)
+    ) {
+      return false;
     }
 
     return true;

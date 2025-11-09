@@ -1,4 +1,11 @@
-import { IsEnum, IsInt, IsOptional, IsString, Min } from 'class-validator';
+import {
+  IsEnum,
+  IsInt,
+  IsObject,
+  IsOptional,
+  IsString,
+  Min,
+} from 'class-validator';
 import { XpEventType } from '@prisma/client';
 
 export class AddXpEventDto {
@@ -15,4 +22,8 @@ export class AddXpEventDto {
   @IsOptional()
   @IsString()
   description?: string;
+
+  @IsOptional()
+  @IsObject()
+  metadata?: Record<string, any>;
 }

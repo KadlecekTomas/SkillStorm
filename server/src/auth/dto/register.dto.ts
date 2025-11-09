@@ -6,7 +6,8 @@ import {
   IsEnum,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { SystemRole } from '@prisma/client';
+import { OrganizationRole, SystemRole } from '@prisma/client';
+import { Transform } from 'class-transformer';
 
 export class RegisterDto {
   @ApiProperty({
@@ -18,13 +19,12 @@ export class RegisterDto {
   @MinLength(2)
   name: string;
 
-  @ApiPropertyOptional({
-    description: 'E-mail (volitelné – může být null)',
+  @ApiProperty({
+    description: 'E-mail',
     example: 'jan.novak@example.com',
   })
-  @IsOptional()
   @IsEmail()
-  email?: string;
+  email: string;
 
   @ApiPropertyOptional({
     description: 'Uživatelské jméno (volitelné; když nepřijde, vygeneruje se)',
@@ -43,11 +43,20 @@ export class RegisterDto {
   @MinLength(6)
   password: string;
 
+  @ApiProperty({
+    description: 'Role v organizaci',
+    enum: OrganizationRole,
+    example: OrganizationRole.TEACHER,
+  })
+  @IsEnum(OrganizationRole)
+  role: OrganizationRole;
+
   @ApiPropertyOptional({
     description: 'Systémová role',
     enum: SystemRole,
     example: SystemRole.SUPERADMIN,
   })
+  @Transform(({ value }) => (value === '' ? undefined : value))
   @IsOptional()
   @IsEnum(SystemRole)
   systemRole?: SystemRole;

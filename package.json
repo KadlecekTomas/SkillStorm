@@ -4,6 +4,6 @@
   "scripts": {
     "audit": "node scripts/audit-project.js",
     "check:rbac": "node bin/skillstorm-rbac-check.js",
-    "test:gamification": "cd client && npm run test:rbac:client"
+    "test:gamification": "cd server && npm run test:gamification"
   }
 }

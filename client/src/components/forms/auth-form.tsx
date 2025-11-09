@@ -1,19 +1,27 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { type FieldErrors, useForm } from "react-hook-form";
+import { Controller, type FieldErrors, useForm } from "react-hook-form";
 import { z } from "zod";
 import { motion } from "framer-motion";
 import { apiClient } from "@/utils/api-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Alert } from "@/components/ui/alert";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { AxiosError } from "axios";
-import { toast } from "react-toastify";
 import { Loader2 } from "lucide-react";
+import { showToastOnce } from "@/utils/toast";
+
+const roleOptions = ["STUDENT", "TEACHER", "DIRECTOR"] as const;
 
 const loginSchema = z.object({
   email: z.string().email({ message: "Enter a valid email" }),
@@ -21,8 +29,8 @@ const loginSchema = z.object({
 });
 
 const registerSchema = loginSchema.extend({
-  fullName: z.string().min(3, { message: "Name must contain at least 3 characters" }),
-  role: z.enum(["teacher", "student"]),
+  name: z.string().min(2, { message: "Name must contain at least 2 characters" }),
+  role: z.enum(roleOptions, { required_error: "Please select a role" }),
 });
 
 type LoginValues = z.infer<typeof loginSchema>;
@@ -39,27 +47,33 @@ export const AuthForm = ({ mode }: AuthFormProps) => {
   const { login, loading: authLoading } = useAuth();
 
   const schema = mode === "login" ? loginSchema : registerSchema;
+
   const form = useForm<LoginValues | RegisterValues>({
     resolver: zodResolver(schema),
     defaultValues:
       mode === "login"
         ? { email: "", password: "" }
-        : { email: "", password: "", fullName: "", role: "teacher" },
+        : { email: "", password: "", name: "", role: undefined },
   });
-
   const onSubmit = async (values: LoginValues | RegisterValues) => {
     try {
       setError(null);
       setSuccess(null);
+
       if (mode === "login") {
         await login({ login: values.email, password: values.password });
         setSuccess("Přihlašuji…");
         return;
       }
+
       setRegistering(true);
-      const { data } = await apiClient.post("/auth/register", values);
+      const registerValues = values as RegisterValues;
+      const { data } = await apiClient.post("/auth/register", registerValues);
+
       if (data?.user) {
-        toast.success("Účet byl vytvořen. Pokračuj na přihlášení.");
+        showToastOnce("Účet byl vytvořen. Pokračuj na přihlášení.", {
+          type: "success",
+        });
         setSuccess("Account created. Continue to dashboard.");
       } else {
         setError("Unexpected response from server.");
@@ -69,16 +83,17 @@ export const AuthForm = ({ mode }: AuthFormProps) => {
         err instanceof AxiosError
           ? (err.response?.data as { message?: string })?.message
           : undefined;
+
       setError(
         message ?? (mode === "login" ? "Invalid credentials." : "Unable to register user."),
       );
-      if (mode === "login") {
-        toast.error(
-          message ?? "Neplatné přihlašovací údaje ❌",
-        );
-      } else {
-        toast.error(message ?? "Registrace se nezdařila.");
-      }
+
+      showToastOnce(
+        mode === "login"
+          ? message ?? "Neplatné přihlašovací údaje ❌"
+          : message ?? "Registrace se nezdařila.",
+        { type: "error" },
+      );
     } finally {
       if (mode === "register") setRegistering(false);
     }
@@ -96,26 +111,31 @@ export const AuthForm = ({ mode }: AuthFormProps) => {
       className="space-y-4"
       onSubmit={form.handleSubmit(onSubmit)}
     >
+      {/* --- Name --- */}
       {mode === "register" && (
         <div className="space-y-2">
-          <label className="text-sm font-medium text-slate-700">Full Name</label>
-          <Input placeholder="Jane Cooper" {...form.register("fullName")} />
-          {registerErrors?.fullName && (
+          <label className="text-sm font-medium text-slate-700">Name</label>
+          <Input placeholder="Jane Cooper" {...form.register("name")} />
+          {registerErrors?.name && (
             <p className="text-sm text-red-600">
-              {registerErrors.fullName.message as string}
+              {registerErrors.name.message as string}
             </p>
           )}
         </div>
       )}
 
+      {/* --- Email --- */}
       <div className="space-y-2">
         <label className="text-sm font-medium text-slate-700">Email</label>
         <Input placeholder="you@school.edu" type="email" {...form.register("email")} />
         {form.formState.errors.email && (
-          <p className="text-sm text-red-600">{form.formState.errors.email.message as string}</p>
+          <p className="text-sm text-red-600">
+            {form.formState.errors.email.message as string}
+          </p>
         )}
       </div>
 
+      {/* --- Password --- */}
       <div className="space-y-2">
         <label className="text-sm font-medium text-slate-700">Password</label>
         <Input placeholder="••••••••" type="password" {...form.register("password")} />
@@ -126,24 +146,40 @@ export const AuthForm = ({ mode }: AuthFormProps) => {
         )}
       </div>
 
+      {/* --- Role --- */}
       {mode === "register" && (
-        <div className="space-y-2">
-          <label className="text-sm font-medium text-slate-700">Role</label>
-          <Select
-            value={form.watch("role")}
-            onValueChange={(value) => form.setValue("role", value as "teacher" | "student")}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select role" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="teacher">Teacher</SelectItem>
-              <SelectItem value="student">Student</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+        <Controller
+          control={form.control}
+          name="role"
+          render={({ field }) => (
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-700">Role</label>
+              <Select
+                onValueChange={(value) => field.onChange(value)}
+                value={field.value ?? ""}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select role" />
+                </SelectTrigger>
+                <SelectContent>
+                  {roleOptions.map((r) => (
+                    <SelectItem key={r} value={r}>
+                      {r.charAt(0) + r.slice(1).toLowerCase()}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {registerErrors?.role && (
+                <p className="text-sm text-red-600">
+                  {registerErrors.role.message as string}
+                </p>
+              )}
+            </div>
+          )}
+        />
       )}
 
+      {/* --- Submit --- */}
       <Button
         type="submit"
         className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl text-base"
@@ -157,6 +193,7 @@ export const AuthForm = ({ mode }: AuthFormProps) => {
 
       {error && <Alert title="Authentication error" description={error} variant="warning" />}
       {success && <Alert title="Success" description={success} variant="success" />}
+
     </motion.form>
   );
 };

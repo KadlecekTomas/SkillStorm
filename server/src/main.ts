@@ -28,6 +28,15 @@ class AllExceptionsFilter implements ExceptionFilter {
     const ctx = host.switchToHttp();
     const res = ctx.getResponse();
 
+    if (process.env.DEBUG_POLICY === '1') {
+      // eslint-disable-next-line no-console
+      console.error('[AllExceptionsFilter]', exception);
+      if (exception?.stack) {
+        // eslint-disable-next-line no-console
+        console.error(exception.stack);
+      }
+    }
+
     if (exception instanceof HttpException) {
       const status = exception.getStatus();
       const body = exception.getResponse();
@@ -79,8 +88,10 @@ class AllExceptionsFilter implements ExceptionFilter {
  * Společná factory – používej ji v prod (main) i v e2e testech.
  */
 export async function createApp(): Promise<INestApplication> {
+  const isTest = process.env.NODE_ENV === 'test';
+  const enableTestLogging = process.env.DEBUG_POLICY === '1';
   const app = await NestFactory.create(AppModule, {
-    logger: process.env.NODE_ENV === 'test' ? false : undefined,
+    logger: isTest && !enableTestLogging ? false : undefined,
   });
 
   const corsOrigins =
@@ -105,7 +116,7 @@ export async function createApp(): Promise<INestApplication> {
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
-      forbidNonWhitelisted: true,
+      forbidNonWhitelisted: false,
       transform: true,
     }),
   );

@@ -60,6 +60,16 @@ export type ResultInsight = {
   trend: "up" | "down";
 };
 
+export type MembershipSummary = {
+  id: string;
+  organizationId: string;
+  role: OrganizationRole;
+  organization?: {
+    name: string;
+    type: string;
+  };
+};
+
 export type User = {
   id: string;
   email?: string | null;
@@ -72,4 +82,6 @@ export type User = {
   lastLoginAt?: string | null;
   avatarUrl?: string | null;
   permissions?: PermissionKey[];
+  memberships?: MembershipSummary[];
+  needsOnboarding?: boolean;
 };

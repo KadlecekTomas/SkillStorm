@@ -17,6 +17,7 @@ import {
   OrganizationRole,
   ContentScope,
   MaterialAccessLevel,
+  XpEventType,
 } from '@prisma/client';
 
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
@@ -31,6 +32,7 @@ import {
 import * as path from 'path';
 import * as fs from 'fs';
 import type { File as MulterFile } from 'multer';
+import { GamificationService } from 'src/gamification/gamification.service';
 
 function materialSearch(
   search?: string,
@@ -58,6 +60,7 @@ export class LearningMaterialsService {
   constructor(
     private prisma: PrismaService,
     @Inject(CACHE_MANAGER) private cache: Cache,
+    private readonly gamification: GamificationService,
   ) {}
 
   // ---------- Audit helper ----------
@@ -330,9 +333,18 @@ export class LearningMaterialsService {
         organizationId: m.organizationId,
         deletedAt: null,
       },
-      select: { id: true },
+      select: { id: true, role: true },
     });
     if (!member) throw new ForbiddenException('Access denied');
+
+    if (member.role === OrganizationRole.STUDENT) {
+      await this.gamification.awardXpForEvent(
+        member.id,
+        XpEventType.MATERIAL_VIEWED,
+        10,
+        { materialId: m.id },
+      );
+    }
 
     return m;
   }

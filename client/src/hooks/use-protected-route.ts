@@ -11,7 +11,7 @@ export const useProtectedRoute = () => {
   useEffect(() => {
     if (initializing) return;
     if (!isAuthenticated) {
-      router.replace("/auth/login");
+      router.replace("/login");
     }
   }, [isAuthenticated, initializing, router]);
 };
