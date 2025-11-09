@@ -28,7 +28,7 @@ import {
   cacheGetOrSet,
   cacheScopeForUser,
   getOrgVersion,
-} from '../shared/cache/org-cache.utils';
+} from '@/shared/cache/org-cache.utils';
 import * as path from 'path';
 import * as fs from 'fs';
 import type { File as MulterFile } from 'multer';

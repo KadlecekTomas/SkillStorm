@@ -24,7 +24,7 @@ import {
   getOrgVersion,
   bumpOrgVersion,
   makeUserSearch,
-} from '../shared/cache/org-cache.utils';
+} from '@/shared/cache/org-cache.utils';
 import { emitRbacInvalidation } from '@/modules/rbac/rbac.events';
 
 @Injectable()

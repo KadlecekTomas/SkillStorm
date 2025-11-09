@@ -50,9 +50,12 @@ jobs:
         run: |
           npm ci
           npm install -g @nestjs/cli
-          npx prisma generate
+          npm run prisma:generate
           npx prisma migrate deploy
+          npm run lint
+          npm run typecheck
           npm run build
+          npm run test:policy
           npm run prisma:seed
 
       - name: 🔐 RBAC server tests

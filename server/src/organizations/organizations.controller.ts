@@ -23,7 +23,7 @@ import {
   ApiOperation,
   ApiQuery,
 } from '@nestjs/swagger';
-import { SchoolAccessGuard } from '../auth/guards/school-access.guard';
+import { SchoolAccessGuard } from '@/auth/guards/school-access.guard';
 import { QueryOrganizationsDto } from './dto/query-organizations.dto';
 import { CacheTTL } from '@nestjs/cache-manager';
 import { InvalidateScopes } from '@/common/cache/invalidate.decorator';

@@ -4,7 +4,7 @@ import {
   BadRequestException,
   NotFoundException,
 } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '@/prisma/prisma.service';
 import { CreateAssignmentDto, UpdateAssignmentDto } from './dto';
 
 const ALLOWED_TARGET_TYPES = new Set(['CLASS', 'STUDENTS']);

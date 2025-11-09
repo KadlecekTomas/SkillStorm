@@ -1,11 +1,11 @@
 import { Test } from '@nestjs/testing';
 import { INestApplication, Controller, Get } from '@nestjs/common';
 import * as request from 'supertest';
-import { Permission } from '../permission.decorator';
+import { Permission } from '@/modules/rbac/permission.decorator';
 import { PermissionKey } from '@prisma/client';
-import { RbacGuard } from '../rbac.guard';
+import { RbacGuard } from '@/modules/rbac/rbac.guard';
 import { APP_GUARD } from '@nestjs/core';
-import { RbacService } from '../rbac.service';
+import { RbacService } from '@/modules/rbac/rbac.service';
 
 let currentUser: any = null;
 

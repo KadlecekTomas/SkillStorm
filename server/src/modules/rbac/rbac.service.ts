@@ -1,6 +1,6 @@
 import { Injectable, OnModuleDestroy, Logger } from '@nestjs/common';
 import { OrganizationRole, PermissionKey, SystemRole } from '@prisma/client';
-import { PrismaService } from '../../prisma/prisma.service';
+import { PrismaService } from '@/prisma/prisma.service';
 import { CacheEntry } from './rbac.types';
 import {
   RBAC_INVALIDATE_EVENT,

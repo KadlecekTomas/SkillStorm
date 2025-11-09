@@ -88,7 +88,7 @@ export async function seed(prisma: PrismaClient) {
         where: { id: existing.id },
         data: {
           name: userSeed.name,
-          systemRole: userSeed.systemRole ?? existing.systemRole,
+          systemRole: userSeed.systemRole ?? existing.systemRole ?? null,
         },
       });
     } else {
@@ -98,12 +98,17 @@ export async function seed(prisma: PrismaClient) {
             email: userSeed.email,
             name: userSeed.name,
             passwordHash,
-            systemRole: userSeed.systemRole,
+            systemRole: userSeed.systemRole ?? null,
           },
         });
         createdUsers += 1;
-      } catch (err: any) {
-        if (err?.code === 'P2002') {
+      } catch (err: unknown) {
+        if (
+          err &&
+          typeof err === 'object' &&
+          'code' in err &&
+          (err as { code?: string }).code === 'P2002'
+        ) {
           console.log(
             `⚠️ Users > Duplicate email detected (${userSeed.email}), skipping creation.`,
           );

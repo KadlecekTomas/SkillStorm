@@ -7,7 +7,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '@/prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
@@ -26,6 +26,7 @@ import { randomBytes, randomUUID, createHash } from 'crypto';
 import { addDays } from 'date-fns';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { GamificationService } from '@/gamification/gamification.service';
+import { AuditService } from '@/audit/audit.service';
 
 type JwtClaims = {
   sub: string;
@@ -43,6 +44,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly config: ConfigService,
     private readonly gamification: GamificationService,
+    private readonly auditService: AuditService,
   ) {}
 
   private readonly logger = new Logger(AuthService.name);
@@ -98,25 +100,6 @@ export class AuthService {
     return this.prisma.organization.create({
       data: {
         name: 'Default School',
-      },
-    });
-  }
-
-  private async audit(
-    action: string,
-    userId?: string | null,
-    organizationId?: string | null,
-    entityId?: string | null,
-    metadata?: Record<string, any>,
-  ) {
-    await this.prisma.auditLog.create({
-      data: {
-        userId: userId ?? null,
-        organizationId: organizationId ?? null,
-        entityType: AuditEntityType.USER,
-        entityId: entityId ?? userId ?? null,
-        action,
-        metadata: metadata ?? null,
       },
     });
   }
@@ -235,19 +218,6 @@ export class AuthService {
             },
           });
 
-          await tx.auditLog.create({
-            data: {
-              userId: createdUser.id,
-              organizationId: organization.id,
-              entityType: AuditEntityType.USER,
-              entityId: createdUser.id,
-              action: 'REGISTER',
-              metadata: {
-                requestedRole: dto.role,
-              },
-            },
-          });
-
           return { user: createdUser, organization, membership };
         });
 
@@ -261,6 +231,17 @@ export class AuthService {
           persistedUser,
           result.membership as unknown as Membership,
         );
+        await this.auditService.log({
+          action: 'REGISTER',
+          entityType: AuditEntityType.USER,
+          userId: result.user.id,
+          organizationId: result.organization.id,
+          entityId: result.user.id,
+          metadata: {
+            requestedRole: dto.role ?? OrganizationRole.STUDENT,
+          },
+        });
+
         this.logger.log(
           `Registration complete for ${result.user.email} in org ${result.organization.id}`,
         );
@@ -350,7 +331,13 @@ export class AuthService {
       );
     }
 
-    await this.audit('LOGIN', updatedUser.id, membership?.organizationId ?? null, updatedUser.id);
+    await this.auditService.log({
+      action: 'LOGIN',
+      entityType: AuditEntityType.USER,
+      userId: updatedUser.id,
+      organizationId: membership?.organizationId ?? null,
+      entityId: updatedUser.id,
+    });
 
     const response = {
       tokens,
@@ -404,7 +391,13 @@ export class AuthService {
 
     // 4) nové tokeny
     const tokens = await this.generateTokens(user, membership);
-    await this.audit('REFRESH', user.id, membership?.organizationId ?? null, user.id);
+    await this.auditService.log({
+      action: 'REFRESH',
+      entityType: AuditEntityType.USER,
+      userId: user.id,
+      organizationId: membership?.organizationId ?? null,
+      entityId: user.id,
+    });
     return tokens;
   }
 
@@ -462,7 +455,13 @@ export class AuthService {
       organizationId = primary?.organizationId ?? null;
     }
 
-    await this.audit('LOGOUT', resolvedUserId, organizationId, resolvedUserId);
+    await this.auditService.log({
+      action: 'LOGOUT',
+      entityType: AuditEntityType.USER,
+      userId: resolvedUserId,
+      organizationId,
+      entityId: resolvedUserId,
+    });
 
     return { message: 'Logged out successfully' };
   }

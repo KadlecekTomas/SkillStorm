@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { PrismaService } from '@/prisma/prisma.service';
+import { PrismaService } from 'risma/prisma.service';
 import { LearningMaterialsController } from './learning-materials.controller';
 import { LearningMaterialsService } from './learning-materials.service';
 

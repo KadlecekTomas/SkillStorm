@@ -12,7 +12,9 @@
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
-    "lint": "eslint './src/**/*.ts'",
+    "lint": "eslint \"src/**/*.{ts,tsx}\" \"tests/**/*.ts\"",
+    "typecheck": "tsc --noEmit",
+    "prisma:generate": "prisma generate",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
@@ -21,7 +23,8 @@
     "test:policy": "vitest run tests/policy/policy.summary.test.ts --reporter=dot",
     "prisma:seed": "ts-node prisma/seed/e2e-seed.ts",
     "test:e2e": "cross-env NODE_ENV=test jest --config ./test/jest-e2e.config.js",
-    "bootstrap:search": "ts-node scripts/bootstrap-search-all.ts"
+    "bootstrap:search": "ts-node scripts/bootstrap-search-all.ts",
+    "prebuild": "npm run prisma:generate && npm run typecheck && npm run lint"
   },
   "dependencies": {
     "@nestjs/cache-manager": "^3.0.1",

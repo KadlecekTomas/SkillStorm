@@ -1,6 +1,6 @@
-import { GamificationService } from '../gamification.service';
+import { GamificationService } from '@/gamification/gamification.service';
 import { PrismaService } from '@/prisma/prisma.service';
-import { AchievementsService } from '../achievements.service';
+import { AchievementsService } from '@/gamification/achievements.service';
 import {
   OrganizationRole,
   XpEventType,

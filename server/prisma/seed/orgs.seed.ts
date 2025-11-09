@@ -50,14 +50,15 @@ export async function seed(prisma: PrismaClient) {
       },
     });
 
+    const domainAlias = key === 'chodovicka' ? 'chodovicka.cz' : null;
+
     await prisma.organizationSettings.upsert({
       where: { orgId: id },
       update: {
         usernamePattern: '{surname}{fi}{yy}',
         initialPassword: 'ChangeMe!{yy}',
         forceResetOnFirstLogin: true,
-        domainAlias:
-          key === 'chodovicka' ? 'chodovicka.cz' : undefined,
+        domainAlias,
       },
       create: {
         id: `${id}-settings`,
@@ -65,7 +66,7 @@ export async function seed(prisma: PrismaClient) {
         usernamePattern: '{surname}{fi}{yy}',
         initialPassword: 'ChangeMe!{yy}',
         forceResetOnFirstLogin: true,
-        domainAlias: key === 'chodovicka' ? 'chodovicka.cz' : undefined,
+        domainAlias,
       },
     });
   }

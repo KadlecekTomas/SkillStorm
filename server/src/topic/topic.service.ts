@@ -30,7 +30,7 @@ import {
   getOrgVersion,
   buildVersionedListKey,
   cacheGetOrSet,
-} from '../shared/cache/org-cache.utils';
+} from '@/shared/cache/org-cache.utils';
 
 @Injectable()
 export class TopicsService {

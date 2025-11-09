@@ -32,6 +32,7 @@ import { HealthModule } from './health/health.module';
 import { MetricsModule } from './metrics/metrics.module';
 import { GamificationModule } from './gamification/gamification.module';
 import { AnalyticsModule } from './analytics/analytics.module';
+import { AuditModule } from './audit/audit.module';
 
 @Module({
   imports: [
@@ -80,6 +81,7 @@ import { AnalyticsModule } from './analytics/analytics.module';
     MetricsModule,
     GamificationModule,
     AnalyticsModule,
+    AuditModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

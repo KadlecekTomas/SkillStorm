@@ -1,7 +1,7 @@
 import { PermissionKey, SystemRole } from '@prisma/client';
-import { RbacService } from '../rbac.service';
+import { RbacService } from '@/modules/rbac/rbac.service';
 import { PrismaService } from '@/prisma/prisma.service';
-import { emitRbacInvalidation } from '../rbac.events';
+import { emitRbacInvalidation } from '@/modules/rbac/rbac.events';
 
 describe('RbacService (unit)', () => {
 let prismaMock: any;

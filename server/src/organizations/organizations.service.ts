@@ -1,6 +1,6 @@
 // src/modules/organizations/organizations.service.ts
 import { Injectable, NotFoundException, Inject } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '@/prisma/prisma.service';
 import { CreateOrganizationDto } from './dto/create-organization.dto';
 import { UpdateOrganizationDto } from './dto/update-organization.dto';
 import {
@@ -17,7 +17,7 @@ import {
   bumpOrgVersion,
   cacheGetOrSet,
   getOrgVersion,
-} from '../shared/cache/org-cache.utils';
+} from '@/shared/cache/org-cache.utils';
 
 @Injectable()
 export class OrganizationsService {

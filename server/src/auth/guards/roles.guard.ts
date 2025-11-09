@@ -5,7 +5,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { ROLES_KEY, AllowedRoles } from '../decorators/roles.decorator';
+import { ROLES_KEY, AllowedRoles } from '@/auth/decorators/roles.decorator';
 import { JwtPayload } from '@/auth/types/jwt-payload';
 
 @Injectable()

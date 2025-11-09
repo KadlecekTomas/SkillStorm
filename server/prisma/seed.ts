@@ -49,7 +49,7 @@ async function ensureUser(email: string, name: string, password: string, role?: 
       email,
       name,
       passwordHash: await hashPassword(password),
-      systemRole: role,
+      systemRole: role ?? null,
     },
   });
 }
@@ -189,13 +189,15 @@ async function ensureTestWithQuestions(
           type: q.type,
           order: q.order,
           score: q.score,
-          correctAnswer: q.correctAnswer,
-          correctAnswers: q.correctAnswers,
-          options: q.options
+          correctAnswer: q.correctAnswer ?? null,
+          correctAnswers: q.correctAnswers ?? [],
+          ...(q.options
             ? {
-                create: q.options.map((option) => ({ text: option })),
+                options: {
+                  create: q.options.map((option) => ({ text: option })),
+                },
               }
-            : undefined,
+            : {}),
         })),
       },
     },
@@ -210,7 +212,7 @@ async function ensureAssignment(data: {
   topicLevelId?: string;
   openOffsetDays: number;
   closeOffsetDays: number;
-}) {
+}): Promise<Assignment> {
   const existing = await prisma.assignment.findFirst({
     where: {
       organizationId: data.organizationId,
@@ -227,7 +229,7 @@ async function ensureAssignment(data: {
       testId: data.test.id,
       classSectionId: data.classSectionId,
       targetType: 'CLASS',
-      topicLevelId: data.topicLevelId,
+      topicLevelId: data.topicLevelId ?? null,
       openAt: new Date(now + data.openOffsetDays * 24 * 60 * 60 * 1000),
       closeAt: new Date(now + data.closeOffsetDays * 24 * 60 * 60 * 1000),
       createdById: data.createdById,
@@ -584,11 +586,13 @@ async function main() {
   ];
 
   for (const [index, material] of materialSeeds.entries()) {
+    if (authors.length === 0) break;
     const existing = await prisma.learningMaterial.findFirst({
       where: { title: material.title, organizationId: school.id },
     });
     if (existing) continue;
     const author = authors[index % authors.length];
+    if (!author) continue;
     await prisma.learningMaterial.create({
       data: {
         title: material.title,
@@ -729,7 +733,7 @@ async function main() {
     where: { testId: fractionsTest.id },
   });
 
-  const sampleScores = [0.92, 0.81, 0.74];
+  const sampleScores: [number, number, number] = [0.92, 0.81, 0.74];
   for (const [idx, student] of studentRecords.entries()) {
     if (student.classKey !== classKey(SchoolGrade.GRADE_9, 'A')) continue;
     await prisma.submission.upsert({

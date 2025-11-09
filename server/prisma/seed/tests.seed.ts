@@ -3,6 +3,7 @@ import {
   PublishStatus,
   QuestionType,
 } from '@prisma/client';
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import {
   CATALOG_TOPIC_IDS,
   ORG_IDS,
@@ -121,7 +122,7 @@ export async function seed(prisma: PrismaClient) {
       continue;
     }
 
-    let test;
+    let test: { id: string };
 
     // ✅ Vytvoření nebo update testu
     try {
@@ -139,18 +140,25 @@ export async function seed(prisma: PrismaClient) {
               type: q.type,
               order: i + 1,
               score: q.score,
-              correctAnswer: q.correctAnswer,
-              correctAnswers: q.correctAnswers,
-              options: q.options
-                ? { create: q.options.map((opt) => ({ text: opt })) }
-                : undefined,
+              correctAnswer: q.correctAnswer ?? null,
+              correctAnswers: q.correctAnswers ?? [],
+              ...(q.options
+                ? {
+                    options: {
+                      create: q.options.map((opt) => ({ text: opt })),
+                    },
+                  }
+                : {}),
             })),
           },
         },
       });
       console.log(`✅ Tests > Created new test: ${testDef.title}`);
-    } catch (err: any) {
-      if (err?.code === 'P2002') {
+    } catch (err: unknown) {
+      if (
+        err instanceof PrismaClientKnownRequestError &&
+        err.code === 'P2002'
+      ) {
         test = await prisma.test.update({
           where: { id: testDef.id },
           data: {
@@ -183,8 +191,11 @@ export async function seed(prisma: PrismaClient) {
       });
 
       console.log(`✅ Tests > Linked ${testDef.title} to topic level ${topicLevel.id}`);
-    } catch (err: any) {
-      if (err.code === 'P2002') {
+    } catch (err: unknown) {
+      if (
+        err instanceof PrismaClientKnownRequestError &&
+        err.code === 'P2002'
+      ) {
         console.warn(`⚠️ Duplicate link detected for ${testDef.title}, skipping.`);
       } else {
         throw err;

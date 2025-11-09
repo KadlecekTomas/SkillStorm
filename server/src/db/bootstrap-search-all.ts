@@ -1,5 +1,5 @@
 // src/db/bootstrap-search-all.ts
-import { PrismaService } from '../prisma/prisma.service'; // uprav cestu dle projektu
+import { PrismaService } from '@/prisma/prisma.service'; // uprav cestu dle projektu
 
 const SQL = `
 CREATE EXTENSION IF NOT EXISTS unaccent;

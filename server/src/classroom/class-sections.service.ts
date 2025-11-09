@@ -23,7 +23,7 @@ import {
   cacheScopeForUser,
   getOrgVersion,
   bumpOrgVersion,
-} from '../shared/cache/org-cache.utils';
+} from '@/shared/cache/org-cache.utils';
 
 @Injectable()
 export class ClassSectionsService {

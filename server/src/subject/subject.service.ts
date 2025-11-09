@@ -18,7 +18,7 @@ import {
   cacheGetOrSet,
   cacheScopeForUser,
   getOrgVersion,
-} from '../shared/cache/org-cache.utils';
+} from '@/shared/cache/org-cache.utils';
 import {
   assertReadScope,
   assertTeacherOrDirectorInOrgOrSuperadmin,

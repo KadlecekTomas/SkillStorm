@@ -30,7 +30,7 @@ module.exports = {
       {
         allowSameFolder: true,
         rootDir: 'src',
-        prefix: '@',
+        prefix: '@/',
       },
     ],
   },

@@ -9,7 +9,7 @@ import {
 import type { Cache } from 'cache-manager';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Prisma, SystemRole, AuditEntityType } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '@/prisma/prisma.service';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
@@ -19,7 +19,7 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { QueryUsersDto } from './dto/query-users.dto';
 
 // pokud to máš jinde, nech cestu dle projektu
-import { makeUserSearch } from '../shared/cache/org-cache.utils';
+import { makeUserSearch } from '@/shared/cache/org-cache.utils';
 
 type ListQuery = { page: number; limit: number; search?: string };
 
