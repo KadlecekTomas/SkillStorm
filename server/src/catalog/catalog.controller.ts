@@ -17,7 +17,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { SystemRole, PermissionKey } from '@prisma/client';
-import { Permission } from 'src/modules/rbac/permission.decorator';
+import { Permission } from '@/modules/rbac/permission.decorator';
 
 import { QueryCatalogDto } from './dto/query-catalog.dto';
 import { CreateCatalogSubjectDto } from './dto/create-catalog-subject.dto';

@@ -20,14 +20,14 @@ import {
 import { CacheTTL } from '@nestjs/cache-manager';
 
 import { SystemRole, OrganizationRole, PermissionKey } from '@prisma/client';
-import { Permission } from 'src/modules/rbac/permission.decorator';
+import { Permission } from '@/modules/rbac/permission.decorator';
 
 import { CreateSubjectDto } from './dto/create-subject.dto';
 import { UpdateSubjectDto } from './dto/update-subject.dto';
 import { QuerySubjectsDto } from './dto/query-subjects.dto';
 import { SubjectsService } from './subject.service';
 
-import { InvalidateScopes } from 'src/common/cache/invalidate.decorator';
+import { InvalidateScopes } from '@/common/cache/invalidate.decorator';
 
 @ApiTags('Subjects')
 @ApiBearerAuth()

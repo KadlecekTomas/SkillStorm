@@ -5,11 +5,11 @@ import {
   NotFoundException,
   Inject,
 } from '@nestjs/common';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { PrismaService } from '@/prisma/prisma.service';
 import { CreateLearningMaterialDto } from './dto/create-learning-material.dto';
 import { UpdateLearningMaterialDto } from './dto/update-learning-material.dto';
 import { QueryLearningMaterialsDto } from './dto/query-learning-materials.dto';
-import { JwtPayload } from 'src/auth/types/jwt-payload';
+import { JwtPayload } from '@/auth/types/jwt-payload';
 import {
   Prisma,
   AuditEntityType,
@@ -32,7 +32,7 @@ import {
 import * as path from 'path';
 import * as fs from 'fs';
 import type { File as MulterFile } from 'multer';
-import { GamificationService } from 'src/gamification/gamification.service';
+import { GamificationService } from '@/gamification/gamification.service';
 
 function materialSearch(
   search?: string,

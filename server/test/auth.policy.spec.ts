@@ -10,11 +10,11 @@ import {
   PrismaClient,
 } from '@prisma/client';
 import { AppModule } from '../src/app.module';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { PrismaService } from '@/prisma/prisma.service';
 import {
   ACCESS_TOKEN_COOKIE,
   REFRESH_TOKEN_COOKIE,
-} from 'src/auth/token-cookies';
+} from '@/auth/token-cookies';
 
 const hashToken = (token: string) =>
   createHash('sha256').update(token).digest('hex');

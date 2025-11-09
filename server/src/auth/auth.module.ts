@@ -8,7 +8,7 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
-import { GamificationModule } from 'src/gamification/gamification.module';
+import { GamificationModule } from '@/gamification/gamification.module';
 
 @Module({
   imports: [

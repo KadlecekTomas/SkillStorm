@@ -1,7 +1,7 @@
 // src/modules/shared/access.utils.ts
 import { ForbiddenException } from '@nestjs/common';
 import { Prisma, SystemRole, $Enums } from '@prisma/client';
-import { JwtPayload } from 'src/auth/types/jwt-payload';
+import { JwtPayload } from '@/auth/types/jwt-payload';
 
 /**
  * Čtení v rámci stejné organizace (superadmin výjimka).

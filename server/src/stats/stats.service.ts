@@ -5,16 +5,16 @@ import {
   NotFoundException,
   Inject,
 } from '@nestjs/common';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { PrismaService } from '@/prisma/prisma.service';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 import { SystemRole, SubmissionStatus, AuditEntityType } from '@prisma/client';
-import { JwtPayload } from 'src/auth/types/jwt-payload';
+import { JwtPayload } from '@/auth/types/jwt-payload';
 import {
   buildVersionedListKey,
   cacheGetOrSet,
   getOrgVersion,
-} from 'src/shared/cache/org-cache.utils';
+} from '@/shared/cache/org-cache.utils';
 import { StatsOverviewResponse } from './dto/overview.dto';
 
 @Injectable()

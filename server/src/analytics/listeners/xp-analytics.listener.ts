@@ -1,10 +1,10 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { PrismaService } from '@/prisma/prisma.service';
 import {
   XP_AWARDED_EVENT,
   XpAwardedPayload,
   xpEvents,
-} from 'src/gamification/events/xp.events';
+} from '@/gamification/events/xp.events';
 
 @Injectable()
 export class XpAnalyticsListener implements OnModuleInit, OnModuleDestroy {

@@ -13,7 +13,7 @@ import {
 import { PermissionKey, OrganizationRole } from '@prisma/client';
 import { CreateAssignmentDto, UpdateAssignmentDto } from './dto';
 import { AssignmentsService } from './assignments.service';
-import { Permission } from 'src/modules/rbac/permission.decorator';
+import { Permission } from '@/modules/rbac/permission.decorator';
 
 @Controller('assignments')
 export class AssignmentsController {

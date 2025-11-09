@@ -1,14 +1,14 @@
-import { MembershipsService } from 'src/memberships/memberships.service';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { MembershipsService } from '@/memberships/memberships.service';
+import { PrismaService } from '@/prisma/prisma.service';
 import { SystemRole, OrganizationRole } from '@prisma/client';
-import { emitRbacInvalidation } from 'src/modules/rbac/rbac.events';
+import { emitRbacInvalidation } from '@/modules/rbac/rbac.events';
 
-jest.mock('src/modules/rbac/rbac.events', () => ({
+jest.mock( '@/ modules/rbac/rbac.events', () => ({
   emitRbacInvalidation: jest.fn(),
 }));
 
-jest.mock('src/shared/cache/org-cache.utils', () => {
-  const actual = jest.requireActual('src/shared/cache/org-cache.utils');
+jest.mock( '@/ shared/cache/org-cache.utils', () => {
+  const actual = jest.requireActual( '@/ shared/cache/org-cache.utils');
   return {
     ...actual,
     bumpOrgVersion: jest.fn(),

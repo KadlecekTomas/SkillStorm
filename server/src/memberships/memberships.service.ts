@@ -6,7 +6,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { PrismaService } from '@/prisma/prisma.service';
 import { CreateMembershipDto } from './dto/create-membership.dto';
 import { UpdateMembershipDto } from './dto/update-membership.dto';
 import { QueryMembershipsDto } from './dto/query-memberships.dto';
@@ -25,7 +25,7 @@ import {
   bumpOrgVersion,
   makeUserSearch,
 } from '../shared/cache/org-cache.utils';
-import { emitRbacInvalidation } from 'src/modules/rbac/rbac.events';
+import { emitRbacInvalidation } from '@/modules/rbac/rbac.events';
 
 @Injectable()
 export class MembershipsService {

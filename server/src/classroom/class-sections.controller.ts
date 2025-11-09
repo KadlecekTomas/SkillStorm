@@ -16,8 +16,8 @@ import { PermissionKey } from '@prisma/client';
 import { UpdateClassroomDto } from './dto/update-classroom.dto';
 import { SetHomeroomDto } from './dto/set-homeroom.dto';
 import { ClassSectionsService } from './class-sections.service';
-import { InvalidateScopes } from 'src/common/cache/invalidate.decorator';
-import { Permission } from 'src/modules/rbac/permission.decorator';
+import { InvalidateScopes } from '@/common/cache/invalidate.decorator';
+import { Permission } from '@/modules/rbac/permission.decorator';
 
 @ApiTags('ClassSections')
 @ApiBearerAuth()

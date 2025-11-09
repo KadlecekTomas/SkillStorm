@@ -8,14 +8,14 @@ import {
 import type { Cache } from 'cache-manager';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 
-import { PrismaService } from 'src/prisma/prisma.service';
+import { PrismaService } from '@/prisma/prisma.service';
 import { CreateTopicDto } from './dto/create-topic.dto';
 import { UpdateTopicDto } from './dto/update-topic.dto';
 import { QueryTopicsDto } from './dto/query-topics.dto';
 import { AssignTestsDto } from './dto/assign-tests.dto';
 import { AssignMaterialsDto } from './dto/assign-materials.dto';
 
-import { JwtPayload } from 'src/auth/types/jwt-payload';
+import { JwtPayload } from '@/auth/types/jwt-payload';
 import {
   Prisma,
   AuditEntityType,
@@ -23,7 +23,7 @@ import {
   TopicPhase,
 } from '@prisma/client';
 
-import { assertSameOrganization } from 'src/shared/access.utils';
+import { assertSameOrganization } from '@/shared/access.utils';
 import {
   bumpOrgVersion,
   cacheScopeForUser,

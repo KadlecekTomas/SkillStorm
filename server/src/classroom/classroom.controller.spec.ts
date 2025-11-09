@@ -1,7 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { SchoolGrade } from '@prisma/client';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { PrismaService } from '@/prisma/prisma.service';
 import { ClassSectionsController } from './class-sections.controller';
 import { ClassSectionsService } from './class-sections.service';
 

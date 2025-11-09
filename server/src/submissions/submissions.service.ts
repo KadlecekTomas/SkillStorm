@@ -5,18 +5,19 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, QuestionType, SubmissionStatus, XpEventType } from '@prisma/client';
-import { PrismaService } from 'src/prisma/prisma.service';
-import { assertSameOrganizationIds } from 'src/shared/access.utils';
-import { GamificationService } from 'src/gamification/gamification.service';
+import {
+  AuditEntityType,
+  Prisma,
+  QuestionType,
+  SubmissionStatus,
+  XpEventType,
+} from '@prisma/client';
+import { PrismaService } from '@/prisma/prisma.service';
+import { assertSameOrganizationIds } from '@/shared/access.utils';
+import { GamificationService } from '@/gamification/gamification.service';
+import { JwtPayload } from '@/auth/types/jwt-payload';
 
-type JwtUser = {
-  id: string; // user.id
-  organizationId?: string | null;
-  organizationRole?: string | null; // 'STUDENT' | 'TEACHER' | ...
-  membershipId?: string | null; // Membership.id v aktuální org
-  systemRole?: string | null; // SUPERADMIN?
-};
+type JwtUser = JwtPayload;
 
 type RespInDto = { questionId: string; givenText: any };
 
@@ -44,14 +45,14 @@ export class SubmissionsService {
     // fallback: podle (user.id, orgId) – některé guardy nemusí membershipId přidat
     if (user.organizationId) {
       const m = await this.prisma.membership.findFirst({
-        where: { userId: user.id, organizationId: user.organizationId },
+        where: { userId: user.userId, organizationId: user.organizationId },
         select: { id: true, organizationId: true, role: true },
       });
       if (m) return m;
     }
     // poslední fallback: jakýkoli membership (pokud má jen jeden, je to OK)
     const m = await this.prisma.membership.findFirst({
-      where: { userId: user.id },
+      where: { userId: user.userId },
       select: { id: true, organizationId: true, role: true },
     });
     if (!m)
@@ -395,6 +396,21 @@ export class SubmissionsService {
         submissionId: submission.id,
       },
     );
+
+    await this.prisma.auditLog.create({
+      data: {
+        userId: user.userId ?? null,
+        organizationId: submission.assignment.organizationId,
+        entityType: AuditEntityType.TEST,
+        entityId: submission.id,
+        action: 'SUBMISSION_FINISH',
+        metadata: {
+          assignmentId: submission.assignment.id,
+          attemptNo: finished.attemptNo,
+          score: finished.score,
+        },
+      },
+    });
 
     return finished;
   }

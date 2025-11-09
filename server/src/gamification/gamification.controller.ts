@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Param, Post, Req } from '@nestjs/common';
 import { GamificationService } from './gamification.service';
 import { AddXpEventDto } from './dto/add-xp-event.dto';
-import { Permission } from 'src/modules/rbac/permission.decorator';
+import { Permission } from '@/modules/rbac/permission.decorator';
 import { PermissionKey } from '@prisma/client';
 
 @Controller('gamification')

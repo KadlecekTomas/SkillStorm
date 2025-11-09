@@ -17,10 +17,10 @@ import {
   ApiQuery,
   ApiTags,
 } from '@nestjs/swagger';
-import { Permission } from 'src/modules/rbac/permission.decorator';
+import { Permission } from '@/modules/rbac/permission.decorator';
 import { PermissionKey } from '@prisma/client';
 import { CacheTTL } from '@nestjs/cache-manager';
-import { InvalidateScopes } from 'src/common/cache/invalidate.decorator';
+import { InvalidateScopes } from '@/common/cache/invalidate.decorator';
 
 import { TestsService } from './tests.service';
 import { CreateTestDto } from './dto/create-test.dto';

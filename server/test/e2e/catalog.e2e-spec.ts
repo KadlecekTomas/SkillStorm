@@ -5,7 +5,7 @@ import * as request from 'supertest';
 import { randomUUID } from 'crypto';
 
 import { AppModule } from '../../src/app.module';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { PrismaService } from '@/prisma/prisma.service';
 import {
   $Enums,
   OrganizationRole,

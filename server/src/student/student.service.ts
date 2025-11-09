@@ -4,7 +4,7 @@ import {
   ForbiddenException,
   Inject,
 } from '@nestjs/common';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { PrismaService } from '@/prisma/prisma.service';
 import {
   AuditEntityType,
   OrganizationRole,
@@ -13,7 +13,7 @@ import {
 } from '@prisma/client';
 import { CreateStudentDto } from './dto/create-student.dto';
 import { UpdateStudentDto } from './dto/update-student.dto';
-import { JwtPayload } from 'src/auth/types/jwt-payload';
+import { JwtPayload } from '@/auth/types/jwt-payload';
 import { canAccessStudent } from './utils/access.utils';
 import { QueryStudentsDto } from './dto/query-students.dto';
 import * as XLSX from 'xlsx';

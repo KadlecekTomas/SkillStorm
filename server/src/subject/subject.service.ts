@@ -4,10 +4,10 @@ import {
   ConflictException,
   Inject,
 } from '@nestjs/common';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { PrismaService } from '@/prisma/prisma.service';
 import { CreateSubjectDto } from './dto/create-subject.dto';
 import { UpdateSubjectDto } from './dto/update-subject.dto';
-import { JwtPayload } from 'src/auth/types/jwt-payload';
+import { JwtPayload } from '@/auth/types/jwt-payload';
 import { QuerySubjectsDto } from './dto/query-subjects.dto';
 import { Prisma, SystemRole, AuditEntityType } from '@prisma/client';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
@@ -23,7 +23,7 @@ import {
   assertReadScope,
   assertTeacherOrDirectorInOrgOrSuperadmin,
   makeSubjectSearch,
-} from 'src/shared/access.utils';
+} from '@/shared/access.utils';
 
 @Injectable()
 export class SubjectsService {

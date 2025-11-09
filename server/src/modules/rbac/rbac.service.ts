@@ -1,5 +1,5 @@
 import { Injectable, OnModuleDestroy, Logger } from '@nestjs/common';
-import { PermissionKey, SystemRole } from '@prisma/client';
+import { OrganizationRole, PermissionKey, SystemRole } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CacheEntry } from './rbac.types';
 import {
@@ -7,6 +7,7 @@ import {
   RbacInvalidatePayload,
   rbacEvents,
 } from './rbac.events';
+import { isPermissionAllowedByDefault } from './rbac.defaults';
 
 const CACHE_TTL_MS = 60_000;
 
@@ -92,11 +93,13 @@ export class RbacService implements OnModuleDestroy {
           { organizationId: membership.organizationId },
           { organizationId: null },
         ],
-        allowed: true,
       },
+      select: { allowed: true },
     });
 
-    const allowed = !!rolePermission;
+    const allowed = rolePermission
+      ? rolePermission.allowed
+      : this.isAllowedByDefault(membership.role, permissionKey);
     this.setCache(cacheKey, userId, organizationId, allowed);
     return allowed;
   }
@@ -217,5 +220,12 @@ export class RbacService implements OnModuleDestroy {
       organizationId: org === 'global' ? null : org,
       permission: rest.join(':'),
     };
+  }
+
+  private isAllowedByDefault(
+    role: OrganizationRole,
+    key: PermissionKey,
+  ): boolean {
+    return isPermissionAllowedByDefault(role, key);
   }
 }

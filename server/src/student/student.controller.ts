@@ -23,8 +23,8 @@ import { QueryStudentsDto } from './dto/query-students.dto';
 import { ExportStudentsDto } from './dto/export-students.dto';
 import { Response } from 'express';
 
-import { InvalidateScopes } from 'src/common/cache/invalidate.decorator';
-import { Permission } from 'src/modules/rbac/permission.decorator';
+import { InvalidateScopes } from '@/common/cache/invalidate.decorator';
+import { Permission } from '@/modules/rbac/permission.decorator';
 
 @ApiTags('Students')
 @ApiBearerAuth()

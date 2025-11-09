@@ -1,6 +1,6 @@
 import { PermissionKey, SystemRole } from '@prisma/client';
 import { RbacService } from '../rbac.service';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { PrismaService } from '@/prisma/prisma.service';
 import { emitRbacInvalidation } from '../rbac.events';
 
 describe('RbacService (unit)', () => {

@@ -14,7 +14,7 @@ import {
   AuditEntityType,
 } from '@prisma/client';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { PrismaService } from '@/prisma/prisma.service';
 import { QueryCatalogDto } from './dto/query-catalog.dto';
 import { CreateCatalogSubjectDto } from './dto/create-catalog-subject.dto';
 import { UpdateCatalogSubjectDto } from './dto/update-catalog-subject.dto';
@@ -23,11 +23,11 @@ import { UpdateCatalogTopicDto } from './dto/update-catalog-topic.dto';
 import { MaterializeSubjectDto } from './dto/materialize-subject.dto';
 import { MaterializeTopicDto } from './dto/materialize-topic.dto';
 import { MaterializeTopicsBulkDto } from './dto/materialize-topics-bulk.dto';
-import { JwtPayload } from 'src/auth/types/jwt-payload';
+import { JwtPayload } from '@/auth/types/jwt-payload';
 
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
-import { assertSameOrganization } from 'src/shared/access.utils';
+import { assertSameOrganization } from '@/shared/access.utils';
 import {
   bumpOrgVersion,
   cacheScopeForUser,

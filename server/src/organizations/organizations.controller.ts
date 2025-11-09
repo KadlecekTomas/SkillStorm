@@ -26,8 +26,8 @@ import {
 import { SchoolAccessGuard } from '../auth/guards/school-access.guard';
 import { QueryOrganizationsDto } from './dto/query-organizations.dto';
 import { CacheTTL } from '@nestjs/cache-manager';
-import { InvalidateScopes } from 'src/common/cache/invalidate.decorator';
-import { Permission } from 'src/modules/rbac/permission.decorator';
+import { InvalidateScopes } from '@/common/cache/invalidate.decorator';
+import { Permission } from '@/modules/rbac/permission.decorator';
 
 @ApiTags('organizations')
 @ApiBearerAuth()

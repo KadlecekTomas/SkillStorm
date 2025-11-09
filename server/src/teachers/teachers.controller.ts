@@ -25,10 +25,10 @@ import { UpdateTeacherDto } from './dto/update-teacher.dto';
 import { QueryTeachersDto } from './dto/query-teachers.dto';
 import { AssignSubjectsDto } from './dto/assign-subjects.dto';
 
-import { Permission } from 'src/modules/rbac/permission.decorator';
+import { Permission } from '@/modules/rbac/permission.decorator';
 import { PermissionKey } from '@prisma/client';
 
-import { InvalidateScopes } from 'src/common/cache/invalidate.decorator';
+import { InvalidateScopes } from '@/common/cache/invalidate.decorator';
 
 @ApiTags('Teachers')
 @ApiBearerAuth()

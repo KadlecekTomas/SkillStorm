@@ -26,9 +26,9 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { QueryUsersDto } from './dto/query-users.dto';
 
 import { OrganizationRole, SystemRole } from '@prisma/client';
-import { InvalidateScopes } from 'src/common/cache/invalidate.decorator';
-import { NoHttpCache } from 'src/common/cache/no-http-cache.decorator';
-import { Permission } from 'src/modules/rbac/permission.decorator';
+import { InvalidateScopes } from '@/common/cache/invalidate.decorator';
+import { NoHttpCache } from '@/common/cache/no-http-cache.decorator';
+import { Permission } from '@/modules/rbac/permission.decorator';
 
 @ApiTags('users')
 @ApiBearerAuth()

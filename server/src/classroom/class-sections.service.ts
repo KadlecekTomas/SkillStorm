@@ -6,10 +6,10 @@ import {
   ForbiddenException,
   ConflictException,
 } from '@nestjs/common';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { PrismaService } from '@/prisma/prisma.service';
 import { CreateClassSectionDto } from './dto/create-classroom.dto';
-import { JwtPayload } from 'src/auth/types/jwt-payload';
-import { assertSameOrganization } from 'src/shared/access.utils';
+import { JwtPayload } from '@/auth/types/jwt-payload';
+import { assertSameOrganization } from '@/shared/access.utils';
 import { UpdateClassroomDto } from './dto/update-classroom.dto';
 import { QueryClassSectionsDto } from './dto/query-class-sections.dto';
 import { SetHomeroomDto } from './dto/set-homeroom.dto';

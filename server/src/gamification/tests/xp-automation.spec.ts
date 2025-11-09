@@ -1,11 +1,11 @@
 import { GamificationService } from '../gamification.service';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { PrismaService } from '@/prisma/prisma.service';
 import { AchievementsService } from '../achievements.service';
 import {
   OrganizationRole,
   XpEventType,
 } from '@prisma/client';
-import { XpAnalyticsListener } from 'src/analytics/listeners/xp-analytics.listener';
+import { XpAnalyticsListener } from '@/analytics/listeners/xp-analytics.listener';
 
 describe('XP automation', () => {
   let prismaMock: any;

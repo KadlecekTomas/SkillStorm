@@ -28,10 +28,10 @@ import { CreateLearningMaterialDto } from './dto/create-learning-material.dto';
 import { UpdateLearningMaterialDto } from './dto/update-learning-material.dto';
 import { QueryLearningMaterialsDto } from './dto/query-learning-materials.dto';
 
-import { Permission } from 'src/modules/rbac/permission.decorator';
+import { Permission } from '@/modules/rbac/permission.decorator';
 import { PermissionKey } from '@prisma/client';
 
-import { InvalidateScopes } from 'src/common/cache/invalidate.decorator';
+import { InvalidateScopes } from '@/common/cache/invalidate.decorator';
 import type { File as MulterFile } from 'multer';
 
 @ApiTags('LearningMaterials')

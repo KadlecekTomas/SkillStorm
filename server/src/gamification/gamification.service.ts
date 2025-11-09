@@ -3,10 +3,10 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { PrismaService } from '@/prisma/prisma.service';
 import { AddXpEventDto } from './dto/add-xp-event.dto';
 import { AchievementsService } from './achievements.service';
-import { JwtPayload } from 'src/auth/types/jwt-payload';
+import { JwtPayload } from '@/auth/types/jwt-payload';
 import { OrganizationRole, Prisma, XpEventType } from '@prisma/client';
 import { emitXpAwarded } from './events/xp.events';
 

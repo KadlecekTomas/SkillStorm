@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Post, Query, Req } from '@nestjs/common';
 import { AnalyticsService } from './analytics.service';
 import { LogAnalyticsEventDto } from './dto/log-analytics-event.dto';
-import { Permission } from 'src/modules/rbac/permission.decorator';
+import { Permission } from '@/modules/rbac/permission.decorator';
 import { PermissionKey } from '@prisma/client';
 
 @Controller('analytics')

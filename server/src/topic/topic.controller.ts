@@ -18,7 +18,7 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { CacheTTL } from '@nestjs/cache-manager';
-import { Permission } from 'src/modules/rbac/permission.decorator';
+import { Permission } from '@/modules/rbac/permission.decorator';
 import { PermissionKey } from '@prisma/client';
 
 import { TopicsService } from './topic.service';
@@ -27,7 +27,7 @@ import { UpdateTopicDto } from './dto/update-topic.dto';
 import { QueryTopicsDto } from './dto/query-topics.dto';
 import { AssignMaterialsDto } from './dto/assign-materials.dto';
 import { AssignTestsDto } from './dto/assign-tests.dto';
-import { InvalidateScopes } from 'src/common/cache/invalidate.decorator';
+import { InvalidateScopes } from '@/common/cache/invalidate.decorator';
 
 @ApiTags('Topics')
 @ApiBearerAuth()

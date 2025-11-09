@@ -11,7 +11,7 @@ import {
   ApiQuery,
   ApiTags,
 } from '@nestjs/swagger';
-import { Permission } from 'src/modules/rbac/permission.decorator';
+import { Permission } from '@/modules/rbac/permission.decorator';
 import { PermissionKey } from '@prisma/client';
 // ⚠️ odstraněn CacheTTL import
 import { StatsService } from './stats.service';
@@ -19,7 +19,7 @@ import {
   OverviewScope,
   StatsOverviewQueryDto,
 } from './dto/stats-overview-query.dto';
-import { NoHttpCacheInterceptor } from 'src/common/interceptors/no-http-cache.interceptor';
+import { NoHttpCacheInterceptor } from '@/common/interceptors/no-http-cache.interceptor';
 
 export const DEFAULT_STATS_OVERVIEW_SCOPE = 'evaluated' as const;
 

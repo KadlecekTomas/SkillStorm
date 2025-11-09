@@ -25,7 +25,7 @@ import {
 import { randomBytes, randomUUID, createHash } from 'crypto';
 import { addDays } from 'date-fns';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
-import { GamificationService } from 'src/gamification/gamification.service';
+import { GamificationService } from '@/gamification/gamification.service';
 
 type JwtClaims = {
   sub: string;

@@ -22,8 +22,8 @@ import { CreateMembershipDto } from './dto/create-membership.dto';
 import { UpdateMembershipDto } from './dto/update-membership.dto';
 import { QueryMembershipsDto } from './dto/query-memberships.dto';
 import { CacheTTL } from '@nestjs/cache-manager';
-import { InvalidateScopes } from 'src/common/cache/invalidate.decorator';
-import { Permission } from 'src/modules/rbac/permission.decorator';
+import { InvalidateScopes } from '@/common/cache/invalidate.decorator';
+import { Permission } from '@/modules/rbac/permission.decorator';
 
 @ApiTags('memberships')
 @ApiBearerAuth()
