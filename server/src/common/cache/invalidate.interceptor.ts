@@ -1,15 +1,16 @@
-import {
+import type {
   CallHandler,
   ExecutionContext,
-  Injectable,
   NestInterceptor,
-  Inject,
 } from '@nestjs/common';
-import { Observable, from, of, switchMap } from 'rxjs';
+import { Injectable, Inject } from '@nestjs/common';
+import type { Observable } from 'rxjs';
+import { from, of, switchMap } from 'rxjs';
 import { Reflector } from '@nestjs/core';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import type { Cache } from 'cache-manager';
-import { INVALIDATE_SCOPES, ScopeFactory } from './invalidate.decorator';
+import { Cache } from 'cache-manager';
+import type { ScopeFactory } from './invalidate.decorator';
+import { INVALIDATE_SCOPES } from './invalidate.decorator';
 import { bumpMany } from './versioned-cache';
 
 @Injectable()

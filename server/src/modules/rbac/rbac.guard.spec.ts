@@ -1,8 +1,9 @@
-import { ExecutionContext, ForbiddenException } from '@nestjs/common';
-import { Reflector } from '@nestjs/core';
+import type { ExecutionContext } from '@nestjs/common';
+import { ForbiddenException } from '@nestjs/common';
+import type { Reflector } from '@nestjs/core';
 import { PermissionKey, SystemRole } from '@prisma/client';
 import { RbacGuard } from './rbac.guard';
-import { RbacService } from './rbac.service';
+import type { RbacService } from './rbac.service';
 
 describe('RbacGuard', () => {
   const reflector = {

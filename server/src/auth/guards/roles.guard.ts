@@ -1,12 +1,9 @@
-import {
-  CanActivate,
-  ExecutionContext,
-  Injectable,
-  UnauthorizedException,
-} from '@nestjs/common';
+import type { CanActivate, ExecutionContext } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { ROLES_KEY, AllowedRoles } from '@/auth/decorators/roles.decorator';
-import { JwtPayload } from '@/auth/types/jwt-payload';
+import type { AllowedRoles } from '@/auth/decorators/roles.decorator';
+import { ROLES_KEY } from '@/auth/decorators/roles.decorator';
+import type { JwtPayload } from '@/auth/types/jwt-payload';
 
 @Injectable()
 export class RolesGuard implements CanActivate {
@@ -27,20 +24,21 @@ export class RolesGuard implements CanActivate {
       throw new UnauthorizedException();
     }
 
-    if (
-      requirements.system &&
-      requirements.system.length > 0 &&
-      !requirements.system.includes(user.systemRole ?? null)
-    ) {
-      return false;
+    if (requirements.system && requirements.system.length > 0) {
+      const systemRole = user.systemRole;
+      if (!systemRole || !requirements.system.includes(systemRole)) {
+        return false;
+      }
     }
 
-    if (
-      requirements.organization &&
-      requirements.organization.length > 0 &&
-      !requirements.organization.includes(user.organizationRole ?? null)
-    ) {
-      return false;
+    if (requirements.organization && requirements.organization.length > 0) {
+      const organizationRole = user.organizationRole;
+      if (
+        !organizationRole ||
+        !requirements.organization.includes(organizationRole)
+      ) {
+        return false;
+      }
     }
 
     return true;

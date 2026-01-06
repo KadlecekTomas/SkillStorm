@@ -6,12 +6,12 @@ import { useAuth } from "@/hooks/use-auth";
 
 export const useProtectedRoute = () => {
   const router = useRouter();
-  const { isAuthenticated, initializing } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
 
   useEffect(() => {
-    if (initializing) return;
+    if (isLoading) return;
     if (!isAuthenticated) {
       router.replace("/login");
     }
-  }, [isAuthenticated, initializing, router]);
+  }, [isAuthenticated, isLoading, router]);
 };

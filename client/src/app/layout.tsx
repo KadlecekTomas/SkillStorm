@@ -6,6 +6,7 @@ import { AppErrorBoundary } from "@/components/layout/app-error-boundary";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import { MswLoader } from "@/components/dev/msw-loader";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -27,6 +28,7 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${inter.variable} bg-secondary text-slate-900`}>
         <AppErrorBoundary>
+          <MswLoader />
           <Suspense fallback={<LoadingSpinner fullScreen />}>
             {children}
           </Suspense>

@@ -7,10 +7,11 @@ import {
   Patch,
   Param,
   Delete,
-  Request,
+  Req,
   Query,
   ParseUUIDPipe,
 } from '@nestjs/common';
+import { RequestWithUser } from '@/types/request-with-user';
 import {
   ApiOperation,
   ApiTags,
@@ -41,7 +42,7 @@ export class TeachersController {
   @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'Create teacher (director or superadmin)' })
   @InvalidateScopes(({ req }) => [req.body?.organizationId].filter(Boolean))
-  create(@Body() dto: CreateTeacherDto, @Request() req) {
+  create(@Body() dto: CreateTeacherDto, @Req() req: RequestWithUser) {
     return this.service.create(dto, req.user);
   }
 
@@ -51,7 +52,7 @@ export class TeachersController {
   @ApiOperation({ summary: 'List teachers (org‑scoped for director)' })
   @ApiQuery({ name: 'organizationId', required: false, type: String })
   @CacheTTL(0) // čtecí endpoint: vypnout HTTP response cache, používáme verzovanou cache v service
-  findAll(@Request() req, @Query() q: QueryTeachersDto) {
+  findAll(@Req() req: RequestWithUser, @Query() q: QueryTeachersDto) {
     return this.service.findAll(req.user, q);
   }
 
@@ -60,7 +61,10 @@ export class TeachersController {
   @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'Get teacher detail' })
   @CacheTTL(0) // čtecí endpoint: viz výše
-  findOne(@Param('id', new ParseUUIDPipe()) id: string, @Request() req) {
+  findOne(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() req: RequestWithUser,
+  ) {
     return this.service.findOne(id, req.user);
   }
 
@@ -74,7 +78,7 @@ export class TeachersController {
   update(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() dto: UpdateTeacherDto,
-    @Request() req,
+    @Req() req: RequestWithUser,
   ) {
     return this.service.update(id, dto, req.user);
   }
@@ -86,7 +90,10 @@ export class TeachersController {
   @InvalidateScopes(({ result }) =>
     result?.organizationId ? [result.organizationId] : [],
   )
-  remove(@Param('id', new ParseUUIDPipe()) id: string, @Request() req) {
+  remove(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() req: RequestWithUser,
+  ) {
     return this.service.remove(id, req.user);
   }
 
@@ -100,7 +107,7 @@ export class TeachersController {
   assignSubjects(
     @Param('id', new ParseUUIDPipe()) teacherId: string,
     @Body() dto: AssignSubjectsDto,
-    @Request() req,
+    @Req() req: RequestWithUser,
   ) {
     return this.service.assignSubjects(teacherId, dto, req.user);
   }
@@ -115,7 +122,7 @@ export class TeachersController {
   removeSubject(
     @Param('id', new ParseUUIDPipe()) teacherId: string,
     @Param('subjectId', new ParseUUIDPipe()) subjectId: string,
-    @Request() req,
+    @Req() req: RequestWithUser,
   ) {
     return this.service.removeSubject(teacherId, subjectId, req.user);
   }

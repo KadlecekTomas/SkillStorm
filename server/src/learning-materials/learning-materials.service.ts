@@ -6,10 +6,10 @@ import {
   Inject,
 } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
-import { CreateLearningMaterialDto } from './dto/create-learning-material.dto';
-import { UpdateLearningMaterialDto } from './dto/update-learning-material.dto';
-import { QueryLearningMaterialsDto } from './dto/query-learning-materials.dto';
-import { JwtPayload } from '@/auth/types/jwt-payload';
+import type { CreateLearningMaterialDto } from './dto/create-learning-material.dto';
+import type { UpdateLearningMaterialDto } from './dto/update-learning-material.dto';
+import type { QueryLearningMaterialsDto } from './dto/query-learning-materials.dto';
+import type { JwtPayload } from '@/auth/types/jwt-payload';
 import {
   Prisma,
   AuditEntityType,
@@ -21,7 +21,7 @@ import {
 } from '@prisma/client';
 
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import type { Cache } from 'cache-manager';
+import { Cache } from 'cache-manager';
 import {
   buildVersionedListKey,
   bumpOrgVersion,
@@ -31,7 +31,7 @@ import {
 } from '@/shared/cache/org-cache.utils';
 import * as path from 'path';
 import * as fs from 'fs';
-import type { File as MulterFile } from 'multer';
+import type { Express } from 'express';
 import { GamificationService } from '@/gamification/gamification.service';
 
 function materialSearch(
@@ -74,19 +74,22 @@ export class LearningMaterialsService {
     metadata?: Record<string, any>;
     changedFields?: Record<string, any>;
   }) {
-    return this.prisma.auditLog.create({
-      data: {
-        userId: opts.userId ?? null,
-        organizationId: opts.orgId ?? null,
-        entityType: AuditEntityType.LEARNING_MATERIAL,
-        entityId: opts.entityId ?? null,
-        action: opts.action,
-        ipAddress: opts.ip ?? null,
-        userAgent: opts.ua ?? null,
-        metadata: opts.metadata ?? null,
-        changedFields: opts.changedFields ?? null,
-      },
-    });
+    const data: Prisma.AuditLogUncheckedCreateInput = {
+      userId: opts.userId ?? null,
+      organizationId: opts.orgId ?? null,
+      entityType: AuditEntityType.LEARNING_MATERIAL,
+      entityId: opts.entityId ?? null,
+      action: opts.action,
+      ipAddress: opts.ip ?? null,
+      userAgent: opts.ua ?? null,
+    };
+    if (opts.metadata !== undefined) {
+      data.metadata = opts.metadata as Prisma.InputJsonValue;
+    }
+    if (opts.changedFields !== undefined) {
+      data.changedFields = opts.changedFields as Prisma.InputJsonValue;
+    }
+    return this.prisma.auditLog.create({ data });
   }
 
   private includeAll() {
@@ -155,13 +158,20 @@ export class LearningMaterialsService {
       authorMembershipId = anyMember?.id ?? null;
     }
 
+    if (!authorMembershipId) {
+      throw new BadRequestException(
+        'Autor musí mít alespoň jedno aktivní členství.',
+      );
+    }
+
     // volitelné FK validace (pokud posláno)
     if (dto.subjectId) {
+      const subjectOrgFilter = orgId ?? undefined;
       const subject = await this.prisma.subject.findFirst({
         where: {
           id: dto.subjectId,
-          organizationId: orgId ?? undefined,
           deletedAt: null,
+          ...(subjectOrgFilter ? { organizationId: subjectOrgFilter } : {}),
         },
         select: { id: true },
       });
@@ -186,22 +196,23 @@ export class LearningMaterialsService {
       );
     }
 
+    const createData: Prisma.LearningMaterialUncheckedCreateInput = {
+      title: dto.title,
+      description: dto.description ?? null,
+      contentType: dto.contentType,
+      educationLevel: dto.educationLevel,
+      schoolGrade: dto.schoolGrade ?? null,
+      subjectId: dto.subjectId ?? null,
+      topicLevelId: dto.topicLevelId ?? null,
+      scope,
+      organizationId: orgId ?? null,
+      createdById: authorMembershipId!,
+      accessLevel: dto.accessLevel ?? MaterialAccessLevel.FREE,
+      price: dto.price ?? null,
+      isDownloadable: dto.isDownloadable ?? true,
+    };
     const created = await this.prisma.learningMaterial.create({
-      data: {
-        title: dto.title,
-        description: dto.description ?? null,
-        contentType: dto.contentType,
-        educationLevel: dto.educationLevel,
-        schoolGrade: dto.schoolGrade ?? null,
-        subjectId: dto.subjectId ?? null,
-        topicLevelId: dto.topicLevelId ?? null,
-        scope,
-        organizationId: orgId,
-        createdById: authorMembershipId, // pro GLOBAL fallback na libovolné členství
-        accessLevel: dto.accessLevel ?? MaterialAccessLevel.FREE,
-        price: dto.price ?? null,
-        isDownloadable: dto.isDownloadable ?? true,
-      },
+      data: createData,
       include: this.includeAll(),
     });
 
@@ -278,7 +289,7 @@ export class LearningMaterialsService {
       version: ver,
       page,
       limit,
-      search: q.search,
+      search: q.search ?? '',
       order: [{ title: 'asc' }, { createdAt: 'desc' }, { id: 'asc' }],
       filters: {
         scope: q.scope ?? null,
@@ -327,11 +338,12 @@ export class LearningMaterialsService {
     if (user.systemRole === SystemRole.SUPERADMIN) return m;
     if (m.scope === ContentScope.GLOBAL) return m;
 
+    const viewerOrgFilter = m.organizationId ?? undefined;
     const member = await this.prisma.membership.findFirst({
       where: {
         userId: uid,
-        organizationId: m.organizationId,
         deletedAt: null,
+        ...(viewerOrgFilter ? { organizationId: viewerOrgFilter } : {}),
       },
       select: { id: true, role: true },
     });
@@ -393,20 +405,27 @@ export class LearningMaterialsService {
       );
     }
 
+    const updateData: Prisma.LearningMaterialUncheckedUpdateInput = {};
+    if (dto.title !== undefined) updateData.title = dto.title;
+    if (dto.description !== undefined) updateData.description = dto.description;
+    if (dto.contentType !== undefined) updateData.contentType = dto.contentType;
+    if (dto.educationLevel !== undefined) {
+      updateData.educationLevel = dto.educationLevel;
+    }
+    if (dto.schoolGrade !== undefined) updateData.schoolGrade = dto.schoolGrade;
+    if (dto.subjectId !== undefined) updateData.subjectId = dto.subjectId;
+    if (dto.topicLevelId !== undefined) {
+      updateData.topicLevelId = dto.topicLevelId;
+    }
+    if (dto.accessLevel !== undefined) updateData.accessLevel = dto.accessLevel;
+    if (dto.price !== undefined) updateData.price = dto.price;
+    if (dto.isDownloadable !== undefined) {
+      updateData.isDownloadable = dto.isDownloadable;
+    }
+
     const updated = await this.prisma.learningMaterial.update({
       where: { id },
-      data: {
-        title: dto.title ?? undefined,
-        description: dto.description ?? undefined,
-        contentType: dto.contentType ?? undefined,
-        educationLevel: dto.educationLevel ?? undefined,
-        schoolGrade: dto.schoolGrade ?? undefined,
-        subjectId: dto.subjectId ?? undefined,
-        topicLevelId: dto.topicLevelId ?? undefined,
-        accessLevel: dto.accessLevel ?? undefined,
-        price: dto.price ?? undefined,
-        isDownloadable: dto.isDownloadable ?? undefined,
-      },
+      data: updateData,
       include: this.includeAll(),
     });
 
@@ -483,7 +502,7 @@ export class LearningMaterialsService {
   // ---------- ATTACH FILE (PDF) ----------
   async attachFile(
     id: string,
-    file: MulterFile,
+    file: Express.Multer.File,
     user: JwtPayload,
     ctx?: { ip?: string; ua?: string },
   ) {

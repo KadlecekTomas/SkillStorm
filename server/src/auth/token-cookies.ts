@@ -1,63 +1,51 @@
-import type { Response } from 'express';
+import { Response } from 'express';
+import { randomBytes } from 'crypto';
 
-export const ACCESS_TOKEN_COOKIE = 'skillstorm_at';
-export const REFRESH_TOKEN_COOKIE = 'skillstorm_rt';
+export const ACCESS_TOKEN_COOKIE = 'ss_at';
+export const REFRESH_TOKEN_COOKIE = 'ss_rt';
+export const CSRF_TOKEN_COOKIE = 'ss_csrf';
 
-type CookieSecurity = { secure: boolean };
+const base = {
+  httpOnly: true,
+  secure: true,
+  sameSite: 'lax' as const,
+  path: '/',
+};
 
-const accessTokenTtlMs = 15 * 60 * 1000; // 15 minutes
-const refreshTokenTtlMs = 7 * 24 * 60 * 60 * 1000; // 7 days
+export function setCsrfCookie(res: Response, token: string) {
+  res.cookie(CSRF_TOKEN_COOKIE, token, {
+    httpOnly: false,
+    secure: true,
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  });
+}
+
+export function clearCsrfCookie(res: Response) {
+  res.clearCookie(CSRF_TOKEN_COOKIE, { path: '/' });
+}
+
+export function generateCsrfToken() {
+  return randomBytes(24).toString('hex');
+}
 
 export function setAuthCookies(
   res: Response,
   tokens: { accessToken: string; refreshToken: string },
-  options: CookieSecurity,
 ) {
-  const base = {
-    httpOnly: true,
-    sameSite: 'strict' as const,
-    secure: options.secure,
-    path: '/',
-  };
-
   res.cookie(ACCESS_TOKEN_COOKIE, tokens.accessToken, {
     ...base,
-    maxAge: accessTokenTtlMs,
+    maxAge: 15 * 60 * 1000,
   });
 
   res.cookie(REFRESH_TOKEN_COOKIE, tokens.refreshToken, {
     ...base,
-    maxAge: refreshTokenTtlMs,
-    path: '/auth',
+    maxAge: 7 * 24 * 60 * 60 * 1000,
   });
 }
 
-export function clearAuthCookies(res: Response, options: CookieSecurity) {
-  const base = {
-    httpOnly: true,
-    sameSite: 'strict' as const,
-    secure: options.secure,
-  };
-  res.cookie(ACCESS_TOKEN_COOKIE, '', {
-    ...base,
-    path: '/',
-    maxAge: 0,
-  });
-  res.cookie(REFRESH_TOKEN_COOKIE, '', {
-    ...base,
-    path: '/auth',
-    maxAge: 0,
-  });
-}
-
-export function extractCookie(req: { headers?: Record<string, any> }, name: string) {
-  const raw = req.headers?.cookie;
-  if (!raw) return null;
-  const target = raw
-    .split(';')
-    .map((c) => c.trim())
-    .find((c) => c.startsWith(`${name}=`));
-  if (!target) return null;
-  const [, value] = target.split('=');
-  return decodeURIComponent(value ?? '');
+export function clearAuthCookies(res: Response) {
+  res.clearCookie(ACCESS_TOKEN_COOKIE, { path: '/' });
+  res.clearCookie(REFRESH_TOKEN_COOKIE, { path: '/' });
 }

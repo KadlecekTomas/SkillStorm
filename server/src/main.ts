@@ -1,19 +1,24 @@
 import { NestFactory } from '@nestjs/core';
-import {
+import type {
   ArgumentsHost,
-  Catch,
   ExceptionFilter,
+  INestApplication,
+  NestApplicationOptions,
+} from '@nestjs/common';
+import {
+  Catch,
   HttpException,
   HttpStatus,
-  INestApplication,
   ValidationPipe,
 } from '@nestjs/common';
+import * as cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 import { PrismaService } from './prisma/prisma.service';
 import { Prisma } from '@prisma/client';
 import { ZodError } from 'zod';
 import { bootstrapSearchAll } from './db/bootstrap-search-all';
 import { setupSwagger } from './swagger.config';
+import { CSRF_TOKEN_COOKIE } from './auth/token-cookies';
 
 /**
  * Jednotný exception filter:
@@ -42,14 +47,18 @@ class AllExceptionsFilter implements ExceptionFilter {
       const body = exception.getResponse();
       return res
         .status(status)
-        .json(typeof body === 'string' ? { message: body } : body);
+        .json(
+          typeof body === 'string'
+            ? { success: false, error: body }
+            : { success: false, error: (body as any)?.message ?? body },
+        );
     }
 
     if (exception instanceof ZodError) {
       return res.status(HttpStatus.BAD_REQUEST).json({
-        statusCode: 400,
-        message: 'Validation failed',
-        issues: exception.issues,
+        success: false,
+        error: 'Validation failed',
+        meta: { issues: exception.issues },
       });
     }
 
@@ -57,29 +66,29 @@ class AllExceptionsFilter implements ExceptionFilter {
       switch (exception.code) {
         case 'P2002': // unique violation
           return res.status(HttpStatus.CONFLICT).json({
-            statusCode: 409,
-            message: 'Unique constraint failed',
+            success: false,
+            error: 'Unique constraint failed',
             meta: exception.meta,
           });
         case 'P2003': // foreign key
           return res.status(HttpStatus.BAD_REQUEST).json({
-            statusCode: 400,
-            message: 'Foreign key constraint failed',
+            success: false,
+            error: 'Foreign key constraint failed',
             meta: exception.meta,
           });
         case 'P2025': // not found
           return res.status(HttpStatus.NOT_FOUND).json({
-            statusCode: 404,
-            message: 'Record not found',
+            success: false,
+            error: 'Record not found',
             meta: exception.meta,
           });
       }
     }
 
     return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
-      statusCode: 500,
-      message: 'Internal Server Error',
-      error: String(exception?.message ?? exception),
+      success: false,
+      error: 'Internal Server Error',
+      meta: String(exception?.message ?? exception),
     });
   }
 }
@@ -90,19 +99,46 @@ class AllExceptionsFilter implements ExceptionFilter {
 export async function createApp(): Promise<INestApplication> {
   const isTest = process.env.NODE_ENV === 'test';
   const enableTestLogging = process.env.DEBUG_POLICY === '1';
-  const app = await NestFactory.create(AppModule, {
-    logger: isTest && !enableTestLogging ? false : undefined,
-  });
+  const options: NestApplicationOptions = {};
+  if (isTest && !enableTestLogging) {
+    options.logger = false;
+  }
+  const app = await NestFactory.create(AppModule, options);
+  app.use(cookieParser());
 
-  const corsOrigins =
-    process.env.CORS_ORIGINS ?? 'http://localhost:4200,http://localhost:3000';
-  const allowedOrigins = corsOrigins
-    .split(',')
-    .map((origin) => origin.trim())
-    .filter(Boolean);
+  // CSRF double-submit protection for state-changing requests
+  if (process.env.DISABLE_CSRF !== '1') {
+    app.use((req: any, res: any, next: any) => {
+      const method = req.method?.toUpperCase?.() ?? '';
+      const isStateChanging = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(
+        method,
+      );
+      const isAuthBootstrap = ['/auth/login', '/auth/register', '/auth/refresh', '/auth/use-org'].some(
+        (path) => req.path?.startsWith(path),
+      );
+      if (!isStateChanging || isAuthBootstrap) {
+        return next();
+      }
+      const csrfCookie = req.cookies?.[CSRF_TOKEN_COOKIE];
+      const csrfHeader =
+        (req.headers?.['x-csrf-token'] as string | undefined) ?? null;
+      if (!csrfCookie || !csrfHeader || csrfCookie !== csrfHeader) {
+        return res.status(403).json({
+          success: false,
+          error: 'CSRF token mismatch',
+        });
+      }
+      return next();
+    });
+  }
 
+  // 🔒 Configured for Next.js (localhost:3000) – allows credentials & cross-origin cookies.
   app.enableCors({
-    origin: allowedOrigins.length ? allowedOrigins : '*',
+    origin: [
+      'http://localhost:3000',
+      'http://127.0.0.1:3000',
+      'http://localhost:4200',
+    ],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: [
@@ -110,6 +146,9 @@ export async function createApp(): Promise<INestApplication> {
       'Authorization',
       'X-Requested-With',
       'Accept',
+      'x-org-id',
+      'x-session-token',
+      'x-cid',
     ],
   });
 
@@ -148,8 +187,10 @@ async function bootstrap() {
   const app = await createApp();
 
   if (process.env.NODE_ENV !== 'test') {
-    setupSwagger(app);
-    await app.listen(process.env.PORT ?? 3001);
+    if (process.env.NODE_ENV !== 'production') {
+      setupSwagger(app);
+    }
+    await app.listen(process.env.PORT ?? 4200);
   } else {
     // e2e: pouze inicializace bez otevření portu
     await app.init();

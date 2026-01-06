@@ -1,10 +1,12 @@
 import {
   Controller,
   Get,
-  Request,
   Query,
+  Req,
   UseInterceptors,
+  ForbiddenException,
 } from '@nestjs/common';
+import { RequestWithUser } from '@/types/request-with-user';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -43,8 +45,8 @@ export class StatsController {
       'How passRate is computed. "evaluated" = APPROVED/(APPROVED+REJECTED). "all" = APPROVED/ALL (incl. PENDING). Default: evaluated.',
   })
   // ⚠️ odstraněno @CacheTTL(0)
-  overview(@Request() req, @Query() query: StatsOverviewQueryDto) {
-    const { organizationId } = req.user;
+  overview(@Req() req: RequestWithUser, @Query() query: StatsOverviewQueryDto) {
+    const organizationId = req.user.organizationId ?? null;
 
     // tvrdá sanitizace: cokoliv mimo 'all' => 'evaluated'
     const raw = (query?.scope ?? '').toString().trim().toLowerCase();
@@ -58,12 +60,16 @@ export class StatsController {
   @Permission(PermissionKey.VIEW_RESULTS)
   @ApiOperation({ summary: 'Student dashboard (my progress)' })
   // ⚠️ odstraněno @CacheTTL(0)
-  student(@Request() req) {
-    const { membershipId, organizationId } = req.user;
-    return this.service.getStudentDashboard(
-      { membershipId, organizationId },
-      req.user,
-    );
+  student(@Req() req: RequestWithUser) {
+    const organizationId = req.user.organizationId ?? null;
+    const membershipPayload: {
+      membershipId?: string;
+      organizationId: string | null;
+    } = { organizationId };
+    if (req.user.membershipId) {
+      membershipPayload.membershipId = req.user.membershipId;
+    }
+    return this.service.getStudentDashboard(membershipPayload, req.user);
   }
 
   @UseInterceptors(NoHttpCacheInterceptor)
@@ -71,11 +77,8 @@ export class StatsController {
   @Permission(PermissionKey.VIEW_RESULTS)
   @ApiOperation({ summary: 'Teacher dashboard (my classes/tests/performance)' })
   // ⚠️ odstraněno @CacheTTL(0)
-  teacher(@Request() req) {
-    const { membershipId, organizationId } = req.user;
-    return this.service.getTeacherDashboard(
-      { membershipId, organizationId },
-      req.user,
-    );
+  teacher(@Req() req: RequestWithUser) {
+    const organizationId = req.user.organizationId ?? null;
+    return this.service.getTeacherDashboard(organizationId, req.user);
   }
 }

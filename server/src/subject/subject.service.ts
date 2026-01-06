@@ -3,15 +3,16 @@ import {
   NotFoundException,
   ConflictException,
   Inject,
+  ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
-import { CreateSubjectDto } from './dto/create-subject.dto';
-import { UpdateSubjectDto } from './dto/update-subject.dto';
-import { JwtPayload } from '@/auth/types/jwt-payload';
-import { QuerySubjectsDto } from './dto/query-subjects.dto';
+import type { CreateSubjectDto } from './dto/create-subject.dto';
+import type { UpdateSubjectDto } from './dto/update-subject.dto';
+import type { JwtPayload } from '@/auth/types/jwt-payload';
+import type { QuerySubjectsDto } from './dto/query-subjects.dto';
 import { Prisma, SystemRole, AuditEntityType } from '@prisma/client';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import type { Cache } from 'cache-manager';
+import { Cache } from 'cache-manager';
 import {
   buildVersionedListKey,
   bumpOrgVersion,
@@ -41,17 +42,20 @@ export class SubjectsService {
     metadata?: Record<string, any>;
     changedFields?: Record<string, any>;
   }) {
-    return this.prisma.auditLog.create({
-      data: {
-        userId: opts.userId ?? null,
-        organizationId: opts.orgId ?? null,
-        entityType: AuditEntityType.ORGANIZATION,
-        entityId: opts.entityId ?? null,
-        action: opts.action,
-        metadata: opts.metadata ?? null,
-        changedFields: opts.changedFields ?? null,
-      },
-    });
+    const data: Prisma.AuditLogUncheckedCreateInput = {
+      userId: opts.userId ?? null,
+      organizationId: opts.orgId ?? null,
+      entityType: AuditEntityType.ORGANIZATION,
+      entityId: opts.entityId ?? null,
+      action: opts.action,
+    };
+    if (opts.metadata !== undefined) {
+      data.metadata = opts.metadata as Prisma.InputJsonValue;
+    }
+    if (opts.changedFields !== undefined) {
+      data.changedFields = opts.changedFields as Prisma.InputJsonValue;
+    }
+    return this.prisma.auditLog.create({ data });
   }
 
   /** ---------- Includes (pevně typované) ---------- */
@@ -150,11 +154,13 @@ export class SubjectsService {
     const skip = (page - 1) * limit;
 
     const isSuper = user.systemRole === SystemRole.SUPERADMIN;
-    const scopedOrgId = isSuper ? null : user.organizationId;
-
-    const where: Prisma.SubjectWhereInput = isSuper
-      ? { deletedAt: null }
-      : { deletedAt: null, organizationId: scopedOrgId };
+    const where: Prisma.SubjectWhereInput = { deletedAt: null };
+    if (!isSuper) {
+      if (!user.organizationId) {
+        throw new ForbiddenException('Missing organization context.');
+      }
+      where.organizationId = user.organizationId;
+    }
 
     const s = makeSubjectSearch(q.search);
     if (s) Object.assign(where, s);
@@ -170,8 +176,10 @@ export class SubjectsService {
       version: ver,
       page,
       limit,
-      search: q.search,
-      includeLevels: q.includeLevels,
+      search: q.search ?? '',
+      ...(q.includeLevels !== undefined
+        ? { includeLevels: q.includeLevels }
+        : {}),
       order: [{ name: 'asc' }, { id: 'asc' }],
       filters: null,
     });
@@ -259,12 +267,17 @@ export class SubjectsService {
         );
     }
 
+    const data: Prisma.SubjectUncheckedUpdateInput = {};
+    if (dto.name !== undefined) {
+      data.name = dto.name.trim();
+    }
+    if (dto.catalogSubjectId !== undefined) {
+      data.catalogSubjectId = dto.catalogSubjectId;
+    }
+
     const updated = await this.prisma.subject.update({
       where: { id },
-      data: {
-        name: dto.name?.trim() ?? undefined,
-        catalogSubjectId: dto.catalogSubjectId ?? undefined,
-      },
+      data,
       select: {
         id: true,
         name: true,

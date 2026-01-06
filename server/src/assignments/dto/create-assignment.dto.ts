@@ -15,13 +15,13 @@ import { Type } from 'class-transformer';
 
 export class CreateAssignmentDto {
   @IsUUID()
-  organizationId: string;
+  organizationId!: string;
 
   @IsUUID()
-  testId: string;
+  testId!: string;
 
   @IsString()
-  targetType: string; // "CLASS" | "STUDENTS"
+  targetType!: string; // "CLASS" | "STUDENTS"
 
   @ValidateIf((o) => o.targetType === 'STUDENTS')
   @IsArray()
@@ -39,26 +39,26 @@ export class CreateAssignmentDto {
 
   @Type(() => Date)
   @IsDate()
-  openAt: Date;
+  openAt!: Date;
 
   @Type(() => Date)
   @IsDate()
-  closeAt: Date;
+  closeAt!: Date;
 
   @IsInt()
   @Min(1)
-  maxAttempts: number;
+  maxAttempts!: number;
 
   @IsOptional()
   @IsInt()
   timeLimitSec?: number;
 
   @IsBoolean()
-  shuffle: boolean;
+  shuffle!: boolean;
 
   @IsString()
-  showExplain: string;
+  showExplain!: string;
 
   @IsUUID()
-  createdById: string;
+  createdById!: string;
 }

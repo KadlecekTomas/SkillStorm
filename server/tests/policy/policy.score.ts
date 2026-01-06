@@ -42,7 +42,10 @@ export interface PolicyScorecard {
   byCategory: Record<PolicyCategory, PolicyBucket>;
 }
 
-const SCORE_SNAPSHOT_FILE = resolve(process.cwd(), 'tests/policy/.policy-score.json');
+const SCORE_SNAPSHOT_FILE = resolve(
+  process.cwd(),
+  'tests/policy/.policy-score.json',
+);
 let snapshotReset = false;
 
 function persistScorecard(score: PolicyScorecard) {
@@ -60,7 +63,10 @@ function resetSnapshotIfNeeded() {
     unlinkSync(SCORE_SNAPSHOT_FILE);
   } catch (error: any) {
     if (error?.code !== 'ENOENT') {
-      console.warn('⚠️ Unable to reset policy score snapshot:', error.message ?? error);
+      console.warn(
+        '⚠️ Unable to reset policy score snapshot:',
+        error.message ?? error,
+      );
     }
   }
 }
@@ -75,7 +81,9 @@ declare global {
 export function ensurePolicyScorecard(): PolicyScorecard {
   resetSnapshotIfNeeded();
   if (!globalThis.POLICY_SCORE) {
-    const buckets = POLICY_CATEGORIES.reduce<Record<PolicyCategory, PolicyBucket>>(
+    const buckets = POLICY_CATEGORIES.reduce<
+      Record<PolicyCategory, PolicyBucket>
+    >(
       (acc, category) => {
         acc[category] = { passed: 0, total: 0, failures: [] };
         return acc;
@@ -122,7 +130,11 @@ export async function policyCheck(
     return true;
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : typeof error === 'string' ? error : 'Unknown failure';
+      error instanceof Error
+        ? error.message
+        : typeof error === 'string'
+          ? error
+          : 'Unknown failure';
     const failure: PolicyFailure = { category, description, details: message };
     score.failures.push(failure);
     bucket.failures.push(failure);

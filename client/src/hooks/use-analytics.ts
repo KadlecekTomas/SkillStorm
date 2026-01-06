@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback } from "react";
-import { apiClient } from "@/utils/api-client";
+import { httpClient } from "@/lib/http/client";
 
 export const useAnalytics = () => {
   const logEvent = useCallback(
@@ -11,7 +11,7 @@ export const useAnalytics = () => {
       metadata?: Record<string, unknown>,
     ) => {
       try {
-        await apiClient.post("/analytics/log", {
+        await httpClient.post("/analytics/log", {
           category,
           action,
           metadata: metadata ?? null,

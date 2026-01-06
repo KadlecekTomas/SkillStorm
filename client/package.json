@@ -10,7 +10,10 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:update": "playwright test --update-snapshots",
-    "test:rbac:client": "vitest run src/tests/rbac && playwright test tests/rbac/rbac-route.spec.ts"
+    "test:rbac:client": "vitest run src/tests/rbac && playwright test tests/rbac/rbac-route.spec.ts",
+    "test:fe-components": "vitest run tests/fe-policy/components",
+    "test:fe-e2e": "playwright test tests/fe-policy/e2e",
+    "test:fe-policy": "node ./tests/fe-policy/reset-policy-score.mjs && npm run test:fe-components && npm run test:fe-e2e && vitest run tests/fe-policy/policy.summary.spec.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
@@ -22,12 +25,14 @@
     "@radix-ui/react-switch": "^1.1.1",
     "@radix-ui/react-tabs": "^1.1.1",
     "@radix-ui/react-tooltip": "^1.1.4",
-    "axios": "^1.7.7",
+    "@types/node": "^20.19.24",
+    "autoprefixer": "^10.4.21",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "framer-motion": "^11.3.27",
     "lucide-react": "^0.451.0",
     "next": "15.3.0",
+    "postcss": "^8.5.6",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-hook-form": "^7.53.0",
@@ -35,25 +40,32 @@
     "recharts": "^2.12.7",
     "tailwind-merge": "^3.3.1",
     "tailwindcss": "^3.4.18",
-    "postcss": "^8.5.6",
-    "autoprefixer": "^10.4.21",
     "tailwindcss-animate": "^1.0.7",
+    "typescript": "^5.9.3",
     "zod": "^3.23.8",
-    "@types/node": "^20.19.24",
-    "zustand": "^4.5.5",
-    "typescript": "^5.9.3"
+    "zustand": "^4.5.5"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@playwright/test": "^1.56.1",
     "@testing-library/jest-dom": "^6.5.0",
     "@testing-library/react": "^16.0.0",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/jsdom": "^27.0.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "cross-env": "^10.1.0",
     "eslint": "^9",
     "eslint-config-next": "15.3.0",
     "jsdom": "^24.0.0",
+    "msw": "^2.12.1",
     "vitest": "^2.0.5",
-    "wait-on": "^9.0.1"
+    "wait-on": "^9.0.1",
+    "whatwg-fetch": "^3.6.20"
+  },
+  "msw": {
+    "workerDirectory": [
+      "public"
+    ]
   }
 }

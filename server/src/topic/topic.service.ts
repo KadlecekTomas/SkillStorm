@@ -1,21 +1,22 @@
 // src/topic/topic.service.ts
 import {
   ConflictException,
+  ForbiddenException,
   Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import type { Cache } from 'cache-manager';
+import { Cache } from 'cache-manager';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 
 import { PrismaService } from '@/prisma/prisma.service';
-import { CreateTopicDto } from './dto/create-topic.dto';
-import { UpdateTopicDto } from './dto/update-topic.dto';
-import { QueryTopicsDto } from './dto/query-topics.dto';
-import { AssignTestsDto } from './dto/assign-tests.dto';
-import { AssignMaterialsDto } from './dto/assign-materials.dto';
+import type { CreateTopicDto } from './dto/create-topic.dto';
+import type { UpdateTopicDto } from './dto/update-topic.dto';
+import type { QueryTopicsDto } from './dto/query-topics.dto';
+import type { AssignTestsDto } from './dto/assign-tests.dto';
+import type { AssignMaterialsDto } from './dto/assign-materials.dto';
 
-import { JwtPayload } from '@/auth/types/jwt-payload';
+import type { JwtPayload } from '@/auth/types/jwt-payload';
 import {
   Prisma,
   AuditEntityType,
@@ -72,17 +73,20 @@ export class TopicsService {
     metadata?: Record<string, any>;
     changedFields?: Record<string, any>;
   }) {
-    await this.prisma.auditLog.create({
-      data: {
-        userId: opts.userId ?? null,
-        organizationId: opts.orgId ?? null,
-        entityType: AuditEntityType.ORGANIZATION,
-        entityId: opts.entityId ?? null,
-        action: opts.action,
-        metadata: opts.metadata ?? null,
-        changedFields: opts.changedFields ?? null,
-      },
-    });
+    const data: Prisma.AuditLogUncheckedCreateInput = {
+      userId: opts.userId ?? null,
+      organizationId: opts.orgId ?? null,
+      entityType: AuditEntityType.ORGANIZATION,
+      entityId: opts.entityId ?? null,
+      action: opts.action,
+    };
+    if (opts.metadata !== undefined) {
+      data.metadata = opts.metadata as Prisma.InputJsonValue;
+    }
+    if (opts.changedFields !== undefined) {
+      data.changedFields = opts.changedFields as Prisma.InputJsonValue;
+    }
+    await this.prisma.auditLog.create({ data });
   }
 
   // jen „bezpečné“ include (žádné assignments atd. – ty se dotáhnou ručně)
@@ -206,9 +210,15 @@ export class TopicsService {
     let where: Prisma.TopicLevelWhereInput = {};
     let orgScope = 'ALL';
     if (user.systemRole !== 'SUPERADMIN') {
-      orgScope = user.organizationId!;
+      const orgId = user.organizationId;
+      if (!orgId) {
+        throw new ForbiddenException(
+          'Uživatel musí mít vybranou organizaci pro práci s tématy.',
+        );
+      }
+      orgScope = orgId;
       where = {
-        subjectLevel: { subject: { organizationId: user.organizationId } },
+        subjectLevel: { subject: { organizationId: orgId } },
       };
     }
     if (q.subjectId) {
@@ -228,7 +238,7 @@ export class TopicsService {
       version,
       page,
       limit,
-      search: q.search,
+      search: q.search ?? '',
       order: [{ subjectLevelId: 'asc' }, { order: 'asc' }, { id: 'asc' }],
       filters: {
         subjectId: q.subjectId ?? null,
@@ -350,16 +360,29 @@ export class TopicsService {
       }
     }
 
+    const data: Prisma.TopicLevelUncheckedUpdateInput = {};
+    if (dto.name !== undefined) {
+      data.name = dto.name.trim() || null;
+    }
+    if (dto.subjectLevelId !== undefined) {
+      data.subjectLevelId = dto.subjectLevelId;
+    }
+    if (dto.catalogTopicId !== undefined) {
+      data.catalogTopicId = dto.catalogTopicId;
+    }
+    if (dto.phase !== undefined) {
+      data.phase = dto.phase;
+    }
+    if (dto.difficulty !== undefined) {
+      data.difficulty = dto.difficulty;
+    }
+    if (dto.order !== undefined) {
+      data.order = dto.order;
+    }
+
     await this.prisma.topicLevel.update({
       where: { id },
-      data: {
-        name: dto.name?.trim() ?? undefined,
-        subjectLevelId: dto.subjectLevelId ?? undefined,
-        catalogTopicId: dto.catalogTopicId ?? undefined,
-        phase: dto.phase ?? undefined,
-        difficulty: dto.difficulty ?? undefined,
-        order: dto.order ?? undefined,
-      },
+      data,
     });
 
     await this.audit({

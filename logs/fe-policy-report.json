@@ -1,0 +1,91 @@
+{
+  "Auth": [
+    {
+      "id": "silent-refresh",
+      "description": "Expired token refreshes without logout.",
+      "passed": true,
+      "timestamp": "2025-11-09T19:31:26.106Z"
+    },
+    {
+      "id": "login-form-validation",
+      "passed": true,
+      "timestamp": "2025-11-09T20:21:29.854Z",
+      "description": "Login form blocks empty submission."
+    },
+    {
+      "id": "login-form-submit",
+      "passed": true,
+      "timestamp": "2025-11-09T20:21:29.871Z",
+      "description": "Login form triggers hook with credentials."
+    },
+    {
+      "id": "redirect-unauthenticated",
+      "passed": true,
+      "timestamp": "2025-11-09T20:38:59.120Z",
+      "description": "Unauthenticated user is redirected to login."
+    },
+    {
+      "id": "teacher-login",
+      "passed": true,
+      "timestamp": "2025-11-09T20:39:06.759Z",
+      "description": "Teacher can access dashboard."
+    },
+    {
+      "id": "logout",
+      "passed": true,
+      "timestamp": "2025-11-09T20:39:14.915Z",
+      "description": "Logout redirects to login."
+    }
+  ],
+  "RBAC": [
+    {
+      "id": "student-no-manage",
+      "description": "Student cannot see create or manage teachers actions.",
+      "passed": true,
+      "timestamp": "2025-11-09T19:32:28.852Z"
+    },
+    {
+      "id": "director-manage-teachers",
+      "description": "Director can manage teachers.",
+      "passed": true,
+      "timestamp": "2025-11-09T19:32:30.534Z"
+    },
+    {
+      "id": "guard-allows-view-results",
+      "passed": true,
+      "timestamp": "2025-11-09T20:21:29.636Z",
+      "description": "Teacher with VIEW_RESULTS can access module."
+    },
+    {
+      "id": "guard-denies-manage-teachers",
+      "passed": true,
+      "timestamp": "2025-11-09T20:21:29.649Z",
+      "description": "Student without MANAGE_TEACHERS is blocked."
+    }
+  ],
+  "Multitenancy": [
+    {
+      "id": "org-b-access",
+      "description": "Teacher of org B can access test resources.",
+      "passed": true,
+      "timestamp": "2025-11-09T19:32:08.030Z"
+    }
+  ],
+  "Content": [
+    {
+      "id": "test-detail-validation",
+      "passed": true,
+      "timestamp": "2025-11-09T20:21:29.652Z",
+      "description": "Test detail enforces validation on policy questions."
+    }
+  ],
+  "Submissions": [],
+  "Audit": [
+    {
+      "id": "audit-login-event",
+      "passed": true,
+      "timestamp": "2025-11-09T20:40:53.451Z",
+      "description": "LOGIN event pushed to audit log."
+    }
+  ]
+}

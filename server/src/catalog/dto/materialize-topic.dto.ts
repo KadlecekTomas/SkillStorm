@@ -5,7 +5,7 @@ import { Difficulty, TopicPhase } from '@prisma/client';
 export class MaterializeTopicDto {
   @ApiProperty({ example: 'subject-level-id-uuid' })
   @IsUUID()
-  subjectLevelId: string;
+  subjectLevelId!: string;
 
   @ApiPropertyOptional({ enum: TopicPhase, example: TopicPhase.INTRO })
   @IsOptional()

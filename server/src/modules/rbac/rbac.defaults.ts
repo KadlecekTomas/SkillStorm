@@ -1,4 +1,5 @@
-import { OrganizationRole, PermissionKey } from '@prisma/client';
+import type { OrganizationRole } from '@prisma/client';
+import { PermissionKey } from '@prisma/client';
 
 type RoleDefaults = Partial<
   Record<OrganizationRole, PermissionKey[] | typeof ALL_PERMISSIONS>

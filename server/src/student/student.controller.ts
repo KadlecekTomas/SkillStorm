@@ -7,7 +7,7 @@ import {
   Patch,
   Param,
   Delete,
-  Request,
+  Req,
   ParseUUIDPipe,
   Query,
   Res,
@@ -22,6 +22,7 @@ import { StudentsService } from './student.service';
 import { QueryStudentsDto } from './dto/query-students.dto';
 import { ExportStudentsDto } from './dto/export-students.dto';
 import { Response } from 'express';
+import { RequestWithUser } from '@/types/request-with-user';
 
 import { InvalidateScopes } from '@/common/cache/invalidate.decorator';
 import { Permission } from '@/modules/rbac/permission.decorator';
@@ -37,7 +38,7 @@ export class StudentsController {
   @Get('export')
   @Permission(SystemRole.SUPERADMIN, OrganizationRole.DIRECTOR)
   async export(
-    @Request() req,
+    @Req() req: RequestWithUser,
     @Query() q: ExportStudentsDto,
     @Res() res: Response,
   ) {
@@ -67,7 +68,7 @@ export class StudentsController {
   @Permission(PermissionKey.MANAGE_STUDENTS)
   @ApiOperation({ summary: 'Create new student' })
   @InvalidateScopes(({ result }) => (result?.orgId ? [result.orgId] : []))
-  create(@Body() dto: CreateStudentDto, @Request() req) {
+  create(@Body() dto: CreateStudentDto, @Req() req: RequestWithUser) {
     return this.service.create(dto, req.user);
   }
 
@@ -77,7 +78,7 @@ export class StudentsController {
   @Permission(SystemRole.SUPERADMIN, OrganizationRole.DIRECTOR)
   @ApiOperation({ summary: 'List students (pagination + filters)' })
   @CacheTTL(0)
-  findAll(@Request() req, @Query() q: QueryStudentsDto) {
+  findAll(@Req() req: RequestWithUser, @Query() q: QueryStudentsDto) {
     return this.service.findAll(req.user, q);
   }
 
@@ -86,7 +87,10 @@ export class StudentsController {
   @Permission(PermissionKey.MANAGE_STUDENTS, OrganizationRole.STUDENT)
   @ApiOperation({ summary: 'Get student by ID' })
   @CacheTTL(0)
-  findOne(@Param('id', new ParseUUIDPipe()) id: string, @Request() req) {
+  findOne(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() req: RequestWithUser,
+  ) {
     return this.service.findOne(id, req.user);
   }
 
@@ -98,7 +102,7 @@ export class StudentsController {
   update(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() dto: UpdateStudentDto,
-    @Request() req,
+    @Req() req: RequestWithUser,
   ) {
     return this.service.update(id, dto, req.user);
   }
@@ -108,7 +112,10 @@ export class StudentsController {
   @Permission(SystemRole.SUPERADMIN, OrganizationRole.DIRECTOR)
   @ApiOperation({ summary: 'Soft delete student by ID' })
   @InvalidateScopes(({ result }) => (result?.orgId ? [result.orgId] : []))
-  remove(@Param('id', new ParseUUIDPipe()) id: string, @Request() req) {
+  remove(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() req: RequestWithUser,
+  ) {
     return this.service.remove(id, req.user);
   }
 }

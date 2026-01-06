@@ -1,6 +1,6 @@
-import { INestApplication } from '@nestjs/common';
+import type { INestApplication } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { readFileSync } from 'fs';
+import { readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { buildPermissionMarkdownTable } from './modules/rbac/permission-map';
 
@@ -34,6 +34,11 @@ export function setupSwagger(app: INestApplication) {
       },
       'bearer',
     )
+    .addCookieAuth('ss_rt', {
+      type: 'apiKey',
+      in: 'cookie',
+      description: 'Refresh token cookie',
+    })
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
@@ -42,4 +47,9 @@ export function setupSwagger(app: INestApplication) {
       persistAuthorization: true,
     },
   });
+
+  if (process.env.EXPORT_OPENAPI === '1') {
+    const target = join(process.cwd(), 'openapi.json');
+    writeFileSync(target, JSON.stringify(document, null, 2), 'utf8');
+  }
 }

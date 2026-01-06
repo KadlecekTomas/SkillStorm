@@ -10,6 +10,7 @@ import {
   Req,
   ParseUUIDPipe,
 } from '@nestjs/common';
+import { RequestWithUser } from '@/types/request-with-user';
 import {
   ApiBearerAuth,
   ApiTags,
@@ -38,7 +39,7 @@ export class MembershipsController {
   })
   @Permission(SystemRole.SUPERADMIN, OrganizationRole.DIRECTOR)
   @InvalidateScopes(({ req }) => [req.body?.organizationId].filter(Boolean))
-  async create(@Body() dto: CreateMembershipDto, @Req() req) {
+  async create(@Body() dto: CreateMembershipDto, @Req() req: RequestWithUser) {
     // org‑scope kontrola probíhá v service (effectiveOrgId)
     return this.service.create(dto, req.user);
   }
@@ -56,7 +57,7 @@ export class MembershipsController {
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @Permission(SystemRole.SUPERADMIN, OrganizationRole.DIRECTOR)
   @CacheTTL(0)
-  async findAll(@Query() q: QueryMembershipsDto, @Req() req) {
+  async findAll(@Query() q: QueryMembershipsDto, @Req() req: RequestWithUser) {
     return this.service.findAll(req.user, q);
   }
 
@@ -70,7 +71,7 @@ export class MembershipsController {
   async update(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() dto: UpdateMembershipDto,
-    @Req() req,
+    @Req() req: RequestWithUser,
   ) {
     return this.service.update(id, dto, req.user);
   }
@@ -84,7 +85,10 @@ export class MembershipsController {
   @InvalidateScopes(({ result }) =>
     result?.organizationId ? [result.organizationId] : [],
   )
-  async remove(@Param('id', new ParseUUIDPipe()) id: string, @Req() req) {
+  async remove(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() req: RequestWithUser,
+  ) {
     return this.service.remove(id, req.user);
   }
 }

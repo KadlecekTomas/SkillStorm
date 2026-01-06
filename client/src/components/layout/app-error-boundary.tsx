@@ -10,7 +10,7 @@ type AppErrorBoundaryProps = {
 
 type AppErrorBoundaryState = {
   hasError: boolean;
-  error?: Error;
+  error: Error | null;
 };
 
 export class AppErrorBoundary extends React.Component<
@@ -19,6 +19,7 @@ export class AppErrorBoundary extends React.Component<
 > {
   state: AppErrorBoundaryState = {
     hasError: false,
+    error: null,
   };
 
   static getDerivedStateFromError(error: Error): AppErrorBoundaryState {
@@ -30,7 +31,7 @@ export class AppErrorBoundary extends React.Component<
   }
 
   handleReset = () => {
-    this.setState({ hasError: false, error: undefined });
+    this.setState({ hasError: false, error: null });
     if (typeof window !== "undefined") {
       window.location.reload();
     }

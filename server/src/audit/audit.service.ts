@@ -1,9 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import {
-  AuditEntityType,
-  Prisma,
-  PrismaClientKnownRequestError,
-} from '@prisma/client';
+import type { AuditEntityType } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
 
 export interface AuditEventInput {
@@ -12,7 +9,7 @@ export interface AuditEventInput {
   entityId?: string | null;
   userId?: string | null;
   organizationId?: string | null;
-  metadata?: Record<string, unknown> | null;
+  metadata?: Prisma.InputJsonValue;
   ipAddress?: string | null;
   userAgent?: string | null;
 }
@@ -25,21 +22,22 @@ export class AuditService {
 
   async log(event: AuditEventInput): Promise<void> {
     try {
-      await this.prisma.auditLog.create({
-        data: {
-          action: event.action,
-          entityType: event.entityType,
-          entityId: event.entityId ?? null,
-          userId: event.userId ?? null,
-          organizationId: event.organizationId ?? null,
-          metadata: event.metadata ?? null,
-          ipAddress: event.ipAddress ?? null,
-          userAgent: event.userAgent ?? null,
-        },
-      });
+      const data: Prisma.AuditLogUncheckedCreateInput = {
+        action: event.action,
+        entityType: event.entityType,
+        entityId: event.entityId ?? null,
+        userId: event.userId ?? null,
+        organizationId: event.organizationId ?? null,
+        ipAddress: event.ipAddress ?? null,
+        userAgent: event.userAgent ?? null,
+      };
+      if (event.metadata !== undefined) {
+        data.metadata = event.metadata;
+      }
+      await this.prisma.auditLog.create({ data });
     } catch (error) {
       if (
-        error instanceof PrismaClientKnownRequestError &&
+        error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === 'P2003'
       ) {
         this.logger.warn(

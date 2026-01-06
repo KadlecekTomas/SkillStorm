@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { CacheModule, CacheModuleOptions } from '@nestjs/cache-manager';
+import type { CacheModuleOptions } from '@nestjs/cache-manager';
+import { CacheModule } from '@nestjs/cache-manager';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 
@@ -33,9 +34,14 @@ import { MetricsModule } from './metrics/metrics.module';
 import { GamificationModule } from './gamification/gamification.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { AuditModule } from './audit/audit.module';
+import { ResponseEnvelopeInterceptor } from './common/http/response-envelope.interceptor';
+import { ScheduleModule } from '@nestjs/schedule';
+import { PrivacyModule } from './privacy/privacy.module';
+import { EnrollmentsModule } from './enrollments/enrollments.module';
 
 @Module({
   imports: [
+    ScheduleModule.forRoot(),
     ConfigModule.forRoot({ isGlobal: true }),
     CacheModule.registerAsync<CacheModuleOptions>({
       isGlobal: true,
@@ -56,8 +62,8 @@ import { AuditModule } from './audit/audit.module';
     }),
     ThrottlerModule.forRoot([
       {
-        ttl: 60,
-        limit: 20,
+        ttl: process.env.DISABLE_THROTTLE === '1' ? 1 : 60,
+        limit: process.env.DISABLE_THROTTLE === '1' ? 10000 : 20,
       },
     ]),
     PrismaModule,
@@ -82,8 +88,11 @@ import { AuditModule } from './audit/audit.module';
     GamificationModule,
     AnalyticsModule,
     AuditModule,
+    PrivacyModule,
+    EnrollmentsModule,
   ],
   providers: [
+    { provide: APP_INTERCEPTOR, useClass: ResponseEnvelopeInterceptor },
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RbacGuard },
@@ -91,5 +100,6 @@ import { AuditModule } from './audit/audit.module';
     { provide: APP_INTERCEPTOR, useClass: UserScopedCacheInterceptor },
     { provide: APP_INTERCEPTOR, useClass: InvalidateInterceptor },
   ],
+  controllers: [],
 })
 export class AppModule {}

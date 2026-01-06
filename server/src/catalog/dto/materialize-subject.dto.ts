@@ -6,7 +6,7 @@ import { SchoolGrade } from '@prisma/client';
 export class MaterializeSubjectDto {
   @ApiProperty({ example: 'organization-id-uuid' })
   @IsUUID()
-  organizationId: string;
+  organizationId!: string;
 
   @ApiPropertyOptional({ example: 'Matematika pro ZŠ' })
   @IsOptional()

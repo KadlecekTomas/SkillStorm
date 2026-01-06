@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { withPermission } from "@/components/access/with-permission";
 import { PermissionKey } from "@/types";
 import { Card } from "@/components/ui/card";
-import { apiClient } from "@/utils/api-client";
+import { httpClient } from "@/lib/http/client";
+import { withGuard } from "@/lib/guard/withGuard";
 
 type AnalyticsItem = {
   category: string;
@@ -16,9 +16,9 @@ function AnalyticsPage() {
   const [items, setItems] = useState<AnalyticsItem[]>([]);
 
   useEffect(() => {
-    apiClient
+    httpClient
       .get<{ items: AnalyticsItem[] }>("/analytics/summary")
-      .then(({ data }) => setItems(data.items ?? []))
+      .then((data) => setItems(data.items ?? []))
       .catch(() => setItems([]));
   }, []);
 
@@ -61,4 +61,6 @@ function AnalyticsPage() {
   );
 }
 
-export default withPermission(PermissionKey.VIEW_ANALYTICS)(AnalyticsPage);
+export default withGuard({
+  requirePerms: [PermissionKey.VIEW_ANALYTICS],
+})(AnalyticsPage);

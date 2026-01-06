@@ -1,14 +1,15 @@
-import { Prisma } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
 
 export type WithId<T extends { id: string }> = T;
 
-export type SelectOf<
-  M extends keyof Prisma.TypeMap['model'],
-> = Prisma.TypeMap['model'][M]['operations']['findUnique']['args']['select'];
+type FindUniqueArgs<M extends keyof Prisma.TypeMap['model']> =
+  Prisma.TypeMap['model'][M]['operations']['findUnique']['args'];
 
-export type IncludeOf<
-  M extends keyof Prisma.TypeMap['model'],
-> = Prisma.TypeMap['model'][M]['operations']['findUnique']['args']['include'];
+export type SelectOf<M extends keyof Prisma.TypeMap['model']> =
+  FindUniqueArgs<M> extends { select: infer S } ? S : never;
+
+export type IncludeOf<M extends keyof Prisma.TypeMap['model']> =
+  FindUniqueArgs<M> extends { include: infer I } ? I : never;
 
 export type Result<
   M extends keyof Prisma.TypeMap['model'],

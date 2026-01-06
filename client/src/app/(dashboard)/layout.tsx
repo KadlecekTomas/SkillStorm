@@ -2,11 +2,16 @@
 
 import type { ReactNode } from "react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
+import { GuardBoundary } from "@/lib/guard/GuardBoundary";
 
 export default function DashboardGroupLayout({
   children,
 }: {
   children: ReactNode;
 }) {
-  return <DashboardLayout>{children}</DashboardLayout>;
+  return (
+    <GuardBoundary>
+      <DashboardLayout>{children}</DashboardLayout>
+    </GuardBoundary>
+  );
 }

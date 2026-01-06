@@ -17,7 +17,7 @@ export class AssignMaterialsDto {
   @ArrayNotEmpty()
   @IsUUID('4', { each: true })
   @Type(() => String)
-  materialIds: string[];
+  materialIds!: string[];
 
   @ApiPropertyOptional({
     description: 'true = nahradí existující přiřazení',

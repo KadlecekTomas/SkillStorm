@@ -1,12 +1,11 @@
-import { Injectable, OnModuleDestroy, Logger } from '@nestjs/common';
-import { OrganizationRole, PermissionKey, SystemRole } from '@prisma/client';
+import type { OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
+import type { OrganizationRole, PermissionKey } from '@prisma/client';
+import { SystemRole } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
-import { CacheEntry } from './rbac.types';
-import {
-  RBAC_INVALIDATE_EVENT,
-  RbacInvalidatePayload,
-  rbacEvents,
-} from './rbac.events';
+import type { CacheEntry } from './rbac.types';
+import type { RbacInvalidatePayload } from './rbac.events';
+import { RBAC_INVALIDATE_EVENT, rbacEvents } from './rbac.events';
 import { isPermissionAllowedByDefault } from './rbac.defaults';
 
 const CACHE_TTL_MS = 60_000;
@@ -56,12 +55,14 @@ export class RbacService implements OnModuleDestroy {
       return true;
     }
 
-    const orgFilter = organizationId ?? undefined;
-
     const userPermission = await this.prisma.userPermission.findFirst({
       where: {
         userId,
-        organizationId: orgFilter,
+        ...(organizationId === null
+          ? { organizationId: null }
+          : organizationId
+            ? { organizationId }
+            : {}),
         permission: { key: permissionKey },
         allowed: true,
       },
@@ -76,6 +77,7 @@ export class RbacService implements OnModuleDestroy {
       where: {
         userId,
         ...(organizationId ? { organizationId } : {}),
+        deletedAt: null,
       },
       select: { role: true, organizationId: true },
     });
@@ -176,13 +178,14 @@ export class RbacService implements OnModuleDestroy {
   private setCache(
     cacheKey: string,
     userId: string,
-    organizationId: string | null,
+    organizationId: string | null | undefined,
     value: boolean,
   ) {
     const expires = Date.now() + CACHE_TTL_MS;
     this.cache.set(cacheKey, { value, expires, cacheKey });
     this.indexKey(this.userIndex, userId, cacheKey);
-    this.indexKey(this.orgIndex, organizationId ?? 'global', cacheKey);
+    const orgKey = organizationId ?? 'global';
+    this.indexKey(this.orgIndex, orgKey, cacheKey);
   }
 
   private deleteKey(cacheKey: string) {
@@ -191,7 +194,11 @@ export class RbacService implements OnModuleDestroy {
     this.removeFromIndex(cacheKey);
   }
 
-  private indexKey(index: Map<string, Set<string>>, key: string, cacheKey: string) {
+  private indexKey(
+    index: Map<string, Set<string>>,
+    key: string,
+    cacheKey: string,
+  ) {
     if (!index.has(key)) {
       index.set(key, new Set());
     }
@@ -214,7 +221,7 @@ export class RbacService implements OnModuleDestroy {
   }
 
   private parseCacheKey(cacheKey: string) {
-    const [userId, org, ...rest] = cacheKey.split(':');
+    const [userId = '', org = 'global', ...rest] = cacheKey.split(':');
     return {
       userId,
       organizationId: org === 'global' ? null : org,

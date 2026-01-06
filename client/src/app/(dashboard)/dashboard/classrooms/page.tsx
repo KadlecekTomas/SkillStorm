@@ -7,8 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { DataTable, type Column } from "@/components/ui/table";
 import type { Classroom } from "@/types";
-import { apiClient } from "@/utils/api-client";
-import { classroomSamples } from "@/utils/sample-data";
+import { fetchWithAuth } from "@/lib/http/client";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 const columns: Column<Classroom>[] = [
@@ -39,7 +38,7 @@ const columns: Column<Classroom>[] = [
 ];
 
 export default function ClassroomsPage() {
-  const [classrooms, setClassrooms] = useState<Classroom[]>(classroomSamples);
+  const [classrooms, setClassrooms] = useState<Classroom[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [newName, setNewName] = useState("");
@@ -47,8 +46,8 @@ export default function ClassroomsPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const { data } = await apiClient.get<Classroom[]>("/classrooms");
-        if (data?.length) setClassrooms(data);
+        const data = await fetchWithAuth<Classroom[]>("GET", "/classrooms");
+        setClassrooms(data ?? []);
       } finally {
         setLoading(false);
       }

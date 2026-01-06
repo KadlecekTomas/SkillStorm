@@ -5,28 +5,27 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import type { Prisma, SchoolGrade } from '@prisma/client';
 import {
-  Prisma,
-  SchoolGrade,
   SystemRole,
   TopicPhase,
   Difficulty,
   AuditEntityType,
 } from '@prisma/client';
-import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
+import type { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { PrismaService } from '@/prisma/prisma.service';
-import { QueryCatalogDto } from './dto/query-catalog.dto';
-import { CreateCatalogSubjectDto } from './dto/create-catalog-subject.dto';
-import { UpdateCatalogSubjectDto } from './dto/update-catalog-subject.dto';
-import { CreateCatalogTopicDto } from './dto/create-catalog-topic.dto';
-import { UpdateCatalogTopicDto } from './dto/update-catalog-topic.dto';
-import { MaterializeSubjectDto } from './dto/materialize-subject.dto';
-import { MaterializeTopicDto } from './dto/materialize-topic.dto';
-import { MaterializeTopicsBulkDto } from './dto/materialize-topics-bulk.dto';
-import { JwtPayload } from '@/auth/types/jwt-payload';
+import type { QueryCatalogDto } from './dto/query-catalog.dto';
+import type { CreateCatalogSubjectDto } from './dto/create-catalog-subject.dto';
+import type { UpdateCatalogSubjectDto } from './dto/update-catalog-subject.dto';
+import type { CreateCatalogTopicDto } from './dto/create-catalog-topic.dto';
+import type { UpdateCatalogTopicDto } from './dto/update-catalog-topic.dto';
+import type { MaterializeSubjectDto } from './dto/materialize-subject.dto';
+import type { MaterializeTopicDto } from './dto/materialize-topic.dto';
+import type { MaterializeTopicsBulkDto } from './dto/materialize-topics-bulk.dto';
+import type { JwtPayload } from '@/auth/types/jwt-payload';
 
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import type { Cache } from 'cache-manager';
+import { Cache } from 'cache-manager';
 import { assertSameOrganization } from '@/shared/access.utils';
 import {
   bumpOrgVersion,
@@ -70,20 +69,23 @@ export class CatalogService {
     orgId?: string | null;
     action: string;
     entityId?: string | null;
-    metadata?: Record<string, any>;
-    changedFields?: Record<string, any>;
+    metadata?: Prisma.InputJsonValue;
+    changedFields?: Prisma.InputJsonValue;
   }) {
-    await this.prisma.auditLog.create({
-      data: {
-        userId: opts.userId ?? null,
-        organizationId: opts.orgId ?? null,
-        entityType: AuditEntityType.ORGANIZATION,
-        entityId: opts.entityId ?? null,
-        action: opts.action,
-        metadata: opts.metadata ?? null,
-        changedFields: opts.changedFields ?? null,
-      },
-    });
+    const data: Prisma.AuditLogUncheckedCreateInput = {
+      userId: opts.userId ?? null,
+      organizationId: opts.orgId ?? null,
+      entityType: AuditEntityType.ORGANIZATION,
+      entityId: opts.entityId ?? null,
+      action: opts.action,
+    };
+    if (opts.metadata !== undefined) {
+      data.metadata = opts.metadata;
+    }
+    if (opts.changedFields !== undefined) {
+      data.changedFields = opts.changedFields;
+    }
+    await this.prisma.auditLog.create({ data });
   }
 
   // ---------------- READ (catalog) ----------------
@@ -299,8 +301,8 @@ export class CatalogService {
     const updated = await this.prisma.catalogSubject.update({
       where: { id },
       data: {
-        code: dto.code?.trim(),
-        name: dto.name?.trim(),
+        ...(dto.code !== undefined ? { code: dto.code.trim() } : {}),
+        ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
       },
       select: { id: true, code: true, name: true },
     });
@@ -360,8 +362,8 @@ export class CatalogService {
       const updated = await this.prisma.catalogTopic.update({
         where: { id },
         data: {
-          subjectId: dto.subjectId ?? undefined,
-          name: dto.name?.trim(),
+          ...(dto.subjectId !== undefined ? { subjectId: dto.subjectId } : {}),
+          ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
         },
         select: { id: true, subjectId: true, name: true },
       });
@@ -574,8 +576,8 @@ export class CatalogService {
 
     // vytvoř postupně (kvůli unique constraintu)
     const createdIds: string[] = [];
-    for (let i = 0; i < topics.length; i++) {
-      const catalogTopicId = topics[i].id;
+    for (const [i, topic] of topics.entries()) {
+      const catalogTopicId = topic.id;
       try {
         const created = await this.prisma.topicLevel.create({
           data: {

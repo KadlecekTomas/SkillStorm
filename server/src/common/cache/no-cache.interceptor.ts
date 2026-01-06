@@ -1,6 +1,7 @@
 // src/common/cache/no-cache.interceptor.ts
 import { CacheInterceptor } from '@nestjs/cache-manager';
-import { ExecutionContext, Injectable } from '@nestjs/common';
+import type { ExecutionContext } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 
 @Injectable()
 export class NoCacheInterceptor extends CacheInterceptor {

@@ -7,9 +7,10 @@ import {
   Patch,
   Post,
   Query,
-  Request,
+  Req,
   ParseUUIDPipe,
 } from '@nestjs/common';
+import { RequestWithUser } from '@/types/request-with-user';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -82,7 +83,7 @@ export class CatalogController {
   materializeSubject(
     @Param('id', new ParseUUIDPipe()) catalogSubjectId: string,
     @Body() dto: MaterializeSubjectDto,
-    @Request() req,
+    @Req() req: RequestWithUser,
   ) {
     return this.service.materializeSubject(catalogSubjectId, dto, req.user);
   }
@@ -93,7 +94,7 @@ export class CatalogController {
   materializeTopic(
     @Param('id', new ParseUUIDPipe()) catalogTopicId: string,
     @Body() dto: MaterializeTopicDto,
-    @Request() req,
+    @Req() req: RequestWithUser,
   ) {
     return this.service.materializeTopic(catalogTopicId, dto, req.user);
   }
@@ -106,7 +107,7 @@ export class CatalogController {
   materializeTopicsBulk(
     @Param('id', new ParseUUIDPipe()) catalogSubjectId: string,
     @Body() dto: MaterializeTopicsBulkDto,
-    @Request() req,
+    @Req() req: RequestWithUser,
   ) {
     return this.service.materializeTopicsBulk(catalogSubjectId, dto, req.user);
   }

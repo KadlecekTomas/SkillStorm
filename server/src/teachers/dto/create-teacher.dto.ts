@@ -4,9 +4,9 @@ import { IsUUID } from 'class-validator';
 export class CreateTeacherDto {
   @ApiProperty({ example: 'membership-uuid' })
   @IsUUID()
-  membershipId: string;
+  membershipId!: string;
 
   @ApiProperty({ example: 'organization-uuid' })
   @IsUUID()
-  organizationId: string;
+  organizationId!: string;
 }

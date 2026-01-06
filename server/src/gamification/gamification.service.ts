@@ -4,10 +4,11 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
-import { AddXpEventDto } from './dto/add-xp-event.dto';
+import type { AddXpEventDto } from './dto/add-xp-event.dto';
 import { AchievementsService } from './achievements.service';
-import { JwtPayload } from '@/auth/types/jwt-payload';
-import { OrganizationRole, Prisma, XpEventType } from '@prisma/client';
+import type { JwtPayload } from '@/auth/types/jwt-payload';
+import type { Prisma, XpEventType } from '@prisma/client';
+import { OrganizationRole } from '@prisma/client';
 import { emitXpAwarded } from './events/xp.events';
 
 const XP_ALLOWED_ROLES = new Set<OrganizationRole>([
@@ -24,10 +25,7 @@ export class GamificationService {
   ) {}
 
   async addXpEvent(dto: AddXpEventDto, actor: JwtPayload) {
-    const membership = await this.resolveMembership(
-      dto.membershipId,
-      actor,
-    );
+    const membership = await this.resolveMembership(dto.membershipId, actor);
     const mergedMetadata =
       dto.metadata || dto.description
         ? {
@@ -71,15 +69,16 @@ export class GamificationService {
 
       const totalXp = membership.xp + amount;
       const resolvedLevel = await this.resolveLevelWithClient(tx, totalXp);
-      await tx.xpEvent.create({
-        data: {
-          membershipId,
-          type,
-          value: amount,
-          description: metadata?.description ?? null,
-          metadata: metadata ?? null,
-        },
-      });
+      const xpEventData: Prisma.XpEventUncheckedCreateInput = {
+        membershipId,
+        type,
+        value: amount,
+        description: metadata?.description ?? null,
+      };
+      if (metadata !== undefined) {
+        xpEventData.metadata = metadata as Prisma.InputJsonValue;
+      }
+      await tx.xpEvent.create({ data: xpEventData });
       const updatedMembership = await tx.membership.update({
         where: { id: membershipId },
         data: {
@@ -107,7 +106,7 @@ export class GamificationService {
       organizationId: result.organizationId,
       type,
       amount,
-      metadata,
+      metadata: metadata ?? null,
     });
 
     return result;

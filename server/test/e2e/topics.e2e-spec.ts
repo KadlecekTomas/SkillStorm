@@ -7,12 +7,12 @@ import { PrismaService } from '@/prisma/prisma.service';
 import {
   $Enums,
   OrganizationRole,
-  OrganizationType,
   ContentType,
   TopicPhase,
   Difficulty,
+  SystemRole,
 } from '@prisma/client';
-import { login, register } from 'test/helpers';
+import { createSystemUser, setupOrgContext } from 'test/helpers';
 
 async function makeTempTopic(
   prisma: PrismaService,
@@ -55,6 +55,11 @@ describe('Topics (e2e)', () => {
     token: string;
     login: { login: string; password: string };
   };
+  let directorB: {
+    id: string;
+    token: string;
+    login: { login: string; password: string };
+  };
   let teacherA1: {
     id: string;
     token: string;
@@ -74,6 +79,9 @@ describe('Topics (e2e)', () => {
   // orgs
   let orgA: { id: string };
   let orgB: { id: string };
+
+  let ctxA: Awaited<ReturnType<typeof setupOrgContext>>;
+  let ctxB: Awaited<ReturnType<typeof setupOrgContext>>;
 
   // memberships (kvůli createdById u materiálů/testů)
   let mbDirectorA!: { id: string };
@@ -117,121 +125,90 @@ describe('Topics (e2e)', () => {
     prisma = app.get(PrismaService);
     await prisma.$connect();
 
-    // users
-    const rSuper = await register(app, 'topics_super');
-    await prisma.user.update({
-      where: { id: rSuper.user.id },
-      data: { systemRole: $Enums.SystemRole.SUPERADMIN },
+    ctxA = await setupOrgContext(app, prisma, {
+      role: 'DIRECTOR',
+      seed: 'topicsA',
     });
-    superUser = {
-      id: rSuper.user.id,
-      token: await login(app, rSuper.login),
-      login: rSuper.login,
-    };
+    ctxB = await setupOrgContext(app, prisma, {
+      role: 'DIRECTOR',
+      seed: 'topicsB',
+    });
 
-    const rDirA = await register(app, 'topics_dirA');
+    orgA = { id: ctxA.organization.id };
+    orgB = { id: ctxB.organization.id };
+
     directorA = {
-      id: rDirA.user.id,
-      token: rDirA.accessToken,
-      login: rDirA.login,
+      id: ctxA.owner.user.id,
+      token: ctxA.owner.accessToken,
+      login: ctxA.owner.login,
+    };
+    directorB = {
+      id: ctxB.owner.user.id,
+      token: ctxB.owner.accessToken,
+      login: ctxB.owner.login,
     };
 
-    const rTeachA1 = await register(app, 'topics_teacherA1');
+    const superUserAuth = await createSystemUser(
+      app,
+      prisma,
+      SystemRole.SUPERADMIN,
+      'topics_super',
+    );
+    await ctxA.addMembershipForUser(
+      superUserAuth.user.id,
+      OrganizationRole.DIRECTOR,
+    );
+    await ctxB.addMembershipForUser(
+      superUserAuth.user.id,
+      OrganizationRole.DIRECTOR,
+    );
+    superUser = {
+      id: superUserAuth.user.id,
+      token: superUserAuth.accessToken,
+      login: superUserAuth.login,
+    };
+
+    const tA1 = await ctxA.addMember(
+      OrganizationRole.TEACHER,
+      'topics_teacherA1',
+    );
     teacherA1 = {
-      id: rTeachA1.user.id,
-      token: rTeachA1.accessToken,
-      login: rTeachA1.login,
+      id: tA1.user.id,
+      token: tA1.accessToken,
+      login: tA1.login,
     };
-
-    const rTeachB1 = await register(app, 'topics_teacherB1');
-    teacherB1 = {
-      id: rTeachB1.user.id,
-      token: rTeachB1.accessToken,
-      login: rTeachB1.login,
-    };
-
-    const rStud = await register(app, 'topics_student1');
-    studentUser = {
-      id: rStud.user.id,
-      token: rStud.accessToken,
-      login: rStud.login,
-    };
-
-    // orgs + memberships
-    orgA = await prisma.organization.create({
-      data: {
-        name: 'Topics Org A',
-        type: OrganizationType.SCHOOL,
-        memberships: {
-          create: { userId: directorA.id, role: OrganizationRole.DIRECTOR },
-        },
-      },
-      select: { id: true },
-    });
-    // re-login director pro include org role
-    directorA.token = await login(app, directorA.login);
-
-    orgB = await prisma.organization.create({
-      data: {
-        name: 'Topics Org B',
-        type: OrganizationType.SCHOOL,
-        memberships: {
-          create: { userId: teacherB1.id, role: OrganizationRole.TEACHER },
-        },
-      },
-      select: { id: true },
-    });
-
-    // teacherA1 membership v orgA
-    mbTeacherA1 = await prisma.membership.create({
-      data: {
-        organizationId: orgA.id,
-        userId: teacherA1.id,
-        role: OrganizationRole.TEACHER,
-      },
-      select: { id: true },
-    });
+    mbTeacherA1 = tA1.membership;
     await prisma.teacher.create({
       data: { membershipId: mbTeacherA1.id, organizationId: orgA.id },
       select: { id: true },
     });
 
-    // ⬅️ DŮLEŽITÉ: refresh tokenu po přidání role do orgA
-    teacherA1.token = await login(app, teacherA1.login);
-
-    // teacherB1 membership v orgB
-    mbTeacherB1 =
-      (await prisma.membership.findFirst({
-        where: {
-          organizationId: orgB.id,
-          userId: teacherB1.id,
-          role: OrganizationRole.TEACHER,
-        },
-        select: { id: true },
-      })) ??
-      (await prisma.membership.create({
-        data: {
-          organizationId: orgB.id,
-          userId: teacherB1.id,
-          role: OrganizationRole.TEACHER,
-        },
-        select: { id: true },
-      }));
+    const tB1 = await ctxB.addMember(
+      OrganizationRole.TEACHER,
+      'topics_teacherB1',
+    );
+    teacherB1 = {
+      id: tB1.user.id,
+      token: tB1.accessToken,
+      login: tB1.login,
+    };
+    mbTeacherB1 = tB1.membership;
     await prisma.teacher.create({
       data: { membershipId: mbTeacherB1.id, organizationId: orgB.id },
       select: { id: true },
     });
-    teacherB1.token = await login(app, teacherB1.login);
 
-    // directorA membership id (vzniklo při orgA create)
-    mbDirectorA = await prisma.membership.findFirstOrThrow({
-      where: {
-        organizationId: orgA.id,
-        userId: directorA.id,
-        role: OrganizationRole.DIRECTOR,
-      },
-      select: { id: true },
-    });
+    const stud = await ctxA.addMember(
+      OrganizationRole.STUDENT,
+      'topics_student1',
+    );
+    studentUser = {
+      id: stud.user.id,
+      token: stud.accessToken,
+      login: stud.login,
+    };
+
+    mbDirectorA = ctxA.owner.membership;
 
     // catalog subjects + topics
     catSubMath = await prisma.catalogSubject.create({
@@ -397,6 +374,7 @@ describe('Topics (e2e)', () => {
             in: [
               superUser.id,
               directorA.id,
+              directorB.id,
               teacherA1.id,
               teacherB1.id,
               studentUser.id,
@@ -412,6 +390,7 @@ describe('Topics (e2e)', () => {
             in: [
               superUser.id,
               directorA.id,
+              directorB.id,
               teacherA1.id,
               teacherB1.id,
               studentUser.id,
@@ -469,10 +448,10 @@ describe('Topics (e2e)', () => {
     await prisma.topicLevel.delete({ where: { id: res.body.id } });
   });
 
-  it('POST /topics → TEACHER v orgA vytvoří [201]', async () => {
+  it('POST /topics → DIRECTOR v orgA vytvoří [201]', async () => {
     const res = await request(app.getHttpServer())
       .post('/topics')
-      .set('Authorization', `Bearer ${teacherA1.token}`)
+      .set('Authorization', `Bearer ${directorA.token}`)
       .send({
         subjectLevelId: levelA_math_g5.id,
         catalogTopicId: catTopicGeometry.id,
@@ -612,13 +591,13 @@ describe('Topics (e2e)', () => {
     expect(ids3).toContain(topicSeed_intro.id);
   });
 
-  it('GET /topics → 401 bez tokenu, TEACHER jiné org → 200 (scoped, pravděpodobně prázdno)', async () => {
+  it('GET /topics → 401 bez tokenu, DIRECTOR jiné org → 200 (scoped, pravděpodobně prázdno)', async () => {
     await request(app.getHttpServer()).get('/topics').expect(401);
 
     const res = await request(app.getHttpServer())
       .get('/topics')
-      .set('Authorization', `Bearer ${teacherB1.token}`)
-      .expect(200); // teacher vidí jen svou org (orgB) → v našem seed prázdno
+      .set('Authorization', `Bearer ${directorB.token}`)
+      .expect(200); // director vidí jen svou org (orgB) → v našem seed prázdno
     expect(Array.isArray(res.body.data)).toBe(true);
   });
 
@@ -639,10 +618,10 @@ describe('Topics (e2e)', () => {
       .expect(200);
   });
 
-  it('GET /topics/:id → TEACHER stejné org [200]', async () => {
+  it('GET /topics/:id → DIRECTOR stejné org [200]', async () => {
     await request(app.getHttpServer())
       .get(`/topics/${topicSeed_intro.id}`)
-      .set('Authorization', `Bearer ${teacherA1.token}`)
+      .set('Authorization', `Bearer ${directorA.token}`)
       .expect(200);
   });
 
@@ -732,7 +711,7 @@ describe('Topics (e2e)', () => {
     await prisma.catalogTopic.delete({ where: { id: cat.id } });
   });
 
-  it('PATCH /topics/:id → TEACHER v orgA může [200]', async () => {
+  it('PATCH /topics/:id → DIRECTOR v orgA může [200]', async () => {
     const { topic: tmp, cat } = await makeTempTopic(prisma, {
       levelId: levelA_math_g5.id,
       catSubjectId: catSubMath.id,
@@ -741,7 +720,7 @@ describe('Topics (e2e)', () => {
 
     await request(app.getHttpServer())
       .patch(`/topics/${tmp.id}`)
-      .set('Authorization', `Bearer ${teacherA1.token}`)
+      .set('Authorization', `Bearer ${directorA.token}`)
       .send({ order: 5 })
       .expect(200);
 
@@ -1274,7 +1253,7 @@ describe('Topics (e2e)', () => {
   // ---------------------------
   // EXTRA: RBAC/UUID edge cases pro ASSIGN endpoints
   // ---------------------------
-  it('POST /topics/:id/materials → TEACHER stejné org může přiřadit [201]', async () => {
+  it('POST /topics/:id/materials → DIRECTOR stejné org může přiřadit [201]', async () => {
     const { topic, cat } = await makeTempTopic(prisma, {
       levelId: levelA_math_g5.id,
       catSubjectId: catSubMath.id,
@@ -1283,7 +1262,7 @@ describe('Topics (e2e)', () => {
 
     const res = await request(app.getHttpServer())
       .post(`/topics/${topic.id}/materials`)
-      .set('Authorization', `Bearer ${teacherA1.token}`)
+      .set('Authorization', `Bearer ${directorA.token}`)
       .send({ materialIds: [matA1.id], replaceAll: true })
       .expect(201);
 
@@ -1327,7 +1306,7 @@ describe('Topics (e2e)', () => {
     await prisma.catalogTopic.delete({ where: { id: cat.id } });
   });
 
-  it('POST /topics/:id/tests → TEACHER stejné org může přiřadit [201]', async () => {
+  it('POST /topics/:id/tests → DIRECTOR stejné org může přiřadit [201]', async () => {
     const { topic, cat } = await makeTempTopic(prisma, {
       levelId: levelA_math_g5.id,
       catSubjectId: catSubMath.id,
@@ -1336,7 +1315,7 @@ describe('Topics (e2e)', () => {
 
     const res = await request(app.getHttpServer())
       .post(`/topics/${topic.id}/tests`)
-      .set('Authorization', `Bearer ${teacherA1.token}`)
+      .set('Authorization', `Bearer ${directorA.token}`)
       .send({ testIds: [testA1.id], replaceAll: true })
       .expect(201);
 

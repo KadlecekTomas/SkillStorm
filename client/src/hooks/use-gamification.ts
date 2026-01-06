@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { apiClient } from "@/utils/api-client";
+import { httpClient } from "@/lib/http/client";
 
 type GamificationSummary = {
   membershipId: string;
@@ -31,9 +31,9 @@ export const useGamification = () => {
   useEffect(() => {
     let active = true;
     setLoading(true);
-    apiClient
+    httpClient
       .get<GamificationSummary>("/gamification/summary/me")
-      .then(({ data }) => {
+      .then((data) => {
         if (!active) return;
         setSummary(data);
       })

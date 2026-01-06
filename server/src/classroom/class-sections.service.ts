@@ -7,16 +7,16 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
-import { CreateClassSectionDto } from './dto/create-classroom.dto';
-import { JwtPayload } from '@/auth/types/jwt-payload';
+import type { CreateClassSectionDto } from './dto/create-classroom.dto';
+import type { JwtPayload } from '@/auth/types/jwt-payload';
 import { assertSameOrganization } from '@/shared/access.utils';
-import { UpdateClassroomDto } from './dto/update-classroom.dto';
-import { QueryClassSectionsDto } from './dto/query-class-sections.dto';
-import { SetHomeroomDto } from './dto/set-homeroom.dto';
+import type { UpdateClassroomDto } from './dto/update-classroom.dto';
+import type { QueryClassSectionsDto } from './dto/query-class-sections.dto';
+import type { SetHomeroomDto } from './dto/set-homeroom.dto';
 import { Prisma, OrganizationRole, SystemRole } from '@prisma/client';
 
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import type { Cache } from 'cache-manager';
+import { Cache } from 'cache-manager';
 import {
   buildVersionedListKey,
   cacheGetOrSet,
@@ -32,19 +32,54 @@ export class ClassSectionsService {
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
   ) {}
 
+  private async getDefaultAcademicYear(orgId: string) {
+    const label = 'DEFAULT';
+    const existing = await this.prisma.academicYear.findFirst({
+      where: { orgId, label },
+      select: { id: true, orgId: true },
+    });
+    if (existing) return existing;
+
+    const now = new Date();
+    const endsAt = new Date(now);
+    endsAt.setFullYear(endsAt.getFullYear() + 1);
+
+    return this.prisma.academicYear.create({
+      data: {
+        orgId,
+        label,
+        startsAt: now,
+        endsAt,
+        isCurrent: true,
+      },
+      select: { id: true, orgId: true },
+    });
+  }
+
   // -------------------------
   // CREATE
   // -------------------------
-  async create(dto: CreateClassSectionDto, user?: JwtPayload) {
-    if (!user) {
-      return { id: 'cls-1', ...dto };
+  async create(dto: CreateClassSectionDto, user: JwtPayload) {
+    if (!user?.organizationId && user.systemRole !== SystemRole.SUPERADMIN) {
+      throw new ForbiddenException('Missing organization context.');
     }
-    const year = await this.prisma.academicYear.findUnique({
-      where: { id: dto.yearId },
-      select: { orgId: true },
-    });
-    if (!year) throw new NotFoundException('Školní rok nebyl nalezen');
-    assertSameOrganization(year.orgId, user, 'třída');
+    const yearId = dto.yearId ?? null;
+    const year = yearId
+      ? await this.prisma.academicYear.findUnique({
+          where: { id: yearId },
+          select: { id: true, orgId: true },
+        })
+      : null;
+    if (yearId && !year) throw new NotFoundException('Školní rok nebyl nalezen');
+    const resolvedYear =
+      year ??
+      (user.organizationId
+        ? await this.getDefaultAcademicYear(user.organizationId)
+        : null);
+    if (!resolvedYear) {
+      throw new NotFoundException('Školní rok nebyl nalezen');
+    }
+    assertSameOrganization(resolvedYear.orgId, user, 'třída');
 
     const teacherId: string | null = dto.teacherId ?? null;
     if (teacherId) {
@@ -54,7 +89,7 @@ export class ClassSectionsService {
       });
       if (!t || t.deletedAt)
         throw new NotFoundException('Učitel nebyl nalezen.');
-      if (t.organizationId !== year.orgId)
+      if (t.organizationId !== resolvedYear.orgId)
         throw new ForbiddenException(
           'Učitel není ze stejné organizace jako třída.',
         );
@@ -63,8 +98,8 @@ export class ClassSectionsService {
     try {
       const created = await this.prisma.classSection.create({
         data: {
-          orgId: year.orgId,
-          yearId: dto.yearId,
+          orgId: resolvedYear.orgId,
+          yearId: resolvedYear.id,
           grade: dto.grade,
           section: dto.section,
           label: dto.label ?? null,
@@ -75,7 +110,7 @@ export class ClassSectionsService {
 
       await bumpOrgVersion(
         this.cache,
-        cacheScopeForUser(user.systemRole, year.orgId),
+        cacheScopeForUser(user.systemRole, resolvedYear.orgId),
       );
       return created; // controller z resultu vytáhne orgId pro invalidaci
     } catch (e) {
@@ -95,24 +130,33 @@ export class ClassSectionsService {
   // -------------------------
   // LIST
   // -------------------------
-  async findAll(q?: QueryClassSectionsDto, user?: JwtPayload) {
-    if (!user || !q) {
-      return [{ id: 'cls-1' }];
-    }
+  async findAll(q: QueryClassSectionsDto, user: JwtPayload) {
     // validace roku + org
-    const year = await this.prisma.academicYear.findUnique({
-      where: { id: q.yearId },
-      select: { orgId: true },
-    });
-    if (!year) throw new NotFoundException('Školní rok nebyl nalezen');
-    assertSameOrganization(year.orgId, user, 'třídy');
+    if (!user?.organizationId && user.systemRole !== SystemRole.SUPERADMIN) {
+      throw new ForbiddenException('Missing organization context.');
+    }
+    const yearId = q.yearId ?? null;
+    const year = yearId
+      ? await this.prisma.academicYear.findUnique({
+          where: { id: yearId },
+          select: { id: true, orgId: true },
+        })
+      : null;
+    if (yearId && !year) throw new NotFoundException('Školní rok nebyl nalezen');
+    const resolvedYear =
+      year ??
+      (user.organizationId
+        ? await this.getDefaultAcademicYear(user.organizationId)
+        : null);
+    if (!resolvedYear) throw new NotFoundException('Školní rok nebyl nalezen');
+    assertSameOrganization(resolvedYear.orgId, user, 'třídy');
 
     const page = q.page ?? 1;
     const limit = q.limit ?? 50;
     const skip = (page - 1) * limit;
 
     const where: Prisma.ClassSectionWhereInput = {
-      yearId: q.yearId,
+      yearId: resolvedYear.id,
       ...(q.grade ? { grade: q.grade } : {}),
       ...(q.search?.trim()
         ? {
@@ -131,7 +175,7 @@ export class ClassSectionsService {
     ];
 
     // org‑scoped verzovaná cache
-    const scope = cacheScopeForUser(user.systemRole, year.orgId);
+    const scope = cacheScopeForUser(user.systemRole, resolvedYear.orgId);
     const ver = await getOrgVersion(this.cache, scope);
     const cacheKey = buildVersionedListKey({
       namespace: 'classSections',
@@ -139,9 +183,9 @@ export class ClassSectionsService {
       version: ver,
       page,
       limit,
-      search: q.search,
+      search: q.search ?? '',
       order: orderBy,
-      filters: { yearId: q.yearId, grade: q.grade ?? null },
+      filters: { yearId: resolvedYear.id, grade: q.grade ?? null },
     });
 
     return cacheGetOrSet(this.cache, cacheKey, 600_000, async () => {
@@ -229,15 +273,24 @@ export class ClassSectionsService {
     }
 
     try {
+      const updateData: Prisma.ClassSectionUncheckedUpdateInput = {};
+      if (dto.grade !== undefined) {
+        updateData.grade = dto.grade;
+      }
+      if (dto.section !== undefined) {
+        updateData.section = dto.section;
+      }
+      if (dto.label !== undefined) {
+        updateData.label = dto.label;
+      }
+      if (teacherId !== undefined) {
+        updateData.teacherId = teacherId;
+      }
+      // TODO: Přidat studyField do modelu ClassSection a migrace
+
       const updated = await this.prisma.classSection.update({
         where: { id },
-        data: {
-          grade: dto.grade ?? undefined,
-          section: dto.section ?? undefined,
-          label: dto.label ?? undefined,
-          teacherId, // může být undefined / null / uuid
-          // TODO: Přidat studyField do modelu ClassSection a migrace
-        },
+        data: updateData,
       });
 
       await bumpOrgVersion(

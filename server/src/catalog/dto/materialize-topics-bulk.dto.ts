@@ -14,11 +14,11 @@ import { Difficulty, TopicPhase } from '@prisma/client';
 export class MaterializeTopicsBulkDto {
   @ApiProperty({ example: 'catalog-subject-id-uuid' })
   @IsUUID()
-  catalogSubjectId: string;
+  catalogSubjectId!: string;
 
   @ApiProperty({ example: 'subject-level-id-uuid' })
   @IsUUID()
-  subjectLevelId: string;
+  subjectLevelId!: string;
 
   @ApiProperty({
     type: [String],
@@ -28,7 +28,7 @@ export class MaterializeTopicsBulkDto {
   @ArrayNotEmpty()
   @IsUUID('4', { each: true })
   @Type(() => String)
-  catalogTopicIds: string[];
+  catalogTopicIds!: string[];
 
   @ApiPropertyOptional({ enum: TopicPhase, example: TopicPhase.INTRO })
   @IsOptional()

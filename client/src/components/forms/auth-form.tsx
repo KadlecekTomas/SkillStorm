@@ -1,13 +1,12 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Controller, type FieldErrors, useForm } from "react-hook-form";
+import { Controller, FieldErrors, useForm } from "react-hook-form";
 import { z } from "zod";
 import { motion } from "framer-motion";
-import { apiClient } from "@/utils/api-client";
+import { httpClient, HttpError } from "@/lib/http/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Alert } from "@/components/ui/alert";
 import {
   Select,
   SelectContent,
@@ -17,20 +16,19 @@ import {
 } from "@/components/ui/select";
 import { useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
-import { AxiosError } from "axios";
 import { Loader2 } from "lucide-react";
 import { showToastOnce } from "@/utils/toast";
 
 const roleOptions = ["STUDENT", "TEACHER", "DIRECTOR"] as const;
 
 const loginSchema = z.object({
-  email: z.string().email({ message: "Enter a valid email" }),
-  password: z.string().min(6, { message: "Minimum 6 characters" }),
+  email: z.string().email({ message: "Zadej platný e-mail" }),
+  password: z.string().min(6, { message: "Heslo musí mít alespoň 6 znaků" }),
 });
 
 const registerSchema = loginSchema.extend({
-  name: z.string().min(2, { message: "Name must contain at least 2 characters" }),
-  role: z.enum(roleOptions, { required_error: "Please select a role" }),
+  name: z.string().min(2, { message: "Jméno musí mít alespoň 2 znaky" }),
+  role: z.enum(roleOptions, { required_error: "Vyber roli" }),
 });
 
 type LoginValues = z.infer<typeof loginSchema>;
@@ -41,10 +39,8 @@ type AuthFormProps = {
 };
 
 export const AuthForm = ({ mode }: AuthFormProps) => {
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const { login, isLoading: authLoading } = useAuth();
   const [registering, setRegistering] = useState(false);
-  const { login, loading: authLoading } = useAuth();
 
   const schema = mode === "login" ? loginSchema : registerSchema;
 
@@ -55,48 +51,50 @@ export const AuthForm = ({ mode }: AuthFormProps) => {
         ? { email: "", password: "" }
         : { email: "", password: "", name: "", role: undefined },
   });
-  const onSubmit = async (values: LoginValues | RegisterValues) => {
-    try {
-      setError(null);
-      setSuccess(null);
 
+  // 🔹 oddělená submit logika
+  const handleSubmit = async (values: LoginValues | RegisterValues) => {
+    try {
       if (mode === "login") {
-        await login({ login: values.email, password: values.password });
-        setSuccess("Přihlašuji…");
+        await login({ email: values.email, password: values.password });
+        showToastOnce("Přihlašuji…", { type: "success" });
         return;
       }
 
       setRegistering(true);
       const registerValues = values as RegisterValues;
-      const { data } = await apiClient.post("/auth/register", registerValues);
+      const data = await httpClient.post<{ user?: unknown }>("/auth/register", registerValues);
 
       if (data?.user) {
-        showToastOnce("Účet byl vytvořen. Pokračuj na přihlášení.", {
+        showToastOnce("Účet byl vytvořen. Pokračuj na přihlášení ✅", {
           type: "success",
         });
-        setSuccess("Account created. Continue to dashboard.");
       } else {
-        setError("Unexpected response from server.");
+        showToastOnce("Neočekávaná odpověď serveru.", { type: "error" });
       }
-    } catch (err: unknown) {
+    } catch (err) {
       const message =
-        err instanceof AxiosError
-          ? (err.response?.data as { message?: string })?.message
-          : undefined;
-
-      setError(
-        message ?? (mode === "login" ? "Invalid credentials." : "Unable to register user."),
-      );
+        err instanceof HttpError
+          ? (err.data as { message?: string })?.message ?? err.message
+          : err instanceof Error
+            ? err.message
+            : "Neznámá chyba";
 
       showToastOnce(
         mode === "login"
           ? message ?? "Neplatné přihlašovací údaje ❌"
           : message ?? "Registrace se nezdařila.",
-        { type: "error" },
+        { type: "error" }
       );
     } finally {
       if (mode === "register") setRegistering(false);
     }
+  };
+
+  // 🔹 bezpečné obalení s preventDefault
+  const handleFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    form.handleSubmit(handleSubmit)(e);
   };
 
   const registerErrors =
@@ -104,62 +102,85 @@ export const AuthForm = ({ mode }: AuthFormProps) => {
       ? (form.formState.errors as FieldErrors<RegisterValues>)
       : undefined;
 
+
   return (
     <motion.form
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       className="space-y-4"
-      onSubmit={form.handleSubmit(onSubmit)}
+      onSubmit={handleFormSubmit}
+      noValidate
     >
-      {/* --- Name --- */}
       {mode === "register" && (
         <div className="space-y-2">
-          <label className="text-sm font-medium text-slate-700">Name</label>
-          <Input placeholder="Jane Cooper" {...form.register("name")} />
-          {registerErrors?.name && (
-            <p className="text-sm text-red-600">
-              {registerErrors.name.message as string}
-            </p>
+          <label
+            htmlFor="name"
+            className="text-sm font-medium text-slate-700"
+          >
+            Jméno
+          </label>
+          <Input id="name" placeholder="Jane Cooper" {...form.register("name")} />
+          {(form.formState.errors as FieldErrors<RegisterValues>).name && (
+            <p>{(form.formState.errors as FieldErrors<RegisterValues>).name?.message}</p>
           )}
+
         </div>
       )}
 
-      {/* --- Email --- */}
       <div className="space-y-2">
-        <label className="text-sm font-medium text-slate-700">Email</label>
-        <Input placeholder="you@school.edu" type="email" {...form.register("email")} />
-        {form.formState.errors.email && (
+        <label htmlFor="email" className="text-sm font-medium text-slate-700">
+          E-mail
+        </label>
+        <Input
+          id="email"
+          placeholder="you@school.edu"
+          type="email"
+          autoComplete="email"
+          {...form.register("email")}
+        />
+        {form.formState.errors["email"] && (
           <p className="text-sm text-red-600">
-            {form.formState.errors.email.message as string}
+            {form.formState.errors["email"]?.message as string}
           </p>
         )}
       </div>
 
-      {/* --- Password --- */}
       <div className="space-y-2">
-        <label className="text-sm font-medium text-slate-700">Password</label>
-        <Input placeholder="••••••••" type="password" {...form.register("password")} />
-        {form.formState.errors.password && (
+        <label htmlFor="password" className="text-sm font-medium text-slate-700">
+          Heslo
+        </label>
+        <Input
+          id="password"
+          placeholder="••••••••"
+          type="password"
+          autoComplete={mode === "login" ? "current-password" : "new-password"}
+          {...form.register("password")}
+        />
+        {form.formState.errors["password"] && (
           <p className="text-sm text-red-600">
-            {form.formState.errors.password.message as string}
+            {form.formState.errors["password"]?.message as string}
           </p>
         )}
       </div>
 
-      {/* --- Role --- */}
       {mode === "register" && (
         <Controller
           control={form.control}
           name="role"
           render={({ field }) => (
             <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-700">Role</label>
+              <label
+                htmlFor="role"
+                className="text-sm font-medium text-slate-700"
+              >
+                Role
+              </label>
               <Select
                 onValueChange={(value) => field.onChange(value)}
                 value={field.value ?? ""}
               >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select role" />
+                <SelectTrigger id="role">
+                  <SelectValue placeholder="Vyber roli" />
                 </SelectTrigger>
                 <SelectContent>
                   {roleOptions.map((r) => (
@@ -174,26 +195,22 @@ export const AuthForm = ({ mode }: AuthFormProps) => {
                   {registerErrors.role.message as string}
                 </p>
               )}
+
             </div>
           )}
         />
       )}
 
-      {/* --- Submit --- */}
       <Button
         type="submit"
-        className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl text-base"
         disabled={mode === "login" ? authLoading : registering}
+        className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl text-base transition-opacity disabled:opacity-60 disabled:cursor-not-allowed"
       >
         {(mode === "login" ? authLoading : registering) && (
           <Loader2 className="h-4 w-4 animate-spin" />
         )}
-        {mode === "login" ? "Sign in" : "Create account"}
+        {mode === "login" ? "Přihlásit se" : "Vytvořit účet"}
       </Button>
-
-      {error && <Alert title="Authentication error" description={error} variant="warning" />}
-      {success && <Alert title="Success" description={success} variant="success" />}
-
     </motion.form>
   );
 };

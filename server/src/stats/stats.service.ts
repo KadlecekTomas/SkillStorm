@@ -418,24 +418,28 @@ export class StatsService {
 
   // ===== TEACHER DASHBOARD ===================================================
   async getTeacherDashboard(
-    ids: { membershipId: string; organizationId: string | null },
+    organizationId: string | null,
     user: JwtPayload,
   ) {
-    await this.ensureOrgContext(user, ids.organizationId);
+    await this.ensureOrgContext(user, organizationId);
+    const membership = await this.resolveMembership(user, organizationId);
+    if (!membership || membership.role !== OrganizationRole.TEACHER) {
+      throw new ForbiddenException('Teacher dashboard requires TEACHER role.');
+    }
 
     // Neshoď 403, když Teacher záznam neexistuje – dashboard má fungovat
     const teacher = await this.prisma.teacher.findFirst({
-      where: { membershipId: ids.membershipId },
+      where: { membershipId: membership.id, deletedAt: null },
       select: { id: true, organizationId: true },
     });
 
-    const scopeId = ids.organizationId ?? 'GLOBAL';
+    const scopeId = organizationId ?? 'GLOBAL';
     const ver = await getOrgVersion(this.cache, scopeId);
     const cacheKey = buildVersionedListKey({
       namespace: 'dashboard:teacher',
       scopeId,
       version: ver,
-      filters: { membershipId: ids.membershipId },
+      filters: { membershipId: membership.id },
     });
 
     return cacheGetOrSet(this.cache, cacheKey, 60_000, async () => {
@@ -453,16 +457,16 @@ export class StatsService {
         this.prisma.student.count({
           where: {
             deletedAt: null,
-            ...(ids.organizationId ? { orgId: ids.organizationId } : {}),
+            ...(organizationId ? { orgId: organizationId } : {}),
           },
         }),
         this.prisma.test.count({
-          where: { creatorId: ids.membershipId, deletedAt: null },
+          where: { creatorId: membership.id, deletedAt: null },
         }),
         this.prisma.submission.aggregate({
           where: {
             deletedAt: null,
-            test: { creatorId: ids.membershipId, deletedAt: null },
+            test: { creatorId: membership.id, deletedAt: null },
             score: { not: null },
           },
           _avg: { score: true },
@@ -470,14 +474,14 @@ export class StatsService {
         this.prisma.submission.count({
           where: {
             deletedAt: null,
-            test: { creatorId: ids.membershipId, deletedAt: null },
+            test: { creatorId: membership.id, deletedAt: null },
             status: SubmissionStatus.PENDING,
           },
         }),
         this.prisma.submission.findMany({
           where: {
             deletedAt: null,
-            test: { creatorId: ids.membershipId, deletedAt: null },
+            test: { creatorId: membership.id, deletedAt: null },
           },
           include: {
             test: { select: { id: true, title: true } },

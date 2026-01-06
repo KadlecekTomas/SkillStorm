@@ -1,5 +1,6 @@
 import { Test } from '@nestjs/testing';
-import { INestApplication, Controller, Get } from '@nestjs/common';
+import type { INestApplication } from '@nestjs/common';
+import { Controller, Get } from '@nestjs/common';
 import * as request from 'supertest';
 import { Permission } from '@/modules/rbac/permission.decorator';
 import { PermissionKey } from '@prisma/client';

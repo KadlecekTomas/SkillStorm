@@ -17,6 +17,49 @@ const ALLOWED_TARGET_TYPES = new Set(['CLASS', 'STUDENTS']);
 export class AssignmentsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  private normalizeText(value?: string | null): string | null {
+    if (value === undefined || value === null) return null;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+
+  private isQuestionScoreable(q: {
+    type: string;
+    correctAnswer: string | null;
+    correctAnswers: string[];
+  }) {
+    const hasAnswer = this.normalizeText(q.correctAnswer) !== null;
+    const hasAnswers = Array.isArray(q.correctAnswers) && q.correctAnswers.length > 0;
+
+    if (q.type === 'MULTIPLE_CHOICE') {
+      if (hasAnswer && hasAnswers) return false;
+      return hasAnswer || hasAnswers;
+    }
+    if (q.type === 'TRUE_FALSE' || q.type === 'FILL_IN_THE_BLANK') {
+      return hasAnswer;
+    }
+    return false;
+  }
+
+  private async ensureTestScoreable(testId: string) {
+    const questions = await this.prisma.question.findMany({
+      where: { testId },
+      select: {
+        id: true,
+        type: true,
+        correctAnswer: true,
+        correctAnswers: true,
+      },
+    });
+    if (questions.length === 0) {
+      throw new BadRequestException('Test has no questions');
+    }
+    const unscorable = questions.filter((q) => !this.isQuestionScoreable(q));
+    if (unscorable.length > 0) {
+      throw new BadRequestException('Test contains unscorable questions');
+    }
+  }
+
   // ------- CREATE ------------------------------------------------------------
   async create(dto: CreateAssignmentDto): Promise<Assignment> {
     // 1) Target type
@@ -41,17 +84,26 @@ export class AssignmentsService {
     if (!org) throw new NotFoundException('Organizace neexistuje');
 
     // 4) Test v rámci org
-    const test = await this.prisma.test.findUnique({
-      where: { id: dto.testId },
-      select: { id: true, organizationId: true },
+    const test = await this.prisma.test.findFirst({
+      where: { id: dto.testId, deletedAt: null },
+      select: { id: true, organizationId: true, status: true },
     });
     if (!test || test.organizationId !== dto.organizationId) {
       throw new BadRequestException(
         'Test neexistuje nebo nepatří do organizace',
       );
     }
+    if (String(test.status) !== 'PUBLISHED') {
+      throw new BadRequestException('Test must be published before assignment');
+    }
+    await this.ensureTestScoreable(test.id);
 
     // 5) classSection (pokud je) v rámci org
+    if (dto.targetType === 'CLASS' && !dto.classSectionId) {
+      throw new BadRequestException(
+        'Pro targetType=CLASS je nutné zadat classSectionId',
+      );
+    }
     if (dto.classSectionId) {
       const cs = await this.prisma.classSection.findUnique({
         where: { id: dto.classSectionId },

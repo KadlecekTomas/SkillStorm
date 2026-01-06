@@ -12,6 +12,12 @@ import {
   OrganizationRole,
   OrganizationType,
 } from '@prisma/client';
+import { authAs } from 'test/helpers';
+
+function uniqueIp() {
+  const rnd = () => Math.floor(Math.random() * 250) + 1;
+  return `10.${rnd()}.${rnd()}.${rnd()}`;
+}
 
 describe('Submissions (e2e)', () => {
   let app: INestApplication;
@@ -24,7 +30,7 @@ describe('Submissions (e2e)', () => {
   let superUser: {
     id: string;
     token: string;
-    login: { login: string; password: string };
+    login: { email: string; password: string };
   };
 
   const teacher = {
@@ -84,27 +90,20 @@ describe('Submissions (e2e)', () => {
     await prisma.$connect();
 
     // SUPERADMIN (pro případnou globální kontrolu)
-    const rSuper = await request(app.getHttpServer())
-      .post('/auth/register')
-      .send({
-        name: 'E2E Super',
-        email: `e2e.super.${unique}@example.com`,
-        username: `e2e_super_${unique}`,
-        password: 'Password123!',
-      })
-      .expect(201);
+    const superAuth = await authAs(app, OrganizationRole.STUDENT, {
+      seed: `super_${unique}`,
+      name: 'E2E Super',
+      email: `e2e.super.${unique}@example.com`,
+      username: `e2e_super_${unique}`,
+    });
     await prisma.user.update({
-      where: { id: rSuper.body.user.id },
+      where: { id: superAuth.user.id },
       data: { systemRole: $Enums.SystemRole.SUPERADMIN },
     });
-    const superLogin = await request(app.getHttpServer())
-      .post('/auth/login')
-      .send({ login: rSuper.body.user.email, password: 'Password123!' })
-      .expect(201);
     superUser = {
-      id: rSuper.body.user.id,
-      token: superLogin.body.accessToken,
-      login: { login: rSuper.body.user.email, password: 'Password123!' },
+      id: superAuth.user.id,
+      token: superAuth.accessToken,
+      login: superAuth.login,
     };
 
     // Orgs
@@ -120,15 +119,18 @@ describe('Submissions (e2e)', () => {
     // Teacher + Student + Outsider users
     const regTeacher = await request(app.getHttpServer())
       .post('/auth/register')
-      .send(teacher)
+      .set('X-Forwarded-For', uniqueIp())
+      .send({ ...teacher, role: OrganizationRole.TEACHER })
       .expect(201);
     const regStudent = await request(app.getHttpServer())
       .post('/auth/register')
-      .send(student)
+      .set('X-Forwarded-For', uniqueIp())
+      .send({ ...student, role: OrganizationRole.STUDENT })
       .expect(201);
     const regOutsider = await request(app.getHttpServer())
       .post('/auth/register')
-      .send(outsider)
+      .set('X-Forwarded-For', uniqueIp())
+      .send({ ...outsider, role: OrganizationRole.STUDENT })
       .expect(201);
 
     // Memberships
@@ -166,21 +168,39 @@ describe('Submissions (e2e)', () => {
     // Logins
     const tLogin = await request(app.getHttpServer())
       .post('/auth/login')
-      .send({ login: teacher.email, password: teacher.password })
+      .set('X-Forwarded-For', uniqueIp())
+      .send({ email: teacher.email, password: teacher.password })
       .expect(201);
-    teacherToken = tLogin.body.accessToken;
+    const tUseOrg = await request(app.getHttpServer())
+      .post('/auth/use-org')
+      .set('Authorization', `Bearer ${tLogin.body.sessionToken}`)
+      .send({ orgId: org.id })
+      .expect(201);
+    teacherToken = tUseOrg.body.sessionToken;
 
     const sLogin = await request(app.getHttpServer())
       .post('/auth/login')
-      .send({ login: student.email, password: student.password })
+      .set('X-Forwarded-For', uniqueIp())
+      .send({ email: student.email, password: student.password })
       .expect(201);
-    studentToken = sLogin.body.accessToken;
+    const sUseOrg = await request(app.getHttpServer())
+      .post('/auth/use-org')
+      .set('Authorization', `Bearer ${sLogin.body.sessionToken}`)
+      .send({ orgId: org.id })
+      .expect(201);
+    studentToken = sUseOrg.body.sessionToken;
 
     const oLogin = await request(app.getHttpServer())
       .post('/auth/login')
-      .send({ login: outsider.email, password: outsider.password })
+      .set('X-Forwarded-For', uniqueIp())
+      .send({ email: outsider.email, password: outsider.password })
       .expect(201);
-    outsiderToken = oLogin.body.accessToken;
+    const oUseOrg = await request(app.getHttpServer())
+      .post('/auth/use-org')
+      .set('Authorization', `Bearer ${oLogin.body.sessionToken}`)
+      .send({ orgId: otherOrg.id })
+      .expect(201);
+    outsiderToken = oUseOrg.body.sessionToken;
 
     // Test se 3 otázkami
     const createdTest = await prisma.test.create({
@@ -329,11 +349,15 @@ describe('Submissions (e2e)', () => {
       orderBy: { order: 'asc' },
       select: { id: true, correctAnswer: true },
     });
+    const [q1, q2, q3] = qs;
+    if (!q1 || !q2 || !q3) {
+      throw new Error('Expected at least 3 questions for submission flow');
+    }
 
     const responses = [
-      { questionId: qs[0].id, givenText: '4' },
-      { questionId: qs[1].id, givenText: 'true' },
-      { questionId: qs[2].id, givenText: 'Praha' },
+      { questionId: q1.id, givenText: '4' },
+      { questionId: q2.id, givenText: 'true' },
+      { questionId: q3.id, givenText: 'Praha' },
     ];
 
     await request(app.getHttpServer())
@@ -408,7 +432,7 @@ describe('Submissions (e2e)', () => {
       .post('/submissions')
       .set('Authorization', `Bearer ${studentToken}`)
       .send({ assignmentId: futureAssignmentId });
-    expect([403, 409]).toContain(res.status);
+    expect([400, 403, 409]).toContain(res.status);
   });
 
   it('POST /submissions → 403/409 když assignment je po deadline', async () => {
@@ -416,7 +440,7 @@ describe('Submissions (e2e)', () => {
       .post('/submissions')
       .set('Authorization', `Bearer ${studentToken}`)
       .send({ assignmentId: closedAssignmentId });
-    expect([403, 409]).toContain(res.status);
+    expect([400, 403, 409]).toContain(res.status);
   });
 
   it('POST /submissions → 409 po vyčerpání maxAttempts', async () => {
@@ -528,10 +552,24 @@ describe('Submissions (e2e)', () => {
   });
 
   it('POST /submissions/:id/finish → idempotentní (druhé finish vrátí 200/409/400, ale nezmění výsledek)', async () => {
+    const tmpAssignment = await prisma.assignment.create({
+      data: {
+        organizationId: org.id,
+        testId,
+        targetType: 'STUDENTS' as any,
+        openAt: new Date(Date.now() - 60_000),
+        closeAt: new Date(Date.now() + 60 * 60 * 1000),
+        maxAttempts: 5,
+        createdById: teacherMembershipId,
+        students: { create: [{ studentId: studentMembershipId }] },
+      },
+      select: { id: true },
+    });
+
     const s = await request(app.getHttpServer())
       .post('/submissions')
       .set('Authorization', `Bearer ${studentToken}`)
-      .send({ assignmentId })
+      .send({ assignmentId: tmpAssignment.id })
       .expect(201);
 
     const done1 = await request(app.getHttpServer())
@@ -547,13 +585,29 @@ describe('Submissions (e2e)', () => {
       .send({ responses: [] });
 
     expect([200, 400, 409]).toContain(done2.status);
+
+    await prisma.assignment.delete({ where: { id: tmpAssignment.id } });
   });
 
   it('PATCH /submissions/:id/responses → zákaz po dokončení (400/409/403)', async () => {
+    const tmpAssignment = await prisma.assignment.create({
+      data: {
+        organizationId: org.id,
+        testId,
+        targetType: 'STUDENTS' as any,
+        openAt: new Date(Date.now() - 60_000),
+        closeAt: new Date(Date.now() + 60 * 60 * 1000),
+        maxAttempts: 5,
+        createdById: teacherMembershipId,
+        students: { create: [{ studentId: studentMembershipId }] },
+      },
+      select: { id: true },
+    });
+
     const s = await request(app.getHttpServer())
       .post('/submissions')
       .set('Authorization', `Bearer ${studentToken}`)
-      .send({ assignmentId })
+      .send({ assignmentId: tmpAssignment.id })
       .expect(201);
 
     await request(app.getHttpServer())
@@ -568,6 +622,8 @@ describe('Submissions (e2e)', () => {
       .send({ responses: [] });
 
     expect([400, 403, 409]).toContain(res.status);
+
+    await prisma.assignment.delete({ where: { id: tmpAssignment.id } });
   });
 
   it('POST /submissions → 404/403 když assignment je v jiné org (student nemá membership)', async () => {

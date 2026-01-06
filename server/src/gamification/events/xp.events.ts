@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events';
-import { XpEventType } from '@prisma/client';
+import type { XpEventType } from '@prisma/client';
 
 export const XP_AWARDED_EVENT = 'xp.awarded';
 

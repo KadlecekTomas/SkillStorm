@@ -8,25 +8,25 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '@/prisma/prisma.service';
-import * as bcrypt from 'bcrypt';
-import { LoginDto } from './dto/login.dto';
-import { RegisterDto } from './dto/register.dto';
+import * as bcrypt from 'bcryptjs';
+import type { LoginDto } from './dto/login.dto';
+import type { RegisterDto } from './dto/register.dto';
 import { ConfigService } from '@nestjs/config';
+import type { Membership, SystemRole, User } from '@prisma/client';
 import {
   AuditEntityType,
-  Membership,
   OrganizationRole,
   OrganizationType,
   Prisma,
-  SystemRole,
-  User,
   XpEventType,
 } from '@prisma/client';
-import { randomBytes, randomUUID, createHash } from 'crypto';
+import { randomBytes, randomUUID } from 'crypto';
 import { addDays } from 'date-fns';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { GamificationService } from '@/gamification/gamification.service';
 import { AuditService } from '@/audit/audit.service';
+import type { Request } from 'express';
+import { REFRESH_TOKEN_COOKIE } from './token-cookies';
 
 type JwtClaims = {
   sub: string;
@@ -88,10 +88,6 @@ export class AuthService {
     };
   }
 
-  private hashToken(token: string) {
-    return createHash('sha256').update(token).digest('hex');
-  }
-
   private async resolveDefaultOrganization() {
     const existing = await this.prisma.organization.findFirst({
       orderBy: { createdAt: 'asc' },
@@ -109,11 +105,9 @@ export class AuthService {
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         const token = randomBytes(48).toString('hex');
-        const tokenHash = this.hashToken(token);
         await this.prisma.refreshToken.create({
           data: {
             token,
-            tokenHash,
             userId,
             expiresAt: addDays(new Date(), 7),
           },
@@ -132,6 +126,9 @@ export class AuthService {
   private async generateTokens(user: User, membership: Membership | null) {
     const claims = this.buildClaims(user, membership);
     const accessSecret = this.config.get<string>('JWT_SECRET');
+    if (!accessSecret) {
+      throw new Error('JWT_SECRET is not configured');
+    }
 
     const accessToken = this.jwtService.sign(
       { ...claims },
@@ -144,6 +141,48 @@ export class AuthService {
 
     const refreshToken = await this.issueRefreshToken(user.id);
     return { accessToken, refreshToken };
+  }
+
+  private async rotateRefreshToken(token: string) {
+    const row = await this.prisma.refreshToken.findFirst({
+      where: { token },
+    });
+    if (!row || row.expiresAt < new Date() || row.revokedAt) {
+      if (row && !row.revokedAt) {
+        await this.prisma.refreshToken.update({
+          where: { id: row.id },
+          data: { revokedAt: new Date() },
+        });
+      }
+      this.logger.warn('Rejected refresh token (invalid/expired)');
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+
+    await this.prisma.refreshToken.update({
+      where: { id: row.id },
+      data: { revokedAt: new Date() },
+    });
+    this.logger.log('Refresh token rotated');
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: row.userId },
+    });
+    if (!user) throw new UnauthorizedException('User not found');
+
+    const membership = await this.prisma.membership.findFirst({
+      where: { userId: user.id },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const tokens = await this.generateTokens(user, membership);
+    await this.auditService.log({
+      action: 'REFRESH',
+      entityType: AuditEntityType.USER,
+      userId: user.id,
+      organizationId: membership?.organizationId ?? null,
+      entityId: user.id,
+    });
+    return tokens;
   }
 
   // -------------------------
@@ -271,14 +310,11 @@ export class AuthService {
   }
 
   async login(dto: LoginDto) {
-    // login = username NEBO email
-    const user = await this.prisma.user.findFirst({
-      where: {
-        OR: [{ username: dto.login }, { email: dto.login }],
-      },
+    const user = await this.prisma.user.findUnique({
+      where: { email: dto.email },
     });
     if (!user) {
-      this.logger.warn(`Failed login – user not found (${dto.login})`);
+      this.logger.warn(`Failed login – user not found (${dto.email})`);
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -287,7 +323,7 @@ export class AuthService {
       user.passwordHash,
     );
     if (!isPasswordValid) {
-      this.logger.warn(`Failed login – invalid password (${dto.login})`);
+      this.logger.warn(`Failed login – invalid password (${dto.email})`);
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -299,7 +335,7 @@ export class AuthService {
 
     let membership = await this.prisma.membership.findFirst({
       where: { userId: user.id },
-      orderBy: { createdAt: 'asc' }, // deterministicky, pokud má víc členství
+      orderBy: { createdAt: 'desc' }, // deterministicky – preferuj nejnovější členství
     });
 
     if (!membership) {
@@ -356,56 +392,32 @@ export class AuthService {
     return response;
   }
 
-  async refreshAccessToken(oldRefreshToken: string) {
-    // 1) musí existovat v DB (opaque kontrola)
-    const row = await this.prisma.refreshToken.findFirst({
-      where: { token: oldRefreshToken },
-    });
-    if (!row || row.expiresAt < new Date() || row.revokedAt) {
-      if (row && !row.revokedAt) {
-        await this.prisma.refreshToken.update({
-          where: { id: row.id },
-          data: { revokedAt: new Date() },
-        });
-      }
-      this.logger.warn('Rejected refresh token (invalid/expired)');
+  async refreshToken(oldToken: string) {
+    if (!oldToken) {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+    return this.rotateRefreshToken(oldToken);
+  }
+
+  async refreshAccessToken(oldRefreshToken?: string, req?: Request) {
+    const resolvedToken =
+      oldRefreshToken ?? req?.cookies?.[REFRESH_TOKEN_COOKIE] ?? undefined;
+
+    if (!resolvedToken) {
+      this.logger.warn('Rejected refresh token (missing)');
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
 
-    await this.prisma.refreshToken.update({
-      where: { id: row.id },
-      data: { revokedAt: new Date() },
-    });
-    this.logger.log('Refresh token rotated');
-
-    // 3) získej uživatele + jeho (první) membership pro payload
-    const user = await this.prisma.user.findUnique({
-      where: { id: row.userId },
-    });
-    if (!user) throw new UnauthorizedException('User not found');
-
-    const membership = await this.prisma.membership.findFirst({
-      where: { userId: user.id },
-      orderBy: { createdAt: 'asc' },
-    });
-
-    // 4) nové tokeny
-    const tokens = await this.generateTokens(user, membership);
-    await this.auditService.log({
-      action: 'REFRESH',
-      entityType: AuditEntityType.USER,
-      userId: user.id,
-      organizationId: membership?.organizationId ?? null,
-      entityId: user.id,
-    });
-    return tokens;
+    return this.rotateRefreshToken(resolvedToken);
   }
 
   async logout(accessToken?: string, refreshToken?: string) {
     let resolvedUserId: string | null = null;
 
     if (accessToken) {
-      const decoded = this.jwtService.decode(accessToken) as { sub?: string } | null;
+      const decoded = this.jwtService.decode(accessToken) as {
+        sub?: string;
+      } | null;
       resolvedUserId = decoded?.sub ?? null;
     }
 
@@ -439,7 +451,10 @@ export class AuthService {
     // Smaž refresh token (může existovat i více – smažeme konkrétní)
     if (refreshToken) {
       await this.prisma.refreshToken.updateMany({
-        where: { token: refreshToken, revokedAt: null },
+        where: {
+          token: refreshToken,
+          revokedAt: null,
+        },
         data: { revokedAt: new Date() },
       });
       this.logger.log('Refresh token revoked');
@@ -509,6 +524,55 @@ export class AuthService {
       organizationRole: primaryMembership?.role ?? null,
       organizationId: primaryMembership?.organizationId ?? null,
       needsOnboarding,
+    };
+  }
+
+  async useOrganization(userId: string, orgId: string) {
+    const membership = await this.prisma.membership.findFirst({
+      where: { userId, organizationId: orgId, deletedAt: null },
+      select: {
+        id: true,
+        role: true,
+        organizationId: true,
+        organization: { select: { id: true, name: true, type: true } },
+      },
+    });
+
+    if (!membership) {
+      throw new UnauthorizedException('User is not a member of organization');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+    if (!user) throw new UnauthorizedException('User not found');
+
+    const tokens = await this.generateTokens(
+      user,
+      membership as unknown as Membership,
+    );
+
+    await this.auditService.log({
+      action: 'USE_ORG',
+      entityType: AuditEntityType.ORGANIZATION,
+      userId,
+      organizationId: orgId,
+      entityId: orgId,
+    });
+
+    return {
+      tokens,
+      user: {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        name: user.name,
+        systemRole: user.systemRole,
+        organizationRole: membership.role,
+        organizationId: membership.organizationId,
+      },
+      organization: membership.organization,
+      membership,
     };
   }
 }

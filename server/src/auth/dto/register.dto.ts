@@ -17,14 +17,14 @@ export class RegisterDto {
   })
   @IsString()
   @MinLength(2)
-  name: string;
+  name!: string;
 
   @ApiProperty({
     description: 'E-mail',
     example: 'jan.novak@example.com',
   })
   @IsEmail()
-  email: string;
+  email!: string;
 
   @ApiPropertyOptional({
     description: 'Uživatelské jméno (volitelné; když nepřijde, vygeneruje se)',
@@ -41,7 +41,7 @@ export class RegisterDto {
   })
   @IsString()
   @MinLength(6)
-  password: string;
+  password!: string;
 
   @ApiProperty({
     description: 'Role v organizaci',
@@ -49,7 +49,7 @@ export class RegisterDto {
     example: OrganizationRole.TEACHER,
   })
   @IsEnum(OrganizationRole)
-  role: OrganizationRole;
+  role!: OrganizationRole;
 
   @ApiPropertyOptional({
     description: 'Systémová role',

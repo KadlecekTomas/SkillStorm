@@ -1,5 +1,5 @@
 import { SetMetadata } from '@nestjs/common';
-import { PermissionToken } from './rbac.types';
+import type { PermissionToken } from './rbac.types';
 
 export const PERMISSION_KEY = 'required_permissions';
 

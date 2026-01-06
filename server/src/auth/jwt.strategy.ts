@@ -1,4 +1,9 @@
-import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Inject,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
@@ -6,24 +11,47 @@ import type { Request } from 'express';
 
 import { PrismaService } from '@/prisma/prisma.service';
 import type { JwtPayload } from './types/jwt-payload';
+import { ACCESS_TOKEN_COOKIE } from './token-cookies';
+
+const bearerExtractor = ExtractJwt.fromAuthHeaderAsBearerToken();
+const cookieExtractor = (req: Request): string | null =>
+  req?.cookies?.[ACCESS_TOKEN_COOKIE] ?? null;
+const sessionHeaderExtractor = (req: Request): string | null => {
+  const header = req?.headers?.['x-session-token'];
+  if (Array.isArray(header)) {
+    return header[0] ?? null;
+  }
+  return typeof header === 'string' && header.length ? header : null;
+};
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
+  private readonly extractToken: (req: Request) => string | null;
+
   constructor(
     private readonly prisma: PrismaService,
     @Inject(ConfigService)
     private readonly configService: ConfigService,
   ) {
+    const tokenExtractor = ExtractJwt.fromExtractors([
+      cookieExtractor,
+      bearerExtractor,
+      sessionHeaderExtractor,
+    ]);
     super({
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      jwtFromRequest: tokenExtractor,
       secretOrKey: configService.get<string>('JWT_SECRET') || 'dev',
       ignoreExpiration: false,
       passReqToCallback: true,
     });
+    this.extractToken = tokenExtractor;
   }
 
-  async validate(req: Request, payload: JwtPayload & { sub?: string; role?: string }) {
-    const token = ExtractJwt.fromAuthHeaderAsBearerToken()(req);
+  async validate(
+    req: Request,
+    payload: JwtPayload & { sub?: string; role?: string },
+  ) {
+    const token = this.extractToken(req);
     if (!token) {
       throw new UnauthorizedException('Missing authorization token');
     }
@@ -65,11 +93,19 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       if (m) {
         organizationRole = m.role;
         organizationId = m.organizationId;
+      } else {
+        throw new ForbiddenException({
+          statusCode: 403,
+          message: 'Forbidden: organization scope not allowed for user',
+        });
       }
     }
     if (!organizationRole && user.memberships?.length) {
-      organizationRole = user.memberships[0].role;
-      organizationId = user.memberships[0].organizationId;
+      const firstMembership = user.memberships[0];
+      if (firstMembership) {
+        organizationRole = firstMembership.role;
+        organizationId = firstMembership.organizationId;
+      }
     }
 
     return {

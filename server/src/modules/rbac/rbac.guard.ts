@@ -1,13 +1,9 @@
-import {
-  CanActivate,
-  ExecutionContext,
-  ForbiddenException,
-  Injectable,
-} from '@nestjs/common';
+import type { CanActivate, ExecutionContext } from '@nestjs/common';
+import { ForbiddenException, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { OrganizationRole, SystemRole } from '@prisma/client';
 import { PERMISSION_KEY } from './permission.decorator';
-import { PermissionToken } from './rbac.types';
+import type { PermissionToken } from './rbac.types';
 import { RbacService } from './rbac.service';
 
 @Injectable()

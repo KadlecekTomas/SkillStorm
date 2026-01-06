@@ -1,9 +1,4 @@
-import {
-  IsNumber,
-  IsOptional,
-  IsString,
-  MaxLength,
-} from 'class-validator';
+import { IsNumber, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class LogAnalyticsEventDto {
   @IsString()
@@ -15,7 +10,7 @@ export class LogAnalyticsEventDto {
   action!: string;
 
   @IsOptional()
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 
   @IsOptional()
   @IsString()

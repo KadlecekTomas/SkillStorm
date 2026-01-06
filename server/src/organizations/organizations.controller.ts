@@ -13,6 +13,7 @@ import {
   ParseUUIDPipe,
   Query,
 } from '@nestjs/common';
+import { RequestWithUser } from '@/types/request-with-user';
 import { CreateOrganizationDto } from './dto/create-organization.dto';
 import { UpdateOrganizationDto } from './dto/update-organization.dto';
 import { OrganizationType, OrganizationRole, SystemRole } from '@prisma/client';
@@ -28,8 +29,11 @@ import { QueryOrganizationsDto } from './dto/query-organizations.dto';
 import { CacheTTL } from '@nestjs/cache-manager';
 import { InvalidateScopes } from '@/common/cache/invalidate.decorator';
 import { Permission } from '@/modules/rbac/permission.decorator';
+import { ok } from '@/common/http/envelope';
+import { ApiStandardResponses } from '@/common/http/api-standard-responses.decorator';
 
 @ApiTags('organizations')
+@ApiStandardResponses()
 @ApiBearerAuth()
 @Controller('organizations')
 export class OrganizationsController {
@@ -41,7 +45,10 @@ export class OrganizationsController {
       'Create organization (PRIVATE/COMMUNITY: any user, SCHOOL: superadmin nebo aktuální director)',
   })
   @InvalidateScopes(() => ['ALL']) // globální list → invaliduj ALL
-  async create(@Body() dto: CreateOrganizationDto, @Req() req: any) {
+  async create(
+    @Body() dto: CreateOrganizationDto,
+    @Req() req: RequestWithUser,
+  ) {
     const userId = req.user?.userId;
     const isSuper = req.user?.systemRole === SystemRole.SUPERADMIN;
 
@@ -54,7 +61,7 @@ export class OrganizationsController {
       }
     }
 
-    return this.service.create(dto, userId);
+    return ok(this.service.create(dto, userId));
   }
 
   @Get()
@@ -68,7 +75,7 @@ export class OrganizationsController {
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @CacheTTL(0) // vypnout HTTP response cache – používáme verzovanou cache v service
   findAll(@Query() q: QueryOrganizationsDto) {
-    return this.service.findAll(q);
+    return ok(this.service.findAll(q));
   }
 
   @Get(':id')
@@ -84,7 +91,7 @@ export class OrganizationsController {
   })
   @CacheTTL(0)
   findOne(@Param('id', new ParseUUIDPipe()) id: string) {
-    return this.service.findOne(id);
+    return ok(this.service.findOne(id));
   }
 
   @Patch(':id')
@@ -95,7 +102,7 @@ export class OrganizationsController {
   update(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() dto: UpdateOrganizationDto,
-    @Req() req: any,
+    @Req() req: RequestWithUser,
   ) {
     if (
       dto.type === OrganizationType.SCHOOL &&
@@ -105,7 +112,7 @@ export class OrganizationsController {
         'Pouze superadmin může změnit typ organizace na SCHOOL.',
       );
     }
-    return this.service.update(id, dto, req.user?.userId ?? null);
+    return ok(this.service.update(id, dto, req.user?.userId ?? null));
   }
 
   @Delete(':id')
@@ -113,6 +120,6 @@ export class OrganizationsController {
   @ApiOperation({ summary: 'Soft delete organization (only for superadmin)' })
   @InvalidateScopes(() => ['ALL'])
   remove(@Param('id', new ParseUUIDPipe()) id: string) {
-    return this.service.remove(id);
+    return ok(this.service.remove(id));
   }
 }

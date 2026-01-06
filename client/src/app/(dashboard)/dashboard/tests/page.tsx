@@ -8,8 +8,7 @@ import { BaseModal } from "@/components/modals/base-modal";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { TestSummary } from "@/types";
-import { apiClient } from "@/utils/api-client";
-import { testSamples } from "@/utils/sample-data";
+import { fetchWithAuth } from "@/lib/http/client";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 const columns: Column<TestSummary>[] = [
@@ -29,7 +28,7 @@ const columns: Column<TestSummary>[] = [
 ];
 
 export default function TestsPage() {
-  const [tests, setTests] = useState<TestSummary[]>(testSamples);
+  const [tests, setTests] = useState<TestSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ title: "", subject: "Mathematics" });
@@ -37,8 +36,8 @@ export default function TestsPage() {
   useEffect(() => {
     const fetchTests = async () => {
       try {
-        const { data } = await apiClient.get<TestSummary[]>("/tests");
-        if (data?.length) setTests(data);
+        const data = await fetchWithAuth<TestSummary[]>("GET", "/tests");
+        setTests(data ?? []);
       } finally {
         setLoading(false);
       }

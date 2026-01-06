@@ -1,9 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import {
-  AuditEntityType,
-  OrganizationRole,
-  PermissionKey,
-} from '@prisma/client';
+import type { OrganizationRole, PermissionKey, Prisma } from '@prisma/client';
+import { AuditEntityType } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
 import { emitRbacInvalidation } from './rbac.events';
 
@@ -41,22 +38,24 @@ export class RbacPolicyService {
       );
     }
 
-    const record = await this.prisma.rolePermission.upsert({
-      where: {
-        organizationId_role_permissionId: {
-          organizationId: input.organizationId ?? null,
-          role: input.role,
-          permissionId: permission.id,
-        },
-      },
-      create: {
-        organizationId: input.organizationId ?? null,
-        role: input.role,
-        permissionId: permission.id,
-        allowed: true,
-      },
-      update: { allowed: true },
-    });
+    const record = input.organizationId
+      ? await this.prisma.rolePermission.upsert({
+          where: {
+            organizationId_role_permissionId: {
+              organizationId: input.organizationId,
+              role: input.role,
+              permissionId: permission.id,
+            },
+          },
+          create: {
+            organizationId: input.organizationId,
+            role: input.role,
+            permissionId: permission.id,
+            allowed: true,
+          },
+          update: { allowed: true },
+        })
+      : await this.upsertGlobalRolePermission(input.role, permission.id);
 
     await this.audit(actor, {
       action: 'ROLE_PERMISSION_GRANT',
@@ -130,22 +129,24 @@ export class RbacPolicyService {
       );
     }
 
-    const record = await this.prisma.userPermission.upsert({
-      where: {
-        userId_organizationId_permissionId: {
-          userId: input.userId,
-          organizationId: input.organizationId ?? null,
-          permissionId: permission.id,
-        },
-      },
-      create: {
-        userId: input.userId,
-        organizationId: input.organizationId ?? null,
-        permissionId: permission.id,
-        allowed: true,
-      },
-      update: { allowed: true },
-    });
+    const record = input.organizationId
+      ? await this.prisma.userPermission.upsert({
+          where: {
+            userId_organizationId_permissionId: {
+              userId: input.userId,
+              organizationId: input.organizationId,
+              permissionId: permission.id,
+            },
+          },
+          create: {
+            userId: input.userId,
+            organizationId: input.organizationId,
+            permissionId: permission.id,
+            allowed: true,
+          },
+          update: { allowed: true },
+        })
+      : await this.upsertGlobalUserPermission(input.userId, permission.id);
 
     await this.audit(actor, {
       action: 'USER_PERMISSION_GRANT',
@@ -212,18 +213,64 @@ export class RbacPolicyService {
 
   private audit(
     actor: ActorContext,
-    payload: { action: string; entityId: string; metadata: Record<string, any> },
+    payload: {
+      action: string;
+      entityId: string;
+      metadata: Record<string, any>;
+    },
   ) {
-    return this.prisma.auditLog.create({
+    const data: Prisma.AuditLogUncheckedCreateInput = {
+      userId: actor.userId ?? null,
+      organizationId: actor.organizationId ?? null,
+      entityType: AuditEntityType.PERMISSION,
+      entityId: payload.entityId,
+      action: payload.action,
+      ipAddress: actor.ipAddress ?? null,
+      userAgent: actor.userAgent ?? null,
+    };
+    if (payload.metadata !== undefined) {
+      data.metadata = payload.metadata;
+    }
+    return this.prisma.auditLog.create({ data });
+  }
+
+  private async upsertGlobalRolePermission(
+    role: OrganizationRole,
+    permissionId: string,
+  ) {
+    const existing = await this.prisma.rolePermission.findFirst({
+      where: { organizationId: null, role, permissionId },
+    });
+    if (existing) {
+      return this.prisma.rolePermission.update({
+        where: { id: existing.id },
+        data: { allowed: true },
+      });
+    }
+    return this.prisma.rolePermission.create({
+      data: { organizationId: null, role, permissionId, allowed: true },
+    });
+  }
+
+  private async upsertGlobalUserPermission(
+    userId: string,
+    permissionId: string,
+  ) {
+    const existing = await this.prisma.userPermission.findFirst({
+      where: { userId, organizationId: null, permissionId },
+    });
+    if (existing) {
+      return this.prisma.userPermission.update({
+        where: { id: existing.id },
+        data: { allowed: true },
+      });
+    }
+    return this.prisma.userPermission.create({
       data: {
-        userId: actor.userId ?? null,
-        organizationId: actor.organizationId ?? null,
-        entityType: AuditEntityType.PERMISSION,
-        entityId: payload.entityId,
-        action: payload.action,
-        ipAddress: actor.ipAddress ?? null,
-        userAgent: actor.userAgent ?? null,
-        metadata: payload.metadata,
+        userId,
+        organizationId: null,
+        permissionId,
+        allowed: true,
       },
     });
   }

@@ -1,14 +1,19 @@
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import type { INestApplication, NestApplicationOptions } from '@nestjs/common';
+import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import * as cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 import { PrismaService } from './prisma/prisma.service';
 import { HttpExceptionFilter } from './infra/http-exception.filter';
 // případně NoopRedis/disable cron přes env
 
 export async function createApp(): Promise<INestApplication> {
-  const app = await NestFactory.create(AppModule, {
-    logger: process.env.NODE_ENV === 'test' ? false : undefined,
-  });
+  const options: NestApplicationOptions = {};
+  if (process.env.NODE_ENV === 'test') {
+    options.logger = false;
+  }
+  const app = await NestFactory.create(AppModule, options);
+  app.use(cookieParser());
 
   // stejné globální pipy jako prod
   app.useGlobalPipes(

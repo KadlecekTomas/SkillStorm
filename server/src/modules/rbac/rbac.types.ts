@@ -1,4 +1,8 @@
-import { OrganizationRole, PermissionKey, SystemRole } from '@prisma/client';
+import type {
+  OrganizationRole,
+  PermissionKey,
+  SystemRole,
+} from '@prisma/client';
 
 export type PermissionToken = PermissionKey | SystemRole | OrganizationRole;
 

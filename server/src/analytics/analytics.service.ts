@@ -1,28 +1,40 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
-import { LogAnalyticsEventDto } from './dto/log-analytics-event.dto';
-import { JwtPayload } from '@/auth/types/jwt-payload';
+import type { Prisma, AnalyticsEvent } from '@prisma/client';
+import type { LogAnalyticsEventDto } from './dto/log-analytics-event.dto';
+import type { JwtPayload } from '@/auth/types/jwt-payload';
 import { subDays } from 'date-fns';
+
+type AnalyticsSummaryItem = { category: string; action: string; count: number };
+type AnalyticsSummary = { since: Date; items: AnalyticsSummaryItem[] };
 
 @Injectable()
 export class AnalyticsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async logEvent(dto: LogAnalyticsEventDto, actor: JwtPayload) {
-    return this.prisma.analyticsEvent.create({
-      data: {
-        userId: actor.userId ?? null,
-        organizationId: actor.organizationId ?? null,
-        category: dto.category,
-        action: dto.action,
-        metadata: dto.metadata ?? null,
-        label: dto.label ?? null,
-        value: dto.value ?? null,
-      },
-    });
+  async logEvent(
+    dto: LogAnalyticsEventDto,
+    actor: JwtPayload,
+  ): Promise<AnalyticsEvent> {
+    const data: Prisma.AnalyticsEventUncheckedCreateInput = {
+      userId: actor.userId ?? null,
+      organizationId: actor.organizationId ?? null,
+      category: dto.category,
+      action: dto.action,
+      label: dto.label ?? null,
+      value: dto.value ?? null,
+    };
+    if (dto.metadata !== undefined) {
+      data.metadata = dto.metadata as Prisma.InputJsonValue;
+    }
+
+    return this.prisma.analyticsEvent.create({ data });
   }
 
-  async summary(days = 7, organizationId?: string | null) {
+  async summary(
+    days = 7,
+    organizationId?: string | null,
+  ): Promise<AnalyticsSummary> {
     const since = subDays(new Date(), days);
     const events = await this.prisma.analyticsEvent.findMany({
       where: {
@@ -35,10 +47,7 @@ export class AnalyticsService {
       },
     });
 
-    const aggregated = new Map<
-      string,
-      { category: string; action: string; count: number }
-    >();
+    const aggregated = new Map<string, AnalyticsSummaryItem>();
     for (const event of events) {
       const key = `${event.category}::${event.action}`;
       const next = aggregated.get(key) ?? {

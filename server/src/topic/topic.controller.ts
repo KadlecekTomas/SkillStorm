@@ -8,9 +8,10 @@ import {
   Param,
   Delete,
   Query,
-  Request,
+  Req,
   ParseUUIDPipe,
 } from '@nestjs/common';
+import { RequestWithUser } from '@/types/request-with-user';
 import {
   ApiOperation,
   ApiTags,
@@ -66,7 +67,7 @@ export class TopicsController {
   @CacheTTL(0)
   getBySubject(
     @Param('subjectId', new ParseUUIDPipe()) subjectId: string,
-    @Request() req,
+    @Req() req: RequestWithUser,
   ) {
     return this.service.findBySubjectId(subjectId, req.user);
   }
@@ -85,7 +86,7 @@ export class TopicsController {
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @CacheTTL(0)
-  findAll(@Request() req, @Query() q: QueryTopicsDto) {
+  findAll(@Req() req: RequestWithUser, @Query() q: QueryTopicsDto) {
     return this.service.findAll(req.user, q);
   }
 
@@ -98,7 +99,7 @@ export class TopicsController {
   @InvalidateScopes(({ result }) =>
     result?.organizationId ? [result.organizationId] : [],
   )
-  create(@Body() dto: CreateTopicDto, @Request() req) {
+  create(@Body() dto: CreateTopicDto, @Req() req: RequestWithUser) {
     return this.service.create(dto, req.user);
   }
 
@@ -109,7 +110,10 @@ export class TopicsController {
   @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'Detail TopicLevel' })
   @CacheTTL(0)
-  findOne(@Param('id', new ParseUUIDPipe()) id: string, @Request() req) {
+  findOne(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() req: RequestWithUser,
+  ) {
     return this.service.findOne(id, req.user);
   }
 
@@ -125,7 +129,7 @@ export class TopicsController {
   update(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() dto: UpdateTopicDto,
-    @Request() req,
+    @Req() req: RequestWithUser,
   ) {
     return this.service.update(id, dto, req.user);
   }
@@ -139,7 +143,10 @@ export class TopicsController {
   @InvalidateScopes(({ result }) =>
     result?.organizationId ? [result.organizationId] : [],
   )
-  remove(@Param('id', new ParseUUIDPipe()) id: string, @Request() req) {
+  remove(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() req: RequestWithUser,
+  ) {
     return this.service.remove(id, req.user);
   }
 
@@ -155,7 +162,7 @@ export class TopicsController {
   assignMaterials(
     @Param('id', new ParseUUIDPipe()) topicLevelId: string,
     @Body() dto: AssignMaterialsDto,
-    @Request() req,
+    @Req() req: RequestWithUser,
   ) {
     return this.service.assignMaterials(topicLevelId, dto, req.user);
   }
@@ -169,7 +176,7 @@ export class TopicsController {
   removeMaterial(
     @Param('id', new ParseUUIDPipe()) topicLevelId: string,
     @Param('materialId', new ParseUUIDPipe()) materialId: string,
-    @Request() req,
+    @Req() req: RequestWithUser,
   ) {
     return this.service.removeMaterial(topicLevelId, materialId, req.user);
   }
@@ -186,7 +193,7 @@ export class TopicsController {
   assignTests(
     @Param('id', new ParseUUIDPipe()) topicLevelId: string,
     @Body() dto: AssignTestsDto,
-    @Request() req,
+    @Req() req: RequestWithUser,
   ) {
     return this.service.assignTests(topicLevelId, dto, req.user);
   }
@@ -200,7 +207,7 @@ export class TopicsController {
   removeTest(
     @Param('id', new ParseUUIDPipe()) topicLevelId: string,
     @Param('testId', new ParseUUIDPipe()) testId: string,
-    @Request() req,
+    @Req() req: RequestWithUser,
   ) {
     return this.service.removeTest(topicLevelId, testId, req.user);
   }

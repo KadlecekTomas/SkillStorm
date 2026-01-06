@@ -12,7 +12,7 @@ import { SystemRole } from '@prisma/client';
 export class CreateUserDto {
   @ApiProperty({ example: 'john.doe@example.com' })
   @IsEmail()
-  email: string;
+  email!: string;
 
   @ApiPropertyOptional({ example: 'jdoe' })
   @IsOptional()
@@ -23,12 +23,12 @@ export class CreateUserDto {
   @ApiProperty({ example: 'John Doe' })
   @IsString()
   @MaxLength(150)
-  name: string;
+  name!: string;
 
   @ApiProperty({ example: 'password123', minLength: 6 })
   @IsString()
   @MinLength(6)
-  password: string;
+  password!: string;
 
   @ApiPropertyOptional({
     enum: SystemRole,

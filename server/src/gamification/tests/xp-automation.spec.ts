@@ -1,10 +1,7 @@
 import { GamificationService } from '@/gamification/gamification.service';
-import { PrismaService } from '@/prisma/prisma.service';
-import { AchievementsService } from '@/gamification/achievements.service';
-import {
-  OrganizationRole,
-  XpEventType,
-} from '@prisma/client';
+import type { PrismaService } from '@/prisma/prisma.service';
+import type { AchievementsService } from '@/gamification/achievements.service';
+import { OrganizationRole, XpEventType } from '@prisma/client';
 import { XpAnalyticsListener } from '@/analytics/listeners/xp-analytics.listener';
 
 describe('XP automation', () => {

@@ -1,33 +1,20 @@
-import {
+import type {
   AcademicYear,
   Assignment,
   CatalogSubject,
   CatalogTopic,
   ClassSection,
-  ContentScope,
-  ContentType,
-  EducationLevel,
   Enrollment,
   LearningMaterial,
-  MaterialAccessLevel,
   MaterialAssignment,
   Membership,
   Organization,
-  OrganizationRole,
-  OrganizationType,
   Permission,
-  PermissionKey,
-  PlanTarget,
-  Prisma,
   PrismaClient,
-  PublishStatus,
   Question,
-  QuestionType,
-  SchoolGrade,
   Student,
   Subscription,
   SubscriptionPlan,
-  SubscriptionStatus,
   Subject,
   SubjectLevel,
   Teacher,
@@ -36,8 +23,23 @@ import {
   TopicLevel,
   User,
 } from '@prisma/client';
+import {
+  ContentScope,
+  ContentType,
+  EducationLevel,
+  MaterialAccessLevel,
+  OrganizationRole,
+  OrganizationType,
+  PermissionKey,
+  PlanTarget,
+  Prisma,
+  PublishStatus,
+  QuestionType,
+  SchoolGrade,
+  SubscriptionStatus,
+} from '@prisma/client';
 import { randomUUID } from 'crypto';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import { RBAC } from './rbac.matrix';
 
 export interface SeededMember {
@@ -160,7 +162,9 @@ async function createMember(
   return { user, membership, password };
 }
 
-export async function seedPolicyData(prisma: PrismaClient): Promise<PolicySeedContext> {
+export async function seedPolicyData(
+  prisma: PrismaClient,
+): Promise<PolicySeedContext> {
   await resetPolicyData(prisma);
 
   const orgA = await prisma.organization.create({
@@ -234,7 +238,9 @@ export async function seedPolicyData(prisma: PrismaClient): Promise<PolicySeedCo
     ),
   );
 
-  const permissionMap = permissionRecords.reduce<Record<PermissionKey, Permission>>(
+  const permissionMap = permissionRecords.reduce<
+    Record<PermissionKey, Permission>
+  >(
     (acc, permission) => {
       acc[permission.key] = permission;
       return acc;
@@ -243,9 +249,24 @@ export async function seedPolicyData(prisma: PrismaClient): Promise<PolicySeedCo
   );
 
   const owner = await createMember(prisma, orgA, OrganizationRole.OWNER, 1);
-  const director = await createMember(prisma, orgA, OrganizationRole.DIRECTOR, 2);
-  const teacherMember = await createMember(prisma, orgA, OrganizationRole.TEACHER, 3);
-  const studentMember = await createMember(prisma, orgA, OrganizationRole.STUDENT, 4);
+  const director = await createMember(
+    prisma,
+    orgA,
+    OrganizationRole.DIRECTOR,
+    2,
+  );
+  const teacherMember = await createMember(
+    prisma,
+    orgA,
+    OrganizationRole.TEACHER,
+    3,
+  );
+  const studentMember = await createMember(
+    prisma,
+    orgA,
+    OrganizationRole.STUDENT,
+    4,
+  );
   const parent = await createMember(prisma, orgA, OrganizationRole.PARENT, 5);
 
   const teacher = await prisma.teacher.create({
@@ -332,7 +353,12 @@ export async function seedPolicyData(prisma: PrismaClient): Promise<PolicySeedCo
     },
   });
 
-  const orgBTeacher = await createMember(prisma, orgB, OrganizationRole.TEACHER, 6);
+  const orgBTeacher = await createMember(
+    prisma,
+    orgB,
+    OrganizationRole.TEACHER,
+    6,
+  );
 
   const learningMaterial = await prisma.learningMaterial.create({
     data: {
@@ -448,7 +474,8 @@ export async function seedPolicyData(prisma: PrismaClient): Promise<PolicySeedCo
   // Role permissions derived from matrix
   await prisma.$transaction(
     Object.entries(RBAC).flatMap(([role, config]) => {
-      const isWildcard = (config.permissions as (PermissionKey | '*')[])[0] === '*';
+      const isWildcard =
+        (config.permissions as (PermissionKey | '*')[])[0] === '*';
       const perms = isWildcard
         ? Object.values(PermissionKey)
         : (config.permissions as PermissionKey[]);

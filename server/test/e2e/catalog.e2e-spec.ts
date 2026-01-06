@@ -9,12 +9,12 @@ import { PrismaService } from '@/prisma/prisma.service';
 import {
   $Enums,
   OrganizationRole,
-  OrganizationType,
   SchoolGrade,
   TopicPhase,
   Difficulty,
+  SystemRole,
 } from '@prisma/client';
-import { login, register } from 'test/helpers';
+import { createSystemUser, setupOrgContext } from 'test/helpers';
 
 describe('Catalog (e2e)', () => {
   let app: INestApplication;
@@ -44,6 +44,7 @@ describe('Catalog (e2e)', () => {
 
   // org + year + level infra
   let org: { id: string };
+  let ctx: Awaited<ReturnType<typeof setupOrgContext>>;
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   let year: { id: string } | null = null;
   let subjectFromMaterialize: { id: string } | null = null;
@@ -69,53 +70,44 @@ describe('Catalog (e2e)', () => {
     prisma = app.get(PrismaService);
     await prisma.$connect();
 
-    // users
-    const rSuper = await register(app, 'super-catalog');
-    await prisma.user.update({
-      where: { id: rSuper.user.id },
-      data: { systemRole: $Enums.SystemRole.SUPERADMIN },
+    ctx = await setupOrgContext(app, prisma, {
+      role: 'DIRECTOR',
+      seed: 'catalog',
+      with: { teacher: true, student: true },
     });
-    superUser = {
-      id: rSuper.user.id,
-      token: await login(app, rSuper.login),
-      login: rSuper.login,
+
+    org = { id: ctx.organization.id };
+    director = {
+      id: ctx.owner.user.id,
+      token: ctx.owner.accessToken,
+      login: ctx.owner.login,
     };
-
-    const rDir = await register(app, 'director-catalog');
-    director = { id: rDir.user.id, token: rDir.accessToken, login: rDir.login };
-
-    const rTeacher = await register(app, 'teacher-catalog', 'Učitel Katalog');
     teacher = {
-      id: rTeacher.user.id,
-      token: rTeacher.accessToken,
-      login: rTeacher.login,
+      id: ctx.teacher!.user.id,
+      token: ctx.teacher!.accessToken,
+      login: ctx.teacher!.login,
     };
-
-    const rStud = await register(app, 'student-catalog');
     student = {
-      id: rStud.user.id,
-      token: rStud.accessToken,
-      login: rStud.login,
+      id: ctx.student!.user.id,
+      token: ctx.student!.accessToken,
+      login: ctx.student!.login,
     };
 
-    // org + membership
-    org = await prisma.organization.create({
-      data: {
-        name: 'Catalog E2E Org',
-        type: OrganizationType.SCHOOL,
-        memberships: {
-          create: [
-            { userId: director.id, role: OrganizationRole.DIRECTOR },
-            { userId: teacher.id, role: OrganizationRole.TEACHER },
-          ],
-        },
-      },
-      select: { id: true },
-    });
-
-    // refresh tokens (pro RolesGuard, kdyby četl claims ze 2. loginu)
-    director.token = await login(app, director.login);
-    teacher.token = await login(app, teacher.login);
+    const superUserAuth = await createSystemUser(
+      app,
+      prisma,
+      SystemRole.SUPERADMIN,
+      'catalog_super',
+    );
+    await ctx.addMembershipForUser(
+      superUserAuth.user.id,
+      OrganizationRole.DIRECTOR,
+    );
+    superUser = {
+      id: superUserAuth.user.id,
+      token: superUserAuth.accessToken,
+      login: superUserAuth.login,
+    };
 
     // academic year (kvůli subject levels materializaci)
     year = await prisma.academicYear.create({
@@ -205,10 +197,10 @@ describe('Catalog (e2e)', () => {
   // READ: subjects + topics
   // ---------------------------
 
-  it('GET /catalog/subjects → 200 list + search', async () => {
+  it('GET /catalog/subjects → 200 list + search (DIRECTOR)', async () => {
     const res = await request(app.getHttpServer())
       .get('/catalog/subjects')
-      .set('Authorization', `Bearer ${teacher.token}`)
+      .set('Authorization', `Bearer ${director.token}`)
       .query({ search: 'mat', page: 1, limit: 10 })
       .expect(200);
 
@@ -226,10 +218,10 @@ describe('Catalog (e2e)', () => {
     expect(res.body.code).toBe('MATH');
   });
 
-  it('GET /catalog/subjects/:id/topics → 200 list topics by subject', async () => {
+  it('GET /catalog/subjects/:id/topics → 200 list topics by subject (DIRECTOR)', async () => {
     const res = await request(app.getHttpServer())
       .get(`/catalog/subjects/${catSubjectA.id}/topics`)
-      .set('Authorization', `Bearer ${teacher.token}`)
+      .set('Authorization', `Bearer ${director.token}`)
       .query({ search: 'ov', page: 1, limit: 50 })
       .expect(200);
 
@@ -237,10 +229,10 @@ describe('Catalog (e2e)', () => {
     expect(names).toEqual(expect.arrayContaining(['Rovnice']));
   });
 
-  it('GET /catalog/topics/:id → 200 detail topic', async () => {
+  it('GET /catalog/topics/:id → 200 detail topic (DIRECTOR)', async () => {
     const res = await request(app.getHttpServer())
       .get(`/catalog/topics/${catTopicA1.id}`)
-      .set('Authorization', `Bearer ${teacher.token}`)
+      .set('Authorization', `Bearer ${director.token}`)
       .expect(200);
 
     expect(res.body.id).toBe(catTopicA1.id);
@@ -377,6 +369,9 @@ describe('Catalog (e2e)', () => {
       .expect(201);
 
     subjectFromMaterialize = res.body;
+    if (!subjectFromMaterialize) {
+      throw new Error('subjectFromMaterialize is null');
+    }
 
     // levels created?
     const levels = await prisma.subjectLevel.findMany({
@@ -385,13 +380,16 @@ describe('Catalog (e2e)', () => {
     expect(levels.length).toBeGreaterThanOrEqual(2);
 
     // pro další testy si necháme 1 level bokem
+    if (!levels[0]) {
+      throw new Error('No subject levels created');
+    }
     subjectLevelForMaterialize = { id: levels[0].id };
   });
 
-  it('POST /catalog/topics/:id/materialize-to-subject-level (TEACHER) → 201', async () => {
+  it('POST /catalog/topics/:id/materialize-to-subject-level (DIRECTOR) → 201', async () => {
     const res = await request(app.getHttpServer())
       .post(`/catalog/topics/${catTopicA2.id}/materialize-to-subject-level`)
-      .set('Authorization', `Bearer ${teacher.token}`)
+      .set('Authorization', `Bearer ${director.token}`)
       .send({
         subjectLevelId: subjectLevelForMaterialize!.id,
         phase: TopicPhase.INTRO,
@@ -444,14 +442,14 @@ describe('Catalog (e2e)', () => {
   it('GET /catalog/subjects → 400 na invalidní page/limit', async () => {
     await request(app.getHttpServer())
       .get('/catalog/subjects?page=0&limit=0')
-      .set('Authorization', `Bearer ${teacher.token}`)
+      .set('Authorization', `Bearer ${director.token}`)
       .expect(400);
   });
 
   it('GET /catalog/subjects/:id → 404 pro non-existing UUID', async () => {
     await request(app.getHttpServer())
       .get(`/catalog/subjects/${randomUUID()}`)
-      .set('Authorization', `Bearer ${teacher.token}`)
+      .set('Authorization', `Bearer ${director.token}`)
       .expect(404);
   });
 
@@ -478,7 +476,7 @@ describe('Catalog (e2e)', () => {
     // list před
     const before = await request(app.getHttpServer())
       .get('/catalog/subjects')
-      .set('Authorization', `Bearer ${teacher.token}`)
+      .set('Authorization', `Bearer ${director.token}`)
       .query({ page: 1, limit: 200 })
       .expect(200);
     const beforeNames = new Set(before.body.data.map((s: any) => s.name));
@@ -504,7 +502,7 @@ describe('Catalog (e2e)', () => {
     // list po – s cache-busterem přes search (nebo změnou pořadí)
     const after = await request(app.getHttpServer())
       .get('/catalog/subjects')
-      .set('Authorization', `Bearer ${teacher.token}`)
+      .set('Authorization', `Bearer ${director.token}`)
       .query({ page: 1, limit: 200, search: '' + Date.now() }) // nevadí, služba ignoruje empty → jen "bust"
       .expect(200);
 
@@ -556,18 +554,27 @@ describe('Catalog (e2e)', () => {
   });
 
   it('POST materialize-to-org (TEACHER) → 403 do cizí org', async () => {
-    const otherOrg = await prisma.organization.create({
-      data: { name: 'Other Org', type: OrganizationType.SCHOOL },
-      select: { id: true },
+    const otherCtx = await setupOrgContext(app, prisma, {
+      role: 'DIRECTOR',
+      seed: `catalog_other_${Date.now()}`,
     });
 
     await request(app.getHttpServer())
       .post(`/catalog/subjects/${catSubjectA.id}/materialize-to-org`)
       .set('Authorization', `Bearer ${teacher.token}`)
-      .send({ organizationId: otherOrg.id }) // teacher není členem
+      .send({ organizationId: otherCtx.organization.id }) // teacher není členem
       .expect(403);
 
-    await prisma.organization.delete({ where: { id: otherOrg.id } });
+    await prisma.membership.deleteMany({
+      where: { organizationId: otherCtx.organization.id },
+    });
+    await prisma.organization.delete({
+      where: { id: otherCtx.organization.id },
+    });
+    await prisma.refreshToken.deleteMany({
+      where: { userId: otherCtx.owner.user.id },
+    });
+    await prisma.user.delete({ where: { id: otherCtx.owner.user.id } });
   });
 
   it('POST materialize-to-org (DIRECTOR) → createLevelsForGrades idempotentní (duplicitní ročníky se nezdvojí)', async () => {
@@ -601,18 +608,27 @@ describe('Catalog (e2e)', () => {
   });
 
   it('POST materialize-to-org (TEACHER) → 403 do cizí org', async () => {
-    const otherOrg = await prisma.organization.create({
-      data: { name: 'Other Org', type: OrganizationType.SCHOOL },
-      select: { id: true },
+    const otherCtx = await setupOrgContext(app, prisma, {
+      role: 'DIRECTOR',
+      seed: `catalog_other_2_${Date.now()}`,
     });
 
     await request(app.getHttpServer())
       .post(`/catalog/subjects/${catSubjectA.id}/materialize-to-org`)
       .set('Authorization', `Bearer ${teacher.token}`)
-      .send({ organizationId: otherOrg.id }) // teacher není členem
+      .send({ organizationId: otherCtx.organization.id }) // teacher není členem
       .expect(403);
 
-    await prisma.organization.delete({ where: { id: otherOrg.id } });
+    await prisma.membership.deleteMany({
+      where: { organizationId: otherCtx.organization.id },
+    });
+    await prisma.organization.delete({
+      where: { id: otherCtx.organization.id },
+    });
+    await prisma.refreshToken.deleteMany({
+      where: { userId: otherCtx.owner.user.id },
+    });
+    await prisma.user.delete({ where: { id: otherCtx.owner.user.id } });
   });
 
   it('POST materialize-to-org (DIRECTOR) → createLevelsForGrades idempotentní (duplicitní ročníky se nezdvojí)', async () => {
@@ -759,14 +775,14 @@ describe('Catalog (e2e)', () => {
   it('GET /catalog/subjects/:id/topics → 400 na nevalidní page/limit', async () => {
     await request(app.getHttpServer())
       .get(`/catalog/subjects/${catSubjectA.id}/topics?page=0&limit=0`)
-      .set('Authorization', `Bearer ${teacher.token}`)
+      .set('Authorization', `Bearer ${director.token}`)
       .expect(400);
   });
 
   it('GET /catalog/topics/:id → 404 neexistující UUID', async () => {
     await request(app.getHttpServer())
       .get(`/catalog/topics/${randomUUID()}`)
-      .set('Authorization', `Bearer ${teacher.token}`)
+      .set('Authorization', `Bearer ${director.token}`)
       .expect(404);
   });
 

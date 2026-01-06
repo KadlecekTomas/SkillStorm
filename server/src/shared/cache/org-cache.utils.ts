@@ -1,5 +1,6 @@
 import type { Cache } from 'cache-manager';
-import { Prisma, SystemRole } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
+import { SystemRole } from '@prisma/client';
 
 /**
  * Vytvoř “scope” pro cache klíče – superadmin = ALL, jinak orgId.

@@ -4,8 +4,8 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import * as request from 'supertest';
 import { AppModule } from '../../src/app.module';
 import { PrismaService } from '@/prisma/prisma.service';
-import { $Enums, OrganizationRole, OrganizationType } from '@prisma/client';
-import { login, register } from 'test/helpers';
+import { $Enums, OrganizationRole, SystemRole } from '@prisma/client';
+import { createSystemUser, setupOrgContext } from 'test/helpers';
 
 describe('Subjects (e2e)', () => {
   let app: INestApplication;
@@ -37,6 +37,9 @@ describe('Subjects (e2e)', () => {
   let orgA: { id: string };
   let orgB: { id: string };
 
+  let ctxA: Awaited<ReturnType<typeof setupOrgContext>>;
+  let ctxB: Awaited<ReturnType<typeof setupOrgContext>>;
+
   // seed IDs (jen stringy kvůli stabilitě)
   let catalogMathId: string;
   let catTopic1Id: string;
@@ -63,75 +66,59 @@ describe('Subjects (e2e)', () => {
     prisma = app.get(PrismaService);
     await prisma.$connect();
 
-    // --- users ---
-    const rSuper = await register(app, 'subjects_super');
-    await prisma.user.update({
-      where: { id: rSuper.user.id },
-      data: { systemRole: $Enums.SystemRole.SUPERADMIN },
+    ctxA = await setupOrgContext(app, prisma, {
+      role: 'DIRECTOR',
+      seed: 'subjectsA',
     });
-    superUser = {
-      id: rSuper.user.id,
-      token: await login(app, rSuper.login),
-      login: rSuper.login,
-    };
+    ctxB = await setupOrgContext(app, prisma, {
+      role: 'TEACHER',
+      seed: 'subjectsB',
+    });
 
-    const rDirA = await register(app, 'subjects_dirA');
+    orgA = { id: ctxA.organization.id };
+    orgB = { id: ctxB.organization.id };
+
     directorA = {
-      id: rDirA.user.id,
-      token: rDirA.accessToken,
-      login: rDirA.login,
+      id: ctxA.owner.user.id,
+      token: ctxA.owner.accessToken,
+      login: ctxA.owner.login,
     };
 
-    const rTeachA1 = await register(app, 'subjects_teacherA1');
+    const tA1 = await ctxA.addMember(
+      OrganizationRole.TEACHER,
+      'subjects_teacherA1',
+    );
     teacherA1 = {
-      id: rTeachA1.user.id,
-      token: rTeachA1.accessToken,
-      login: rTeachA1.login,
+      id: tA1.user.id,
+      token: tA1.accessToken,
+      login: tA1.login,
     };
 
-    const rTeachB1 = await register(app, 'subjects_teacherB1');
     teacherB1 = {
-      id: rTeachB1.user.id,
-      token: rTeachB1.accessToken,
-      login: rTeachB1.login,
+      id: ctxB.actor.user.id,
+      token: ctxB.actor.accessToken,
+      login: ctxB.actor.login,
     };
 
-    // --- orgs + memberships ---
-    orgA = await prisma.organization.create({
-      data: {
-        name: 'Subjects Org A',
-        type: OrganizationType.SCHOOL,
-        memberships: {
-          create: { userId: directorA.id, role: OrganizationRole.DIRECTOR },
-        },
-      },
-      select: { id: true },
-    });
-    // re-login ředitele, aby měl org v JWT
-    directorA.token = await login(app, directorA.login);
-
-    orgB = await prisma.organization.create({
-      data: {
-        name: 'Subjects Org B',
-        type: OrganizationType.SCHOOL,
-        memberships: {
-          create: { userId: teacherB1.id, role: OrganizationRole.TEACHER },
-        },
-      },
-      select: { id: true },
-    });
-    // re-login učitele B1 (orgB)
-    teacherB1.token = await login(app, teacherB1.login);
-
-    // teacherA1 v orgA (membership) + re-login pro org roli
-    await prisma.membership.create({
-      data: {
-        organizationId: orgA.id,
-        userId: teacherA1.id,
-        role: OrganizationRole.TEACHER,
-      },
-    });
-    teacherA1.token = await login(app, teacherA1.login);
+    const superUserAuth = await createSystemUser(
+      app,
+      prisma,
+      SystemRole.SUPERADMIN,
+      'subjects_super',
+    );
+    await ctxA.addMembershipForUser(
+      superUserAuth.user.id,
+      OrganizationRole.DIRECTOR,
+    );
+    await ctxB.addMembershipForUser(
+      superUserAuth.user.id,
+      OrganizationRole.DIRECTOR,
+    );
+    superUser = {
+      id: superUserAuth.user.id,
+      token: superUserAuth.accessToken,
+      login: superUserAuth.login,
+    };
 
     // --- katalogový předmět s povinným code ---
     const cat = await prisma.catalogSubject.create({
@@ -226,7 +213,13 @@ describe('Subjects (e2e)', () => {
       .deleteMany({
         where: {
           userId: {
-            in: [superUser.id, directorA.id, teacherA1.id, teacherB1.id],
+            in: [
+              superUser.id,
+              directorA.id,
+              teacherA1.id,
+              teacherB1.id,
+              ctxB.owner.user.id,
+            ],
           },
         },
       })
@@ -234,7 +227,15 @@ describe('Subjects (e2e)', () => {
     await prisma.user
       .deleteMany({
         where: {
-          id: { in: [superUser.id, directorA.id, teacherA1.id, teacherB1.id] },
+          id: {
+            in: [
+              superUser.id,
+              directorA.id,
+              teacherA1.id,
+              teacherB1.id,
+              ctxB.owner.user.id,
+            ],
+          },
         },
       })
       .catch(() => {});
@@ -260,10 +261,10 @@ describe('Subjects (e2e)', () => {
     await prisma.subject.delete({ where: { id: res.body.id } });
   });
 
-  it('POST /subjects → TEACHER v orgA vytvoří [201]', async () => {
+  it('POST /subjects → DIRECTOR v orgA vytvoří [201]', async () => {
     const res = await request(app.getHttpServer())
       .post('/subjects')
-      .set('Authorization', `Bearer ${teacherA1.token}`)
+      .set('Authorization', `Bearer ${directorA.token}`)
       .send({ name: 'Chemie', organizationId: orgA.id })
       .expect(201);
 
@@ -271,7 +272,7 @@ describe('Subjects (e2e)', () => {
     await prisma.subject.delete({ where: { id: res.body.id } });
   });
 
-  it('POST /subjects → 403 TEACHER jiné organizace', async () => {
+  it('POST /subjects → 403 TEACHER bez MANAGE_TEACHERS', async () => {
     await request(app.getHttpServer())
       .post('/subjects')
       .set('Authorization', `Bearer ${teacherB1.token}`)
@@ -304,7 +305,7 @@ describe('Subjects (e2e)', () => {
     await request(app.getHttpServer())
       .post('/subjects')
       .set('Authorization', `Bearer ${directorA.token}`)
-      .send({ name: 'A', organizationId: 'not-uuid' }) // name too short + bad uuid
+      .send({ name: 'A', organizationId: orgA.id }) // name too short
       .expect(400);
   });
 
@@ -376,12 +377,12 @@ describe('Subjects (e2e)', () => {
     expect(item.levels.length).toBeGreaterThan(0);
   });
 
-  it('GET /subjects → 401 bez tokenu, 403 TEACHER jiné org na list', async () => {
+  it('GET /subjects → 401 bez tokenu, TEACHER bez MANAGE_TEACHERS → 403', async () => {
     await request(app.getHttpServer()).get('/subjects').expect(401);
     await request(app.getHttpServer())
       .get('/subjects')
-      .set('Authorization', `Bearer ${teacherB1.token}`) // orgB
-      .expect(200);
+      .set('Authorization', `Bearer ${teacherB1.token}`)
+      .expect(403);
   });
 
   // ---------------------------
@@ -401,10 +402,10 @@ describe('Subjects (e2e)', () => {
       .expect(200);
   });
 
-  it('GET /subjects/:id → TEACHER stejné org [200]', async () => {
+  it('GET /subjects/:id → DIRECTOR stejné org [200]', async () => {
     await request(app.getHttpServer())
       .get(`/subjects/${subjectA1Id}`)
-      .set('Authorization', `Bearer ${teacherA1.token}`)
+      .set('Authorization', `Bearer ${directorA.token}`)
       .expect(200);
   });
 
@@ -453,7 +454,7 @@ describe('Subjects (e2e)', () => {
     await prisma.catalogSubject.delete({ where: { id: otherCatalog.id } });
   });
 
-  it('PATCH /subjects/:id → TEACHER v orgA může [200]', async () => {
+  it('PATCH /subjects/:id → DIRECTOR v orgA může [200]', async () => {
     const tmp = await prisma.subject.create({
       data: { name: 'Zeměpis', organizationId: orgA.id },
       select: { id: true },
@@ -461,7 +462,7 @@ describe('Subjects (e2e)', () => {
 
     await request(app.getHttpServer())
       .patch(`/subjects/${tmp.id}`)
-      .set('Authorization', `Bearer ${teacherA1.token}`)
+      .set('Authorization', `Bearer ${directorA.token}`)
       .send({ name: 'Zeměpis – edit' })
       .expect(200);
 
@@ -575,15 +576,11 @@ describe('Subjects (e2e)', () => {
 
   it('GET /subjects → STUDENT nemá přístup (403)', async () => {
     // založ studenta + membership v orgA + re-login
-    const rStud = await register(app, 'subjects_extra_student');
-    await prisma.membership.create({
-      data: {
-        organizationId: orgA.id,
-        userId: rStud.user.id,
-        role: OrganizationRole.STUDENT,
-      },
-    });
-    const studToken = await login(app, rStud.login);
+    const rStud = await ctxA.addMember(
+      OrganizationRole.STUDENT,
+      'subjects_extra_student',
+    );
+    const studToken = rStud.accessToken;
 
     await request(app.getHttpServer())
       .get('/subjects')
@@ -591,6 +588,7 @@ describe('Subjects (e2e)', () => {
       .expect(403);
 
     // cleanup user
+    await prisma.membership.delete({ where: { id: rStud.membership.id } });
     await prisma.refreshToken.deleteMany({ where: { userId: rStud.user.id } });
     await prisma.user.delete({ where: { id: rStud.user.id } });
   });

@@ -579,8 +579,8 @@ export class TestsService {
   }
 
   async results(testId: string, user: JwtPayload): Promise<unknown> {
-    const test = await this.prisma.test.findUnique({
-      where: { id: testId },
+    const test = await this.prisma.test.findFirst({
+      where: { id: testId, deletedAt: null },
       select: { id: true, organizationId: true },
     });
     if (!test) throw new NotFoundException('Test nenalezen');

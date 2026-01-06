@@ -40,6 +40,12 @@ jobs:
           npm ci
           npm run build
 
+      - name: 🧪 FE policy tests
+        working-directory: ./client
+        run: |
+          npx playwright install --with-deps
+          npm run test:fe-policy
+
       # === BACKEND ===
       - name: 🧩 Ensure Nest CLI available
         working-directory: ./server

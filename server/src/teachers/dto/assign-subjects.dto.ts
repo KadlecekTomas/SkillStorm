@@ -17,7 +17,7 @@ export class AssignSubjectsDto {
   @ArrayNotEmpty()
   @IsUUID('4', { each: true })
   @Type(() => String)
-  subjectIds: string[];
+  subjectIds!: string[];
 
   @ApiPropertyOptional({
     description:

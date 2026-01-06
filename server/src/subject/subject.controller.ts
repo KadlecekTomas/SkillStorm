@@ -7,10 +7,11 @@ import {
   Patch,
   Param,
   Delete,
-  Request,
+  Req,
   ParseUUIDPipe,
   Query,
 } from '@nestjs/common';
+import { RequestWithUser } from '@/types/request-with-user';
 import {
   ApiOperation,
   ApiTags,
@@ -40,7 +41,7 @@ export class SubjectsController {
   @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'Vytvoření předmětu' })
   @InvalidateScopes(({ req }) => [req.body?.organizationId].filter(Boolean))
-  create(@Body() dto: CreateSubjectDto, @Request() req) {
+  create(@Body() dto: CreateSubjectDto, @Req() req: RequestWithUser) {
     return this.service.create(dto, req.user);
   }
 
@@ -55,7 +56,7 @@ export class SubjectsController {
   @ApiQuery({ name: 'search', required: false, example: 'mat' })
   @ApiQuery({ name: 'includeLevels', required: false, example: false })
   @CacheTTL(0) // čtecí endpointy necacheujeme na HTTP vrstvě – používáme verziovanou cache v service
-  findAll(@Request() req, @Query() q: QuerySubjectsDto) {
+  findAll(@Req() req: RequestWithUser, @Query() q: QuerySubjectsDto) {
     return this.service.findAll(req.user, q);
   }
 
@@ -64,7 +65,10 @@ export class SubjectsController {
   @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'Detail předmětu' })
   @CacheTTL(0)
-  findOne(@Param('id', new ParseUUIDPipe()) id: string, @Request() req) {
+  findOne(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() req: RequestWithUser,
+  ) {
     return this.service.findOne(id, req.user);
   }
 
@@ -78,7 +82,7 @@ export class SubjectsController {
   update(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() dto: UpdateSubjectDto,
-    @Request() req,
+    @Req() req: RequestWithUser,
   ) {
     return this.service.update(id, dto, req.user);
   }
@@ -90,7 +94,10 @@ export class SubjectsController {
   @InvalidateScopes(({ result }) =>
     result?.organizationId ? [result.organizationId] : [],
   )
-  remove(@Param('id', new ParseUUIDPipe()) id: string, @Request() req) {
+  remove(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() req: RequestWithUser,
+  ) {
     return this.service.remove(id, req.user);
   }
 
@@ -101,7 +108,7 @@ export class SubjectsController {
   @CacheTTL(0)
   findLevels(
     @Param('id', new ParseUUIDPipe()) subjectId: string,
-    @Request() req,
+    @Req() req: RequestWithUser,
   ) {
     return this.service.findLevels(subjectId, req.user);
   }
@@ -115,7 +122,7 @@ export class SubjectsController {
   @CacheTTL(0)
   findTopicsBySubject(
     @Param('id', new ParseUUIDPipe()) subjectId: string,
-    @Request() req,
+    @Req() req: RequestWithUser,
   ) {
     return this.service.findTopicLevels(subjectId, req.user);
   }

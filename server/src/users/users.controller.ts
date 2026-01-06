@@ -12,6 +12,7 @@ import {
   ForbiddenException,
   ParseUUIDPipe,
 } from '@nestjs/common';
+import { RequestWithUser } from '@/types/request-with-user';
 import {
   ApiBearerAuth,
   ApiTags,
@@ -29,8 +30,11 @@ import { OrganizationRole, SystemRole } from '@prisma/client';
 import { InvalidateScopes } from '@/common/cache/invalidate.decorator';
 import { NoHttpCache } from '@/common/cache/no-http-cache.decorator';
 import { Permission } from '@/modules/rbac/permission.decorator';
+import { ok } from '@/common/http/envelope';
+import { ApiStandardResponses } from '@/common/http/api-standard-responses.decorator';
 
 @ApiTags('users')
+@ApiStandardResponses()
 @ApiBearerAuth()
 @Controller('users')
 export class UsersController {
@@ -46,21 +50,24 @@ export class UsersController {
   @ApiQuery({ name: 'limit', required: false, example: 50 })
   @ApiQuery({ name: 'search', required: false, example: 'john' })
   @CacheTTL(0)
-  findAll(@Req() req: any, @Query() q: QueryUsersDto) {
+  findAll(@Req() req: RequestWithUser, @Query() q: QueryUsersDto) {
     // služba sama vyhodnotí scope (ALL pro superadmina, jinak org-scoped)
-    return this.usersService.findAllQuery(req.user, q);
+    return ok(this.usersService.findAllQuery(req.user, q));
   }
 
   // -------- DETAIL (self nebo SUPERADMIN) --------
   @Get(':id')
   @NoHttpCache()
-  async findOne(@Param('id', new ParseUUIDPipe()) id: string, @Req() req: any) {
-    const isSelf = req.user.userId === id || req.user.sub === id;
+  async findOne(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() req: RequestWithUser,
+  ) {
+    const isSelf = req.user.userId === id;
     const isSuperadmin = req.user.systemRole === 'SUPERADMIN';
     if (!isSelf && !isSuperadmin) {
       throw new ForbiddenException('Můžeš zobrazit pouze svůj vlastní účet.');
     }
-    return this.usersService.findOneSafe(id);
+    return ok(this.usersService.findOneSafe(id));
   }
 
   // -------- CREATE (SUPERADMIN) --------
@@ -72,7 +79,7 @@ export class UsersController {
     Array.isArray(result?.affectedOrgIds) ? result.affectedOrgIds : ['ALL'],
   )
   create(@Body() dto: CreateUserDto) {
-    return this.usersService.create(dto);
+    return ok(this.usersService.create(dto));
   }
 
   // -------- UPDATE (self nebo SUPERADMIN) --------
@@ -90,18 +97,20 @@ export class UsersController {
   async update(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() dto: UpdateUserDto,
-    @Req() req: any,
+    @Req() req: RequestWithUser,
   ) {
-    const isSelf = req.user.userId === id || req.user.sub === id;
+    const isSelf = req.user.userId === id;
     const isSuperadmin = req.user.systemRole === 'SUPERADMIN';
     if (!isSelf && !isSuperadmin) {
       throw new ForbiddenException('Můžeš upravit pouze svůj vlastní účet.');
     }
     // doporučení: usersService.update vracej { user, affectedOrgIds }
-    return this.usersService.update(id, dto, {
-      requesterIsSuperadmin: isSuperadmin,
-      requesterId: req.user.userId,
-    });
+    return ok(
+      this.usersService.update(id, dto, {
+        requesterIsSuperadmin: isSuperadmin,
+        requesterId: req.user.userId,
+      }),
+    );
   }
 
   // -------- DELETE/ANONYMIZE (SUPERADMIN nebo DIRECTOR v téže org; nikdy ne mazat superadmina) --------
@@ -119,8 +128,11 @@ export class UsersController {
     const fallbackOrg = req?.user?.organizationId;
     return fallbackOrg ? [fallbackOrg] : ['ALL'];
   })
-  async remove(@Param('id', new ParseUUIDPipe()) id: string, @Req() req: any) {
+  async remove(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() req: RequestWithUser,
+  ) {
     // doporučení: usersService.remove vracej { ok: true, affectedOrgIds: [...] }
-    return this.usersService.remove(id, req.user);
+    return ok(this.usersService.remove(id, req.user));
   }
 }

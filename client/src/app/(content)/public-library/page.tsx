@@ -1,7 +1,7 @@
 import { ContentLibraryList } from "@/components/content/content-library-list";
-import { contentSamples } from "@/utils/sample-data";
 
 export default function PublicLibraryPage() {
+  const demoItems: any[] = [];
   return (
     <div className="min-h-screen bg-secondary px-6 py-12">
       <div className="mx-auto max-w-5xl space-y-6">
@@ -14,7 +14,7 @@ export default function PublicLibraryPage() {
             Browse featured content before signing in.
           </p>
         </div>
-        <ContentLibraryList items={contentSamples} />
+        <ContentLibraryList items={demoItems} />
       </div>
     </div>
   );

@@ -6,30 +6,32 @@ export class CreateClassSectionDto {
   @ApiProperty({
     example: 'year-uuid',
     description: 'ID školního roku (AcademicYear)',
+    required: false,
   })
+  @IsOptional()
   @IsUUID()
-  yearId: string;
+  yearId?: string;
 
   @ApiProperty({
     example: 'PRIMARY_1',
     description: 'Ročník třídy (např. PRIMARY_1, PRIMARY_2...)',
   })
   @IsEnum(SchoolGrade)
-  grade: SchoolGrade;
+  grade!: SchoolGrade;
 
   @ApiProperty({
     example: 'A',
     description: 'Označení sekce (A, B, C...)',
   })
   @IsString()
-  section: string;
+  section!: string;
 
   @ApiProperty({
     example: '1.A',
     description: 'Celé označení třídy',
   })
   @IsString()
-  label: string;
+  label!: string;
 
   @ApiProperty({
     example: 'Informatika',

@@ -506,11 +506,11 @@ describe('Students (e2e)', () => {
       .expect(200);
   });
 
-  it('GET /students/:id → TEACHER třídní v current roce vidí [200]', async () => {
+  it('GET /students/:id → TEACHER třídní v current roce → 403 (bez MANAGE_STUDENTS)', async () => {
     await request(app.getHttpServer())
       .get(`/students/${studentA1.id}`)
       .set('Authorization', `Bearer ${teacherA1.token}`)
-      .expect(200);
+      .expect(403);
   });
 
   it('GET /students/:id → TEACHER cizí org nebo netřídní → 403', async () => {
@@ -553,13 +553,12 @@ describe('Students (e2e)', () => {
     expect(res.body.externalId).toBe('X-55555');
   });
 
-  it('PATCH /students/:id → TEACHER třídní v current roce může [200]', async () => {
+  it('PATCH /students/:id → TEACHER třídní v current roce → 403 (bez MANAGE_STUDENTS)', async () => {
     const res = await request(app.getHttpServer())
       .patch(`/students/${studentA1.id}`)
       .set('Authorization', `Bearer ${teacherA1.token}`)
       .send({ studentNumber: '2025-EDIT' })
-      .expect(200);
-    expect(res.body.studentNumber).toBe('2025-EDIT');
+      .expect(403);
   });
 
   it('PATCH /students/:id → TEACHER z jiné org → 403', async () => {

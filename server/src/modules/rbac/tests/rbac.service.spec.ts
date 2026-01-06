@@ -1,21 +1,21 @@
 import { PermissionKey, SystemRole } from '@prisma/client';
 import { RbacService } from '@/modules/rbac/rbac.service';
-import { PrismaService } from '@/prisma/prisma.service';
+import type { PrismaService } from '@/prisma/prisma.service';
 import { emitRbacInvalidation } from '@/modules/rbac/rbac.events';
 
 describe('RbacService (unit)', () => {
-let prismaMock: any;
-let service: RbacService;
+  let prismaMock: any;
+  let service: RbacService;
 
-beforeEach(() => {
-  prismaMock = {
-    user: { findUnique: jest.fn() },
-    userPermission: { findFirst: jest.fn() },
-    membership: { findFirst: jest.fn() },
-    rolePermission: { findFirst: jest.fn() },
-  };
-  service = new RbacService(prismaMock as PrismaService);
-});
+  beforeEach(() => {
+    prismaMock = {
+      user: { findUnique: jest.fn() },
+      userPermission: { findFirst: jest.fn() },
+      membership: { findFirst: jest.fn() },
+      rolePermission: { findFirst: jest.fn() },
+    };
+    service = new RbacService(prismaMock as PrismaService);
+  });
 
   afterEach(() => {
     service.invalidateAll();

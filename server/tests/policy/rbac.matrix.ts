@@ -13,8 +13,16 @@ export const PERMISSION_ENDPOINTS: Record<PermissionKey, string[]> = {
   [PermissionKey.CREATE_TEST]: ['POST /tests', 'POST /tests/:id/questions'],
   [PermissionKey.EDIT_TEST]: ['PATCH /tests/:id', 'PATCH /tests/:id/questions'],
   [PermissionKey.DELETE_TEST]: ['DELETE /tests/:id'],
-  [PermissionKey.VIEW_RESULTS]: ['GET /tests', 'GET /tests/:id', 'GET /submissions', 'GET /results/:classId'],
-  [PermissionKey.MANAGE_STUDENTS]: ['POST /submissions', 'PATCH /submissions/:id/responses'],
+  [PermissionKey.VIEW_RESULTS]: [
+    'GET /tests',
+    'GET /tests/:id',
+    'GET /submissions',
+    'GET /results/:classId',
+  ],
+  [PermissionKey.MANAGE_STUDENTS]: [
+    'POST /submissions',
+    'PATCH /submissions/:id/responses',
+  ],
   [PermissionKey.MANAGE_TEACHERS]: ['PATCH /teachers/:id', 'POST /teachers'],
   [PermissionKey.VIEW_ANALYTICS]: ['GET /analytics/**'],
 };
@@ -50,7 +58,9 @@ export const RBAC: RolePermissionMatrix = {
       ...PERMISSION_ENDPOINTS[PermissionKey.EDIT_TEST],
       ...PERMISSION_ENDPOINTS[PermissionKey.VIEW_RESULTS],
     ],
-    notes: ['Authors can build and review tests, but cannot delete others by default'],
+    notes: [
+      'Authors can build and review tests, but cannot delete others by default',
+    ],
   },
   [OrganizationRole.STUDENT]: {
     permissions: [PermissionKey.VIEW_RESULTS],

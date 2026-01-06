@@ -5,8 +5,15 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     globals: true,
-    setupFiles: ["./src/tests/setupTests.ts"],
-    include: ["src/tests/**/*.spec.ts", "src/tests/**/*.spec.tsx"],
+    setupFiles: ["./setup-tests.ts"],
+    include: [
+      "src/tests/**/*.spec.ts",
+      "src/tests/**/*.spec.tsx",
+      "tests/fe-policy/**/*.test.ts",
+      "tests/fe-policy/**/*.test.tsx",
+      "tests/fe-policy/**/*.spec.ts",
+      "tests/fe-policy/**/*.spec.tsx",
+    ],
   },
   resolve: {
     alias: {

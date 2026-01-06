@@ -1,10 +1,8 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import type { OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
-import {
-  XP_AWARDED_EVENT,
-  XpAwardedPayload,
-  xpEvents,
-} from '@/gamification/events/xp.events';
+import type { XpAwardedPayload } from '@/gamification/events/xp.events';
+import { XP_AWARDED_EVENT, xpEvents } from '@/gamification/events/xp.events';
 
 @Injectable()
 export class XpAnalyticsListener implements OnModuleInit, OnModuleDestroy {
@@ -36,11 +34,11 @@ export class XpAnalyticsListener implements OnModuleInit, OnModuleDestroy {
     }
   };
 
-  onModuleInit() {
+  onModuleInit(): void {
     xpEvents.on(XP_AWARDED_EVENT, this.handleXpAwarded);
   }
 
-  onModuleDestroy() {
+  onModuleDestroy(): void {
     xpEvents.off(XP_AWARDED_EVENT, this.handleXpAwarded);
   }
 }

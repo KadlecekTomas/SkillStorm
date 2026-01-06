@@ -22,8 +22,7 @@ export class AchievementsService {
 
     for (const achievement of achievements) {
       if (earnedIds.has(achievement.id)) continue;
-      const condition = (achievement.condition ??
-        {}) as AchievementCondition;
+      const condition = (achievement.condition ?? {}) as AchievementCondition;
       if (this.meetsCondition(condition, totalXp)) {
         await this.prisma.membershipAchievement.create({
           data: {

@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import { USER_EMAILS } from './seed-constants';
 
 export const logStep = (message: string) =>

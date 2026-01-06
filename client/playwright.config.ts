@@ -5,6 +5,7 @@ export default defineConfig({
   timeout: 30_000,
   retries: 1,
   reporter: "list",
+  workers: 1,
   snapshotDir: "./tests/snapshots",
   use: {
     baseURL: process.env.BASE_URL || "http://localhost:3000",
@@ -19,9 +20,14 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "npm run dev -- --hostname 127.0.0.1 --port 3000",
+    command:
+      "bash -c \"npm run build && npm run start -- --hostname 127.0.0.1 --port 3000\"",
     url: process.env.BASE_URL || "http://127.0.0.1:3000",
     reuseExistingServer: !process.env.CI,
     stdout: "pipe",
+    env: {
+      NEXT_PUBLIC_ENABLE_MSW: "false",
+      NEXT_PUBLIC_API_URL: "/api",
+    },
   },
 });

@@ -14,7 +14,7 @@ export class AssignTestsDto {
   @ArrayNotEmpty()
   @IsUUID('4', { each: true })
   @Type(() => String)
-  testIds: string[];
+  testIds!: string[];
 
   @ApiPropertyOptional({
     description: 'true = nahradí existující přiřazení',

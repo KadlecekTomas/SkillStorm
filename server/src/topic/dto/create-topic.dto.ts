@@ -20,14 +20,14 @@ export class CreateTopicDto {
     description: 'ID SubjectLevel (předmět × ročník)',
   })
   @IsUUID()
-  subjectLevelId: string;
+  subjectLevelId!: string;
 
   @ApiProperty({
     example: 'catalog-topic-id-uuid',
     description: 'ID CatalogTopic (globální katalog)',
   })
   @IsUUID()
-  catalogTopicId: string;
+  catalogTopicId!: string;
 
   @ApiPropertyOptional({ enum: TopicPhase, example: TopicPhase.INTRO })
   @IsOptional()

@@ -1,7 +1,8 @@
 // src/common/cache/user-scoped-cache.interceptor.ts
 import { CacheInterceptor } from '@nestjs/cache-manager';
-import { ExecutionContext, Injectable } from '@nestjs/common';
-import { Request } from 'express';
+import type { ExecutionContext } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import type { Request } from 'express';
 
 @Injectable()
 export class UserScopedCacheInterceptor extends CacheInterceptor {

@@ -9,6 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
 import { Switch } from "@/components/ui/switch";
+import { PermissionGate } from "@/components/access/permission-gate";
+import { PermissionKey } from "@/types";
 
 const profileSchema = z.object({
   fullName: z.string().min(3),
@@ -106,6 +108,20 @@ export default function SettingsPage() {
           variant="success"
         />
       )}
+
+      <PermissionGate permission={PermissionKey.MANAGE_TEACHERS}>
+        <Card className="md:col-span-2 flex flex-col gap-3 rounded-3xl border border-dashed border-blue-200 bg-blue-50/70 p-6">
+          <h3 className="text-lg font-semibold text-slate-900">
+            Manage teachers
+          </h3>
+          <p className="text-sm text-slate-600">
+            Přístup pouze pro ředitele nebo ownera. Umožňuje přidávat a odebírat učitele.
+          </p>
+          <Button className="w-fit rounded-2xl" variant="outline">
+            Open teacher manager
+          </Button>
+        </Card>
+      </PermissionGate>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { AuthForm } from "@/components/forms/auth-form";
+import { LoginForm } from "@/components/forms/login-form";
 
 export default function LoginPage() {
   return (
@@ -14,7 +14,7 @@ export default function LoginPage() {
           Use your EduTo credentials to access the unified dashboard.
         </p>
       </div>
-      <AuthForm mode="login" />
+      <LoginForm />
     </div>
   );
 }

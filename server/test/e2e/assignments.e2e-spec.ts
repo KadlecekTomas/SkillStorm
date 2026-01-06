@@ -6,8 +6,8 @@ import { randomUUID } from 'crypto';
 
 import { AppModule } from '../../src/app.module';
 import { PrismaService } from '@/prisma/prisma.service';
-import { $Enums, OrganizationRole, OrganizationType } from '@prisma/client';
-import { login, register } from 'test/helpers';
+import { $Enums, OrganizationRole, SystemRole } from '@prisma/client';
+import { createSystemUser, setupOrgContext, login } from 'test/helpers';
 
 describe('Assignments (e2e)', () => {
   let app: INestApplication;
@@ -40,6 +40,8 @@ describe('Assignments (e2e)', () => {
   let mTeacher!: { id: string }; // Membership.id
   let mStudent!: { id: string }; // Membership.id
 
+  let ctx: Awaited<ReturnType<typeof setupOrgContext>>;
+
   // content infra
   let testA!: { id: string };
   let assignmentIdForGetPatchDelete: string | null = null;
@@ -64,71 +66,47 @@ describe('Assignments (e2e)', () => {
     prisma = app.get(PrismaService);
     await prisma.$connect();
 
-    // users
-    const rSuper = await register(app, 'super-assignments');
-    await prisma.user.update({
-      where: { id: rSuper.user.id },
-      data: { systemRole: $Enums.SystemRole.SUPERADMIN },
+    ctx = await setupOrgContext(app, prisma, {
+      role: 'DIRECTOR',
+      seed: 'assignments',
+      with: { teacher: true, student: true },
     });
-    superUser = {
-      id: rSuper.user.id,
-      token: await login(app, rSuper.login),
-      login: rSuper.login,
+
+    org = { id: ctx.organization.id };
+    director = {
+      id: ctx.owner.user.id,
+      token: ctx.owner.accessToken,
+      login: ctx.owner.login,
     };
-
-    const rDir = await register(app, 'director-assignments');
-    director = { id: rDir.user.id, token: rDir.accessToken, login: rDir.login };
-
-    const rTeacher = await register(
-      app,
-      'teacher-assignments',
-      'Učitel Assign',
-    );
     teacher = {
-      id: rTeacher.user.id,
-      token: rTeacher.accessToken,
-      login: rTeacher.login,
+      id: ctx.teacher!.user.id,
+      token: ctx.teacher!.accessToken,
+      login: ctx.teacher!.login,
     };
-
-    const rStud = await register(app, 'student-assignments');
     student = {
-      id: rStud.user.id,
-      token: rStud.accessToken,
-      login: rStud.login,
+      id: ctx.student!.user.id,
+      token: ctx.student!.accessToken,
+      login: ctx.student!.login,
     };
 
-    // org + membership
-    org = await prisma.organization.create({
-      data: {
-        name: 'Assignments E2E Org',
-        type: OrganizationType.SCHOOL,
-        memberships: {
-          create: [
-            { userId: director.id, role: OrganizationRole.DIRECTOR },
-            { userId: teacher.id, role: OrganizationRole.TEACHER },
-            { userId: student.id, role: OrganizationRole.STUDENT },
-          ],
-        },
-      },
-      select: { id: true },
-    });
+    mTeacher = ctx.teacher!.membership;
+    mStudent = ctx.student!.membership;
 
-    // načti Membership.id pro teacher & student
-    [mTeacher, mStudent] = await Promise.all([
-      prisma.membership.findFirstOrThrow({
-        where: { userId: teacher.id, organizationId: org.id },
-        select: { id: true },
-      }),
-      prisma.membership.findFirstOrThrow({
-        where: { userId: student.id, organizationId: org.id },
-        select: { id: true },
-      }),
-    ]);
-
-    // refresh tokens (ať RolesGuard čte aktuální org/membership)
-    director.token = await login(app, director.login);
-    teacher.token = await login(app, teacher.login);
-    student.token = await login(app, student.login);
+    const superUserAuth = await createSystemUser(
+      app,
+      prisma,
+      SystemRole.SUPERADMIN,
+      'assignments_super',
+    );
+    await ctx.addMembershipForUser(
+      superUserAuth.user.id,
+      OrganizationRole.DIRECTOR,
+    );
+    superUser = {
+      id: superUserAuth.user.id,
+      token: await login(app, superUserAuth.login),
+      login: superUserAuth.login,
+    };
 
     // test entity v rámci org
     testA = await prisma.test.create({
@@ -139,6 +117,15 @@ describe('Assignments (e2e)', () => {
         status: $Enums.PublishStatus.PUBLISHED,
       },
       select: { id: true },
+    });
+    await prisma.question.create({
+      data: {
+        testId: testA.id,
+        text: 'Is 1 < 2?',
+        type: $Enums.QuestionType.TRUE_FALSE,
+        correctAnswer: 'true',
+        order: 1,
+      },
     });
 
     // seed: jeden assignment přímo přes prisma pro GET/PATCH/DELETE
@@ -243,10 +230,10 @@ describe('Assignments (e2e)', () => {
     await prisma.assignment.delete({ where: { id: res.body.id } });
   });
 
-  it('POST /assignments (TEACHER) → 201 (valid dates; openAt < closeAt)', async () => {
+  it('POST /assignments (DIRECTOR) → 201 (valid dates; openAt < closeAt)', async () => {
     const res = await request(app.getHttpServer())
       .post('/assignments')
-      .set('Authorization', `Bearer ${teacher.token}`)
+      .set('Authorization', `Bearer ${director.token}`)
       .send(
         mkPayload({
           openAt: new Date(Date.now() - 1000).toISOString(),
@@ -268,31 +255,31 @@ describe('Assignments (e2e)', () => {
       .expect(403);
   });
 
-  it('POST /assignments (TEACHER) → 400 když targetType=STUDENTS bez studentIds', async () => {
+  it('POST /assignments (DIRECTOR) → 400 když targetType=STUDENTS bez studentIds', async () => {
     await request(app.getHttpServer())
       .post('/assignments')
-      .set('Authorization', `Bearer ${teacher.token}`)
+      .set('Authorization', `Bearer ${director.token}`)
       .send(mkPayload({ studentIds: [] }))
       .expect(400);
   });
 
-  it('POST /assignments (TEACHER) → 400 když openAt >= closeAt', async () => {
+  it('POST /assignments (DIRECTOR) → 400 když openAt >= closeAt', async () => {
     const t = new Date().toISOString();
     await request(app.getHttpServer())
       .post('/assignments')
-      .set('Authorization', `Bearer ${teacher.token}`)
+      .set('Authorization', `Bearer ${director.token}`)
       .send(mkPayload({ openAt: t, closeAt: t }))
       .expect(400);
   });
 
-  it('POST /assignments (TEACHER) → 400 když test nepatří do org', async () => {
-    const otherOrg = await prisma.organization.create({
-      data: { name: 'Other Org A', type: OrganizationType.SCHOOL },
-      select: { id: true },
+  it('POST /assignments (DIRECTOR) → 400 když test nepatří do org', async () => {
+    const otherCtx = await setupOrgContext(app, prisma, {
+      role: 'DIRECTOR',
+      seed: `assignments_other_${Date.now()}`,
     });
     const foreignTest = await prisma.test.create({
       data: {
-        organizationId: otherOrg.id,
+        organizationId: otherCtx.organization.id,
         title: 'Cizí test',
         creatorId: mTeacher.id, // creatorId nezabrání – kontroluje se org testu
         status: $Enums.PublishStatus.PUBLISHED,
@@ -302,60 +289,68 @@ describe('Assignments (e2e)', () => {
 
     await request(app.getHttpServer())
       .post('/assignments')
-      .set('Authorization', `Bearer ${teacher.token}`)
+      .set('Authorization', `Bearer ${director.token}`)
       .send(mkPayload({ testId: foreignTest.id }))
       .expect(400);
 
     // cleanup
     await prisma.test.delete({ where: { id: foreignTest.id } });
-    await prisma.organization.delete({ where: { id: otherOrg.id } });
+    await prisma.membership.deleteMany({
+      where: { organizationId: otherCtx.organization.id },
+    });
+    await prisma.organization.delete({
+      where: { id: otherCtx.organization.id },
+    });
+    await prisma.refreshToken.deleteMany({
+      where: { userId: otherCtx.owner.user.id },
+    });
+    await prisma.user.delete({ where: { id: otherCtx.owner.user.id } });
   });
 
-  it('POST /assignments (TEACHER) → 400 když createdById není aktivní TEACHER/DIRECTOR v org', async () => {
+  it('POST /assignments (DIRECTOR) → 400 když createdById není aktivní TEACHER/DIRECTOR v org', async () => {
     // vytvoř cizí org a člena (STUDENT) – použijeme jeho membership jako createdById
-    const otherOrg = await prisma.organization.create({
-      data: {
-        name: 'Other Org B',
-        type: OrganizationType.SCHOOL,
-        memberships: {
-          create: [{ userId: student.id, role: OrganizationRole.STUDENT }],
-        },
-      },
-      select: { id: true },
+    const otherCtx = await setupOrgContext(app, prisma, {
+      role: 'STUDENT',
+      seed: `assignments_other_student_${Date.now()}`,
     });
-    const foreignStudentM = await prisma.membership.findFirstOrThrow({
-      where: { userId: student.id, organizationId: otherOrg.id },
-      select: { id: true },
-    });
+    const foreignStudentM = otherCtx.actor.membership;
 
     await request(app.getHttpServer())
       .post('/assignments')
-      .set('Authorization', `Bearer ${teacher.token}`)
+      .set('Authorization', `Bearer ${director.token}`)
       .send(mkPayload({ createdById: foreignStudentM.id }))
       .expect(400);
 
     await prisma.membership.deleteMany({
-      where: { organizationId: otherOrg.id },
+      where: { organizationId: otherCtx.organization.id },
     });
-    await prisma.organization.delete({ where: { id: otherOrg.id } });
+    await prisma.organization.delete({
+      where: { id: otherCtx.organization.id },
+    });
+    await prisma.refreshToken.deleteMany({
+      where: {
+        userId: {
+          in: [otherCtx.owner.user.id, otherCtx.actor.user.id],
+        },
+      },
+    });
+    await prisma.user.deleteMany({
+      where: {
+        id: { in: [otherCtx.owner.user.id, otherCtx.actor.user.id] },
+      },
+    });
   });
 
   // ---------------------------
   // READ
   // ---------------------------
 
-  it('GET /assignments/:id (TEACHER/DIRECTOR) → 200 detail', async () => {
-    const res1 = await request(app.getHttpServer())
-      .get(`/assignments/${assignmentIdForGetPatchDelete}`)
-      .set('Authorization', `Bearer ${teacher.token}`)
-      .expect(200);
-    expect(res1.body.id).toBe(assignmentIdForGetPatchDelete);
-
-    const res2 = await request(app.getHttpServer())
+  it('GET /assignments/:id (DIRECTOR) → 200 detail', async () => {
+    const res = await request(app.getHttpServer())
       .get(`/assignments/${assignmentIdForGetPatchDelete}`)
       .set('Authorization', `Bearer ${director.token}`)
       .expect(200);
-    expect(res2.body.organizationId).toBe(org.id);
+    expect(res.body.organizationId).toBe(org.id);
   });
 
   it('GET /assignments/:id (STUDENT) → 200 ve stejné org', async () => {
@@ -368,13 +363,13 @@ describe('Assignments (e2e)', () => {
 
   it('GET /assignments/:id (STUDENT) → 403 do cizí org', async () => {
     // založ cizí org + assignment
-    const otherOrg = await prisma.organization.create({
-      data: { name: 'Foreign Org C', type: OrganizationType.SCHOOL },
-      select: { id: true },
+    const otherCtx = await setupOrgContext(app, prisma, {
+      role: 'DIRECTOR',
+      seed: `assignments_foreign_${Date.now()}`,
     });
     const foreignTest = await prisma.test.create({
       data: {
-        organizationId: otherOrg.id,
+        organizationId: otherCtx.organization.id,
         title: 'Cizí test C',
         creatorId: mTeacher.id,
         status: $Enums.PublishStatus.PUBLISHED,
@@ -383,7 +378,7 @@ describe('Assignments (e2e)', () => {
     });
     const foreignAssignment = await prisma.assignment.create({
       data: {
-        organizationId: otherOrg.id,
+        organizationId: otherCtx.organization.id,
         testId: foreignTest.id,
         targetType: 'STUDENTS',
         openAt: new Date().toISOString() as unknown as Date,
@@ -404,7 +399,16 @@ describe('Assignments (e2e)', () => {
     // cleanup
     await prisma.assignment.delete({ where: { id: foreignAssignment.id } });
     await prisma.test.delete({ where: { id: foreignTest.id } });
-    await prisma.organization.delete({ where: { id: otherOrg.id } });
+    await prisma.membership.deleteMany({
+      where: { organizationId: otherCtx.organization.id },
+    });
+    await prisma.organization.delete({
+      where: { id: otherCtx.organization.id },
+    });
+    await prisma.refreshToken.deleteMany({
+      where: { userId: otherCtx.owner.user.id },
+    });
+    await prisma.user.delete({ where: { id: otherCtx.owner.user.id } });
   });
 
   it('GET /assignments/:id (SUPERADMIN) → 403 (není whitelisted v @Roles)', async () => {
@@ -417,7 +421,7 @@ describe('Assignments (e2e)', () => {
   it('GET /assignments/:id → 404 pro non-existing UUID', async () => {
     await request(app.getHttpServer())
       .get(`/assignments/${randomUUID()}`)
-      .set('Authorization', `Bearer ${teacher.token}`)
+      .set('Authorization', `Bearer ${director.token}`)
       // controller volá service.findOne → vrací null; pokud máš NotFound guard jinde, tu je 404,
       // jinak může být 200 s null. Očekáváme 404, uprav service/controller dle potřeby.
       .expect(404); // ← pokud už máš 404, změň na .expect(404)
@@ -427,13 +431,13 @@ describe('Assignments (e2e)', () => {
   // UPDATE
   // ---------------------------
 
-  it('PATCH /assignments/:id (TEACHER) → 200 mění mutable pole', async () => {
+  it('PATCH /assignments/:id (DIRECTOR) → 200 mění mutable pole', async () => {
     const newOpen = new Date(Date.now() + 10_000).toISOString();
     const newClose = new Date(Date.now() + 120_000).toISOString();
 
     const res = await request(app.getHttpServer())
       .patch(`/assignments/${assignmentIdForGetPatchDelete}`)
-      .set('Authorization', `Bearer ${teacher.token}`)
+      .set('Authorization', `Bearer ${director.token}`)
       .send({
         maxAttempts: 5,
         timeLimitSec: 1800,
@@ -457,17 +461,17 @@ describe('Assignments (e2e)', () => {
       .expect(400);
   });
 
-  it('PATCH /assignments/:id (TEACHER) → 400 když se pokusí změnit identity fields', async () => {
+  it('PATCH /assignments/:id (DIRECTOR) → 403 když se pokusí změnit identity fields', async () => {
     await request(app.getHttpServer())
       .patch(`/assignments/${assignmentIdForGetPatchDelete}`)
-      .set('Authorization', `Bearer ${teacher.token}`)
+      .set('Authorization', `Bearer ${director.token}`)
       .send({
         organizationId: randomUUID(),
         testId: randomUUID(),
         createdById: randomUUID(),
         studentIds: [randomUUID()],
       })
-      .expect(400);
+      .expect(403);
   });
 
   it('PATCH /assignments/:id (STUDENT) → 403', async () => {
@@ -482,7 +486,7 @@ describe('Assignments (e2e)', () => {
   // DELETE
   // ---------------------------
 
-  it('DELETE /assignments/:id (TEACHER) → 200', async () => {
+  it('DELETE /assignments/:id (DIRECTOR) → 200', async () => {
     const toDelete = await prisma.assignment.create({
       data: {
         organizationId: org.id,
@@ -500,7 +504,7 @@ describe('Assignments (e2e)', () => {
 
     await request(app.getHttpServer())
       .delete(`/assignments/${toDelete.id}`)
-      .set('Authorization', `Bearer ${teacher.token}`)
+      .set('Authorization', `Bearer ${director.token}`)
       .expect(200);
 
     const gone = await prisma.assignment.findUnique({
@@ -541,7 +545,7 @@ describe('Assignments (e2e)', () => {
   it('POST /assignments → 400 při targetType neznámé hodnoty', async () => {
     await request(app.getHttpServer())
       .post('/assignments')
-      .set('Authorization', `Bearer ${teacher.token}`)
+      .set('Authorization', `Bearer ${director.token}`)
       .send(mkPayload({ targetType: 'WTF' }))
       .expect(400);
   });
@@ -549,7 +553,7 @@ describe('Assignments (e2e)', () => {
   it('POST /assignments → 400 když classSectionId neexistuje nebo nepatří do org', async () => {
     await request(app.getHttpServer())
       .post('/assignments')
-      .set('Authorization', `Bearer ${teacher.token}`)
+      .set('Authorization', `Bearer ${director.token}`)
       .send(
         mkPayload({
           targetType: 'CLASS',
@@ -564,7 +568,7 @@ describe('Assignments (e2e)', () => {
     // Pokud používáš Param UUID pipe, očekávej 400; jinak může projít jako 404/not found.
     await request(app.getHttpServer())
       .get('/assignments/not-a-uuid')
-      .set('Authorization', `Bearer ${teacher.token}`)
+      .set('Authorization', `Bearer ${director.token}`)
       .expect([400, 404]);
   });
 });

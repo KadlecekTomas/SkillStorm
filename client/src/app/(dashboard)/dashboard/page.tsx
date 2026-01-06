@@ -8,8 +8,7 @@ import { ClassroomList } from "@/components/content/classroom-list";
 import { StudentProgress } from "@/components/content/student-progress";
 import { TeacherOverview } from "@/components/content/teacher-overview";
 import { Card } from "@/components/ui/card";
-import { apiClient } from "@/utils/api-client";
-import { classroomSamples, testSamples } from "@/utils/sample-data";
+import { httpClient } from "@/lib/http/client";
 import type { Classroom, TestSummary } from "@/types";
 import { BookOpenCheck, NotebookTabs, Users2 } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
@@ -20,11 +19,12 @@ import { RestrictedView } from "@/components/access/restricted-view";
 import { useGamification } from "@/hooks/use-gamification";
 import { GamificationPanel } from "@/components/gamification/gamification-panel";
 import { LevelUpModal } from "@/components/gamification/level-up-modal";
+import { withGuard } from "@/lib/guard/withGuard";
 
-export default function DashboardPage() {
+function DashboardPage() {
   const router = useRouter();
-  const [classrooms, setClassrooms] = useState<Classroom[]>(classroomSamples);
-  const [tests, setTests] = useState<TestSummary[]>(testSamples);
+  const [classrooms, setClassrooms] = useState<Classroom[]>([]);
+  const [tests, setTests] = useState<TestSummary[]>([]);
   const [testsLoading, setTestsLoading] = useState(false);
   const [classroomsLoading, setClassroomsLoading] = useState(false);
   const { can } = usePermissions();
@@ -52,9 +52,9 @@ export default function DashboardPage() {
       return;
     }
     setTestsLoading(true);
-    apiClient
+    httpClient
       .get<TestSummary[]>("/tests")
-      .then(({ data }) => {
+      .then((data) => {
         if (cancelled) return;
         if (data?.length) setTests(data);
       })
@@ -74,9 +74,9 @@ export default function DashboardPage() {
       return;
     }
     setClassroomsLoading(true);
-    apiClient
+    httpClient
       .get<Classroom[]>("/classrooms")
-      .then(({ data }) => {
+      .then((data) => {
         if (cancelled) return;
         if (data?.length) setClassrooms(data);
       })
@@ -223,3 +223,5 @@ export default function DashboardPage() {
     </>
   );
 }
+
+export default withGuard()(DashboardPage);

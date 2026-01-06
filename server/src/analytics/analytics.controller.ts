@@ -3,19 +3,26 @@ import { AnalyticsService } from './analytics.service';
 import { LogAnalyticsEventDto } from './dto/log-analytics-event.dto';
 import { Permission } from '@/modules/rbac/permission.decorator';
 import { PermissionKey } from '@prisma/client';
+import { RequestWithUser } from '@/types/request-with-user';
 
 @Controller('analytics')
 export class AnalyticsController {
   constructor(private readonly analytics: AnalyticsService) {}
 
   @Post('log')
-  async log(@Body() dto: LogAnalyticsEventDto, @Req() req) {
+  async log(
+    @Body() dto: LogAnalyticsEventDto,
+    @Req() req: RequestWithUser,
+  ): ReturnType<AnalyticsService['logEvent']> {
     return this.analytics.logEvent(dto, req.user);
   }
 
   @Get('summary')
   @Permission(PermissionKey.VIEW_ANALYTICS)
-  summary(@Query('days') days = '7', @Req() req) {
+  summary(
+    @Query('days') days = '7',
+    @Req() req: RequestWithUser,
+  ): ReturnType<AnalyticsService['summary']> {
     return this.analytics.summary(Number(days) || 7, req.user.organizationId);
   }
 }

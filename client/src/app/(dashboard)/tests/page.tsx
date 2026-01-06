@@ -1,11 +1,12 @@
 "use client";
 
-import { withPermission } from "@/components/access/with-permission";
+import Link from "next/link";
 import { PermissionKey } from "@/types";
 import { PermissionGate } from "@/components/access/permission-gate";
 import { Button } from "@/components/ui/button";
 import { PlusCircle } from "lucide-react";
 import { RestrictedView } from "@/components/access/restricted-view";
+import { withGuard } from "@/lib/guard/withGuard";
 
 function TestsPage() {
   return (
@@ -24,9 +25,11 @@ function TestsPage() {
             </Button>
           }
         >
-          <Button className="rounded-2xl">
-            <PlusCircle className="h-4 w-4" />
-            <span className="ml-2">New test</span>
+          <Button className="rounded-2xl" asChild>
+            <Link href="/tests/create">
+              <PlusCircle className="h-4 w-4" />
+              <span className="ml-2">Create test</span>
+            </Link>
           </Button>
         </PermissionGate>
       </div>
@@ -35,4 +38,6 @@ function TestsPage() {
   );
 }
 
-export default withPermission(PermissionKey.CREATE_TEST)(TestsPage);
+export default withGuard({
+  requirePerms: [PermissionKey.CREATE_TEST],
+})(TestsPage);

@@ -1,7 +1,8 @@
 // src/modules/shared/access.utils.ts
 import { ForbiddenException } from '@nestjs/common';
-import { Prisma, SystemRole, $Enums } from '@prisma/client';
-import { JwtPayload } from '@/auth/types/jwt-payload';
+import type { Prisma } from '@prisma/client';
+import { SystemRole, $Enums } from '@prisma/client';
+import type { JwtPayload } from '@/auth/types/jwt-payload';
 
 /**
  * Čtení v rámci stejné organizace (superadmin výjimka).
@@ -74,7 +75,9 @@ export function assertSameOrganizationIds(
     );
   }
   if (referenceOrgId !== targetOrgId) {
-    throw new ForbiddenException(`Cross-organization přístup k ${context} není povolen.`);
+    throw new ForbiddenException(
+      `Cross-organization přístup k ${context} není povolen.`,
+    );
   }
 }
 

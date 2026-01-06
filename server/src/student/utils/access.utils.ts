@@ -1,5 +1,5 @@
 import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
-import { JwtPayload } from '@/auth/types/jwt-payload';
+import type { JwtPayload } from '@/auth/types/jwt-payload';
 import { OrganizationRole, SystemRole } from '@prisma/client';
 
 export function canAccessStudent(student: any, user: JwtPayload): void {

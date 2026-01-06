@@ -6,12 +6,13 @@ import {
   Patch,
   Param,
   Delete,
-  Request,
+  Req,
   Query,
   ParseUUIDPipe,
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
+import { RequestWithUser } from '@/types/request-with-user';
 import {
   ApiOperation,
   ApiTags,
@@ -22,6 +23,7 @@ import {
 import { CacheTTL } from '@nestjs/cache-manager';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ParseFilePipe, MaxFileSizeValidator } from '@nestjs/common';
+import { Express } from 'express';
 
 import { LearningMaterialsService } from './learning-materials.service';
 import { CreateLearningMaterialDto } from './dto/create-learning-material.dto';
@@ -32,7 +34,6 @@ import { Permission } from '@/modules/rbac/permission.decorator';
 import { PermissionKey } from '@prisma/client';
 
 import { InvalidateScopes } from '@/common/cache/invalidate.decorator';
-import type { File as MulterFile } from 'multer';
 
 @ApiTags('LearningMaterials')
 @ApiBearerAuth()
@@ -44,7 +45,7 @@ export class LearningMaterialsController {
   @Permission(PermissionKey.EDIT_TEST)
   @ApiOperation({ summary: 'Create learning material' })
   @InvalidateScopes(({ req }) => [req.body?.organizationId].filter(Boolean))
-  create(@Body() dto: CreateLearningMaterialDto, @Request() req) {
+  create(@Body() dto: CreateLearningMaterialDto, @Req() req: RequestWithUser) {
     return this.service.create(dto, req.user);
   }
 
@@ -53,7 +54,7 @@ export class LearningMaterialsController {
   @ApiOperation({ summary: 'List learning materials' })
   @ApiQuery({ name: 'organizationId', required: false, type: String })
   @CacheTTL(0)
-  findAll(@Request() req, @Query() q: QueryLearningMaterialsDto) {
+  findAll(@Req() req: RequestWithUser, @Query() q: QueryLearningMaterialsDto) {
     return this.service.findAll(req.user, q);
   }
 
@@ -61,7 +62,10 @@ export class LearningMaterialsController {
   @Permission(PermissionKey.VIEW_RESULTS)
   @ApiOperation({ summary: 'Get material detail' })
   @CacheTTL(0)
-  findOne(@Param('id', new ParseUUIDPipe()) id: string, @Request() req) {
+  findOne(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() req: RequestWithUser,
+  ) {
     return this.service.findOne(id, req.user);
   }
 
@@ -74,7 +78,7 @@ export class LearningMaterialsController {
   update(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() dto: UpdateLearningMaterialDto,
-    @Request() req,
+    @Req() req: RequestWithUser,
   ) {
     return this.service.update(id, dto, req.user);
   }
@@ -85,7 +89,10 @@ export class LearningMaterialsController {
   @InvalidateScopes(({ result }) =>
     result?.organizationId ? [result.organizationId] : [],
   )
-  remove(@Param('id', new ParseUUIDPipe()) id: string, @Request() req) {
+  remove(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() req: RequestWithUser,
+  ) {
     return this.service.remove(id, req.user);
   }
 
@@ -104,8 +111,8 @@ export class LearningMaterialsController {
         validators: [new MaxFileSizeValidator({ maxSize: 25 * 1024 * 1024 })],
       }),
     )
-    file: MulterFile,
-    @Request() req,
+    file: Express.Multer.File,
+    @Req() req: RequestWithUser,
   ) {
     return this.service.attachFile(id, file, req.user);
   }

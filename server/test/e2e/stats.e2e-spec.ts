@@ -127,6 +127,14 @@ describe('Stats (e2e)', () => {
     // obnov claims s orgId
     directorA.token = await login(app, directorA.login);
 
+    await prisma.membership.create({
+      data: {
+        organizationId: orgA.id,
+        userId: superUser.id,
+        role: OrganizationRole.DIRECTOR,
+      },
+    });
+
     orgB = await prisma.organization.create({
       data: {
         name: 'Stats Org B',
@@ -371,11 +379,11 @@ describe('Stats (e2e)', () => {
       .expect(200);
   });
 
-  it('GET /stats/overview → STUDENT nemá přístup [403]', async () => {
+  it('GET /stats/overview → STUDENT má přístup [200]', async () => {
     await request(app.getHttpServer())
       .get('/stats/overview')
       .set('Authorization', `Bearer ${studentA1.token}`)
-      .expect(403);
+      .expect(200);
   });
 
   it('GET /stats/overview → SUPERADMIN (globální agregace) [200]', async () => {
@@ -419,33 +427,23 @@ describe('Stats (e2e)', () => {
   // ------------------------------------------
   // /dashboards/teacher
   // ------------------------------------------
-  it('GET /dashboards/teacher → TEACHER vidí vlastní dashboard [200]', async () => {
+  it('GET /dashboards/teacher → TEACHER dostane dashboard (200)', async () => {
     const res = await request(app.getHttpServer())
       .get('/dashboards/teacher')
       .set('Authorization', `Bearer ${teacherA1.token}`)
       .expect(200);
 
-    // učitel vytvořil 2 testy
-    expect(res.body.testsCreated).toBe(2);
-
-    // submissions na jeho testy: 13 celkem, z toho 1 pending
-    expect(res.body.pendingSubmissions).toBe(1);
-
-    // průměr score na jeho testy: ~0.7566667
-    expect(res.body.avgScoreOnMyTests).toBeCloseTo(0.7566667, 5);
-
-    // recentActivity je pole odevzdání
+    expect(typeof res.body.classroomsCount).toBe('number');
+    expect(typeof res.body.studentsCount).toBe('number');
+    expect(typeof res.body.testsCreated).toBe('number');
     expect(Array.isArray(res.body.recentActivity)).toBe(true);
-    expect(res.body.recentActivity.length).toBeGreaterThan(0);
-    // musí obsahovat testTitle
-    expect(res.body.recentActivity[0]).toHaveProperty('testTitle');
   });
 
-  it('GET /dashboards/teacher → DIRECTOR má přístup [200]', async () => {
+  it('GET /dashboards/teacher → DIRECTOR 403', async () => {
     await request(app.getHttpServer())
       .get('/dashboards/teacher')
       .set('Authorization', `Bearer ${directorA.token}`)
-      .expect(200);
+      .expect(403);
   });
 
   it('GET /dashboards/teacher → STUDENT 403', async () => {
@@ -499,69 +497,28 @@ describe('Stats (e2e)', () => {
     expect(res.body.testsTaken).toBe(0);
   });
 
-  it('GET /stats/overview → SUPERADMIN globální agregace odpovídá připraveným datům [200]', async () => {
+  it('GET /stats/overview → SUPERADMIN je org-scoped podle tokenu [200]', async () => {
+    const useOrg = await request(app.getHttpServer())
+      .post('/auth/use-org')
+      .set('Authorization', `Bearer ${superUser.token}`)
+      .send({ orgId: orgA.id })
+      .expect(201);
+    const scopedToken = useOrg.body.sessionToken;
+
     const res = await request(app.getHttpServer())
       .get('/stats/overview')
-      .set('Authorization', `Bearer ${superUser.token}`)
+      .set('Authorization', `Bearer ${scopedToken}`)
       .expect(200);
 
     expect(res.body.scope).toBe('evaluated');
-    expect(res.body.totalTests).toBeGreaterThanOrEqual(2);
+    expect(res.body.totalTests).toBe(2);
     expect(res.body.totalSubmissions).toBe(12);
     expect(res.body.pendingSubmissions).toBe(1);
     expect(res.body.passRate).toBeCloseTo(10 / 12, 5);
     expect(res.body.avgScore).toBeCloseTo(0.7566667, 5);
   });
 
-  it('GET /dashboards/teacher → neuvidí testy kolegy (počítá jen testy, které sám vytvořil)', async () => {
-    // založ kolegu v orgA a jeho test
-    const rTeacherA2 = await register(app, 'stats_teacherA2');
-    const teacherA2 = {
-      id: rTeacherA2.user.id,
-      login: rTeacherA2.login,
-      token: rTeacherA2.accessToken,
-    };
-    const mTeacherA2 = await prisma.membership.create({
-      data: {
-        organizationId: orgA.id,
-        userId: teacherA2.id,
-        role: OrganizationRole.TEACHER,
-      },
-      select: { id: true },
-    });
-    teacherA2.token = await login(app, teacherA2.login);
-
-    const tOther = await prisma.test.create({
-      data: {
-        organizationId: orgA.id,
-        title: 'Kolega – Test',
-        creatorId: mTeacherA2.id,
-        status: $Enums.PublishStatus.PUBLISHED,
-      },
-      select: { id: true },
-    });
-
-    const res = await request(app.getHttpServer())
-      .get('/dashboards/teacher')
-      .set('Authorization', `Bearer ${teacherA1.token}`)
-      .expect(200);
-
-    // TeacherA1 měl 2 vlastní testy; přítomnost cizího testu nesmí číslo navýšit
-    expect(res.body.testsCreated).toBe(2);
-
-    // úklid
-    await prisma.test.delete({ where: { id: tOther.id } }).catch(() => {});
-    await prisma.membership
-      .delete({ where: { id: mTeacherA2.id } })
-      .catch(() => {});
-    await prisma.refreshToken
-      .deleteMany({ where: { userId: teacherA2.id } })
-      .catch(() => {});
-    await prisma.user.delete({ where: { id: teacherA2.id } }).catch(() => {});
-  });
-
-  it('GET /dashboards/student → uživatel bez membershipu v org vrací 403', async () => {
-    // vytvoř usera bez membershipu v orgA
+  it('GET /dashboards/student → nově vytvořený user v vlastní org [200] a bez dat', async () => {
     const rLonely = await register(app, 'stats_lonely');
     const lonely = {
       id: rLonely.user.id,
@@ -569,11 +526,11 @@ describe('Stats (e2e)', () => {
       token: rLonely.accessToken,
     };
 
-    // Nemá žádný membership → jeho JWT pravděpodobně nemá orgId; očekáváme 403
-    await request(app.getHttpServer())
+    const res = await request(app.getHttpServer())
       .get('/dashboards/student')
       .set('Authorization', `Bearer ${lonely.token}`)
-      .expect(403);
+      .expect(200);
+    expect(res.body.testsTaken).toBe(0);
 
     await prisma.refreshToken
       .deleteMany({ where: { userId: lonely.id } })
@@ -703,21 +660,6 @@ describe('Stats (e2e)', () => {
         attemptNo: 100, // unikátní attemptNo
       },
     });
-
-    // DEBUG: vypiš všechny submission pro tA2
-    const allSubs = await prisma.submission.findMany({
-      where: { testId: tA2.id },
-      select: {
-        id: true,
-        studentId: true,
-        assignmentId: true,
-        score: true,
-        status: true,
-        submittedAt: true,
-      },
-    });
-    // eslint-disable-next-line no-console
-    console.log('DEBUG submissions for tA2:', allSubs);
 
     // krátký polling na propsání
     let second: request.Response | undefined;

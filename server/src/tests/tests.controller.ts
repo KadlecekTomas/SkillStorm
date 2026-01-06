@@ -8,9 +8,11 @@ import {
   Param,
   Body,
   Query,
-  Request,
+  Req,
   ParseUUIDPipe,
+  ForbiddenException,
 } from '@nestjs/common';
+import { RequestWithUser } from '@/types/request-with-user';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -33,8 +35,12 @@ import { CreateOptionDto } from './dto/create-option.dto';
 import { UpdateOptionDto } from './dto/update-option.dto';
 import { CreateAnswerDto } from './dto/create-answer.dto';
 import { UpdateAnswerDto } from './dto/update-answer.dto';
+import { ok } from '@/common/http/envelope';
+import { AssignTestDto } from './dto/assign-test.dto';
+import { ApiStandardResponses } from '@/common/http/api-standard-responses.decorator';
 
-@ApiTags('Tests')
+@ApiTags('tests')
+@ApiStandardResponses()
 @ApiBearerAuth()
 @Controller('tests')
 export class TestsController {
@@ -45,8 +51,16 @@ export class TestsController {
   @Permission(PermissionKey.CREATE_TEST)
   @ApiOperation({ summary: 'Create test' })
   @InvalidateScopes(({ req }) => [req.body?.organizationId].filter(Boolean))
-  create(@Body() dto: CreateTestDto, @Request() req) {
-    return this.service.create(dto, req.user);
+  create(@Body() dto: CreateTestDto, @Req() req: RequestWithUser) {
+    if (
+      dto.organizationId &&
+      req.user.systemRole !== 'SUPERADMIN' &&
+      req.user.organizationId &&
+      dto.organizationId !== req.user.organizationId
+    ) {
+      throw new ForbiddenException('Invalid org scope for test creation');
+    }
+    return ok(this.service.create(dto, req.user));
   }
 
   @Get()
@@ -54,16 +68,31 @@ export class TestsController {
   @ApiOperation({ summary: 'List tests' })
   @ApiQuery({ name: 'organizationId', required: false, type: String })
   @CacheTTL(0)
-  findAll(@Request() req, @Query() q: QueryTestsDto) {
-    return this.service.findAll(req.user, q);
+  findAll(@Req() req: RequestWithUser, @Query() q: QueryTestsDto) {
+    if (
+      q.organizationId &&
+      req.user.systemRole !== 'SUPERADMIN' &&
+      req.user.organizationId &&
+      q.organizationId !== req.user.organizationId
+    ) {
+      throw new ForbiddenException('Invalid org scope for test list');
+    }
+    const enforced = {
+      ...q,
+      organizationId: q.organizationId ?? req.user.organizationId ?? '',
+    };
+    return ok(this.service.findAll(req.user, enforced));
   }
 
   @Get(':id')
   @Permission(PermissionKey.VIEW_RESULTS)
   @ApiOperation({ summary: 'Get test detail' })
   @CacheTTL(0)
-  findOne(@Param('id', new ParseUUIDPipe()) id: string, @Request() req) {
-    return this.service.findOne(id, req.user);
+  findOne(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() req: RequestWithUser,
+  ) {
+    return ok(this.service.findOne(id, req.user));
   }
 
   @Patch(':id')
@@ -75,9 +104,9 @@ export class TestsController {
   update(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() dto: UpdateTestDto,
-    @Request() req,
+    @Req() req: RequestWithUser,
   ) {
-    return this.service.update(id, dto, req.user);
+    return ok(this.service.update(id, dto, req.user));
   }
 
   @Delete(':id')
@@ -86,8 +115,29 @@ export class TestsController {
   @InvalidateScopes(({ result }) =>
     result?.organizationId ? [result.organizationId] : [],
   )
-  remove(@Param('id', new ParseUUIDPipe()) id: string, @Request() req) {
-    return this.service.remove(id, req.user);
+  remove(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() req: RequestWithUser,
+  ) {
+    return ok(this.service.remove(id, req.user));
+  }
+
+  @Post(':id/assign')
+  @Permission(PermissionKey.MANAGE_TEACHERS)
+  @ApiOperation({ summary: 'Assign test to class or students' })
+  assignTest(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: AssignTestDto,
+    @Req() req: RequestWithUser,
+  ) {
+    return ok(this.service.assignTest(id, dto, req.user));
+  }
+
+  @Get(':id/results')
+  @Permission(PermissionKey.VIEW_RESULTS)
+  @ApiOperation({ summary: 'Get test results (submissions + scores)' })
+  results(@Param('id', new ParseUUIDPipe()) id: string, @Req() req: RequestWithUser) {
+    return ok(this.service.results(id, req.user));
   }
 
   // QUESTIONS -------------------------------------------
@@ -100,9 +150,9 @@ export class TestsController {
   reorderQuestions(
     @Param('id', new ParseUUIDPipe()) testId: string,
     @Body() dto: ReorderQuestionsDto,
-    @Request() req,
+    @Req() req: RequestWithUser,
   ) {
-    return this.service.reorderQuestions(testId, dto, req.user);
+    return ok(this.service.reorderQuestions(testId, dto, req.user));
   }
 
   @Post(':id/questions')
@@ -111,9 +161,9 @@ export class TestsController {
   addQuestion(
     @Param('id', new ParseUUIDPipe()) testId: string,
     @Body() dto: CreateQuestionDto,
-    @Request() req,
+    @Req() req: RequestWithUser,
   ) {
-    return this.service.addQuestion(testId, dto, req.user);
+    return ok(this.service.addQuestion(testId, dto, req.user));
   }
 
   @Patch(':id/questions/:questionId([0-9a-fA-F-]{36})')
@@ -123,9 +173,11 @@ export class TestsController {
     @Param('id', new ParseUUIDPipe()) testId: string,
     @Param('questionId', new ParseUUIDPipe()) questionId: string,
     @Body() dto: UpdateQuestionDto,
-    @Request() req,
+    @Req() req: RequestWithUser,
   ) {
-    return this.service.updateQuestion(testId, questionId, dto, req.user);
+    return ok(
+      this.service.updateQuestion(testId, questionId, dto, req.user),
+    );
   }
 
   @Delete(':id/questions/:questionId([0-9a-fA-F-]{36})')
@@ -134,9 +186,9 @@ export class TestsController {
   removeQuestion(
     @Param('id', new ParseUUIDPipe()) testId: string,
     @Param('questionId', new ParseUUIDPipe()) questionId: string,
-    @Request() req,
+    @Req() req: RequestWithUser,
   ) {
-    return this.service.removeQuestion(testId, questionId, req.user);
+    return ok(this.service.removeQuestion(testId, questionId, req.user));
   }
 
   // OPTIONS ---------------------------------------------
@@ -146,9 +198,9 @@ export class TestsController {
     @Param('id', new ParseUUIDPipe()) testId: string,
     @Param('questionId', new ParseUUIDPipe()) questionId: string,
     @Body() dto: CreateOptionDto,
-    @Request() req,
+    @Req() req: RequestWithUser,
   ) {
-    return this.service.addOption(testId, questionId, dto, req.user);
+    return ok(this.service.addOption(testId, questionId, dto, req.user));
   }
 
   @Patch(
@@ -160,14 +212,16 @@ export class TestsController {
     @Param('questionId', new ParseUUIDPipe()) questionId: string,
     @Param('optionId', new ParseUUIDPipe()) optionId: string,
     @Body() dto: UpdateOptionDto,
-    @Request() req,
+    @Req() req: RequestWithUser,
   ) {
-    return this.service.updateOption(
-      testId,
-      questionId,
-      optionId,
-      dto,
-      req.user,
+    return ok(
+      this.service.updateOption(
+        testId,
+        questionId,
+        optionId,
+        dto,
+        req.user,
+      ),
     );
   }
 
@@ -179,9 +233,11 @@ export class TestsController {
     @Param('id', new ParseUUIDPipe()) testId: string,
     @Param('questionId', new ParseUUIDPipe()) questionId: string,
     @Param('optionId', new ParseUUIDPipe()) optionId: string,
-    @Request() req,
+    @Req() req: RequestWithUser,
   ) {
-    return this.service.removeOption(testId, questionId, optionId, req.user);
+    return ok(
+      this.service.removeOption(testId, questionId, optionId, req.user),
+    );
   }
 
   // ANSWERS (správné odpovědi) --------------------------
@@ -191,9 +247,9 @@ export class TestsController {
     @Param('id', new ParseUUIDPipe()) testId: string,
     @Param('questionId', new ParseUUIDPipe()) questionId: string,
     @Body() dto: CreateAnswerDto,
-    @Request() req,
+    @Req() req: RequestWithUser,
   ) {
-    return this.service.addAnswer(testId, questionId, dto, req.user);
+    return ok(this.service.addAnswer(testId, questionId, dto, req.user));
   }
 
   @Patch(
@@ -205,14 +261,16 @@ export class TestsController {
     @Param('questionId', new ParseUUIDPipe()) questionId: string,
     @Param('answerId', new ParseUUIDPipe()) answerId: string,
     @Body() dto: UpdateAnswerDto,
-    @Request() req,
+    @Req() req: RequestWithUser,
   ) {
-    return this.service.updateAnswer(
-      testId,
-      questionId,
-      answerId,
-      dto,
-      req.user,
+    return ok(
+      this.service.updateAnswer(
+        testId,
+        questionId,
+        answerId,
+        dto,
+        req.user,
+      ),
     );
   }
 
@@ -224,8 +282,10 @@ export class TestsController {
     @Param('id', new ParseUUIDPipe()) testId: string,
     @Param('questionId', new ParseUUIDPipe()) questionId: string,
     @Param('answerId', new ParseUUIDPipe()) answerId: string,
-    @Request() req,
+    @Req() req: RequestWithUser,
   ) {
-    return this.service.removeAnswer(testId, questionId, answerId, req.user);
+    return ok(
+      this.service.removeAnswer(testId, questionId, answerId, req.user),
+    );
   }
 }

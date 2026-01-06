@@ -1,55 +1,36 @@
-import type { AxiosError } from "axios";
 import { API_BASE_URL } from "@/utils/env";
 import { useAuthStore } from "@/store/use-auth-store";
+import type { PermissionKey } from "@/types";
 
 type ForbiddenPayload = {
   route?: string;
-  permissionKey?: string;
+  permissionKey?: PermissionKey | string;
   message?: string;
 };
 
 const METRIC_ENDPOINT = `${API_BASE_URL}/metrics/rbac`;
 
-const isAxiosError = (error: unknown): error is AxiosError => {
-  if (!error || typeof error !== "object") return false;
-  return (
-    "isAxiosError" in error &&
-    Boolean((error as { isAxiosError?: boolean }).isAxiosError)
-  );
-};
-
-const hasPermissionKey = (
-  payload: unknown,
-): payload is { permissionKey?: string } => {
-  if (!payload || typeof payload !== "object") return false;
-  return "permissionKey" in payload;
-};
-
-const isForbiddenPayload = (payload: unknown): payload is ForbiddenPayload => {
-  if (!payload || typeof payload !== "object") return false;
-  return true;
-};
-
-export const reportForbiddenAccess = (
-  error?: AxiosError | ForbiddenPayload,
-) => {
+export const reportForbiddenAccess = (error?: ForbiddenPayload | Error) => {
   if (typeof window === "undefined") return;
 
   const state = useAuthStore.getState();
-  const axiosError = isAxiosError(error) ? error : undefined;
-  const forbiddenPayload =
-    !axiosError && isForbiddenPayload(error) ? error : undefined;
 
   const payload = {
     userId: state.user?.id ?? null,
-    route: axiosError?.config?.url ?? forbiddenPayload?.route ?? "unknown",
-    permissionKey: axiosError
-      ? (() => {
-          const data = axiosError.response?.data;
-          return hasPermissionKey(data) ? data.permissionKey : undefined;
-        })()
-      : forbiddenPayload?.permissionKey,
-    message: axiosError?.message ?? forbiddenPayload?.message,
+    route:
+      (error && "route" in (error as ForbiddenPayload)
+        ? (error as ForbiddenPayload).route
+        : undefined) ??
+      window.location.pathname ??
+      "unknown",
+    permissionKey:
+      (error && "permissionKey" in (error as ForbiddenPayload)
+        ? (error as ForbiddenPayload).permissionKey
+        : undefined) ?? null,
+    message:
+      (error && "message" in (error as ForbiddenPayload)
+        ? (error as ForbiddenPayload).message
+        : undefined) ?? (error instanceof Error ? error.message : null),
   };
 
   const body = JSON.stringify(payload);

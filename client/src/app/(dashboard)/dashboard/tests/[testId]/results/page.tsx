@@ -1,0 +1,52 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useParams } from "next/navigation";
+import { fetchWithAuth } from "@/lib/http/client";
+import { Card } from "@/components/ui/card";
+import { Alert } from "@/components/ui/alert";
+
+type ResultRow = {
+  id: string;
+  score: number | null;
+  submittedAt: string | null;
+  attemptNo: number;
+  student?: { name?: string | null };
+  isAnonymous?: boolean;
+};
+
+export default function TestResultsPage() {
+  const { testId } = useParams<{ testId: string }>();
+  const [results, setResults] = useState<ResultRow[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchWithAuth<ResultRow[]>("GET", `/tests/${testId}/results`)
+      .then((data) => setResults(data ?? []))
+      .catch((e: any) => setError(e?.message ?? "Nelze načíst výsledky"));
+  }, [testId]);
+
+  return (
+    <div className="space-y-4">
+      <h1 className="text-2xl font-semibold">Výsledky testu</h1>
+      {error && <Alert title="Chyba" description={error} variant="warning" />}
+      <div className="grid gap-3">
+        {results.map((r) => (
+          <Card key={r.id} className="p-4">
+            <p className="font-semibold">
+              {r.isAnonymous ? "Anonymizovaný uživatel" : r.student?.name ?? "Student"}
+            </p>
+            <p className="text-sm text-slate-600">
+              Score: {r.score !== null ? Math.round((r.score ?? 0) * 100) + "%" : "n/a"}
+            </p>
+            <p className="text-sm text-slate-600">Attempt: {r.attemptNo}</p>
+            <p className="text-sm text-slate-600">
+              Submitted: {r.submittedAt ? new Date(r.submittedAt).toLocaleString() : "neodevzdáno"}
+            </p>
+          </Card>
+        ))}
+        {!results.length && <Card className="p-4 text-sm text-slate-600">Zatím žádné výsledky.</Card>}
+      </div>
+    </div>
+  );
+}

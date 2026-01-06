@@ -5,10 +5,10 @@ export class CreateCatalogSubjectDto {
   @ApiProperty({ example: 'MATH' })
   @IsString()
   @Length(2, 32)
-  code: string;
+  code!: string;
 
   @ApiProperty({ example: 'Matematika' })
   @IsString()
   @Length(2, 255)
-  name: string;
+  name!: string;
 }

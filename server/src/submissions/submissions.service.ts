@@ -32,8 +32,8 @@ export class SubmissionsService {
 
   private async getActiveMembership(user: JwtUser) {
     if (user.membershipId) {
-      const m = await this.prisma.membership.findUnique({
-        where: { id: user.membershipId },
+      const m = await this.prisma.membership.findFirst({
+        where: { id: user.membershipId, deletedAt: null },
         select: {
           id: true,
           organizationId: true,
@@ -45,14 +45,18 @@ export class SubmissionsService {
     // fallback: podle (user.id, orgId) – některé guardy nemusí membershipId přidat
     if (user.organizationId) {
       const m = await this.prisma.membership.findFirst({
-        where: { userId: user.userId, organizationId: user.organizationId },
+        where: {
+          userId: user.userId,
+          organizationId: user.organizationId,
+          deletedAt: null,
+        },
         select: { id: true, organizationId: true, role: true },
       });
       if (m) return m;
     }
     // poslední fallback: jakýkoli membership (pokud má jen jeden, je to OK)
     const m = await this.prisma.membership.findFirst({
-      where: { userId: user.userId },
+      where: { userId: user.userId, deletedAt: null },
       select: { id: true, organizationId: true, role: true },
     });
     if (!m)
@@ -176,6 +180,9 @@ export class SubmissionsService {
 
     // 2) membership studenta (nebo učitele – ale submission dává smysl pro STUDENTa)
     const membership = await this.getActiveMembership(user);
+    if (String(membership.role) !== 'STUDENT') {
+      throw new ForbiddenException('Only students can create submissions.');
+    }
 
     // 3) multitenancy
     assertSameOrganizationIds(
@@ -263,6 +270,9 @@ export class SubmissionsService {
 
     // přístup – student může editovat jen vlastní draft v rámci org
     const membership = await this.getActiveMembership(user);
+    if (String(membership.role) !== 'STUDENT') {
+      throw new ForbiddenException('Only students can update submissions.');
+    }
     assertSameOrganizationIds(
       submission.assignment.organizationId,
       membership.organizationId,
@@ -358,6 +368,9 @@ export class SubmissionsService {
     }
 
     const membership = await this.getActiveMembership(user);
+    if (String(membership.role) !== 'STUDENT') {
+      throw new ForbiddenException('Only students can finish submissions.');
+    }
     assertSameOrganizationIds(
       submission.assignment.organizationId,
       membership.organizationId,

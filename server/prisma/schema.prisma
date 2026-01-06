@@ -1,7 +1,3 @@
-// =======================================================
-// Prisma Schema – SkillStorm v.600/100 (Enterprise Catalog + Grades + Years)
-// =======================================================
-
 generator client {
   provider      = "prisma-client-js"
   binaryTargets = ["native", "debian-openssl-3.0.x"]
@@ -12,14 +8,764 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// =======================================================
-// ENUMS
-// =======================================================
+model User {
+  id                String             @id @default(uuid()) @map("user_id")
+  email             String?            @unique @db.VarChar(320)
+  username          String?            @unique @db.VarChar(64)
+  passwordHash      String             @map("password_hash") @db.VarChar(255)
+  name              String             @db.VarChar(150)
+  preferredLang     String?            @map("preferred_lang") @db.VarChar(10)
+  systemRole        SystemRole?        @map("system_role")
+  status            UserStatus         @default(ACTIVE)
+  lastLoginAt       DateTime?          @map("last_login_at")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+  deletedAt         DateTime?          @map("deleted_at")
+  anonymized        Boolean            @default(false)
+  anonymizedAt      DateTime?          @map("anonymized_at")
+  analyticsEvents   AnalyticsEvent[]
+  auditLogs         AuditLog[]
+  materialPurchases MaterialPurchase[]
+  memberships       Membership[]
+  refreshTokens     RefreshToken[]
+  revokedTokens     RevokedToken[]
+  userPermissions   UserPermission[]
+
+  @@index([username])
+  @@map("users")
+}
+
+model Organization {
+  id                String                @id @default(uuid()) @map("organization_id")
+  name              String                @db.VarChar(255)
+  address           String?               @db.VarChar(255)
+  city              String?               @db.VarChar(100)
+  country           String?               @db.VarChar(100)
+  type              OrganizationType      @default(SCHOOL)
+  createdAt         DateTime              @default(now()) @map("created_at")
+  updatedAt         DateTime              @updatedAt @map("updated_at")
+  deletedAt         DateTime?             @map("deleted_at")
+  academicYears     AcademicYear[]
+  analyticsEvents   AnalyticsEvent[]
+  assignments       Assignment[]
+  auditLogs         AuditLog[]
+  classSections     ClassSection[]
+  exportLogs        ExportLog[]
+  importBatches     ImportBatch[]
+  learningMaterials LearningMaterial[]
+  materialPurchases MaterialPurchase[]
+  memberships       Membership[]
+  settings          OrganizationSettings?
+  rolePermissions   RolePermission[]
+  students          Student[]
+  subjects          Subject[]
+  subscriptions     Subscription[]
+  teachers          Teacher[]
+  tests             Test[]
+  userPermissions   UserPermission[]
+
+  @@index([name])
+  @@index([city])
+  @@map("organizations")
+}
+
+model OrganizationSettings {
+  id                     String       @id @default(uuid()) @map("organization_settings_id")
+  orgId                  String       @unique @map("organization_id")
+  usernamePattern        String       @default("{surname}{fi}{yy}")
+  domainAlias            String?
+  initialPassword        String       @default("ChangeMe!{yy}")
+  forceResetOnFirstLogin Boolean      @default(true)
+  ssoProvider            String?
+  organization           Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@map("organization_settings")
+}
+
+model Membership {
+  id                 String                  @id @default(uuid()) @map("membership_id")
+  userId             String                  @map("user_id")
+  organizationId     String                  @map("organization_id")
+  role               OrganizationRole
+  xp                 Int                     @default(0)
+  level              Int                     @default(1)
+  avatarType         String?                 @map("avatar_type") @db.VarChar(50)
+  createdAt          DateTime                @default(now()) @map("created_at")
+  updatedAt          DateTime                @updatedAt @map("updated_at")
+  deletedAt          DateTime?               @map("deleted_at")
+  assignmentStudents AssignmentStudent[]
+  createdAssignments Assignment[]            @relation("AssignmentCreatedBy")
+  exportedLogs       ExportLog[]
+  importedBatches    ImportBatch[]
+  createdMaterials   LearningMaterial[]
+  achievements       MembershipAchievement[]
+  organization       Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user               User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  student            Student?
+  submissions        Submission[]
+  teacher            Teacher?
+  createdTests       Test[]
+  xpEvents           XpEvent[]
+
+  @@unique([userId, organizationId])
+  @@index([organizationId, role])
+  @@index([userId])
+  @@map("memberships")
+}
+
+model Level {
+  id        String   @id @default(uuid()) @map("level_id")
+  levelNo   Int      @unique @map("level_no")
+  minXp     Int      @map("min_xp")
+  badgeUrl  String?  @map("badge_url")
+  rewards   Json?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("levels")
+}
+
+model XpEvent {
+  id           String      @id @default(uuid()) @map("xp_event_id")
+  membershipId String      @map("membership_id")
+  type         XpEventType @map("event_type")
+  value        Int
+  description  String?
+  createdAt    DateTime    @default(now()) @map("created_at")
+  metadata     Json?
+  membership   Membership  @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+
+  @@index([membershipId, type])
+  @@map("xp_events")
+}
+
+model Achievement {
+  id          String                  @id @default(uuid()) @map("achievement_id")
+  title       String
+  description String?
+  iconUrl     String?                 @map("icon_url")
+  condition   Json?
+  createdAt   DateTime                @default(now()) @map("created_at")
+  memberships MembershipAchievement[]
+
+  @@map("achievements")
+}
+
+model MembershipAchievement {
+  id            String      @id @default(uuid()) @map("membership_achievement_id")
+  membershipId  String      @map("membership_id")
+  achievementId String      @map("achievement_id")
+  achievedAt    DateTime    @default(now()) @map("achieved_at")
+  achievement   Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+  membership    Membership  @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+
+  @@unique([membershipId, achievementId])
+  @@map("membership_achievements")
+}
+
+model Permission {
+  id              String             @id @default(uuid()) @map("permission_id")
+  key             PermissionKey      @unique
+  description     String?
+  allowedTypes    OrganizationType[]
+  category        String?            @db.VarChar(100)
+  isDeprecated    Boolean            @default(false) @map("is_deprecated")
+  rolePermissions RolePermission[]
+  userPermissions UserPermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  id             String           @id @default(uuid()) @map("role_permission_id")
+  role           OrganizationRole
+  permissionId   String           @map("permission_id")
+  allowed        Boolean          @default(true)
+  organizationId String?          @map("organization_id")
+  organization   Organization?    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  permission     Permission       @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, role, permissionId])
+  @@map("role_permissions")
+}
+
+model UserPermission {
+  id             String        @id @default(uuid()) @map("user_permission_id")
+  userId         String        @map("user_id")
+  permissionId   String        @map("permission_id")
+  allowed        Boolean       @default(true)
+  organizationId String?       @map("organization_id")
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  permission     Permission    @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId, permissionId])
+  @@map("user_permissions")
+}
+
+model Subscription {
+  id             String             @id @default(uuid()) @map("subscription_id")
+  organizationId String             @map("organization_id")
+  planId         String             @map("plan_id")
+  status         SubscriptionStatus
+  startDate      DateTime           @map("start_date")
+  endDate        DateTime           @map("end_date")
+  createdAt      DateTime           @default(now()) @map("created_at")
+  deletedAt      DateTime?          @map("deleted_at")
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  plan           SubscriptionPlan   @relation(fields: [planId], references: [id])
+
+  @@index([organizationId])
+  @@index([planId])
+  @@map("subscriptions")
+}
+
+model SubscriptionPlan {
+  id            String         @id @default(uuid()) @map("plan_id")
+  name          String
+  target        PlanTarget
+  price         Decimal        @db.Decimal(10, 2)
+  currency      String         @db.VarChar(3)
+  billingCycle  String         @map("billing_cycle") @db.VarChar(50)
+  maxUsers      Int?           @map("max_users")
+  features      Json
+  subscriptions Subscription[]
+
+  @@map("subscription_plans")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid()) @map("refresh_token_id")
+  token     String   @unique @db.Text
+  userId    String   @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  expiresAt DateTime @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model RevokedToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+  userId    String?  @map("user_id")
+  user      User?    @relation(fields: [userId], references: [id])
+
+  @@map("revoked_tokens")
+}
+
+model AuditLog {
+  id             String          @id @default(uuid()) @map("audit_log_id")
+  userId         String?         @map("user_id")
+  organizationId String?         @map("organization_id")
+  entityType     AuditEntityType @map("entity_type")
+  entityId       String?         @map("entity_id")
+  action         String
+  ipAddress      String?         @map("ip_address")
+  userAgent      String?         @map("user_agent")
+  metadata       Json?
+  changedFields  Json?           @map("changed_fields")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  organization   Organization?   @relation(fields: [organizationId], references: [id])
+  user           User?           @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([organizationId])
+  @@index([entityType])
+  @@map("audit_logs")
+}
+
+model AnalyticsEvent {
+  id             String        @id @default(uuid()) @map("analytics_event_id")
+  userId         String?       @map("user_id")
+  organizationId String?       @map("organization_id")
+  category       String        @db.VarChar(100)
+  action         String        @db.VarChar(100)
+  metadata       Json?
+  createdAt      DateTime      @default(now()) @map("created_at")
+  label          String?       @db.VarChar(120)
+  value          Int?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  user           User?         @relation(fields: [userId], references: [id])
+
+  @@index([organizationId, category])
+  @@map("analytics_events")
+}
+
+model AcademicYear {
+  id            String         @id @default(uuid()) @map("academic_year_id")
+  orgId         String         @map("organization_id")
+  label         String
+  startsAt      DateTime
+  endsAt        DateTime
+  isCurrent     Boolean        @default(false)
+  organization  Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  classSections ClassSection[]
+  enrollments   Enrollment[]
+
+  @@unique([orgId, label])
+  @@map("academic_years")
+}
+
+model ClassSection {
+  id                String             @id @default(uuid()) @map("class_section_id")
+  orgId             String             @map("organization_id")
+  yearId            String             @map("academic_year_id")
+  grade             SchoolGrade
+  section           String
+  label             String?
+  teacherId         String?            @map("teacher_id")
+  assignments       Assignment[]
+  academicYear      AcademicYear       @relation(fields: [yearId], references: [id], onDelete: Cascade)
+  organization      Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  teacher           Teacher?           @relation("Homeroom", fields: [teacherId], references: [id])
+  enrollments       Enrollment[]
+  studentClassrooms StudentClassroom[]
+
+  @@unique([orgId, yearId, grade, section])
+  @@index([orgId, grade])
+  @@map("class_sections")
+}
+
+model Teacher {
+  id             String           @id @default(uuid()) @map("teacher_id")
+  membershipId   String           @unique @map("membership_id")
+  organizationId String           @map("organization_id")
+  deletedAt      DateTime?        @map("deleted_at")
+  homeroomOf     ClassSection[]   @relation("Homeroom")
+  subjects       TeacherSubject[]
+  membership     Membership       @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@map("teachers")
+}
+
+model Student {
+  id               String             @id @default(uuid()) @map("student_id")
+  membershipId     String             @unique @map("membership_id")
+  orgId            String             @map("organization_id")
+  studentNumber    String?
+  externalId       String?
+  deletedAt        DateTime?          @map("deleted_at")
+  enrollments      Enrollment[]
+  StudentClassroom StudentClassroom[]
+  membership       Membership         @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  organization     Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, studentNumber])
+  @@map("students")
+}
+
+model Enrollment {
+  id             String           @id @default(uuid()) @map("enrollment_id")
+  studentId      String           @map("student_id")
+  classSectionId String           @map("class_section_id")
+  yearId         String           @map("academic_year_id")
+  status         EnrollmentStatus @default(ACTIVE)
+  academicYear   AcademicYear     @relation(fields: [yearId], references: [id], onDelete: Cascade)
+  classSection   ClassSection     @relation(fields: [classSectionId], references: [id], onDelete: Cascade)
+  student        Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, yearId])
+  @@index([classSectionId])
+  @@map("enrollments")
+}
+
+model CatalogSubject {
+  id       String         @id @default(uuid()) @map("catalog_subject_id")
+  code     String         @unique
+  name     String
+  topics   CatalogTopic[]
+  subjects Subject[]
+
+  @@map("catalog_subjects")
+}
+
+model CatalogTopic {
+  id          String         @id @default(uuid()) @map("catalog_topic_id")
+  subjectId   String         @map("catalog_subject_id")
+  name        String
+  subject     CatalogSubject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  topicLevels TopicLevel[]
+
+  @@unique([subjectId, name])
+  @@map("catalog_topics")
+}
+
+model Subject {
+  id                String             @id @default(uuid()) @map("subject_id")
+  organizationId    String             @map("organization_id")
+  catalogSubjectId  String?            @map("catalog_subject_id")
+  name              String
+  deletedAt         DateTime?          @map("deleted_at")
+  learningMaterials LearningMaterial[]
+  levels            SubjectLevel[]
+  catalogSubject    CatalogSubject?    @relation(fields: [catalogSubjectId], references: [id], onDelete: Restrict)
+  organization      Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  teachers          TeacherSubject[]
+
+  @@unique([organizationId, catalogSubjectId])
+  @@index([organizationId])
+  @@index([catalogSubjectId])
+  @@map("subjects")
+}
+
+model SubjectLevel {
+  id        String       @id @default(uuid()) @map("subject_level_id")
+  subjectId String       @map("subject_id")
+  grade     SchoolGrade
+  order     Int?
+  label     String?
+  subject   Subject      @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  topics    TopicLevel[]
+
+  @@unique([subjectId, grade])
+  @@map("subject_levels")
+}
+
+model TopicLevel {
+  id                  String               @id @default(uuid()) @map("topic_level_id")
+  subjectLevelId      String               @map("subject_level_id")
+  catalogTopicId      String               @map("catalog_topic_id")
+  name                String?
+  phase               TopicPhase           @default(INTRO)
+  difficulty          Difficulty           @default(BASIC)
+  order               Int?
+  objectives          Json?
+  prerequisites       Json?
+  assignments         Assignment[]
+  LearningMaterial    LearningMaterial[]
+  materialAssignments MaterialAssignment[]
+  studentClassrooms   StudentClassroom[]
+  testAssignments     TestAssignment[]
+  catalogTopic        CatalogTopic         @relation(fields: [catalogTopicId], references: [id])
+  subjectLevel        SubjectLevel         @relation(fields: [subjectLevelId], references: [id], onDelete: Cascade)
+
+  @@unique([subjectLevelId, catalogTopicId, phase])
+  @@index([catalogTopicId])
+  @@map("topic_levels")
+}
+
+model TeacherSubject {
+  id        String  @id @default(uuid()) @map("teacher_subject_id")
+  teacherId String  @map("teacher_id")
+  subjectId String  @map("subject_id")
+  subject   Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  teacher   Teacher @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+
+  @@unique([teacherId, subjectId])
+  @@map("teacher_subjects")
+}
+
+model LearningMaterial {
+  id             String               @id @default(uuid()) @map("material_id")
+  title          String
+  description    String?
+  contentType    ContentType          @map("content_type")
+  educationLevel EducationLevel       @map("education_level")
+  schoolGrade    SchoolGrade?         @map("school_grade")
+  subjectId      String?              @map("subject_id")
+  topicLevelId   String?              @map("topic_level_id")
+  fileUrl        String?              @map("file_url")
+  richContent    Json?                @map("rich_content")
+  scope          ContentScope         @default(GLOBAL)
+  organizationId String?              @map("organization_id")
+  createdById    String               @map("created_by_id")
+  accessLevel    MaterialAccessLevel  @default(FREE) @map("access_level")
+  price          Decimal?             @db.Decimal(10, 2)
+  currency       String?              @default("CZK")
+  isDownloadable Boolean              @default(true) @map("is_downloadable")
+  createdAt      DateTime             @default(now()) @map("created_at")
+  deletedAt      DateTime?            @map("deleted_at")
+  createdBy      Membership           @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  organization   Organization?        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  subject        Subject?             @relation(fields: [subjectId], references: [id])
+  topicLevel     TopicLevel?          @relation(fields: [topicLevelId], references: [id])
+  assignments    MaterialAssignment[]
+  purchases      MaterialPurchase[]
+
+  @@index([topicLevelId])
+  @@map("learning_materials")
+}
+
+model StudentClassroom {
+  id             String       @id @default(uuid()) @map("student_classroom_id")
+  studentId      String       @map("student_id")
+  classSectionId String       @map("class_section_id")
+  schoolYear     String
+  assignedAt     DateTime     @default(now()) @map("assigned_at")
+  topicLevelId   String?
+  classSection   ClassSection @relation(fields: [classSectionId], references: [id], onDelete: Cascade)
+  student        Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  TopicLevel     TopicLevel?  @relation(fields: [topicLevelId], references: [id])
+
+  @@unique([studentId, schoolYear])
+  @@index([classSectionId, schoolYear])
+  @@map("student_classrooms")
+}
+
+model MaterialAssignment {
+  id           String           @id @default(uuid()) @map("material_assignment_id")
+  topicLevelId String           @map("topic_level_id")
+  materialId   String           @map("material_id")
+  isPrimary    Boolean          @default(false)
+  order        Int?
+  material     LearningMaterial @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  topicLevel   TopicLevel       @relation(fields: [topicLevelId], references: [id], onDelete: Cascade)
+
+  @@unique([topicLevelId, materialId])
+  @@index([materialId])
+  @@map("material_assignments")
+}
+
+model MaterialPurchase {
+  id             String           @id @default(uuid()) @map("material_purchase_id")
+  materialId     String           @map("material_id")
+  organizationId String           @map("organization_id")
+  purchasedById  String           @map("purchased_by_id")
+  price          Decimal          @db.Decimal(10, 2)
+  currency       String           @default("CZK")
+  purchasedAt    DateTime         @default(now()) @map("purchased_at")
+  material       LearningMaterial @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  purchasedBy    User             @relation(fields: [purchasedById], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, materialId])
+  @@map("material_purchases")
+}
+
+model Test {
+  id                   String           @id @default(uuid()) @map("test_id")
+  organizationId       String           @map("organization_id")
+  title                String
+  description          String?
+  version              Int              @default(1)
+  status               PublishStatus    @default(DRAFT)
+  order                Int?
+  creatorId            String           @map("creator_id")
+  createdAt            DateTime         @default(now()) @map("created_at")
+  updatedAt            DateTime         @updatedAt @map("updated_at")
+  deletedAt            DateTime?        @map("deleted_at")
+  scheduledAssignments Assignment[]     @relation("TestToAssignments")
+  questions            Question[]
+  submissions          Submission[]
+  assignments          TestAssignment[]
+  creator              Membership       @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  organization         Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("tests")
+}
+
+model TestAssignment {
+  id           String     @id @default(uuid()) @map("test_assignment_id")
+  topicLevelId String     @map("topic_level_id")
+  testId       String     @map("test_id")
+  isPrimary    Boolean    @default(false)
+  order        Int?
+  test         Test       @relation(fields: [testId], references: [id], onDelete: Cascade)
+  topicLevel   TopicLevel @relation(fields: [topicLevelId], references: [id], onDelete: Cascade)
+
+  @@unique([topicLevelId, testId])
+  @@index([testId])
+  @@map("test_assignments")
+}
+
+model Question {
+  id             String       @id @default(uuid()) @map("question_id")
+  text           String
+  type           QuestionType
+  order          Int?
+  testId         String       @map("test_id")
+  correctAnswer  String?
+  correctAnswers String[]
+  score          Int          @default(1)
+  answers        Answer[]
+  options        Option[]
+  test           Test         @relation(fields: [testId], references: [id], onDelete: Cascade)
+  responses      Response[]
+
+  @@map("questions")
+}
+
+model Option {
+  id         String   @id @default(uuid()) @map("option_id")
+  text       String
+  questionId String   @map("question_id")
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@map("options")
+}
+
+model Answer {
+  id         String   @id @default(uuid()) @map("answer_id")
+  text       String
+  questionId String   @map("question_id")
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@map("answers")
+}
+
+model Submission {
+  id           String           @id @default(uuid()) @map("submission_id")
+  studentId    String           @map("student_id")
+  testId       String           @map("test_id")
+  score        Float?
+  status       SubmissionStatus @default(PENDING)
+  submittedAt  DateTime?        @map("submitted_at")
+  deletedAt    DateTime?        @map("deleted_at")
+  assignmentId String?          @map("assignment_id")
+  attemptNo    Int              @default(1) @map("attempt_no")
+  createdAt    DateTime         @default(now()) @map("created_at")
+  updatedAt    DateTime         @updatedAt @map("updated_at")
+  isAnonymous  Boolean          @default(false)
+  responses    Response[]
+  assignment   Assignment?      @relation(fields: [assignmentId], references: [id])
+  student      Membership       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  test         Test             @relation(fields: [testId], references: [id], onDelete: Cascade)
+
+  @@unique([assignmentId, studentId, attemptNo])
+  @@index([assignmentId])
+  @@index([testId, status])
+  @@index([studentId, submittedAt])
+  @@map("submissions")
+}
+
+model Response {
+  id            String     @id @default(uuid()) @map("response_id")
+  submissionId  String     @map("submission_id")
+  questionId    String     @map("question_id")
+  givenText     String
+  isCorrect     Boolean?
+  feedback      String?
+  explanation   String?
+  attemptNumber Int        @default(1) @map("attempt_number")
+  corrected     Boolean?   @default(false)
+  question      Question   @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  submission    Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@index([submissionId])
+  @@index([questionId])
+  @@map("responses")
+}
+
+model ImportBatch {
+  id             String       @id @default(uuid()) @map("import_batch_id")
+  organizationId String       @map("organization_id")
+  fileName       String       @map("file_name")
+  importedById   String       @map("imported_by_id")
+  status         ImportStatus
+  processedAt    DateTime?    @map("processed_at")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  importedBy     Membership   @relation(fields: [importedById], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("import_batches")
+}
+
+model ExportLog {
+  id             String       @id @default(uuid()) @map("export_log_id")
+  organizationId String       @map("organization_id")
+  type           String
+  format         String
+  exportedById   String       @map("exported_by_id")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  exportedBy     Membership   @relation(fields: [exportedById], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("export_logs")
+}
+
+model TaskCompletionStats {
+  test_id           String
+  title             String
+  total_submissions Int
+  passed_count      Int
+  pass_rate         Float
+
+  @@ignore
+}
+
+model vw_student_progress {
+  membership_id     String
+  student_name      String
+  classroom_name    String
+  total_submissions Int
+  avg_score         Float
+  xp                Int
+  level             Int
+
+  @@ignore
+}
+
+model vw_teacher_dashboard {
+  teacher_id       String
+  teacher_name     String
+  classrooms_count Int
+  students_count   Int
+  tests_count      Int
+
+  @@ignore
+}
+
+model vw_classroom_results {
+  classroom_id   String
+  classroom_name String
+  avg_score      Float
+  best_score     Float
+  worst_score    Float
+
+  @@ignore
+}
+
+model Assignment {
+  id             String              @id @default(uuid()) @map("assignment_id")
+  organizationId String              @map("organization_id")
+  testId         String              @map("test_id")
+  targetType     String              @default("CLASS")
+  classSectionId String?             @map("class_section_id")
+  topicLevelId   String?             @map("topic_level_id")
+  openAt         DateTime
+  closeAt        DateTime
+  maxAttempts    Int                 @default(1)
+  timeLimitSec   Int?                @map("time_limit_sec")
+  shuffle        Boolean             @default(true)
+  showExplain    String              @default("after_close")
+  createdById    String              @map("created_by_id")
+  createdAt      DateTime            @default(now()) @map("created_at")
+  students       AssignmentStudent[]
+  classSection   ClassSection?       @relation(fields: [classSectionId], references: [id])
+  createdBy      Membership          @relation("AssignmentCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
+  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  test           Test                @relation("TestToAssignments", fields: [testId], references: [id], onDelete: Cascade)
+  topicLevel     TopicLevel?         @relation(fields: [topicLevelId], references: [id])
+  submissions    Submission[]
+
+  @@index([organizationId, classSectionId])
+  @@index([testId])
+  @@map("assignments")
+}
+
+model AssignmentStudent {
+  id           String     @id @default(uuid()) @map("assignment_student_id")
+  assignmentId String     @map("assignment_id")
+  studentId    String     @map("student_id")
+  assignment   Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  student      Membership @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([assignmentId, studentId])
+  @@index([studentId])
+  @@map("assignment_students")
+}
 
 enum SystemRole {
-  SUPERADMIN // plný přístup ke všemu, včetně administrace škol
-  DEVOPS // technická správa, CI/CD, systémové migrace
-  SUPPORT // přístup jen k auditům, statistikám a logům
+  SUPERADMIN
+  DEVOPS
+  SUPPORT
 }
 
 enum UserStatus {
@@ -35,11 +781,11 @@ enum MaterialAccessLevel {
 }
 
 enum OrganizationRole {
-  OWNER // má všechna práva v rámci své školy
-  DIRECTOR // může řídit učitele a správu školy
-  TEACHER // běžný učitel, vytváří testy, materiály, hodnotí
-  STUDENT // přistupuje k výukovým materiálům a výsledkům
-  PARENT // pouze náhled na výsledky studenta
+  STUDENT
+  TEACHER
+  DIRECTOR
+  OWNER
+  PARENT
 }
 
 enum PermissionKey {
@@ -170,885 +916,4 @@ enum XpEventType {
   USER_LOGIN
   MATERIAL_VIEWED
   TEST_COMPLETED
-}
-
-// =======================================================
-// CORE USER / ORGANIZATION / MEMBERSHIP
-// =======================================================
-
-model User {
-  id            String      @id @default(uuid()) @map("user_id")
-  email         String?     @unique @db.VarChar(320)
-  username      String?     @unique @db.VarChar(64)
-  passwordHash  String      @map("password_hash") @db.VarChar(255)
-  name          String      @db.VarChar(150)
-  preferredLang String?     @map("preferred_lang") @db.VarChar(10)
-  systemRole    SystemRole? @map("system_role")
-  status        UserStatus  @default(ACTIVE)
-  lastLoginAt   DateTime?   @map("last_login_at")
-  isAnonymized  Boolean     @default(false) @map("is_anonymized")
-
-  memberships       Membership[]
-  refreshTokens     RefreshToken[]
-  revokedTokens     RevokedToken[]
-  auditLogs         AuditLog[]
-  userPermissions   UserPermission[]
-  materialPurchases MaterialPurchase[]
-
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
-  deletedAt DateTime? @map("deleted_at")
-  analyticsEvents AnalyticsEvent[]  
-
-  @@index([username])
-  @@map("users")
-}
-
-model Organization {
-  id      String           @id @default(uuid()) @map("organization_id")
-  name    String           @db.VarChar(255)
-  address String?          @db.VarChar(255)
-  city    String?          @db.VarChar(100)
-  country String?          @db.VarChar(100)
-  type    OrganizationType @default(SCHOOL)
-
-  memberships       Membership[]
-  subscriptions     Subscription[]
-  classSections     ClassSection[]
-  subjects          Subject[]
-  auditLogs         AuditLog[]
-  learningMaterials LearningMaterial[]
-  tests             Test[]
-  importBatches     ImportBatch[]
-  exportLogs        ExportLog[]
-  teachers          Teacher[]
-  students          Student[]
-  settings          OrganizationSettings?
-  academicYears     AcademicYear[]
-  materialPurchases MaterialPurchase[]
-
-  assignments Assignment[]
-
-  rolePermissions RolePermission[]
-  userPermissions UserPermission[]
-
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
-  deletedAt DateTime? @map("deleted_at")
-  analyticsEvents AnalyticsEvent[]  
-
-  @@index([name])
-  @@index([city])
-  @@map("organizations")
-}
-
-model OrganizationSettings {
-  id                     String  @id @default(uuid()) @map("organization_settings_id")
-  orgId                  String  @unique @map("organization_id")
-  usernamePattern        String  @default("{surname}{fi}{yy}") // e.g. novakj25
-  domainAlias            String?
-  initialPassword        String  @default("ChangeMe!{yy}")
-  forceResetOnFirstLogin Boolean @default(true)
-  ssoProvider            String? // "Bakalari" | "AzureAD" | null
-
-  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-
-  @@map("organization_settings")
-}
-
-model Membership {
-  id             String           @id @default(uuid()) @map("membership_id")
-  userId         String           @map("user_id")
-  organizationId String           @map("organization_id")
-  role           OrganizationRole
-  xp             Int              @default(0)
-  level          Int              @default(1)
-  avatarType     String?          @map("avatar_type") @db.VarChar(50)
-  isAnonymized   Boolean          @default(false) @map("is_anonymized")
-
-  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
-  teacher          Teacher?
-  student          Student?
-  createdMaterials LearningMaterial[]
-  createdTests     Test[]
-  submissions      Submission[]
-  importedBatches  ImportBatch[]
-  exportedLogs     ExportLog[]
-
-  //  :
-  createdAssignments Assignment[]        @relation("AssignmentCreatedBy")
-  assignmentStudents AssignmentStudent[] // back-relation k AssignmentStudent.student
-  xpEvents           XpEvent[]
-  achievements       MembershipAchievement[]
-
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
-  deletedAt DateTime? @map("deleted_at")
-
-  @@unique([userId, organizationId])
-  @@index([organizationId, role])
-  @@index([userId])
-  @@map("memberships")
-}
-
-model Level {
-  id        String   @id @default(uuid()) @map("level_id")
-  levelNo   Int      @unique @map("level_no")
-  minXp     Int      @map("min_xp")
-  badgeUrl  String?  @map("badge_url")
-  rewards   Json?
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  @@map("levels")
-}
-
-model XpEvent {
-  id           String      @id @default(uuid()) @map("xp_event_id")
-  membershipId String      @map("membership_id")
-  type         XpEventType @map("event_type")
-  value        Int
-  description  String?
-  metadata     Json?
-  createdAt    DateTime    @default(now()) @map("created_at")
-
-  membership Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
-
-  @@index([membershipId, type])
-  @@map("xp_events")
-}
-
-model Achievement {
-  id          String  @id @default(uuid()) @map("achievement_id")
-  title       String
-  description String?
-  iconUrl     String? @map("icon_url")
-  condition   Json?
-  createdAt   DateTime @default(now()) @map("created_at")
-
-  memberships MembershipAchievement[]
-
-  @@map("achievements")
-}
-
-model MembershipAchievement {
-  id            String   @id @default(uuid()) @map("membership_achievement_id")
-  membershipId  String   @map("membership_id")
-  achievementId String   @map("achievement_id")
-  achievedAt    DateTime @default(now()) @map("achieved_at")
-
-  membership  Membership  @relation(fields: [membershipId], references: [id], onDelete: Cascade)
-  achievement Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
-
-  @@unique([membershipId, achievementId])
-  @@map("membership_achievements")
-}
-
-// =======================================================
-// RBAC
-// =======================================================
-
-model Permission {
-  id           String             @id @default(uuid()) @map("permission_id")
-  key          PermissionKey      @unique
-  description  String?
-  allowedTypes OrganizationType[]
-
-  // ✨ nové:
-  category     String? @db.VarChar(100)
-  isDeprecated Boolean @default(false) @map("is_deprecated")
-
-  rolePermissions RolePermission[]
-  userPermissions UserPermission[]
-
-  @@map("permissions")
-}
-
-model RolePermission {
-  id             String           @id @default(uuid()) @map("role_permission_id")
-  organizationId String?          @map("organization_id")
-  role           OrganizationRole
-  permissionId   String           @map("permission_id")
-  allowed        Boolean          @default(true)
-
-  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  permission   Permission    @relation(fields: [permissionId], references: [id], onDelete: Cascade)
-
-  @@unique([organizationId, role, permissionId])
-  @@map("role_permissions")
-}
-
-model UserPermission {
-  id             String  @id @default(uuid()) @map("user_permission_id")
-  userId         String  @map("user_id")
-  organizationId String? @map("organization_id")
-  permissionId   String  @map("permission_id")
-  allowed        Boolean @default(true)
-
-  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  permission   Permission    @relation(fields: [permissionId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, organizationId, permissionId])
-  @@map("user_permissions")
-}
-
-// =======================================================
-// SUBSCRIPTION
-// =======================================================
-
-model Subscription {
-  id             String             @id @default(uuid()) @map("subscription_id")
-  organizationId String             @map("organization_id")
-  planId         String             @map("plan_id")
-  status         SubscriptionStatus
-  startDate      DateTime           @map("start_date")
-  endDate        DateTime           @map("end_date")
-
-  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  plan         SubscriptionPlan @relation(fields: [planId], references: [id])
-
-  createdAt DateTime  @default(now()) @map("created_at")
-  deletedAt DateTime? @map("deleted_at")
-
-  @@index([organizationId])
-  @@index([planId])
-  @@map("subscriptions")
-}
-
-model SubscriptionPlan {
-  id           String     @id @default(uuid()) @map("plan_id")
-  name         String
-  target       PlanTarget
-  price        Decimal    @db.Decimal(10, 2)
-  currency     String     @db.VarChar(3)
-  billingCycle String     @map("billing_cycle") @db.VarChar(50)
-  maxUsers     Int?       @map("max_users")
-  features     Json
-
-  subscriptions Subscription[]
-
-  @@map("subscription_plans")
-}
-
-// =======================================================
-// AUTH
-// =======================================================
-
-model RefreshToken {
-  id        String   @id @default(uuid()) @map("refresh_token_id")
-  token     String   @unique
-  tokenHash String   @unique @map("token_hash")
-  userId    String   @map("user_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  expiresAt DateTime @map("expires_at")
-  revokedAt DateTime? @map("revoked_at")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@map("refresh_tokens")
-}
-
-model RevokedToken {
-  id        String   @id @default(uuid())
-  token     String   @unique
-  userId    String?  @map("user_id")
-  createdAt DateTime @default(now()) @map("created_at")
-
-  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
-
-  @@map("revoked_tokens") // dříve "RevokedToken"
-}
-
-// =======================================================
-// AUDIT
-// =======================================================
-
-model AuditLog {
-  id             String          @id @default(uuid()) @map("audit_log_id")
-  userId         String?         @map("user_id")
-  organizationId String?         @map("organization_id")
-  entityType     AuditEntityType @map("entity_type")
-  entityId       String?         @map("entity_id")
-  action         String
-  ipAddress      String?         @map("ip_address")
-  userAgent      String?         @map("user_agent")
-  metadata       Json?
-  changedFields  Json?           @map("changed_fields")
-  createdAt      DateTime        @default(now()) @map("created_at")
-
-  user         User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
-  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
-
-  @@index([userId])
-  @@index([organizationId])
-  @@index([entityType])
-  @@map("audit_logs")
-}
-
-model AnalyticsEvent {
-  id             String   @id @default(uuid()) @map("analytics_event_id")
-  userId         String?  @map("user_id")
-  organizationId String?  @map("organization_id")
-  category       String   @db.VarChar(100)
-  action         String   @db.VarChar(100)
-  label          String?  @db.VarChar(120)
-  value          Int?
-  metadata       Json?
-  createdAt      DateTime @default(now()) @map("created_at")
-
-  user         User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
-  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
-
-  @@index([organizationId, category])
-  @@map("analytics_events")
-}
-
-// =======================================================
-// SCHOOL STRUCTURE – YEARS, CLASSES, PEOPLE
-// =======================================================
-
-model AcademicYear {
-  id          String       @id @default(uuid()) @map("academic_year_id")
-  orgId       String       @map("organization_id")
-  label       String // e.g. "2025/26"
-  startsAt    DateTime
-  endsAt      DateTime
-  isCurrent   Boolean      @default(false)
-  enrollments Enrollment[]
-
-  organization  Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  classSections ClassSection[]
-
-  @@unique([orgId, label])
-  @@map("academic_years")
-}
-
-model ClassSection {
-  id                String             @id @default(uuid()) @map("class_section_id")
-  orgId             String             @map("organization_id")
-  yearId            String             @map("academic_year_id")
-  grade             SchoolGrade
-  section           String // "A" | "B" | "C"
-  label             String?
-  teacherId         String?            @map("teacher_id")
-  studentClassrooms StudentClassroom[]
-
-  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  academicYear AcademicYear @relation(fields: [yearId], references: [id], onDelete: Cascade)
-  teacher      Teacher?     @relation("Homeroom", fields: [teacherId], references: [id], onDelete: SetNull)
-  enrollments  Enrollment[]
-
-  //  : back-relation na Assignment.classSection
-  assignments Assignment[]
-
-  @@unique([orgId, yearId, grade, section])
-  @@index([orgId, grade])
-  @@map("class_sections")
-}
-
-model Teacher {
-  id             String @id @default(uuid()) @map("teacher_id")
-  membershipId   String @unique @map("membership_id")
-  organizationId String @map("organization_id")
-
-  membership   Membership   @relation(fields: [membershipId], references: [id], onDelete: Cascade)
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
-  subjects   TeacherSubject[]
-  homeroomOf ClassSection[]   @relation("Homeroom")
-
-  deletedAt DateTime? @map("deleted_at")
-
-  @@index([organizationId])
-  @@map("teachers")
-}
-
-model Student {
-  id            String  @id @default(uuid()) @map("student_id")
-  membershipId  String  @unique @map("membership_id")
-  orgId         String  @map("organization_id")
-  studentNumber String?
-  externalId    String?
-
-  membership   Membership   @relation(fields: [membershipId], references: [id], onDelete: Cascade)
-  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  enrollments  Enrollment[]
-
-  deletedAt        DateTime?          @map("deleted_at")
-  StudentClassroom StudentClassroom[]
-
-  @@index([orgId, studentNumber])
-  @@map("students")
-}
-
-model Enrollment {
-  id             String           @id @default(uuid()) @map("enrollment_id")
-  studentId      String           @map("student_id")
-  classSectionId String           @map("class_section_id")
-  yearId         String           @map("academic_year_id")
-  status         EnrollmentStatus @default(ACTIVE)
-
-  student      Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  classSection ClassSection @relation(fields: [classSectionId], references: [id], onDelete: Cascade)
-  academicYear AcademicYear @relation(fields: [yearId], references: [id], onDelete: Cascade)
-
-  @@unique([studentId, yearId])
-  @@index([classSectionId])
-  @@map("enrollments")
-}
-
-// =======================================================
-// SUBJECTS – Catalog + School Instances + Levels
-// =======================================================
-
-model CatalogSubject {
-  id       String         @id @default(uuid()) @map("catalog_subject_id")
-  code     String         @unique
-  name     String
-  topics   CatalogTopic[]
-  subjects Subject[]
-
-  @@map("catalog_subjects")
-}
-
-model CatalogTopic {
-  id          String       @id @default(uuid()) @map("catalog_topic_id")
-  subjectId   String       @map("catalog_subject_id")
-  name        String
-  topicLevels TopicLevel[]
-
-  subject CatalogSubject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
-
-  @@unique([subjectId, name])
-  @@map("catalog_topics")
-}
-
-model Subject {
-  id               String  @id @default(uuid()) @map("subject_id")
-  organizationId   String  @map("organization_id")
-  catalogSubjectId String? @map("catalog_subject_id")
-  name             String
-
-  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  catalogSubject CatalogSubject? @relation(fields: [catalogSubjectId], references: [id], onDelete: Restrict)
-
-  levels            SubjectLevel[]
-  teachers          TeacherSubject[]
-  learningMaterials LearningMaterial[]
-
-  deletedAt DateTime? @map("deleted_at")
-
-  @@unique([organizationId, catalogSubjectId])
-  @@index([organizationId])
-  @@index([catalogSubjectId])
-  @@map("subjects")
-}
-
-model SubjectLevel {
-  id        String      @id @default(uuid()) @map("subject_level_id")
-  subjectId String      @map("subject_id")
-  grade     SchoolGrade
-  order     Int?
-  label     String?
-
-  subject Subject      @relation(fields: [subjectId], references: [id], onDelete: Cascade)
-  topics  TopicLevel[]
-
-  @@unique([subjectId, grade])
-  @@map("subject_levels")
-}
-
-model TopicLevel {
-  id                String             @id @default(uuid()) @map("topic_level_id")
-  subjectLevelId    String             @map("subject_level_id")
-  catalogTopicId    String             @map("catalog_topic_id")
-  name              String?
-  phase             TopicPhase         @default(INTRO)
-  difficulty        Difficulty         @default(BASIC)
-  order             Int?
-  objectives        Json?
-  prerequisites     Json?
-  studentClassrooms StudentClassroom[]
-
-  subjectLevel SubjectLevel @relation(fields: [subjectLevelId], references: [id], onDelete: Cascade)
-  catalogTopic CatalogTopic @relation(fields: [catalogTopicId], references: [id], onDelete: Restrict)
-
-  materialAssignments MaterialAssignment[]
-  testAssignments     TestAssignment[]
-  LearningMaterial    LearningMaterial[]
-
-  assignments Assignment[]
-
-  @@unique([subjectLevelId, catalogTopicId, phase])
-  @@index([catalogTopicId])
-  @@map("topic_levels")
-}
-
-model TeacherSubject {
-  id        String @id @default(uuid()) @map("teacher_subject_id")
-  teacherId String @map("teacher_id")
-  subjectId String @map("subject_id")
-
-  teacher Teacher @relation(fields: [teacherId], references: [id], onDelete: Cascade)
-  subject Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
-
-  @@unique([teacherId, subjectId])
-  @@map("teacher_subjects")
-}
-
-// =======================================================
-// LEARNING MATERIALS (with assignments) & TESTS
-// =======================================================
-
-model LearningMaterial {
-  id             String         @id @default(uuid()) @map("material_id")
-  title          String
-  description    String?
-  contentType    ContentType    @map("content_type")
-  educationLevel EducationLevel @map("education_level")
-  schoolGrade    SchoolGrade?   @map("school_grade")
-  subjectId      String?        @map("subject_id")
-
-  topicLevelId String? @map("topic_level_id")
-
-  fileUrl        String?      @map("file_url")
-  richContent    Json?        @map("rich_content")
-  scope          ContentScope @default(GLOBAL)
-  organizationId String?      @map("organization_id")
-  createdById    String       @map("created_by_id")
-
-  accessLevel    MaterialAccessLevel @default(FREE) @map("access_level")
-  price          Decimal?            @db.Decimal(10, 2)
-  currency       String?             @default("CZK")
-  isDownloadable Boolean             @default(true) @map("is_downloadable")
-
-  subject      Subject?      @relation(fields: [subjectId], references: [id], onDelete: SetNull)
-  topicLevel   TopicLevel?   @relation(fields: [topicLevelId], references: [id], onDelete: SetNull)
-  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  createdBy    Membership    @relation(fields: [createdById], references: [id], onDelete: Cascade)
-
-  assignments MaterialAssignment[]
-
-  purchases MaterialPurchase[]
-
-  createdAt DateTime  @default(now()) @map("created_at")
-  deletedAt DateTime? @map("deleted_at")
-
-  @@index([topicLevelId])
-  @@map("learning_materials")
-}
-
-model StudentClassroom {
-  id             String   @id @default(uuid()) @map("student_classroom_id")
-  studentId      String   @map("student_id")
-  classSectionId String   @map("class_section_id")
-  schoolYear     String
-  assignedAt     DateTime @default(now()) @map("assigned_at")
-
-  student      Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  classSection ClassSection @relation(fields: [classSectionId], references: [id], onDelete: Cascade)
-  TopicLevel   TopicLevel?  @relation(fields: [topicLevelId], references: [id])
-  topicLevelId String?
-
-  @@unique([studentId, schoolYear])
-  @@index([classSectionId, schoolYear])
-  @@map("student_classrooms")
-}
-
-model MaterialAssignment {
-  id           String  @id @default(uuid()) @map("material_assignment_id")
-  topicLevelId String  @map("topic_level_id")
-  materialId   String  @map("material_id")
-  isPrimary    Boolean @default(false)
-  order        Int?
-
-  topicLevel TopicLevel       @relation(fields: [topicLevelId], references: [id], onDelete: Cascade)
-  material   LearningMaterial @relation(fields: [materialId], references: [id], onDelete: Cascade)
-
-  @@unique([topicLevelId, materialId])
-  @@index([materialId])
-  @@map("material_assignments")
-}
-
-model MaterialPurchase {
-  id             String   @id @default(uuid()) @map("material_purchase_id")
-  materialId     String   @map("material_id")
-  organizationId String   @map("organization_id")
-  purchasedById  String   @map("purchased_by_id")
-  price          Decimal  @db.Decimal(10, 2)
-  currency       String   @default("CZK")
-  purchasedAt    DateTime @default(now()) @map("purchased_at")
-
-  material     LearningMaterial @relation(fields: [materialId], references: [id], onDelete: Cascade)
-  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  purchasedBy  User             @relation(fields: [purchasedById], references: [id], onDelete: Cascade)
-
-  @@index([organizationId, materialId])
-  @@map("material_purchases")
-}
-
-model Test {
-  id             String        @id @default(uuid()) @map("test_id")
-  organizationId String        @map("organization_id")
-  title          String
-  description    String?
-  version        Int           @default(1)
-  status         PublishStatus @default(DRAFT)
-  order          Int?
-  creatorId      String        @map("creator_id")
-
-  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  creator      Membership       @relation(fields: [creatorId], references: [id], onDelete: Cascade)
-  questions    Question[]
-  submissions  Submission[]
-  assignments  TestAssignment[] // vazba na TopicLevel přes spojovací tabulku
-
-  scheduledAssignments Assignment[] @relation("TestToAssignments")
-
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
-  deletedAt DateTime? @map("deleted_at")
-
-  @@map("tests")
-}
-
-model TestAssignment {
-  id           String  @id @default(uuid()) @map("test_assignment_id")
-  topicLevelId String  @map("topic_level_id")
-  testId       String  @map("test_id")
-  isPrimary    Boolean @default(false)
-  order        Int?
-
-  topicLevel TopicLevel @relation(fields: [topicLevelId], references: [id], onDelete: Cascade)
-  test       Test       @relation(fields: [testId], references: [id], onDelete: Cascade)
-
-  @@unique([topicLevelId, testId])
-  @@index([testId])
-  @@map("test_assignments")
-}
-
-model Question {
-  id     String       @id @default(uuid()) @map("question_id")
-  text   String
-  type   QuestionType
-  order  Int?
-  testId String       @map("test_id")
-
-  // Auto-scoring fields
-  score          Int      @default(1)
-  correctAnswer  String? // TF, FITB, MCQ single
-  correctAnswers String[] // MCQ multiple
-
-  test      Test       @relation(fields: [testId], references: [id], onDelete: Cascade)
-  options   Option[]
-  answers   Answer[]
-  responses Response[]
-
-  @@map("questions")
-}
-
-model Option {
-  id         String @id @default(uuid()) @map("option_id")
-  text       String
-  questionId String @map("question_id")
-
-  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
-
-  @@map("options")
-}
-
-model Answer {
-  id         String @id @default(uuid()) @map("answer_id")
-  text       String
-  questionId String @map("question_id")
-
-  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
-
-  @@map("answers")
-}
-
-// =======================================================
-// SUBMISSIONS & RESPONSES
-// =======================================================
-
-model Submission {
-  id           String  @id @default(uuid()) @map("submission_id")
-  studentId    String  @map("student_id")
-  testId       String  @map("test_id")
-  assignmentId String? @map("assignment_id")
-
-  attemptNo   Int              @default(1) @map("attempt_no")
-  status      SubmissionStatus @default(PENDING)
-  score       Float?
-  submittedAt DateTime?        @map("submitted_at")
-  createdAt   DateTime         @default(now()) @map("created_at")
-  updatedAt   DateTime         @updatedAt @map("updated_at")
-  deletedAt   DateTime?        @map("deleted_at")
-
-  student    Membership  @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  test       Test        @relation(fields: [testId], references: [id], onDelete: Cascade)
-  assignment Assignment? @relation(fields: [assignmentId], references: [id], onDelete: SetNull)
-  responses  Response[]
-
-  // PONECH pouze tenhle:
-  @@unique([assignmentId, studentId, attemptNo])
-  @@index([assignmentId])
-  @@index([testId, status])
-  @@index([studentId, submittedAt])
-  @@map("submissions")
-}
-
-model Response {
-  id            String   @id @default(uuid()) @map("response_id")
-  submissionId  String   @map("submission_id")
-  questionId    String   @map("question_id")
-  givenText     String
-  isCorrect     Boolean?
-  feedback      String?
-  explanation   String?
-  attemptNumber Int      @default(1) @map("attempt_number")
-  corrected     Boolean? @default(false)
-
-  submission Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
-  question   Question   @relation(fields: [questionId], references: [id], onDelete: Cascade)
-
-  @@index([submissionId])
-  @@index([questionId])
-  @@map("responses")
-}
-
-// =======================================================
-// IMPORT / EXPORT LOGS
-// =======================================================
-
-model ImportBatch {
-  id             String       @id @default(uuid()) @map("import_batch_id")
-  organizationId String       @map("organization_id")
-  fileName       String       @map("file_name")
-  importedById   String       @map("imported_by_id")
-  status         ImportStatus
-  processedAt    DateTime?    @map("processed_at")
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  importedBy   Membership   @relation(fields: [importedById], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now()) @map("created_at")
-
-  @@map("import_batches")
-}
-
-model ExportLog {
-  id             String @id @default(uuid()) @map("export_log_id")
-  organizationId String @map("organization_id")
-  type           String
-  format         String
-  exportedById   String @map("exported_by_id")
-
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  exportedBy   Membership   @relation(fields: [exportedById], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now()) @map("created_at")
-
-  @@map("export_logs")
-}
-
-// =======================================================
-// STATS VIEW (ignored)
-// =======================================================
-
-model TaskCompletionStats {
-  test_id           String
-  title             String
-  total_submissions Int
-  passed_count      Int
-  pass_rate         Float
-
-  @@ignore
-}
-
-model vw_student_progress {
-  membership_id     String
-  student_name      String
-  classroom_name    String
-  total_submissions Int
-  avg_score         Float
-  xp                Int
-  level             Int
-
-  @@ignore
-}
-
-model vw_teacher_dashboard {
-  teacher_id       String
-  teacher_name     String
-  classrooms_count Int
-  students_count   Int
-  tests_count      Int
-
-  @@ignore
-}
-
-model vw_classroom_results {
-  classroom_id   String
-  classroom_name String
-  avg_score      Float
-  best_score     Float
-  worst_score    Float
-
-  @@ignore
-}
-
-model Assignment {
-  id             String @id @default(uuid()) @map("assignment_id")
-  organizationId String @map("organization_id")
-  testId         String @map("test_id")
-
-  // cíl zadání
-  targetType     String  @default("CLASS") // "CLASS" | "STUDENTS"
-  classSectionId String? @map("class_section_id")
-  topicLevelId   String? @map("topic_level_id") // volitelně, pro přehledy
-
-  // okno a pravidla
-  openAt       DateTime
-  closeAt      DateTime
-  maxAttempts  Int      @default(1)
-  timeLimitSec Int?     @map("time_limit_sec")
-  shuffle      Boolean  @default(true)
-  showExplain  String   @default("after_close") // "never"|"after_finish"|"after_close"
-
-  createdById String @map("created_by_id")
-
-  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  // Pojmenuju relaci, aby se nebila s Test.assignments (což je TestAssignment[])
-  test         Test          @relation("TestToAssignments", fields: [testId], references: [id], onDelete: Cascade)
-  classSection ClassSection? @relation(fields: [classSectionId], references: [id], onDelete: SetNull)
-  topicLevel   TopicLevel?   @relation(fields: [topicLevelId], references: [id], onDelete: SetNull)
-  createdBy    Membership    @relation("AssignmentCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
-
-  // back-relations
-  submissions Submission[]
-  students    AssignmentStudent[]
-
-  createdAt DateTime @default(now()) @map("created_at")
-
-  @@index([organizationId, classSectionId])
-  @@index([testId])
-  @@map("assignments")
-}
-
-model AssignmentStudent {
-  id           String @id @default(uuid()) @map("assignment_student_id")
-  assignmentId String @map("assignment_id")
-  studentId    String @map("student_id") // Membership.id studenta
-
-  assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
-  student    Membership @relation(fields: [studentId], references: [id], onDelete: Cascade)
-
-  @@unique([assignmentId, studentId])
-  @@index([studentId])
-  @@map("assignment_students")
 }

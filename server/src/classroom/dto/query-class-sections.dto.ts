@@ -12,8 +12,9 @@ import { SchoolGrade } from '@prisma/client';
 
 export class QueryClassSectionsDto {
   @ApiProperty({ description: 'Školní rok', example: 'year-uuid' })
+  @IsOptional()
   @IsUUID()
-  yearId!: string;
+  yearId?: string;
 
   @ApiPropertyOptional({ enum: SchoolGrade, example: 'PRIMARY_1' })
   @IsOptional()

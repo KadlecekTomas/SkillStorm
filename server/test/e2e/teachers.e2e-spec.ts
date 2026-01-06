@@ -3,8 +3,8 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import * as request from 'supertest';
 import { AppModule } from '../../src/app.module';
 import { PrismaService } from '@/prisma/prisma.service';
-import { $Enums, OrganizationType, OrganizationRole } from '@prisma/client';
-import { login, register } from 'test/helpers';
+import { OrganizationRole, SystemRole } from '@prisma/client';
+import { createSystemUser, setupOrgContext } from 'test/helpers';
 import { randomUUID } from 'crypto';
 
 describe('Teachers (e2e)', () => {
@@ -52,6 +52,9 @@ describe('Teachers (e2e)', () => {
   let orgA: { id: string };
   let orgB: { id: string };
 
+  let ctxA: Awaited<ReturnType<typeof setupOrgContext>>;
+  let ctxB: Awaited<ReturnType<typeof setupOrgContext>>;
+
   // subjects
   let subjA1: { id: string };
   let subjA2: { id: string };
@@ -75,116 +78,92 @@ describe('Teachers (e2e)', () => {
     prisma = app.get(PrismaService);
     await prisma.$connect();
 
-    // users
-    const rSuper = await register(app, 'super');
-    await prisma.user.update({
-      where: { id: rSuper.user.id },
-      data: { systemRole: $Enums.SystemRole.SUPERADMIN },
+    ctxA = await setupOrgContext(app, prisma, {
+      role: 'DIRECTOR',
+      seed: 'teachersA',
     });
-    superUser = {
-      id: rSuper.user.id,
-      token: await login(app, rSuper.login),
-      login: rSuper.login,
-    };
+    ctxB = await setupOrgContext(app, prisma, {
+      role: 'DIRECTOR',
+      seed: 'teachersB',
+    });
 
-    const rDirA = await register(app, 'directorA');
+    orgA = { id: ctxA.organization.id };
+    orgB = { id: ctxB.organization.id };
+
     directorA = {
-      id: rDirA.user.id,
-      token: rDirA.accessToken,
-      login: rDirA.login,
+      id: ctxA.owner.user.id,
+      token: ctxA.owner.accessToken,
+      login: ctxA.owner.login,
     };
-
-    const rDirB = await register(app, 'directorB');
     directorB = {
-      id: rDirB.user.id,
-      token: rDirB.accessToken,
-      login: rDirB.login,
+      id: ctxB.owner.user.id,
+      token: ctxB.owner.accessToken,
+      login: ctxB.owner.login,
     };
 
-    const rTA1 = await register(app, 'teacherA1', 'Pan Učitel Novák');
+    const superUserAuth = await createSystemUser(
+      app,
+      prisma,
+      SystemRole.SUPERADMIN,
+      'teachers_super',
+    );
+    await ctxA.addMembershipForUser(
+      superUserAuth.user.id,
+      OrganizationRole.DIRECTOR,
+    );
+    await ctxB.addMembershipForUser(
+      superUserAuth.user.id,
+      OrganizationRole.DIRECTOR,
+    );
+    superUser = {
+      id: superUserAuth.user.id,
+      token: superUserAuth.accessToken,
+      login: superUserAuth.login,
+    };
+
+    const ta1 = await ctxA.addMember(
+      OrganizationRole.TEACHER,
+      'teacherA1',
+      'Pan Učitel Novák',
+    );
     teacherUserA1 = {
-      id: rTA1.user.id,
-      token: rTA1.accessToken,
-      login: rTA1.login,
+      id: ta1.user.id,
+      token: ta1.accessToken,
+      login: ta1.login,
     };
 
-    const rTA2 = await register(app, 'teacherA2', 'Paní Učitelová Sýkorová');
+    const ta2 = await ctxA.addMember(
+      OrganizationRole.TEACHER,
+      'teacherA2',
+      'Paní Učitelová Sýkorová',
+    );
     teacherUserA2 = {
-      id: rTA2.user.id,
-      token: rTA2.accessToken,
-      login: rTA2.login,
+      id: ta2.user.id,
+      token: ta2.accessToken,
+      login: ta2.login,
     };
 
-    const rTB1 = await register(app, 'teacherB1', 'Profesor Cizinec');
+    const tb1 = await ctxB.addMember(
+      OrganizationRole.TEACHER,
+      'teacherB1',
+      'Profesor Cizinec',
+    );
     teacherUserB1 = {
-      id: rTB1.user.id,
-      token: rTB1.accessToken,
-      login: rTB1.login,
+      id: tb1.user.id,
+      token: tb1.accessToken,
+      login: tb1.login,
     };
 
-    const rStud = await register(app, 'student');
+    const stud = await ctxA.addMember(OrganizationRole.STUDENT, 'student');
     studentUser = {
-      id: rStud.user.id,
-      token: rStud.accessToken,
-      login: rStud.login,
+      id: stud.user.id,
+      token: stud.accessToken,
+      login: stud.login,
     };
 
-    // org A & B
-    orgA = await prisma.organization.create({
-      data: {
-        name: 'E2E Org A',
-        type: OrganizationType.SCHOOL,
-        memberships: {
-          create: [{ userId: directorA.id, role: OrganizationRole.DIRECTOR }],
-        },
-      },
-      select: { id: true },
-    });
-    orgB = await prisma.organization.create({
-      data: {
-        name: 'E2E Org B',
-        type: OrganizationType.PRIVATE,
-        memberships: {
-          create: [{ userId: directorB.id, role: OrganizationRole.DIRECTOR }],
-        },
-      },
-      select: { id: true },
-    });
-
-    // refresh directors to embed roles in JWT (if RolesGuard reads JWT)
-    directorA.token = await login(app, directorA.login);
-    directorB.token = await login(app, directorB.login);
-
-    // Make teacher memberships (needed to create Teacher)
-    const mA1 = await prisma.membership.create({
-      data: {
-        organizationId: orgA.id,
-        userId: teacherUserA1.id,
-        role: OrganizationRole.TEACHER,
-      },
-      select: { id: true },
-    });
-    const mA2 = await prisma.membership.create({
-      data: {
-        organizationId: orgA.id,
-        userId: teacherUserA2.id,
-        role: OrganizationRole.TEACHER,
-      },
-      select: { id: true },
-    });
-    const mB1 = await prisma.membership.create({
-      data: {
-        organizationId: orgB.id,
-        userId: teacherUserB1.id,
-        role: OrganizationRole.TEACHER,
-      },
-      select: { id: true },
-    });
-
-    // refresh teachers for TEACHER role in JWT (for GET eligibility)
-    teacherUserA1.token = await login(app, teacherUserA1.login);
-    teacherUserA2.token = await login(app, teacherUserA2.login);
-    teacherUserB1.token = await login(app, teacherUserB1.login);
+    const mA1 = ta1.membership;
+    const mA2 = ta2.membership;
+    const mB1 = tb1.membership;
 
     // subjects in orgA + orgB
     subjA1 = await prisma.subject.create({
@@ -309,16 +288,8 @@ describe('Teachers (e2e)', () => {
   // ---------------------------
 
   it('POST /teachers → 201 Director orgA vytvoří učitele v orgA', async () => {
-    const tmpUser = await register(app, 'tmpTA');
-    // membership role TEACHER v orgA
-    const mTmp = await prisma.membership.create({
-      data: {
-        organizationId: orgA.id,
-        userId: tmpUser.user.id,
-        role: OrganizationRole.TEACHER,
-      },
-      select: { id: true },
-    });
+    const tmpUser = await ctxA.addMember(OrganizationRole.TEACHER, 'tmpTA');
+    const mTmp = tmpUser.membership;
 
     const res = await request(app.getHttpServer())
       .post('/teachers')
@@ -338,15 +309,8 @@ describe('Teachers (e2e)', () => {
   });
 
   it('POST /teachers → 403 Director orgA nesmí vytvořit učitele v orgB (cross‑org)', async () => {
-    const some = await register(app, 'tmpCross');
-    const m = await prisma.membership.create({
-      data: {
-        organizationId: orgB.id,
-        userId: some.user.id,
-        role: OrganizationRole.TEACHER,
-      },
-      select: { id: true },
-    });
+    const some = await ctxB.addMember(OrganizationRole.TEACHER, 'tmpCross');
+    const m = some.membership;
 
     await request(app.getHttpServer())
       .post('/teachers')
@@ -361,15 +325,8 @@ describe('Teachers (e2e)', () => {
   });
 
   it('POST /teachers → 403/400 když membership.role není TEACHER (např. STUDENT)', async () => {
-    const some = await register(app, 'tmpWrongRole');
-    const m = await prisma.membership.create({
-      data: {
-        organizationId: orgA.id,
-        userId: some.user.id,
-        role: OrganizationRole.STUDENT,
-      },
-      select: { id: true },
-    });
+    const some = await ctxA.addMember(OrganizationRole.STUDENT, 'tmpWrongRole');
+    const m = some.membership;
 
     await request(app.getHttpServer())
       .post('/teachers')
@@ -445,10 +402,10 @@ describe('Teachers (e2e)', () => {
   // DETAIL / GET :id (roles: SUPERADMIN, DIRECTOR, TEACHER)
   // ---------------------------
 
-  it('GET /teachers/:id → 200 TEACHER z téže org může vidět detail učitele své org (např. teacherA1 vidí teacherA2)', async () => {
+  it('GET /teachers/:id → 200 DIRECTOR z téže org může vidět detail učitele své org', async () => {
     const res = await request(app.getHttpServer())
       .get(`/teachers/${teacherA2.id}`)
-      .set('Authorization', `Bearer ${teacherUserA1.token}`)
+      .set('Authorization', `Bearer ${directorA.token}`)
       .expect(200);
 
     expect(res.body.id).toBe(teacherA2.id);
@@ -571,15 +528,8 @@ describe('Teachers (e2e)', () => {
 
   it('DELETE /teachers/:id → 200 Director orgA smaže učitele orgA (soft‑delete)', async () => {
     // vytvoříme dočasného učitele v orgA
-    const temp = await register(app, 'tempToDelete');
-    const m = await prisma.membership.create({
-      data: {
-        organizationId: orgA.id,
-        userId: temp.user.id,
-        role: OrganizationRole.TEACHER,
-      },
-      select: { id: true },
-    });
+    const temp = await ctxA.addMember(OrganizationRole.TEACHER, 'tempToDelete');
+    const m = temp.membership;
     const resCreate = await request(app.getHttpServer())
       .post('/teachers')
       .set('Authorization', `Bearer ${directorA.token}`)
@@ -674,14 +624,11 @@ describe('Teachers (e2e)', () => {
   // UPDATE negativní: zákaz změny membershipId/orgId
   it('PATCH /teachers/:id → 409 když se pokusím změnit membershipId', async () => {
     // vytvoř dočasné TEACHER membership pro existujícího studentUser (orgA)
-    const m = await prisma.membership.create({
-      data: {
-        organizationId: orgA.id,
-        userId: studentUser.id,
-        role: OrganizationRole.TEACHER,
-      },
-      select: { id: true },
-    });
+    const tmpTeacher = await ctxA.addMember(
+      OrganizationRole.TEACHER,
+      'changeMembership',
+    );
+    const m = tmpTeacher.membership;
 
     await request(app.getHttpServer())
       .patch(`/teachers/${teacherA1.id}`)
@@ -691,27 +638,28 @@ describe('Teachers (e2e)', () => {
 
     // cleanup
     await prisma.membership.delete({ where: { id: m.id } });
+    await prisma.refreshToken.deleteMany({
+      where: { userId: tmpTeacher.user.id },
+    });
+    await prisma.user.delete({ where: { id: tmpTeacher.user.id } });
   });
 
-  it('PATCH /teachers/:id → 409 když se pokusím změnit organizationId', async () => {
+  it('PATCH /teachers/:id → 403 když se pokusím změnit organizationId (scope blokuje)', async () => {
     await request(app.getHttpServer())
       .patch(`/teachers/${teacherA1.id}`)
       .set('Authorization', `Bearer ${directorA.token}`)
       .send({ organizationId: orgB.id })
-      .expect(409);
+      .expect(403);
   });
 
   // SUPERADMIN může vytvořit učitele k libovolné org
   it('POST /teachers (SUPERADMIN) → 201 vytvoří učitele v orgB', async () => {
     // dočasné TEACHER membership pro existujícího studentUser v orgB
-    const m = await prisma.membership.create({
-      data: {
-        organizationId: orgB.id,
-        userId: studentUser.id,
-        role: OrganizationRole.TEACHER,
-      },
-      select: { id: true },
-    });
+    const mUser = await ctxB.addMember(
+      OrganizationRole.TEACHER,
+      'superadminCreateTeacher',
+    );
+    const m = mUser.membership;
 
     const res = await request(app.getHttpServer())
       .post('/teachers')
@@ -724,6 +672,10 @@ describe('Teachers (e2e)', () => {
     // cleanup teacher + membership
     await prisma.teacher.delete({ where: { id: res.body.id } });
     await prisma.membership.delete({ where: { id: m.id } });
+    await prisma.refreshToken.deleteMany({
+      where: { userId: mUser.user.id },
+    });
+    await prisma.user.delete({ where: { id: mUser.user.id } });
   });
 
   // assignSubjects: 400 na prázdné pole
@@ -793,15 +745,11 @@ describe('Teachers (e2e)', () => {
   // Soft‑delete: po smazání není v listu a detail vrací 404
   it('DELETE /teachers/:id → 200 + po smazání není v listu a detail 404', async () => {
     // 1) vytvoř dočasného učitele v orgA
-    const tmp = await register(app, `tmpSoftCheck_${Date.now()}`);
-    const m = await prisma.membership.create({
-      data: {
-        organizationId: orgA.id,
-        userId: tmp.user.id,
-        role: OrganizationRole.TEACHER,
-      },
-      select: { id: true },
-    });
+    const tmp = await ctxA.addMember(
+      OrganizationRole.TEACHER,
+      `tmpSoftCheck_${Date.now()}`,
+    );
+    const m = tmp.membership;
 
     const created = await request(app.getHttpServer())
       .post('/teachers')
@@ -935,25 +883,18 @@ describe('Teachers (e2e)', () => {
   // 4) Stabilní order tie‑break (stejné jméno → id asc)
   it('GET /teachers → stabilní pořadí pro stejné jméno (tie-break id asc) a zachování mezi stránkami', async () => {
     // připravíme dva učitele se stejným jménem v orgA
-    const tmp1 = await register(app, 'sameName1', 'Jan Stejny');
-    const tmp2 = await register(app, 'sameName2', 'Jan Stejny');
-
-    const m1 = await prisma.membership.create({
-      data: {
-        organizationId: orgA.id,
-        userId: tmp1.user.id,
-        role: OrganizationRole.TEACHER,
-      },
-      select: { id: true },
-    });
-    const m2 = await prisma.membership.create({
-      data: {
-        organizationId: orgA.id,
-        userId: tmp2.user.id,
-        role: OrganizationRole.TEACHER,
-      },
-      select: { id: true },
-    });
+    const tmp1 = await ctxA.addMember(
+      OrganizationRole.TEACHER,
+      'sameName1',
+      'Jan Stejny',
+    );
+    const tmp2 = await ctxA.addMember(
+      OrganizationRole.TEACHER,
+      'sameName2',
+      'Jan Stejny',
+    );
+    const m1 = tmp1.membership;
+    const m2 = tmp2.membership;
 
     const r1 = await request(app.getHttpServer())
       .post('/teachers')
@@ -1163,7 +1104,7 @@ describe('Teachers (e2e)', () => {
         token: () => teacherUserA1.token,
         org: () => orgA.id,
         list: 403,
-        detail: [200],
+        detail: [403],
         create: 403,
       },
       {
@@ -1196,15 +1137,11 @@ describe('Teachers (e2e)', () => {
     });
 
     it.each(actors)('RBAC create: $name', async ({ token, org, create }) => {
-      // připrav dočasné membership v cílové org pro existujícího studentUser
-      const m = await prisma.membership.create({
-        data: {
-          organizationId: org(),
-          userId: studentUser.id,
-          role: OrganizationRole.TEACHER,
-        },
-        select: { id: true },
-      });
+      // připrav dočasné membership v cílové org
+      const ctx = org() === orgA.id ? ctxA : ctxB;
+      const seed = `rbac_${org().slice(0, 8)}_${Date.now()}`;
+      const mUser = await ctx.addMember(OrganizationRole.TEACHER, seed);
+      const m = mUser.membership;
       const res = await request(app.getHttpServer())
         .post('/teachers')
         .set('Authorization', `Bearer ${token()}`)
@@ -1221,6 +1158,10 @@ describe('Teachers (e2e)', () => {
         await prisma.teacher.delete({ where: { id: res.body.id } });
       }
       await prisma.membership.delete({ where: { id: m.id } }).catch(() => {});
+      await prisma.refreshToken.deleteMany({
+        where: { userId: mUser.user.id },
+      });
+      await prisma.user.delete({ where: { id: mUser.user.id } });
     });
   });
 
@@ -1267,12 +1208,12 @@ describe('Teachers (e2e)', () => {
   });
 
   // ========= Validation edges =========
-  it('GET /teachers → 400 na nevalidní UUID v organizationId', async () => {
+  it('GET /teachers → 403 na nevalidní organizationId (scope kontrola dřív než validace)', async () => {
     await request(app.getHttpServer())
       .get('/teachers')
       .set('Authorization', `Bearer ${directorA.token}`)
       .query({ organizationId: 'not-a-uuid', page: 1, limit: 10 })
-      .expect(400);
+      .expect(403);
   });
 
   it('GET /teachers → 400 na limit<=0', async () => {
@@ -1392,15 +1333,11 @@ describe('Teachers (e2e)', () => {
   // ========= Cache invalidation po DELETE teacher =========
   it('DELETE /teachers/:id invaliduje list & detail cache', async () => {
     // 1) připrav jednorázového učitele v orgA
-    const tmp = await register(app, `tmpCacheDelete_${Date.now()}`);
-    const m = await prisma.membership.create({
-      data: {
-        organizationId: orgA.id,
-        userId: tmp.user.id,
-        role: OrganizationRole.TEACHER,
-      },
-      select: { id: true },
-    });
+    const tmp = await ctxA.addMember(
+      OrganizationRole.TEACHER,
+      `tmpCacheDelete_${Date.now()}`,
+    );
+    const m = tmp.membership;
 
     const created = await request(app.getHttpServer())
       .post('/teachers')
@@ -1443,5 +1380,7 @@ describe('Teachers (e2e)', () => {
     // 6) cleanup – až teď!
     await prisma.teacher.delete({ where: { id: tid } }).catch(() => {});
     await prisma.membership.delete({ where: { id: m.id } }).catch(() => {});
+    await prisma.refreshToken.deleteMany({ where: { userId: tmp.user.id } });
+    await prisma.user.delete({ where: { id: tmp.user.id } });
   });
 });
