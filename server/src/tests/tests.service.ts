@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import type { Cache } from 'cache-manager';
+import { Cache } from 'cache-manager';
 import {
   Prisma,
   AuditEntityType,
@@ -16,17 +16,18 @@ import {
   OrganizationRole,
   PublishStatus,
 } from '@prisma/client';
-import { CreateTestDto } from './dto/create-test.dto';
-import { UpdateTestDto } from './dto/update-test.dto';
-import { QueryTestsDto } from './dto/query-tests.dto';
-import { CreateQuestionDto } from './dto/create-question.dto';
-import { UpdateQuestionDto } from './dto/update-question.dto';
-import { ReorderQuestionsDto } from './dto/reorder-questions.dto';
-import { CreateOptionDto } from './dto/create-option.dto';
-import { UpdateOptionDto } from './dto/update-option.dto';
-import { CreateAnswerDto } from './dto/create-answer.dto';
-import { UpdateAnswerDto } from './dto/update-answer.dto';
-import { JwtPayload } from '@/auth/types/jwt-payload';
+import type { CreateTestDto } from './dto/create-test.dto';
+import type { UpdateTestDto } from './dto/update-test.dto';
+import type { QueryTestsDto } from './dto/query-tests.dto';
+import type { CreateQuestionDto } from './dto/create-question.dto';
+import type { UpdateQuestionDto } from './dto/update-question.dto';
+import type { ReorderQuestionsDto } from './dto/reorder-questions.dto';
+import type { CreateOptionDto } from './dto/create-option.dto';
+import type { UpdateOptionDto } from './dto/update-option.dto';
+import type { CreateAnswerDto } from './dto/create-answer.dto';
+import type { UpdateAnswerDto } from './dto/update-answer.dto';
+import type { JwtPayload } from '@/auth/types/jwt-payload';
+import type { AssignTestDto } from './dto/assign-test.dto';
 
 import {
   buildVersionedListKey,
@@ -73,20 +74,40 @@ export class TestsService {
     entityId?: string | null;
     ip?: string | null;
     ua?: string | null;
-    changedFields?: Record<string, any>;
-  }) {
-    return this.prisma.auditLog.create({
-      data: {
-        userId: opts.userId ?? null,
-        organizationId: opts.orgId ?? null,
-        entityType: AuditEntityType.TEST,
-        entityId: opts.entityId ?? null,
-        action: opts.action,
-        ipAddress: opts.ip ?? null,
-        userAgent: opts.ua ?? null,
-        changedFields: opts.changedFields ?? null,
+    changedFields?: Record<string, unknown>;
+  }): Promise<void> {
+    const data: Prisma.AuditLogUncheckedCreateInput = {
+      userId: opts.userId ?? null,
+      organizationId: opts.orgId ?? null,
+      entityType: AuditEntityType.TEST,
+      entityId: opts.entityId ?? null,
+      action: opts.action,
+      ipAddress: opts.ip ?? null,
+      userAgent: opts.ua ?? null,
+    };
+    if (opts.changedFields !== undefined) {
+      data.changedFields = opts.changedFields as Prisma.InputJsonValue;
+    }
+    return this.prisma.auditLog.create({ data }).then(() => undefined);
+  }
+
+  private async resolveOrgMembership(
+    user: JwtPayload,
+    organizationId: string,
+  ) {
+    if (user.systemRole === SystemRole.SUPERADMIN) return null;
+    const membership = await this.prisma.membership.findFirst({
+      where: {
+        userId: user.userId,
+        organizationId,
+        deletedAt: null,
       },
+      select: { id: true, role: true, organizationId: true },
     });
+    if (!membership) {
+      throw new ForbiddenException('Access denied');
+    }
+    return membership;
   }
 
   // ----- Permissions -----
@@ -110,8 +131,128 @@ export class TestsService {
       throw new ForbiddenException('Upravovat může jen autor nebo ředitel.');
   }
 
+  private normalizeText(value?: string | null): string | null {
+    if (value === undefined || value === null) return null;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+
+  private normalizeAnswerList(value?: string[] | null): string[] | null {
+    if (value === undefined || value === null) return null;
+    if (!Array.isArray(value)) return [];
+    return value.map((v) => String(v).trim()).filter((v) => v.length > 0);
+  }
+
+  private buildAnswerFields(params: {
+    type: string;
+    correctAnswer?: string | null | undefined;
+    correctAnswers?: string[] | null | undefined;
+    existing?: { correctAnswer: string | null; correctAnswers: string[] };
+  }) {
+    const { type, existing } = params;
+    const hasAnswerInput = params.correctAnswer !== undefined;
+    const hasAnswersInput = params.correctAnswers !== undefined;
+
+    const normalizedAnswer = this.normalizeText(params.correctAnswer ?? null);
+    const normalizedAnswers = this.normalizeAnswerList(
+      params.correctAnswers ?? null,
+    );
+
+    if (hasAnswerInput && !normalizedAnswer) {
+      throw new BadRequestException('correctAnswer must be a non-empty string');
+    }
+    if (hasAnswersInput) {
+      if (!normalizedAnswers || normalizedAnswers.length === 0) {
+        throw new BadRequestException(
+          'correctAnswers must be a non-empty array',
+        );
+      }
+      const unique = new Set(normalizedAnswers);
+      if (unique.size !== normalizedAnswers.length) {
+        throw new BadRequestException('correctAnswers contains duplicates');
+      }
+    }
+
+    if (type === 'TRUE_FALSE' || type === 'FILL_IN_THE_BLANK') {
+      if (hasAnswersInput && (normalizedAnswers?.length ?? 0) > 0) {
+        throw new BadRequestException(
+          'correctAnswers is not allowed for this question type',
+        );
+      }
+      return {
+        correctAnswer:
+          hasAnswerInput ? normalizedAnswer : existing?.correctAnswer ?? null,
+        correctAnswers: [],
+      };
+    }
+
+    if (type === 'MULTIPLE_CHOICE') {
+      if (hasAnswerInput && hasAnswersInput) {
+        throw new BadRequestException(
+          'Use either correctAnswer or correctAnswers for MULTIPLE_CHOICE',
+        );
+      }
+      if (hasAnswersInput) {
+        return { correctAnswer: null, correctAnswers: normalizedAnswers ?? [] };
+      }
+      if (hasAnswerInput) {
+        return { correctAnswer: normalizedAnswer, correctAnswers: [] };
+      }
+      return {
+        correctAnswer: existing?.correctAnswer ?? null,
+        correctAnswers: existing?.correctAnswers ?? [],
+      };
+    }
+
+    return {
+      correctAnswer:
+        hasAnswerInput ? normalizedAnswer : existing?.correctAnswer ?? null,
+      correctAnswers: existing?.correctAnswers ?? [],
+    };
+  }
+
+  private isQuestionScoreable(q: {
+    type: string;
+    correctAnswer: string | null;
+    correctAnswers: string[];
+  }) {
+    const hasAnswer = this.normalizeText(q.correctAnswer) !== null;
+    const hasAnswers = Array.isArray(q.correctAnswers) && q.correctAnswers.length > 0;
+
+    if (q.type === 'MULTIPLE_CHOICE') {
+      if (hasAnswer && hasAnswers) return false;
+      return hasAnswer || hasAnswers;
+    }
+    if (q.type === 'TRUE_FALSE' || q.type === 'FILL_IN_THE_BLANK') {
+      return hasAnswer;
+    }
+    return false;
+  }
+
+  private async ensureTestScoreable(testId: string) {
+    const questions = await this.prisma.question.findMany({
+      where: { testId },
+      select: {
+        id: true,
+        type: true,
+        correctAnswer: true,
+        correctAnswers: true,
+      },
+    });
+    if (questions.length === 0) {
+      throw new BadRequestException('Test has no questions');
+    }
+    const unscorable = questions.filter((q) => !this.isQuestionScoreable(q));
+    if (unscorable.length > 0) {
+      throw new BadRequestException({
+        message: 'Test contains unscorable questions',
+        questionIds: unscorable.map((q) => q.id),
+      });
+    }
+  }
+
   // ====== TESTS ===================================================
-  async create(dto: CreateTestDto, user: JwtPayload) {
+  async create(dto: CreateTestDto, user: JwtPayload): Promise<unknown> {
     const isSuper = user.systemRole === SystemRole.SUPERADMIN;
 
     if (!isSuper) {
@@ -146,6 +287,12 @@ export class TestsService {
       }
     }
 
+    if (dto.status === PublishStatus.PUBLISHED) {
+      throw new BadRequestException(
+        'Publish requires questions to be created first. Create test as DRAFT.',
+      );
+    }
+
     const created = await this.prisma.test.create({
       data: {
         title: dto.title,
@@ -159,10 +306,10 @@ export class TestsService {
 
     await this.audit({
       userId: user.userId,
-      orgId: dto.organizationId,
+      orgId: dto.organizationId ?? null,
       action: 'TEST_CREATE',
       entityId: created.id,
-      changedFields: dto as any,
+      changedFields: dto as unknown as Record<string, unknown>,
     });
 
     await bumpOrgVersion(
@@ -172,7 +319,7 @@ export class TestsService {
     return created;
   }
 
-  async findAll(user: JwtPayload, q: QueryTestsDto) {
+  async findAll(user: JwtPayload, q: QueryTestsDto): Promise<unknown> {
     const page = q.page ?? 1;
     const limit = Math.min(q.limit ?? 20, 100);
     const skip = (page - 1) * limit;
@@ -217,7 +364,7 @@ export class TestsService {
       version: ver,
       page,
       limit,
-      search: q.search,
+      search: q.search ?? '',
       order: [{ createdAt: 'desc' }, { id: 'asc' }],
       filters: { status: q.status ?? null, organizationId: effectiveOrgId },
     });
@@ -245,7 +392,7 @@ export class TestsService {
     });
   }
 
-  async findOne(id: string, user: JwtPayload) {
+  async findOne(id: string, user: JwtPayload): Promise<unknown> {
     const t = await this.prisma.test.findFirst({
       where: { id, deletedAt: null },
       include: this.includeAll(),
@@ -267,7 +414,7 @@ export class TestsService {
 
     return t;
   }
-  async update(id: string, dto: UpdateTestDto, user: JwtPayload) {
+  async update(id: string, dto: UpdateTestDto, user: JwtPayload): Promise<unknown> {
     const current = await this.prisma.test.findUnique({
       where: { id },
       select: {
@@ -282,22 +429,33 @@ export class TestsService {
 
     await this.ensureCanEditTest(user, current);
 
+    if (dto.status === PublishStatus.PUBLISHED) {
+      await this.ensureTestScoreable(id);
+    }
+
+    const updateData: Prisma.TestUncheckedUpdateInput = {};
+    if (dto.title !== undefined) {
+      updateData.title = dto.title;
+    }
+    if (dto.description !== undefined) {
+      updateData.description = dto.description;
+    }
+    if (dto.status !== undefined) {
+      updateData.status = dto.status;
+    }
+
     const updated = await this.prisma.test.update({
       where: { id },
-      data: {
-        title: dto.title ?? undefined,
-        description: dto.description ?? undefined,
-        status: dto.status ?? undefined,
-      },
+      data: updateData,
       include: this.includeAll(),
     });
 
     await this.audit({
       userId: user.userId,
-      orgId: current.organizationId,
+      orgId: current.organizationId ?? null,
       action: 'TEST_UPDATE',
       entityId: id,
-      changedFields: dto as any,
+      changedFields: dto as unknown as Record<string, unknown>,
     });
     await bumpOrgVersion(
       this.cache,
@@ -306,7 +464,7 @@ export class TestsService {
     return updated;
   }
 
-  async remove(id: string, user: JwtPayload) {
+  async remove(id: string, user: JwtPayload): Promise<unknown> {
     const current = await this.prisma.test.findUnique({
       where: { id },
       select: {
@@ -334,7 +492,7 @@ export class TestsService {
     });
     await this.audit({
       userId: user.userId,
-      orgId: current.organizationId,
+      orgId: current.organizationId ?? null,
       action: 'TEST_DELETE_SOFT',
       entityId: id,
     });
@@ -343,6 +501,148 @@ export class TestsService {
       cacheScopeForUser(user.systemRole, current.organizationId),
     );
     return deleted;
+  }
+
+  async assignTest(
+    testId: string,
+    dto: AssignTestDto,
+    user: JwtPayload,
+  ): Promise<unknown> {
+    const test = await this.prisma.test.findUnique({
+      where: { id: testId, deletedAt: null },
+      select: { id: true, organizationId: true },
+    });
+    if (!test) throw new NotFoundException('Test nenalezen');
+
+    await this.ensureTestScoreable(test.id);
+
+    if (user.systemRole !== SystemRole.SUPERADMIN) {
+      if (!user.organizationId || user.organizationId !== test.organizationId) {
+        throw new ForbiddenException('Cizí organizace');
+      }
+    }
+
+    const organizationId = dto.organizationId ?? test.organizationId;
+
+    if (organizationId !== test.organizationId) {
+      throw new ForbiddenException('Test a assignment musí být ve stejné org');
+    }
+
+    const classSection = await this.prisma.classSection.findUnique({
+      where: { id: dto.classSectionId },
+      select: { id: true, orgId: true },
+    });
+    if (!classSection || classSection.orgId !== organizationId) {
+      throw new BadRequestException('Class section neexistuje nebo cizí org');
+    }
+
+    const creatorMembership = await this.prisma.membership.findFirst({
+      where: {
+        userId: user.userId,
+        organizationId,
+        role: { in: [OrganizationRole.TEACHER, OrganizationRole.DIRECTOR] },
+        deletedAt: null,
+      },
+      select: { id: true },
+    });
+    if (!creatorMembership) {
+      throw new ForbiddenException('Nemáš oprávnění přiřadit test');
+    }
+
+    const assignment = await this.prisma.assignment.create({
+      data: {
+        organizationId,
+        testId: testId,
+        targetType: 'CLASS',
+        classSectionId: dto.classSectionId,
+        topicLevelId: null,
+        openAt: new Date(dto.openAt),
+        closeAt: new Date(dto.closeAt),
+        maxAttempts: dto.maxAttempts,
+        timeLimitSec: dto.timeLimitSec ?? null,
+        shuffle: dto.shuffle,
+        showExplain: dto.showExplain,
+        createdById: creatorMembership.id,
+      },
+    });
+
+    await this.audit({
+      userId: user.userId,
+      orgId: user.organizationId ?? null,
+      action: 'TEST_ASSIGN',
+      entityId: assignment.id,
+      changedFields: dto as unknown as Record<string, unknown>,
+    });
+
+    return assignment;
+  }
+
+  async results(testId: string, user: JwtPayload): Promise<unknown> {
+    const test = await this.prisma.test.findUnique({
+      where: { id: testId },
+      select: { id: true, organizationId: true },
+    });
+    if (!test) throw new NotFoundException('Test nenalezen');
+
+    if (user.systemRole !== SystemRole.SUPERADMIN) {
+      if (!user.organizationId || user.organizationId !== test.organizationId) {
+        throw new ForbiddenException('Cizí organizace');
+      }
+    }
+
+    const membership = await this.resolveOrgMembership(
+      user,
+      test.organizationId,
+    );
+    const role = membership?.role ?? user.organizationRole ?? null;
+
+    let assignmentScope: Prisma.AssignmentWhereInput | undefined;
+    if (role === OrganizationRole.TEACHER && membership) {
+      const teacher = await this.prisma.teacher.findFirst({
+        where: { membershipId: membership.id, deletedAt: null },
+        select: { id: true },
+      });
+      assignmentScope = {
+        organizationId: test.organizationId,
+        OR: [
+          { createdById: membership.id },
+          ...(teacher ? [{ classSection: { teacherId: teacher.id } }] : []),
+        ],
+      };
+    }
+
+    const submissions = await this.prisma.submission.findMany({
+      where: {
+        testId,
+        assignment: assignmentScope ?? { organizationId: test.organizationId },
+        ...(role === OrganizationRole.STUDENT && membership
+          ? { studentId: membership.id }
+          : {}),
+      },
+      include: {
+        assignment: { select: { id: true, classSectionId: true } },
+        student: {
+          select: {
+            user: { select: { name: true } },
+          },
+        },
+      },
+      orderBy: { submittedAt: 'desc' },
+    });
+
+    return submissions.map((s) => ({
+      id: s.id,
+      score: s.score,
+      submittedAt: s.submittedAt,
+      attemptNo: s.attemptNo,
+      assignmentId: s.assignmentId,
+      classSectionId: s.assignment?.classSectionId ?? null,
+      student:
+        role === OrganizationRole.STUDENT
+          ? null
+          : { name: s.student?.user?.name ?? null },
+      isAnonymous: s.isAnonymous ?? false,
+    }));
   }
 
   // ====== QUESTIONS / OPTIONS / ANSWERS ===========================
@@ -362,10 +662,26 @@ export class TestsService {
   }
 
   // Questions
-  async addQuestion(testId: string, dto: CreateQuestionDto, user: JwtPayload) {
+  async addQuestion(
+    testId: string,
+    dto: CreateQuestionDto,
+    user: JwtPayload,
+  ): Promise<unknown> {
     const t = await this.getEditableTestFor(user, testId);
+    const answers = this.buildAnswerFields({
+      type: dto.type,
+      correctAnswer: dto.correctAnswer,
+      correctAnswers: dto.correctAnswers,
+    });
     const q = await this.prisma.question.create({
-      data: { testId, text: dto.text, type: dto.type, order: dto.order ?? 0 },
+      data: {
+        testId,
+        text: dto.text,
+        type: dto.type,
+        order: dto.order ?? 0,
+        correctAnswer: answers.correctAnswer ?? null,
+        correctAnswers: answers.correctAnswers ?? [],
+      },
     });
     await this.audit({
       userId: user.userId,
@@ -385,26 +701,54 @@ export class TestsService {
     questionId: string,
     dto: UpdateQuestionDto,
     user: JwtPayload,
-  ) {
+  ): Promise<unknown> {
     const t = await this.getEditableTestFor(user, testId);
     const exists = await this.prisma.question.findFirst({
       where: { id: questionId, testId },
+      select: {
+        id: true,
+        type: true,
+        correctAnswer: true,
+        correctAnswers: true,
+      },
     });
     if (!exists) throw new NotFoundException('Otázka nenalezena');
+    const nextType = dto.type ?? exists.type;
+    const answers = this.buildAnswerFields({
+      type: nextType,
+      correctAnswer: dto.correctAnswer,
+      correctAnswers: dto.correctAnswers,
+      existing: {
+        correctAnswer: exists.correctAnswer,
+        correctAnswers: exists.correctAnswers,
+      },
+    });
+    const questionUpdate: Prisma.QuestionUncheckedUpdateInput = {};
+    if (dto.text !== undefined) {
+      questionUpdate.text = dto.text;
+    }
+    if (dto.type !== undefined) {
+      questionUpdate.type = dto.type;
+    }
+    if (dto.order !== undefined) {
+      questionUpdate.order = dto.order;
+    }
+    if (answers.correctAnswer !== undefined) {
+      questionUpdate.correctAnswer = answers.correctAnswer;
+    }
+    if (answers.correctAnswers !== undefined) {
+      questionUpdate.correctAnswers = answers.correctAnswers;
+    }
     const q = await this.prisma.question.update({
       where: { id: questionId },
-      data: {
-        text: dto.text ?? undefined,
-        type: dto.type ?? undefined,
-        order: dto.order ?? undefined,
-      },
+      data: questionUpdate,
     });
     await this.audit({
       userId: user.userId,
       orgId: t.organizationId,
       action: 'QUESTION_UPDATE',
       entityId: q.id,
-      changedFields: dto as any,
+      changedFields: dto as unknown as Record<string, unknown>,
     });
     await bumpOrgVersion(
       this.cache,
@@ -417,7 +761,7 @@ export class TestsService {
     testId: string,
     dto: ReorderQuestionsDto,
     user: JwtPayload,
-  ) {
+  ): Promise<unknown> {
     const t = await this.getEditableTestFor(user, testId);
 
     // ověř, že všechny otázky patří do testu
@@ -441,7 +785,7 @@ export class TestsService {
       userId: user.userId,
       orgId: t.organizationId,
       action: 'QUESTION_REORDER',
-      changedFields: dto as any,
+      changedFields: dto as unknown as Record<string, unknown>,
     });
     await bumpOrgVersion(
       this.cache,
@@ -450,7 +794,11 @@ export class TestsService {
     return { ok: true };
   }
 
-  async removeQuestion(testId: string, questionId: string, user: JwtPayload) {
+  async removeQuestion(
+    testId: string,
+    questionId: string,
+    user: JwtPayload,
+  ): Promise<unknown> {
     const t = await this.getEditableTestFor(user, testId);
     const exists = await this.prisma.question.findFirst({
       where: { id: questionId, testId },
@@ -476,7 +824,7 @@ export class TestsService {
     questionId: string,
     dto: CreateOptionDto,
     user: JwtPayload,
-  ) {
+  ): Promise<unknown> {
     const t = await this.getEditableTestFor(user, testId);
     const q = await this.prisma.question.findFirst({
       where: { id: questionId, testId },
@@ -504,22 +852,26 @@ export class TestsService {
     optionId: string,
     dto: UpdateOptionDto,
     user: JwtPayload,
-  ) {
+  ): Promise<unknown> {
     const t = await this.getEditableTestFor(user, testId);
     const exists = await this.prisma.option.findFirst({
       where: { id: optionId, questionId, question: { testId } },
     });
     if (!exists) throw new NotFoundException('Možnost nenalezena');
+    const optionUpdate: Prisma.OptionUncheckedUpdateInput = {};
+    if (dto.text !== undefined) {
+      optionUpdate.text = dto.text;
+    }
     const o = await this.prisma.option.update({
       where: { id: optionId },
-      data: { text: dto.text ?? undefined },
+      data: optionUpdate,
     });
     await this.audit({
       userId: user.userId,
       orgId: t.organizationId,
       action: 'OPTION_UPDATE',
       entityId: o.id,
-      changedFields: dto as any,
+      changedFields: dto as unknown as Record<string, unknown>,
     });
     await bumpOrgVersion(
       this.cache,
@@ -533,7 +885,7 @@ export class TestsService {
     questionId: string,
     optionId: string,
     user: JwtPayload,
-  ) {
+  ): Promise<unknown> {
     const t = await this.getEditableTestFor(user, testId);
     const exists = await this.prisma.option.findFirst({
       where: { id: optionId, questionId, question: { testId } },
@@ -559,7 +911,7 @@ export class TestsService {
     questionId: string,
     dto: CreateAnswerDto,
     user: JwtPayload,
-  ) {
+  ): Promise<unknown> {
     const t = await this.getEditableTestFor(user, testId);
     const q = await this.prisma.question.findFirst({
       where: { id: questionId, testId },
@@ -587,22 +939,26 @@ export class TestsService {
     answerId: string,
     dto: UpdateAnswerDto,
     user: JwtPayload,
-  ) {
+  ): Promise<unknown> {
     const t = await this.getEditableTestFor(user, testId);
     const exists = await this.prisma.answer.findFirst({
       where: { id: answerId, questionId, question: { testId } },
     });
     if (!exists) throw new NotFoundException('Odpověď nenalezena');
+    const answerUpdate: Prisma.AnswerUncheckedUpdateInput = {};
+    if (dto.text !== undefined) {
+      answerUpdate.text = dto.text;
+    }
     const a = await this.prisma.answer.update({
       where: { id: answerId },
-      data: { text: dto.text ?? undefined },
+      data: answerUpdate,
     });
     await this.audit({
       userId: user.userId,
       orgId: t.organizationId,
       action: 'ANSWER_UPDATE',
       entityId: a.id,
-      changedFields: dto as any,
+      changedFields: dto as unknown as Record<string, unknown>,
     });
     await bumpOrgVersion(
       this.cache,
@@ -616,7 +972,7 @@ export class TestsService {
     questionId: string,
     answerId: string,
     user: JwtPayload,
-  ) {
+  ): Promise<unknown> {
     const t = await this.getEditableTestFor(user, testId);
     const exists = await this.prisma.answer.findFirst({
       where: { id: answerId, questionId, question: { testId } },

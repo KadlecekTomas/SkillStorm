@@ -5,9 +5,9 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
 import {
   AuditEntityType,
-  Prisma,
   QuestionType,
   SubmissionStatus,
   XpEventType,
@@ -15,7 +15,7 @@ import {
 import { PrismaService } from '@/prisma/prisma.service';
 import { assertSameOrganizationIds } from '@/shared/access.utils';
 import { GamificationService } from '@/gamification/gamification.service';
-import { JwtPayload } from '@/auth/types/jwt-payload';
+import type { JwtPayload } from '@/auth/types/jwt-payload';
 
 type JwtUser = JwtPayload;
 
@@ -60,6 +60,61 @@ export class SubmissionsService {
     return m;
   }
 
+  private async getTeacherAssignmentScope(membershipId: string) {
+    const teacher = await this.prisma.teacher.findFirst({
+      where: { membershipId, deletedAt: null },
+      select: { id: true },
+    });
+    return {
+      OR: [
+        { createdById: membershipId },
+        ...(teacher ? [{ classSection: { teacherId: teacher.id } }] : []),
+      ],
+    };
+  }
+
+  private sanitizeSubmission(
+    submission: {
+      id: string;
+      assignmentId: string | null;
+      testId: string;
+      status: SubmissionStatus;
+      score: number | null;
+      submittedAt: Date | null;
+      attemptNo: number;
+      isAnonymous?: boolean | null;
+      responses?: Array<{
+        id: string;
+        questionId: string;
+        givenText: string;
+        isCorrect: boolean | null;
+      }>;
+      student?: { user?: { name: string | null } | null } | null;
+    },
+    role: string | null,
+  ) {
+    return {
+      id: submission.id,
+      assignmentId: submission.assignmentId,
+      testId: submission.testId,
+      status: submission.status,
+      score: submission.score,
+      submittedAt: submission.submittedAt,
+      attemptNo: submission.attemptNo,
+      isAnonymous: submission.isAnonymous ?? false,
+      responses:
+        submission.responses?.map((r) => ({
+          questionId: r.questionId,
+          givenText: r.givenText,
+          isCorrect: r.isCorrect,
+        })) ?? [],
+      student:
+        role === 'STUDENT'
+          ? null
+          : { name: submission.student?.user?.name ?? null },
+    };
+  }
+
   private normalizeFitb(s?: string | null) {
     return (
       (s ?? '')
@@ -69,6 +124,41 @@ export class SubmissionsService {
         .replace(/\p{Diacritic}/gu, '')
         .toLowerCase()
     );
+  }
+
+  private normalizeText(value?: string | null) {
+    if (value === undefined || value === null) return null;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+
+  private normalizeAnswerList(value: unknown): string[] {
+    if (Array.isArray(value)) {
+      return value.map((v) => String(v).trim()).filter((v) => v.length > 0);
+    }
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (Array.isArray(parsed)) {
+            return parsed
+              .map((v) => String(v).trim())
+              .filter((v) => v.length > 0);
+          }
+        } catch {
+          return [];
+        }
+      }
+    }
+    return [];
+  }
+
+  private serializeGivenText(value: unknown): string {
+    if (Array.isArray(value)) {
+      return JSON.stringify(value);
+    }
+    return String(value ?? '');
   }
 
   // ---- API methods ---------------------------------------------------------
@@ -167,6 +257,9 @@ export class SubmissionsService {
       },
     });
     if (!submission) throw new NotFoundException('Submission nenalezena');
+    if (!submission.assignment) {
+      throw new NotFoundException('Submission nemá přiřazený assignment.');
+    }
 
     // přístup – student může editovat jen vlastní draft v rámci org
     const membership = await this.getActiveMembership(user);
@@ -206,14 +299,14 @@ export class SubmissionsService {
         if (existing) {
           await this.prisma.response.update({
             where: { id: existing.id },
-            data: { givenText: r.givenText },
+            data: { givenText: this.serializeGivenText(r.givenText) },
           });
         } else {
           await this.prisma.response.create({
             data: {
               submissionId: submission.id,
               questionId: r.questionId,
-              givenText: r.givenText,
+              givenText: this.serializeGivenText(r.givenText),
             },
           });
         }
@@ -260,6 +353,9 @@ export class SubmissionsService {
       },
     });
     if (!submission) throw new NotFoundException('Submission nenalezena');
+    if (!submission.assignment) {
+      throw new NotFoundException('Submission nemá přiřazený assignment.');
+    }
 
     const membership = await this.getActiveMembership(user);
     assertSameOrganizationIds(
@@ -299,19 +395,19 @@ export class SubmissionsService {
         );
         try {
           if (existing) {
-            await this.prisma.response.update({
-              where: { id: existing.id },
-              data: { givenText: r.givenText },
-            });
-          } else {
-            await this.prisma.response.create({
-              data: {
-                submissionId: submission.id,
-                questionId: r.questionId,
-                givenText: r.givenText,
-              },
-            });
-          }
+          await this.prisma.response.update({
+            where: { id: existing.id },
+            data: { givenText: this.serializeGivenText(r.givenText) },
+          });
+        } else {
+          await this.prisma.response.create({
+            data: {
+              submissionId: submission.id,
+              questionId: r.questionId,
+              givenText: this.serializeGivenText(r.givenText),
+            },
+          });
+        }
         } catch (e: any) {
           if (e.code === 'P2003' || e.code === 'P2023') {
             throw new BadRequestException('Nevalidní questionId');
@@ -330,37 +426,70 @@ export class SubmissionsService {
     // auto-scoring
     let total = 0;
     let maxScore = 0;
+    const unscorableQuestions: string[] = [];
 
     for (const q of submission.test.questions) {
       const resp = dbResponses.find((r) => r.questionId === q.id);
       const given = resp?.givenText;
 
-      let correct = false;
+      let correct: boolean | null = false;
       let gained = 0;
       const qScore = q.score ?? 1;
+
+      const correctAnswer = this.normalizeText(q.correctAnswer ?? null);
+      const correctAnswers = this.normalizeAnswerList(q.correctAnswers ?? []);
+      const hasSingle = !!correctAnswer;
+      const hasMulti = correctAnswers.length > 0;
+
+      let mode: 'single' | 'multi' | null = null;
+      if (q.type === QuestionType.MULTIPLE_CHOICE) {
+        if (hasSingle && hasMulti) {
+          mode = null;
+        } else if (hasMulti) {
+          mode = 'multi';
+        } else if (hasSingle) {
+          mode = 'single';
+        }
+      } else if (
+        q.type === QuestionType.TRUE_FALSE ||
+        q.type === QuestionType.FILL_IN_THE_BLANK
+      ) {
+        mode = hasSingle ? 'single' : null;
+      }
+
+      if (!mode) {
+        unscorableQuestions.push(q.id);
+        if (resp) {
+          await this.prisma.response.update({
+            where: { id: resp.id },
+            data: { isCorrect: null },
+          });
+        }
+        continue;
+      }
+
       maxScore += qScore;
 
       if (q.type === QuestionType.TRUE_FALSE) {
         correct =
           String(given ?? '').toLowerCase() ===
-          String(q.correctAnswer ?? '').toLowerCase();
+          String(correctAnswer ?? '').toLowerCase();
         gained = correct ? qScore : 0;
       } else if (q.type === QuestionType.FILL_IN_THE_BLANK) {
         correct =
           this.normalizeFitb(String(given)) ===
-          this.normalizeFitb(q.correctAnswer ?? '');
+          this.normalizeFitb(correctAnswer ?? '');
         gained = correct ? qScore : 0;
       } else if (q.type === QuestionType.MULTIPLE_CHOICE) {
-        if (Array.isArray(q.correctAnswers)) {
+        if (mode === 'multi') {
           // multi: očekáváme pole – rovnost množin (po seřazení)
-          const corr = [...q.correctAnswers].sort().join(',');
-          const giv = Array.isArray(given)
-            ? [...given].sort().join(',')
-            : String(given ?? '');
+          const corr = [...correctAnswers].sort().join(',');
+          const giv = this.normalizeAnswerList(given).sort().join(',');
           correct = corr === giv;
         } else {
           // single: string
-          correct = String(given ?? '') === String(q.correctAnswer ?? '');
+          const givenSingle = Array.isArray(given) ? given[0] : given;
+          correct = String(givenSingle ?? '') === String(correctAnswer ?? '');
         }
         gained = correct ? qScore : 0;
       }
@@ -368,10 +497,38 @@ export class SubmissionsService {
       if (resp) {
         await this.prisma.response.update({
           where: { id: resp.id },
-          data: { isCorrect: correct },
+          data: { isCorrect: correct ?? null },
         });
       }
       total += gained;
+    }
+
+    if (unscorableQuestions.length > 0) {
+      const rejected = await this.prisma.submission.update({
+        where: { id: submission.id },
+        data: {
+          submittedAt: new Date(),
+          status: SubmissionStatus.REJECTED,
+          score: null,
+        },
+      });
+
+      await this.prisma.auditLog.create({
+        data: {
+          userId: user.userId ?? null,
+          organizationId: submission.assignment.organizationId,
+          entityType: AuditEntityType.TEST,
+          entityId: submission.id,
+          action: 'SUBMISSION_REJECT_UNSCORABLE',
+          metadata: {
+            assignmentId: submission.assignment.id,
+            attemptNo: rejected.attemptNo,
+            unscorableQuestionIds: unscorableQuestions,
+          },
+        },
+      });
+
+      return rejected;
     }
 
     // Normalizace skóre na 0–1
@@ -420,38 +577,73 @@ export class SubmissionsService {
     user: JwtUser,
   ) {
     const membership = await this.getActiveMembership(user);
+    const role = String(membership.role ?? '');
 
-    const where: Prisma.SubmissionWhereInput = {
-      assignment: { organizationId: membership.organizationId },
+    const baseAssignment: Prisma.AssignmentWhereInput = {
+      organizationId: membership.organizationId,
     };
 
-    if (filter.assignmentId) where.assignmentId = filter.assignmentId;
+    if (role === 'TEACHER') {
+      const scope = await this.getTeacherAssignmentScope(membership.id);
+      baseAssignment.OR = scope.OR;
+    }
+
+    const where: Prisma.SubmissionWhereInput = {
+      assignment: baseAssignment,
+      ...(filter.assignmentId ? { assignmentId: filter.assignmentId } : {}),
+    };
 
     // STUDENT vidí jen své
-    if (String(membership.role) === 'STUDENT') {
+    if (role === 'STUDENT') {
       where.studentId = membership.id;
     } else if (filter.studentId) {
       where.studentId = filter.studentId;
     }
 
-    return this.prisma.submission.findMany({
+    const submissions = await this.prisma.submission.findMany({
       where,
-      include: { responses: true },
+      include: {
+        responses: {
+          select: {
+            id: true,
+            questionId: true,
+            givenText: true,
+            isCorrect: true,
+          },
+        },
+        student: { select: { user: { select: { name: true } } } },
+      },
       orderBy: { createdAt: 'desc' },
     });
+
+    return submissions.map((s) => this.sanitizeSubmission(s, role));
   }
 
   async findOne(id: string, user: JwtUser) {
     const membership = await this.getActiveMembership(user);
+    const role = String(membership.role ?? '');
 
     const submission = await this.prisma.submission.findUnique({
       where: { id },
       include: {
-        responses: true,
-        assignment: { select: { organizationId: true } },
+        responses: {
+          select: {
+            id: true,
+            questionId: true,
+            givenText: true,
+            isCorrect: true,
+          },
+        },
+        assignment: {
+          select: { organizationId: true, createdById: true, classSectionId: true },
+        },
+        student: { select: { user: { select: { name: true } } } },
       },
     });
     if (!submission) throw new NotFoundException('Submission nenalezena');
+    if (!submission.assignment) {
+      throw new NotFoundException('Submission nemá přiřazený assignment.');
+    }
 
     assertSameOrganizationIds(
       submission.assignment.organizationId,
@@ -460,12 +652,34 @@ export class SubmissionsService {
     );
 
     if (
-      String(membership.role) === 'STUDENT' &&
+      role === 'STUDENT' &&
       submission.studentId !== membership.id
     ) {
       throw new ForbiddenException('Access denied');
     }
 
-    return submission;
+    if (role === 'TEACHER') {
+      const teacher = await this.prisma.teacher.findFirst({
+        where: { membershipId: membership.id, deletedAt: null },
+        select: { id: true },
+      });
+      const createdByTeacher = submission.assignment?.createdById === membership.id;
+      let homeroomMatch = false;
+      if (teacher && submission.assignment?.classSectionId) {
+        const cls = await this.prisma.classSection.findFirst({
+          where: {
+            id: submission.assignment.classSectionId,
+            teacherId: teacher.id,
+          },
+          select: { id: true },
+        });
+        homeroomMatch = !!cls;
+      }
+      if (!createdByTeacher && !homeroomMatch) {
+        throw new ForbiddenException('Access denied');
+      }
+    }
+
+    return this.sanitizeSubmission(submission, role);
   }
 }

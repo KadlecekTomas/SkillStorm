@@ -5,17 +5,24 @@ import {
   NotFoundException,
   Inject,
 } from '@nestjs/common';
+import { createHash } from 'crypto';
 import { PrismaService } from '@/prisma/prisma.service';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import type { Cache } from 'cache-manager';
-import { SystemRole, SubmissionStatus, AuditEntityType } from '@prisma/client';
-import { JwtPayload } from '@/auth/types/jwt-payload';
+import { Cache } from 'cache-manager';
+import type { Prisma } from '@prisma/client';
+import {
+  SystemRole,
+  SubmissionStatus,
+  AuditEntityType,
+  OrganizationRole,
+} from '@prisma/client';
+import type { JwtPayload } from '@/auth/types/jwt-payload';
 import {
   buildVersionedListKey,
   cacheGetOrSet,
   getOrgVersion,
 } from '@/shared/cache/org-cache.utils';
-import { StatsOverviewResponse } from './dto/overview.dto';
+import type { StatsOverviewResponse } from './dto/overview.dto';
 
 @Injectable()
 export class StatsService {
@@ -29,18 +36,19 @@ export class StatsService {
     userId?: string;
     orgId?: string | null;
     action: string;
-    meta?: Record<string, any> | null;
+    meta?: Prisma.InputJsonValue;
   }) {
-    return this.prisma.auditLog.create({
-      data: {
-        userId: opts.userId ?? null,
-        organizationId: opts.orgId ?? null,
-        entityType: AuditEntityType.ORGANIZATION,
-        entityId: opts.orgId ?? null,
-        action: opts.action,
-        metadata: opts.meta ?? null,
-      },
-    });
+    const data: Prisma.AuditLogUncheckedCreateInput = {
+      userId: opts.userId ?? null,
+      organizationId: opts.orgId ?? null,
+      entityType: AuditEntityType.ORGANIZATION,
+      entityId: opts.orgId ?? null,
+      action: opts.action,
+    };
+    if (opts.meta !== undefined) {
+      data.metadata = opts.meta;
+    }
+    return this.prisma.auditLog.create({ data });
   }
 
   // ----- Helpers -------------------------------------------------------------
@@ -59,6 +67,26 @@ export class StatsService {
     if (!member) throw new ForbiddenException('Access denied.');
   }
 
+  private async resolveMembership(
+    user: JwtPayload,
+    organizationId: string | null,
+  ) {
+    if (user.systemRole === SystemRole.SUPERADMIN) return null;
+    if (!organizationId) {
+      throw new ForbiddenException('Missing organization context.');
+    }
+    const membership = await this.prisma.membership.findFirst({
+      where: { userId: user.userId, organizationId, deletedAt: null },
+      select: { id: true, role: true, organizationId: true },
+    });
+    if (!membership) throw new ForbiddenException('Access denied.');
+    return membership;
+  }
+
+  private anonymizeId(value: string) {
+    return createHash('sha256').update(value).digest('hex').slice(0, 12);
+  }
+
   // ===== ORG OVERVIEW ========================================================
   async getOrgOverview(
     organizationId: string | null,
@@ -66,6 +94,8 @@ export class StatsService {
     scope: 'evaluated' | 'all' = 'evaluated',
   ): Promise<StatsOverviewResponse> {
     await this.ensureOrgContext(user, organizationId);
+    const membership = await this.resolveMembership(user, organizationId);
+    const role = membership?.role ?? user.organizationRole ?? null;
 
     // TVRDÁ normalizace scope – cokoliv mimo 'all' => 'evaluated'
     const safeScope: 'evaluated' | 'all' =
@@ -78,46 +108,129 @@ export class StatsService {
 
     const scopeId = organizationId ?? 'GLOBAL';
     const ver = await getOrgVersion(this.cache, scopeId);
-    const baseTestWhere = {
-      organizationId: organizationId ?? undefined,
+    const baseTestWhere: Prisma.TestWhereInput = {
       deletedAt: null,
-    } as const;
+      ...(organizationId ? { organizationId } : {}),
+    };
     const cacheKey = buildVersionedListKey({
       namespace: 'stats:overview',
       scopeId,
       version: ver,
-      // žádné proměnlivé filtry do klíče – ať se to nelepí na staré hodnoty
-      filters: {},
+      filters:
+        role === OrganizationRole.STUDENT || role === OrganizationRole.TEACHER
+          ? { membershipId: membership?.id ?? null, role }
+          : {},
     });
 
     const compute = async (): Promise<StatsOverviewResponse> => {
+      if (
+        (role === OrganizationRole.STUDENT || role === OrganizationRole.TEACHER) &&
+        membership
+      ) {
+        const teacher = await this.prisma.teacher.findFirst({
+          where: { membershipId: membership.id, deletedAt: null },
+          select: { id: true },
+        });
+        const submissionScope: Prisma.SubmissionWhereInput =
+          role === OrganizationRole.STUDENT
+            ? { studentId: membership.id }
+            : {
+                assignment: {
+                  organizationId: membership.organizationId,
+                  OR: [
+                    { createdById: membership.id },
+                    ...(teacher ? [{ classSection: { teacherId: teacher.id } }] : []),
+                  ],
+                },
+              };
+
+        const [approved, rejected, pending, all, maxAgg, avgAgg, testIds] =
+          await this.prisma.$transaction([
+            this.prisma.submission.count({
+              where: { ...submissionScope, status: SubmissionStatus.APPROVED },
+            }),
+            this.prisma.submission.count({
+              where: { ...submissionScope, status: SubmissionStatus.REJECTED },
+            }),
+            this.prisma.submission.count({
+              where: { ...submissionScope, status: SubmissionStatus.PENDING },
+            }),
+            this.prisma.submission.count({ where: submissionScope }),
+            this.prisma.submission.aggregate({
+              where: { ...submissionScope, submittedAt: { not: null } },
+              _max: { submittedAt: true },
+            }),
+            this.prisma.submission.aggregate({
+              where: { ...submissionScope, score: { not: null } },
+              _avg: { score: true },
+            }),
+            this.prisma.submission.findMany({
+              where: submissionScope,
+              distinct: ['testId'],
+              select: { testId: true },
+            }),
+          ]);
+
+        const avgScoreValue = avgAgg._avg?.score ?? null;
+        const lastSubmittedAt = maxAgg._max?.submittedAt ?? null;
+        const totalTests = testIds.length;
+        const evaluated = approved + rejected;
+        const passRateEvaluated = evaluated > 0 ? approved / evaluated : 0;
+        const passRateAll = all > 0 ? approved / all : 0;
+
+        return {
+          scope: safeScope,
+          totalTests,
+          counts: { approved, rejected, pending, all },
+          totalSubmissions: safeScope === 'evaluated' ? evaluated : all,
+          pendingSubmissions: pending,
+          passRate: safeScope === 'evaluated' ? passRateEvaluated : passRateAll,
+          passRateEvaluated,
+          passRateAll,
+          avgScore: avgScoreValue,
+          lastSubmittedAt,
+        };
+      }
+
       // žádný filtr na submittedAt – chceme současný stav
       // OPRAVA: počítej všechny submission pokusy (všechny attemptNo), ne jen první
       const [approved, rejected, pending, all, maxAgg, totalTests, avgAgg] =
         await this.prisma.$transaction([
           this.prisma.submission.count({
-            where: { test: baseTestWhere, status: SubmissionStatus.APPROVED },
+            where: {
+              test: { is: baseTestWhere },
+              status: SubmissionStatus.APPROVED,
+            },
           }),
           this.prisma.submission.count({
-            where: { test: baseTestWhere, status: SubmissionStatus.REJECTED },
+            where: {
+              test: { is: baseTestWhere },
+              status: SubmissionStatus.REJECTED,
+            },
           }),
           this.prisma.submission.count({
-            where: { test: baseTestWhere, status: SubmissionStatus.PENDING },
+            where: {
+              test: { is: baseTestWhere },
+              status: SubmissionStatus.PENDING,
+            },
           }),
           this.prisma.submission.count({
-            where: { test: baseTestWhere },
+            where: { test: { is: baseTestWhere } },
           }),
           this.prisma.submission.aggregate({
-            where: { test: baseTestWhere, submittedAt: { not: null } },
+            where: { test: { is: baseTestWhere }, submittedAt: { not: null } },
             _max: { submittedAt: true },
           }),
           this.prisma.test.count({ where: baseTestWhere }),
           this.prisma.submission.aggregate({
             // průměr jen ze skutečně vyhodnocených (score != null)
-            where: { test: baseTestWhere, score: { not: null } },
+            where: { test: { is: baseTestWhere }, score: { not: null } },
             _avg: { score: true },
           }),
         ]);
+
+      const avgScoreValue = avgAgg._avg?.score ?? null;
+      const lastSubmittedAt = maxAgg._max?.submittedAt ?? null;
 
       // evaluated = všechny schválené + zamítnuté (všechny attempty)
       const evaluated = approved + rejected;
@@ -140,8 +253,8 @@ export class StatsService {
         passRate: safeScope === 'evaluated' ? passRateEvaluated : passRateAll,
         passRateEvaluated,
         passRateAll,
-        avgScore: avgAgg._avg.score ?? null,
-        lastSubmittedAt: maxAgg._max.submittedAt ?? null,
+        avgScore: avgScoreValue,
+        lastSubmittedAt,
       };
     };
 
@@ -177,8 +290,8 @@ export class StatsService {
       const m = await this.prisma.membership.findFirst({
         where: {
           userId: user.userId,
-          organizationId: ids.organizationId ?? undefined,
           deletedAt: null,
+          ...(ids.organizationId ? { organizationId: ids.organizationId } : {}),
         },
         select: { id: true },
       });
@@ -200,8 +313,8 @@ export class StatsService {
     const member = await this.prisma.membership.findFirst({
       where: {
         id: effectiveMembershipId,
-        organizationId: ids.organizationId ?? undefined,
         deletedAt: null,
+        ...(ids.organizationId ? { organizationId: ids.organizationId } : {}),
       },
       include: { user: true, organization: true },
     });
@@ -218,15 +331,15 @@ export class StatsService {
     });
 
     return cacheGetOrSet(this.cache, cacheKey, 60_000, async () => {
-      const baseTestWhere = {
+      const baseTestWhere: Prisma.TestWhereInput = {
         deletedAt: null,
-        organizationId: ids.organizationId ?? undefined,
-      } as const;
+        ...(ids.organizationId ? { organizationId: ids.organizationId } : {}),
+      };
 
-      const baseSubmissionWhere = {
+      const baseSubmissionWhere: Prisma.SubmissionWhereInput = {
         studentId: effectiveMembershipId,
-        test: baseTestWhere,
-      } as const;
+        test: { is: baseTestWhere },
+      };
 
       const [testsTaken, agg, lastSubmissions, allSubs] = await Promise.all([
         this.prisma.submission.count({ where: baseSubmissionWhere }),
@@ -268,7 +381,7 @@ export class StatsService {
 
       return {
         member: {
-          id: member.id,
+          id: this.anonymizeId(member.id),
           name: member.user?.name ?? null,
           organization: member.organization?.name ?? null,
           xp: (member as any).xp, // pokud používáš XP/level na membershipu
@@ -324,7 +437,10 @@ export class StatsService {
           where: { teacherId: teacher?.id ?? '___none___' },
         }),
         this.prisma.student.count({
-          where: { orgId: ids.organizationId ?? undefined, deletedAt: null },
+          where: {
+            deletedAt: null,
+            ...(ids.organizationId ? { orgId: ids.organizationId } : {}),
+          },
         }),
         this.prisma.test.count({
           where: { creatorId: ids.membershipId, deletedAt: null },
