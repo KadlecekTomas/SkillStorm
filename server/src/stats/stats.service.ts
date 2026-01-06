@@ -133,7 +133,7 @@ export class StatsService {
         });
         const submissionScope: Prisma.SubmissionWhereInput =
           role === OrganizationRole.STUDENT
-            ? { studentId: membership.id }
+            ? { studentId: membership.id, deletedAt: null, test: { deletedAt: null } }
             : {
                 assignment: {
                   organizationId: membership.organizationId,
@@ -142,6 +142,8 @@ export class StatsService {
                     ...(teacher ? [{ classSection: { teacherId: teacher.id } }] : []),
                   ],
                 },
+                deletedAt: null,
+                test: { deletedAt: null },
               };
 
         const [approved, rejected, pending, all, maxAgg, avgAgg, testIds] =
@@ -198,33 +200,44 @@ export class StatsService {
         await this.prisma.$transaction([
           this.prisma.submission.count({
             where: {
+              deletedAt: null,
               test: { is: baseTestWhere },
               status: SubmissionStatus.APPROVED,
             },
           }),
           this.prisma.submission.count({
             where: {
+              deletedAt: null,
               test: { is: baseTestWhere },
               status: SubmissionStatus.REJECTED,
             },
           }),
           this.prisma.submission.count({
             where: {
+              deletedAt: null,
               test: { is: baseTestWhere },
               status: SubmissionStatus.PENDING,
             },
           }),
           this.prisma.submission.count({
-            where: { test: { is: baseTestWhere } },
+            where: { deletedAt: null, test: { is: baseTestWhere } },
           }),
           this.prisma.submission.aggregate({
-            where: { test: { is: baseTestWhere }, submittedAt: { not: null } },
+            where: {
+              deletedAt: null,
+              test: { is: baseTestWhere },
+              submittedAt: { not: null },
+            },
             _max: { submittedAt: true },
           }),
           this.prisma.test.count({ where: baseTestWhere }),
           this.prisma.submission.aggregate({
             // průměr jen ze skutečně vyhodnocených (score != null)
-            where: { test: { is: baseTestWhere }, score: { not: null } },
+            where: {
+              deletedAt: null,
+              test: { is: baseTestWhere },
+              score: { not: null },
+            },
             _avg: { score: true },
           }),
         ]);
@@ -338,6 +351,7 @@ export class StatsService {
 
       const baseSubmissionWhere: Prisma.SubmissionWhereInput = {
         studentId: effectiveMembershipId,
+        deletedAt: null,
         test: { is: baseTestWhere },
       };
 
@@ -447,6 +461,7 @@ export class StatsService {
         }),
         this.prisma.submission.aggregate({
           where: {
+            deletedAt: null,
             test: { creatorId: ids.membershipId, deletedAt: null },
             score: { not: null },
           },
@@ -454,12 +469,16 @@ export class StatsService {
         }),
         this.prisma.submission.count({
           where: {
+            deletedAt: null,
             test: { creatorId: ids.membershipId, deletedAt: null },
             status: SubmissionStatus.PENDING,
           },
         }),
         this.prisma.submission.findMany({
-          where: { test: { creatorId: ids.membershipId, deletedAt: null } },
+          where: {
+            deletedAt: null,
+            test: { creatorId: ids.membershipId, deletedAt: null },
+          },
           include: {
             test: { select: { id: true, title: true } },
             student: { include: { user: { select: { name: true } } } },

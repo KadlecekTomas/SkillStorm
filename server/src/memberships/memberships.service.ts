@@ -7,17 +7,13 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
-import { CreateMembershipDto } from './dto/create-membership.dto';
-import { UpdateMembershipDto } from './dto/update-membership.dto';
-import { QueryMembershipsDto } from './dto/query-memberships.dto';
-import {
-  Prisma,
-  SystemRole,
-  OrganizationRole,
-  AuditEntityType,
-} from '@prisma/client';
+import type { CreateMembershipDto } from './dto/create-membership.dto';
+import type { UpdateMembershipDto } from './dto/update-membership.dto';
+import type { QueryMembershipsDto } from './dto/query-memberships.dto';
+import type { Prisma } from '@prisma/client';
+import { SystemRole, OrganizationRole, AuditEntityType } from '@prisma/client';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import type { Cache } from 'cache-manager';
+import { Cache } from 'cache-manager';
 import {
   buildVersionedListKey,
   cacheGetOrSet,
@@ -124,11 +120,12 @@ export class MembershipsService {
     }
 
     // 3) where + search
+    const userSearch = makeUserSearch(q.search);
     const where: Prisma.MembershipWhereInput = {
       organizationId: q.organizationId,
       deletedAt: null,
       ...(q.role ? { role: q.role } : {}),
-      user: makeUserSearch(q.search),
+      ...(userSearch ? { user: { is: userSearch } } : {}),
     };
 
     // 4) stabilní řazení
@@ -146,7 +143,7 @@ export class MembershipsService {
       version: ver,
       page,
       limit,
-      search: q.search,
+      search: q.search ?? '',
       order: [{ user: { name: 'asc' } }, { id: 'asc' }],
       filters: { role: q.role ?? null },
     });
@@ -170,7 +167,8 @@ export class MembershipsService {
                 systemRole: true,
                 status: true,
                 lastLoginAt: true,
-                isAnonymized: true,
+                anonymized: true,
+                anonymizedAt: true,
                 createdAt: true,
                 updatedAt: true,
                 deletedAt: true,
@@ -321,7 +319,8 @@ export class MembershipsService {
   // -------- DELETE --------
   async remove(id: string, user: any) {
     const current = await this.prisma.membership.findUnique({ where: { id } });
-    if (!current) throw new NotFoundException('Membership not found');
+    if (!current || current.deletedAt)
+      throw new NotFoundException('Membership not found');
 
     const isSuper = user?.systemRole === SystemRole.SUPERADMIN;
     const sameOrg = user?.organizationId === current.organizationId;
@@ -337,12 +336,44 @@ export class MembershipsService {
       }
     }
 
-    const deleted = await this.prisma.membership.delete({ where: { id } });
+    // Soft delete kvůli auditní stopě (submissions/assignments zůstávají čitelné).
+    const deleted = await this.prisma.membership.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
+
+    const teachers = await this.prisma.teacher.findMany({
+      where: { membershipId: id, deletedAt: null },
+      select: { id: true },
+    });
+    const teacherIds = teachers.map((t) => t.id);
+    if (teacherIds.length > 0) {
+      // Odpoj homeroom vazby + smaž teacher-subject mapování (konfigurační vazby bez historické hodnoty).
+      await this.prisma.classSection.updateMany({
+        where: { teacherId: { in: teacherIds } },
+        data: { teacherId: null },
+      });
+      await this.prisma.teacherSubject.deleteMany({
+        where: { teacherId: { in: teacherIds } },
+      });
+    }
+
+    await Promise.all([
+      this.prisma.teacher.updateMany({
+        where: { membershipId: id, deletedAt: null },
+        data: { deletedAt: new Date() },
+      }),
+      // Student soft delete; enrollments zůstávají pro auditní stopu.
+      this.prisma.student.updateMany({
+        where: { membershipId: id, deletedAt: null },
+        data: { deletedAt: new Date() },
+      }),
+    ]);
 
     await Promise.all([
       bumpOrgVersion(this.cache, current.organizationId),
       this.auditMembershipChange({
-        action: 'MEMBERSHIP_DELETE',
+        action: 'MEMBERSHIP_DELETE_SOFT',
         membershipId: current.id,
         organizationId: current.organizationId,
         actorId: user?.userId ?? user?.sub ?? null,
@@ -355,7 +386,7 @@ export class MembershipsService {
     emitRbacInvalidation({
       userId: current.userId,
       organizationId: current.organizationId,
-      reason: 'MEMBERSHIP_DELETE',
+      reason: 'MEMBERSHIP_DELETE_SOFT',
     });
     return { ...deleted, organizationId: current.organizationId };
   }
@@ -367,15 +398,16 @@ export class MembershipsService {
     actorId?: string | null;
     metadata?: Record<string, any>;
   }) {
-    return this.prisma.auditLog.create({
-      data: {
-        userId: opts.actorId ?? null,
-        organizationId: opts.organizationId,
-        entityType: AuditEntityType.PERMISSION,
-        entityId: opts.membershipId,
-        action: opts.action,
-        metadata: opts.metadata ?? null,
-      },
-    });
+    const data: Prisma.AuditLogUncheckedCreateInput = {
+      userId: opts.actorId ?? null,
+      organizationId: opts.organizationId,
+      entityType: AuditEntityType.PERMISSION,
+      entityId: opts.membershipId,
+      action: opts.action,
+    };
+    if (opts.metadata !== undefined) {
+      data.metadata = opts.metadata as Prisma.InputJsonValue;
+    }
+    return this.prisma.auditLog.create({ data });
   }
 }

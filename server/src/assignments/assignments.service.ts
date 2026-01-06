@@ -3,9 +3,13 @@ import {
   Injectable,
   BadRequestException,
   NotFoundException,
+  ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
-import { CreateAssignmentDto, UpdateAssignmentDto } from './dto';
+import type { Assignment, Prisma } from '@prisma/client';
+import type { CreateAssignmentDto, UpdateAssignmentDto } from './dto';
+import type { JwtPayload } from '@/auth/types/jwt-payload';
+import type { MyAssignmentDto } from './my-assignments.dto';
 
 const ALLOWED_TARGET_TYPES = new Set(['CLASS', 'STUDENTS']);
 
@@ -14,7 +18,7 @@ export class AssignmentsService {
   constructor(private readonly prisma: PrismaService) {}
 
   // ------- CREATE ------------------------------------------------------------
-  async create(dto: CreateAssignmentDto) {
+  async create(dto: CreateAssignmentDto): Promise<Assignment> {
     // 1) Target type
     if (!ALLOWED_TARGET_TYPES.has(dto.targetType)) {
       throw new BadRequestException(
@@ -114,25 +118,25 @@ export class AssignmentsService {
       });
     } else {
       // CLASS: bez students
-      const { studentIds, ...rest } = dto;
-      void studentIds;
+      const { studentIds: _unused, ...rest } = dto;
+      void _unused;
       return this.prisma.assignment.create({ data: rest });
     }
   }
 
   // ------- READ --------------------------------------------------------------
-  async findOne(id: string) {
+  async findOne(id: string): Promise<Assignment | null> {
     return this.prisma.assignment.findUnique({ where: { id } });
   }
 
-  async findOneOrThrow(id: string) {
+  async findOneOrThrow(id: string): Promise<Assignment> {
     const a = await this.findOne(id);
     if (!a) throw new NotFoundException('Assignment nenalezen');
     return a;
   }
 
   // ------- UPDATE ------------------------------------------------------------
-  async update(id: string, dto: UpdateAssignmentDto) {
+  async update(id: string, dto: UpdateAssignmentDto): Promise<Assignment> {
     const current = await this.findOneOrThrow(id);
 
     // Nepovoluj měnit identitu/kontext assignmentu,
@@ -180,14 +184,68 @@ export class AssignmentsService {
     }
 
     // UPDATE – odfiltruj studentIds (není sloupec)
-    const data = dto as any;
+    const data: Prisma.AssignmentUncheckedUpdateInput = {};
+    if (dto.targetType !== undefined) data.targetType = dto.targetType;
+    if (dto.classSectionId !== undefined) {
+      data.classSectionId = dto.classSectionId;
+    }
+    if (dto.topicLevelId !== undefined) {
+      data.topicLevelId = dto.topicLevelId;
+    }
+    if (dto.openAt !== undefined) data.openAt = dto.openAt;
+    if (dto.closeAt !== undefined) data.closeAt = dto.closeAt;
+    if (dto.maxAttempts !== undefined) data.maxAttempts = dto.maxAttempts;
+    if (dto.timeLimitSec !== undefined) {
+      data.timeLimitSec = dto.timeLimitSec;
+    }
+    if (dto.shuffle !== undefined) data.shuffle = dto.shuffle;
+    if (dto.showExplain !== undefined) data.showExplain = dto.showExplain;
+
     return this.prisma.assignment.update({ where: { id }, data });
   }
 
   // ------- DELETE ------------------------------------------------------------
-  async remove(id: string) {
-    // Pokud referenční integrita (FK) vyžaduje, smaž nejdřív navázané entity (není-li ON DELETE CASCADE).
-    // Tady předpokládáme, že CASCADE nebo žádné závislosti v testech.
+  async remove(id: string): Promise<Assignment> {
+    // Assignment má historickou hodnotu, pokud existují submissions; v tom případě delete zakazujeme.
+    const submissions = await this.prisma.submission.count({
+      where: { assignmentId: id, deletedAt: null },
+    });
+    if (submissions > 0) {
+      throw new ConflictException('Assignment má navázané submissions.');
+    }
+    // Bez submissions je hard delete bezpečný (konfigurační záznam bez historie).
     return this.prisma.assignment.delete({ where: { id } });
+  }
+
+  async listForUser(user: JwtPayload): Promise<MyAssignmentDto[]> {
+    const membership = await this.prisma.membership.findFirst({
+      where: {
+        userId: user.userId,
+        ...(user.organizationId ? { organizationId: user.organizationId } : {}),
+        deletedAt: null,
+      },
+      select: { id: true, organizationId: true },
+    });
+    if (!membership) {
+      return [];
+    }
+    const assignments = await this.prisma.assignment.findMany({
+      where: {
+        organizationId: membership.organizationId,
+        targetType: 'CLASS',
+      },
+      include: { submissions: { where: { studentId: membership.id } } },
+      orderBy: { openAt: 'asc' },
+    });
+    return assignments.map((a) => ({
+      id: a.id,
+      testId: a.testId,
+      classSectionId: a.classSectionId,
+      organizationId: a.organizationId,
+      openAt: a.openAt,
+      closeAt: a.closeAt,
+      maxAttempts: a.maxAttempts,
+      attemptNo: a.submissions?.[0]?.attemptNo ?? 0,
+    }));
   }
 }

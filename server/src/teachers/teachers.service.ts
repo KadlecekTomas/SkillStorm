@@ -7,10 +7,10 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
-import { CreateTeacherDto } from './dto/create-teacher.dto';
-import { UpdateTeacherDto } from './dto/update-teacher.dto';
-import { QueryTeachersDto } from './dto/query-teachers.dto';
-import { JwtPayload } from '@/auth/types/jwt-payload';
+import type { CreateTeacherDto } from './dto/create-teacher.dto';
+import type { UpdateTeacherDto } from './dto/update-teacher.dto';
+import type { QueryTeachersDto } from './dto/query-teachers.dto';
+import type { JwtPayload } from '@/auth/types/jwt-payload';
 import {
   Prisma,
   AuditEntityType,
@@ -19,7 +19,7 @@ import {
 } from '@prisma/client';
 
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import type { Cache } from 'cache-manager';
+import { Cache } from 'cache-manager';
 import {
   buildVersionedListKey,
   bumpOrgVersion,
@@ -27,7 +27,7 @@ import {
   cacheScopeForUser,
   getOrgVersion,
 } from '@/shared/cache/org-cache.utils';
-import { AssignSubjectsDto } from './dto/assign-subjects.dto';
+import type { AssignSubjectsDto } from './dto/assign-subjects.dto';
 
 function teacherSearch(search?: string): Prisma.TeacherWhereInput | undefined {
   const raw = search?.trim();
@@ -64,17 +64,20 @@ export class TeachersService {
     metadata?: Record<string, any>;
     changedFields?: Record<string, any>;
   }) {
-    return this.prisma.auditLog.create({
-      data: {
-        userId: opts.userId ?? null,
-        organizationId: opts.orgId ?? null,
-        entityType: AuditEntityType.ORGANIZATION,
-        entityId: opts.entityId ?? null,
-        action: opts.action,
-        metadata: opts.metadata ?? null,
-        changedFields: opts.changedFields ?? null,
-      },
-    });
+    const data: Prisma.AuditLogUncheckedCreateInput = {
+      userId: opts.userId ?? null,
+      organizationId: opts.orgId ?? null,
+      entityType: AuditEntityType.ORGANIZATION,
+      entityId: opts.entityId ?? null,
+      action: opts.action,
+    };
+    if (opts.metadata !== undefined) {
+      data.metadata = opts.metadata as Prisma.InputJsonValue;
+    }
+    if (opts.changedFields !== undefined) {
+      data.changedFields = opts.changedFields as Prisma.InputJsonValue;
+    }
+    return this.prisma.auditLog.create({ data });
   }
 
   // ---------- Includes (typově bezpečné) ----------
@@ -217,7 +220,7 @@ export class TeachersService {
       version: ver,
       page,
       limit,
-      search: q.search,
+      search: q.search ?? '',
       order: [{ membership: { user: { name: 'asc' } } }, { id: 'asc' }],
       filters: null,
     });
@@ -333,6 +336,7 @@ export class TeachersService {
 
   // ---------- DELETE (soft) ----------
   async remove(id: string, user: JwtPayload) {
+    // Soft delete: historické vazby (třídy/úkoly) musí zůstat auditně dohledatelné.
     const teacher = await this.prisma.teacher.findUnique({
       where: { id },
       select: { id: true, organizationId: true, deletedAt: true },

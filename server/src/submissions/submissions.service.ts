@@ -590,6 +590,7 @@ export class SubmissionsService {
 
     const where: Prisma.SubmissionWhereInput = {
       assignment: baseAssignment,
+      deletedAt: null,
       ...(filter.assignmentId ? { assignmentId: filter.assignmentId } : {}),
     };
 
@@ -640,7 +641,8 @@ export class SubmissionsService {
         student: { select: { user: { select: { name: true } } } },
       },
     });
-    if (!submission) throw new NotFoundException('Submission nenalezena');
+    if (!submission || submission.deletedAt)
+      throw new NotFoundException('Submission nenalezena');
     if (!submission.assignment) {
       throw new NotFoundException('Submission nemá přiřazený assignment.');
     }

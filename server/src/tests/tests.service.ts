@@ -465,6 +465,7 @@ export class TestsService {
   }
 
   async remove(id: string, user: JwtPayload): Promise<unknown> {
+    // Soft delete: testy tvoří auditní stopu (submissions/hodnocení).
     const current = await this.prisma.test.findUnique({
       where: { id },
       select: {
@@ -615,6 +616,7 @@ export class TestsService {
       where: {
         testId,
         assignment: assignmentScope ?? { organizationId: test.organizationId },
+        deletedAt: null,
         ...(role === OrganizationRole.STUDENT && membership
           ? { studentId: membership.id }
           : {}),

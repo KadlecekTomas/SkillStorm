@@ -6,17 +6,18 @@ import {
   ConflictException,
   Inject,
 } from '@nestjs/common';
-import type { Cache } from 'cache-manager';
+import { Cache } from 'cache-manager';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { Prisma, SystemRole, AuditEntityType } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
+import { SystemRole, AuditEntityType } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 
-import { CreateUserDto } from './dto/create-user.dto';
-import { UpdateUserDto } from './dto/update-user.dto';
-import { QueryUsersDto } from './dto/query-users.dto';
+import type { CreateUserDto } from './dto/create-user.dto';
+import type { UpdateUserDto } from './dto/update-user.dto';
+import type { QueryUsersDto } from './dto/query-users.dto';
 
 // pokud to máš jinde, nech cestu dle projektu
 import { makeUserSearch } from '@/shared/cache/org-cache.utils';
@@ -40,7 +41,8 @@ export class UsersService {
     systemRole: true,
     status: true,
     lastLoginAt: true,
-    isAnonymized: true,
+    anonymized: true,
+    anonymizedAt: true,
     deletedAt: true,
   } as const;
 
@@ -53,17 +55,20 @@ export class UsersService {
     metadata?: any;
     changedFields?: any;
   }) {
-    await this.prisma.auditLog.create({
-      data: {
-        userId: opts.userId ?? null,
-        organizationId: opts.orgId ?? null,
-        entityType: AuditEntityType.USER,
-        entityId: opts.entityId ?? null,
-        action: opts.action,
-        metadata: opts.metadata ?? null,
-        changedFields: opts.changedFields ?? null,
-      },
-    });
+    const data: Prisma.AuditLogUncheckedCreateInput = {
+      userId: opts.userId ?? null,
+      organizationId: opts.orgId ?? null,
+      entityType: AuditEntityType.USER,
+      entityId: opts.entityId ?? null,
+      action: opts.action,
+    };
+    if (opts.metadata !== undefined) {
+      data.metadata = opts.metadata as Prisma.InputJsonValue;
+    }
+    if (opts.changedFields !== undefined) {
+      data.changedFields = opts.changedFields as Prisma.InputJsonValue;
+    }
+    await this.prisma.auditLog.create({ data });
   }
 
   // -------- cache versioning --------
@@ -107,7 +112,7 @@ export class UsersService {
   async findAll(q: ListQuery) {
     const skip = (q.page - 1) * q.limit;
     const where: Prisma.UserWhereInput = {
-      isAnonymized: false,
+      anonymized: false,
       deletedAt: null,
       ...(q.search
         ? {
@@ -161,7 +166,7 @@ export class UsersService {
           },
         },
       });
-      if (!user || user.isAnonymized || user.deletedAt) {
+      if (!user || user.anonymized || user.deletedAt) {
         throw new NotFoundException('User not found');
       }
       return user;
@@ -220,11 +225,11 @@ export class UsersService {
       select: {
         id: true,
         systemRole: true,
-        isAnonymized: true,
+        anonymized: true,
         deletedAt: true,
       },
     });
-    if (!current || current.isAnonymized || current.deletedAt) {
+    if (!current || current.anonymized || current.deletedAt) {
       throw new NotFoundException('User not found');
     }
 
@@ -241,13 +246,12 @@ export class UsersService {
       throw new ForbiddenException('Nelze si odebrat roli SUPERADMIN.');
     }
 
-    const data: Prisma.UserUpdateInput = {
-      email: dto.email ?? undefined,
-      username: dto.username ?? undefined,
-      name: dto.name ?? undefined,
-      preferredLang: dto.preferredLang ?? undefined,
-      systemRole: dto.systemRole ?? undefined,
-    };
+    const data: Prisma.UserUncheckedUpdateInput = {};
+    if (dto.email !== undefined) data.email = dto.email;
+    if (dto.username !== undefined) data.username = dto.username;
+    if (dto.name !== undefined) data.name = dto.name;
+    if (dto.preferredLang !== undefined) data.preferredLang = dto.preferredLang;
+    if (dto.systemRole !== undefined) data.systemRole = dto.systemRole;
     if (dto.password) data.passwordHash = await bcrypt.hash(dto.password, 10);
 
     try {
@@ -296,17 +300,18 @@ export class UsersService {
 
   // -------- DELETE / anonymizace --------
   async remove(id: string, requester: any) {
+    // Soft delete + anonymizace: historická data zůstávají, osobní údaje ne.
     const target = await this.prisma.user.findUnique({
       where: { id },
       select: {
         id: true,
         systemRole: true,
-        isAnonymized: true,
+        anonymized: true,
         deletedAt: true,
         memberships: { select: { organizationId: true } },
       },
     });
-    if (!target || target.isAnonymized || target.deletedAt) {
+    if (!target || target.anonymized || target.deletedAt) {
       throw new NotFoundException('User not found');
     }
 
@@ -338,7 +343,7 @@ export class UsersService {
         username: null,
         name: 'Deleted User',
         status: 'INACTIVE',
-        isAnonymized: true,
+        anonymized: true,
         deletedAt: new Date(),
       },
       select: this.selectSafe,
@@ -350,7 +355,9 @@ export class UsersService {
       userId: requester.userId ?? null,
       action: 'USER_DELETE_SOFT',
       entityId: id,
-      metadata: { requesterOrgId: requester.organizationId ?? null },
+      metadata: {
+        requesterOrgId: requester.organizationId ?? null,
+      } as Prisma.InputJsonValue,
     });
 
     // bump verze → další GET detailu sáhne na nový klíč a vrátí 404
@@ -401,7 +408,7 @@ export class UsersService {
     }
 
     const where: Prisma.UserWhereInput = {
-      isAnonymized: false,
+      anonymized: false,
       deletedAt: null,
       ...(membershipsFilter
         ? { memberships: { some: membershipsFilter } }

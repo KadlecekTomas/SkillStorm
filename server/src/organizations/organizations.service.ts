@@ -1,17 +1,17 @@
 // src/modules/organizations/organizations.service.ts
 import { Injectable, NotFoundException, Inject } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
-import { CreateOrganizationDto } from './dto/create-organization.dto';
-import { UpdateOrganizationDto } from './dto/update-organization.dto';
+import type { CreateOrganizationDto } from './dto/create-organization.dto';
+import type { UpdateOrganizationDto } from './dto/update-organization.dto';
+import type { Prisma } from '@prisma/client';
 import {
   OrganizationType,
-  Prisma,
   AuditEntityType,
   OrganizationRole,
 } from '@prisma/client';
-import { QueryOrganizationsDto } from './dto/query-organizations.dto';
+import type { QueryOrganizationsDto } from './dto/query-organizations.dto';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import type { Cache } from 'cache-manager';
+import { Cache } from 'cache-manager';
 import {
   buildVersionedListKey,
   bumpOrgVersion,
@@ -31,20 +31,20 @@ export class OrganizationsService {
     userId?: string | null;
     action: string;
     entityId?: string | null;
-    metadata?: Record<string, any> | null;
+    metadata?: Prisma.InputJsonValue | null;
     orgId?: string | null;
   }) {
-    await this.prisma.auditLog.create({
-      data: {
-        userId: opts.userId ?? null,
-        organizationId: opts.orgId ?? null,
-        entityType: AuditEntityType.ORGANIZATION,
-        entityId: opts.entityId ?? null,
-        action: opts.action,
-        metadata: opts.metadata ?? null,
-        changedFields: null,
-      },
-    });
+    const data: Prisma.AuditLogUncheckedCreateInput = {
+      userId: opts.userId ?? null,
+      organizationId: opts.orgId ?? null,
+      entityType: AuditEntityType.ORGANIZATION,
+      entityId: opts.entityId ?? null,
+      action: opts.action,
+    };
+    if (opts.metadata !== undefined) {
+      data.metadata = opts.metadata as Prisma.InputJsonValue;
+    }
+    await this.prisma.auditLog.create({ data });
   }
 
   // fulltext nad name/city/country (case-insensitive)
@@ -90,7 +90,7 @@ export class OrganizationsService {
       version: ver,
       page,
       limit,
-      search: q.search,
+      search: q.search ?? '',
       order: orderBy,
       filters: { type: q.type ?? null },
     });
@@ -200,15 +200,16 @@ export class OrganizationsService {
     if (!org || org.deletedAt)
       throw new NotFoundException('Organization not found');
 
+    const data: Prisma.OrganizationUncheckedUpdateInput = {};
+    if (dto.name !== undefined) data.name = dto.name;
+    if (dto.address !== undefined) data.address = dto.address;
+    if (dto.city !== undefined) data.city = dto.city;
+    if (dto.country !== undefined) data.country = dto.country;
+    if (dto.type !== undefined) data.type = dto.type;
+
     const updated = await this.prisma.organization.update({
       where: { id },
-      data: {
-        name: dto.name ?? undefined,
-        address: dto.address ?? undefined,
-        city: dto.city ?? undefined,
-        country: dto.country ?? undefined,
-        type: dto.type ?? undefined,
-      },
+      data,
     });
 
     await this.audit({
@@ -227,6 +228,7 @@ export class OrganizationsService {
     const org = await this.prisma.organization.findUnique({ where: { id } });
     if (!org) throw new NotFoundException('Organization not found');
 
+    // Soft delete: auditní stopa organizace a její historie musí zůstat čitelná.
     const deleted = await this.prisma.organization.update({
       where: { id },
       data: { deletedAt: new Date() },

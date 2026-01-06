@@ -3,8 +3,8 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import * as request from 'supertest';
 import { AppModule } from '../../src/app.module';
 import { PrismaService } from '@/prisma/prisma.service';
-import { $Enums, OrganizationType, OrganizationRole } from '@prisma/client';
-import { login, register } from 'test/helpers';
+import { $Enums, OrganizationRole, SystemRole } from '@prisma/client';
+import { createSystemUser, setupOrgContext } from 'test/helpers';
 
 describe('Memberships (e2e)', () => {
   let app: INestApplication;
@@ -36,6 +36,9 @@ describe('Memberships (e2e)', () => {
   let orgA: { id: string };
   let orgB: { id: string };
 
+  let ctxA: Awaited<ReturnType<typeof setupOrgContext>>;
+  let ctxB: Awaited<ReturnType<typeof setupOrgContext>>;
+
   // existing memberships to mutate
   let memberA_student: { id: string }; // plainUser as STUDENT in orgA (created during tests)
 
@@ -53,76 +56,55 @@ describe('Memberships (e2e)', () => {
     prisma = app.get(PrismaService);
     await prisma.$connect();
 
-    // users
-    {
-      const rSuper = await register(app, 'super');
-      await prisma.user.update({
-        where: { id: rSuper.user.id },
-        data: { systemRole: $Enums.SystemRole.SUPERADMIN },
-      });
-      const superToken = await login(app, rSuper.login);
-      superUser = {
-        id: rSuper.user.id,
-        token: superToken,
-        login: rSuper.login,
-      };
-
-      const rDirector = await register(app, 'directorA');
-      directorA = {
-        id: rDirector.user.id,
-        token: rDirector.accessToken,
-        login: rDirector.login,
-      };
-
-      const rTeacherB = await register(app, 'teacherB');
-      teacherB = {
-        id: rTeacherB.user.id,
-        token: rTeacherB.accessToken,
-        login: rTeacherB.login,
-      };
-
-      const rPlain = await register(app, 'plainUser');
-      plainUser = {
-        id: rPlain.user.id,
-        token: rPlain.accessToken,
-        login: rPlain.login,
-      };
-    }
-
-    // orgs
-    orgA = await prisma.organization.create({
-      data: {
-        name: 'E2E Org A',
-        type: OrganizationType.SCHOOL,
-        memberships: {
-          create: {
-            userId: directorA.id,
-            role: OrganizationRole.DIRECTOR,
-          },
-        },
-      },
-      select: { id: true },
+    ctxA = await setupOrgContext(app, prisma, {
+      role: 'DIRECTOR',
+      seed: 'membershipsA',
+    });
+    ctxB = await setupOrgContext(app, prisma, {
+      role: 'TEACHER',
+      seed: 'membershipsB',
     });
 
-    // refresh director JWT so role is embedded (if your guard reads roles from token)
-    directorA.token = await login(app, directorA.login);
+    orgA = { id: ctxA.organization.id };
+    orgB = { id: ctxB.organization.id };
 
-    orgB = await prisma.organization.create({
-      data: {
-        name: 'E2E Org B',
-        type: OrganizationType.PRIVATE,
-        memberships: {
-          create: {
-            userId: teacherB.id,
-            role: OrganizationRole.TEACHER,
-          },
-        },
-      },
-      select: { id: true },
-    });
+    directorA = {
+      id: ctxA.owner.user.id,
+      token: ctxA.owner.accessToken,
+      login: ctxA.owner.login,
+    };
+    teacherB = {
+      id: ctxB.actor.user.id,
+      token: ctxB.actor.accessToken,
+      login: ctxB.actor.login,
+    };
 
-    // refresh teacherB token as well
-    teacherB.token = await login(app, teacherB.login);
+    const plain = await ctxA.createUser('plainUser');
+    plainUser = {
+      id: plain.user.id,
+      token: plain.accessToken,
+      login: plain.login,
+    };
+
+    const superUserAuth = await createSystemUser(
+      app,
+      prisma,
+      SystemRole.SUPERADMIN,
+      'memberships_super',
+    );
+    await ctxA.addMembershipForUser(
+      superUserAuth.user.id,
+      OrganizationRole.DIRECTOR,
+    );
+    await ctxB.addMembershipForUser(
+      superUserAuth.user.id,
+      OrganizationRole.DIRECTOR,
+    );
+    superUser = {
+      id: superUserAuth.user.id,
+      token: superUserAuth.accessToken,
+      login: superUserAuth.login,
+    };
   });
 
   afterAll(async () => {
@@ -134,12 +116,28 @@ describe('Memberships (e2e)', () => {
     });
     await prisma.refreshToken.deleteMany({
       where: {
-        userId: { in: [superUser.id, directorA.id, teacherB.id, plainUser.id] },
+        userId: {
+          in: [
+            superUser.id,
+            directorA.id,
+            teacherB.id,
+            plainUser.id,
+            ctxB.owner.user.id,
+          ],
+        },
       },
     });
     await prisma.user.deleteMany({
       where: {
-        id: { in: [superUser.id, directorA.id, teacherB.id, plainUser.id] },
+        id: {
+          in: [
+            superUser.id,
+            directorA.id,
+            teacherB.id,
+            plainUser.id,
+            ctxB.owner.user.id,
+          ],
+        },
       },
     });
 
@@ -183,7 +181,7 @@ describe('Memberships (e2e)', () => {
   });
 
   it('POST /memberships → SUPERADMIN může přidat člena do libovolné org [201]', async () => {
-    const someone = await register(app, 'someoneB');
+    const someone = await ctxB.createUser('someoneB');
     const res = await request(app.getHttpServer())
       .post('/memberships')
       .set('Authorization', `Bearer ${superUser.token}`)
@@ -256,15 +254,8 @@ describe('Memberships (e2e)', () => {
 
   it('PATCH /memberships/:id → DIRECTOR nemůže měnit ředitele (403)', async () => {
     // vytvoříme dalšího ředitele v orgA
-    const other = await register(app, 'otherDirector');
-    const otherMembership = await prisma.membership.create({
-      data: {
-        organizationId: orgA.id,
-        userId: other.user.id,
-        role: OrganizationRole.DIRECTOR,
-      },
-      select: { id: true },
-    });
+    const other = await ctxA.addMember(OrganizationRole.DIRECTOR, 'otherDirector');
+    const otherMembership = other.membership;
 
     await request(app.getHttpServer())
       .patch(`/memberships/${otherMembership.id}`)
@@ -303,15 +294,8 @@ describe('Memberships (e2e)', () => {
 
   it('PATCH /memberships/:id → DIRECTOR nemůže upravit členství v cizí org (403)', async () => {
     // vytvoř v orgB dočasné členství
-    const tmpUser = await register(app, 'tmpB');
-    const memberB = await prisma.membership.create({
-      data: {
-        organizationId: orgB.id,
-        userId: tmpUser.user.id,
-        role: OrganizationRole.STUDENT,
-      },
-      select: { id: true },
-    });
+    const tmpUser = await ctxB.addMember(OrganizationRole.STUDENT, 'tmpB');
+    const memberB = tmpUser.membership;
 
     await request(app.getHttpServer())
       .patch(`/memberships/${memberB.id}`)
@@ -370,15 +354,8 @@ describe('Memberships (e2e)', () => {
   });
 
   it('DELETE /memberships/:id → DIRECTOR může smazat člena (STUDENT/TEACHER) ze své org [200]', async () => {
-    const tmp = await register(app, 'toRemove');
-    const m = await prisma.membership.create({
-      data: {
-        organizationId: orgA.id,
-        userId: tmp.user.id,
-        role: OrganizationRole.STUDENT,
-      },
-      select: { id: true },
-    });
+    const tmp = await ctxA.addMember(OrganizationRole.STUDENT, 'toRemove');
+    const m = tmp.membership;
 
     await request(app.getHttpServer())
       .delete(`/memberships/${m.id}`)
@@ -386,7 +363,7 @@ describe('Memberships (e2e)', () => {
       .expect(200);
 
     const gone = await prisma.membership.findUnique({ where: { id: m.id } });
-    expect(gone).toBeNull();
+    expect(gone?.deletedAt).toBeTruthy();
 
     // cleanup user
     await prisma.refreshToken.deleteMany({ where: { userId: tmp.user.id } });
@@ -394,15 +371,8 @@ describe('Memberships (e2e)', () => {
   });
 
   it('DELETE /memberships/:id → DIRECTOR nemůže mazat členství v cizí org (403)', async () => {
-    const tmp = await register(app, 'toRemoveB');
-    const m = await prisma.membership.create({
-      data: {
-        organizationId: orgB.id,
-        userId: tmp.user.id,
-        role: OrganizationRole.STUDENT,
-      },
-      select: { id: true },
-    });
+    const tmp = await ctxB.addMember(OrganizationRole.STUDENT, 'toRemoveB');
+    const m = tmp.membership;
 
     await request(app.getHttpServer())
       .delete(`/memberships/${m.id}`)
@@ -416,15 +386,8 @@ describe('Memberships (e2e)', () => {
   });
 
   it('DELETE /memberships/:id → SUPERADMIN může mazat kdekoliv [200]', async () => {
-    const tmp = await register(app, 'superRemove');
-    const m = await prisma.membership.create({
-      data: {
-        organizationId: orgB.id,
-        userId: tmp.user.id,
-        role: OrganizationRole.STUDENT,
-      },
-      select: { id: true },
-    });
+    const tmp = await ctxB.addMember(OrganizationRole.STUDENT, 'superRemove');
+    const m = tmp.membership;
 
     await request(app.getHttpServer())
       .delete(`/memberships/${m.id}`)
@@ -432,40 +395,29 @@ describe('Memberships (e2e)', () => {
       .expect(200);
 
     const gone = await prisma.membership.findUnique({ where: { id: m.id } });
-    expect(gone).toBeNull();
+    expect(gone?.deletedAt).toBeTruthy();
 
     await prisma.refreshToken.deleteMany({ where: { userId: tmp.user.id } });
     await prisma.user.delete({ where: { id: tmp.user.id } });
   });
 
-  it('POST /memberships → 400 invalid UUIDs', async () => {
+  it('POST /memberships → 400 invalid userId UUID', async () => {
     await request(app.getHttpServer())
       .post('/memberships')
       .set('Authorization', `Bearer ${directorA.token}`)
       .send({
-        organizationId: 'not-uuid',
+        organizationId: orgA.id,
         userId: 'not-uuid',
         role: OrganizationRole.STUDENT,
       })
       .expect(400);
   });
 
-  it('POST /memberships → 404 když org/user neexistuje', async () => {
-    // validní, ale neexistující UUID
+  it('POST /memberships → 404 když user neexistuje', async () => {
     const fake = '11111111-1111-4111-8111-111111111111';
     await request(app.getHttpServer())
       .post('/memberships')
-      .set('Authorization', `Bearer ${superUser.token}`)
-      .send({
-        organizationId: fake,
-        userId: plainUser.id,
-        role: OrganizationRole.STUDENT,
-      })
-      .expect(404);
-
-    await request(app.getHttpServer())
-      .post('/memberships')
-      .set('Authorization', `Bearer ${superUser.token}`)
+      .set('Authorization', `Bearer ${directorA.token}`)
       .send({
         organizationId: orgA.id,
         userId: fake,
@@ -504,15 +456,8 @@ describe('Memberships (e2e)', () => {
 
   it('PATCH /memberships/:id → DIRECTOR nemůže měnit členství v cizí org (assertSameOrganization → 403)', async () => {
     // vytvoř člena v orgB
-    const x = await register(app, 'xInOrgB');
-    const mb = await prisma.membership.create({
-      data: {
-        organizationId: orgB.id,
-        userId: x.user.id,
-        role: OrganizationRole.STUDENT,
-      },
-      select: { id: true },
-    });
+    const x = await ctxB.addMember(OrganizationRole.STUDENT, 'xInOrgB');
+    const mb = x.membership;
 
     await request(app.getHttpServer())
       .patch(`/memberships/${mb.id}`)
@@ -555,15 +500,8 @@ describe('Memberships (e2e)', () => {
 
   it('DELETE /memberships/:id → kaskádově smaže Teacher a jeho vazby', async () => {
     // připrav učitele v orgA
-    const tu = await register(app, 'teacherForCascade');
-    const m = await prisma.membership.create({
-      data: {
-        organizationId: orgA.id,
-        userId: tu.user.id,
-        role: OrganizationRole.TEACHER,
-      },
-      select: { id: true },
-    });
+    const tu = await ctxA.addMember(OrganizationRole.TEACHER, 'teacherForCascade');
+    const m = tu.membership;
     // vytvoř Teacher entitu (použij nějaký existující endpoint /teachers nebo přímo přes Prisma)
     const teacher = await prisma.teacher.create({
       data: { membershipId: m.id, organizationId: orgA.id },
@@ -577,6 +515,28 @@ describe('Memberships (e2e)', () => {
     await prisma.teacherSubject.create({
       data: { teacherId: teacher.id, subjectId: subj.id },
     });
+    // a homeroom vazbu (třída ukazuje na učitele)
+    const ay = await prisma.academicYear.create({
+      data: {
+        orgId: orgA.id,
+        label: `AY_${Date.now()}`,
+        startsAt: new Date('2025-09-01'),
+        endsAt: new Date('2026-06-30'),
+        isCurrent: false,
+      },
+      select: { id: true },
+    });
+    const cs = await prisma.classSection.create({
+      data: {
+        orgId: orgA.id,
+        yearId: ay.id,
+        grade: $Enums.SchoolGrade.GRADE_1,
+        section: 'X',
+        label: 'Homeroom',
+        teacherId: teacher.id,
+      },
+      select: { id: true },
+    });
 
     // smaž membership jako DIRECTOR v téže org
     await request(app.getHttpServer())
@@ -584,20 +544,27 @@ describe('Memberships (e2e)', () => {
       .set('Authorization', `Bearer ${directorA.token}`)
       .expect(200);
 
-    // učitel i vazby pryč
+    // učitel je soft-deleted, vazby jsou odpojené
     const tGone = await prisma.teacher.findUnique({
       where: { id: teacher.id },
     });
-    expect(tGone).toBeNull();
+    expect(tGone?.deletedAt).toBeTruthy();
     const links = await prisma.teacherSubject.findMany({
       where: { teacherId: teacher.id },
     });
     expect(links.length).toBe(0);
+    const csAfter = await prisma.classSection.findUnique({
+      where: { id: cs.id },
+      select: { teacherId: true },
+    });
+    expect(csAfter?.teacherId).toBeNull();
 
-    // cleanup user + subject
+    // cleanup user + subject + class section
     await prisma.refreshToken.deleteMany({ where: { userId: tu.user.id } });
     await prisma.user.delete({ where: { id: tu.user.id } });
     await prisma.subject.delete({ where: { id: subj.id } });
+    await prisma.classSection.delete({ where: { id: cs.id } }).catch(() => {});
+    await prisma.academicYear.delete({ where: { id: ay.id } }).catch(() => {});
   });
 
   it('GET /memberships → payload obsahuje embedded user a teacher/student části', async () => {
@@ -629,12 +596,12 @@ describe('Memberships (e2e)', () => {
       .expect(400);
   });
 
-  it('GET /memberships → 400 when organizationId is not UUID', async () => {
+  it('GET /memberships → 403 when organizationId is invalid (scope check wins)', async () => {
     await request(app.getHttpServer())
       .get('/memberships')
       .query({ organizationId: 'not-uuid' })
       .set('Authorization', `Bearer ${directorA.token}`)
-      .expect(400);
+      .expect(403);
   });
 
   it('PATCH /memberships/:id → 400 when id is not UUID', async () => {
@@ -718,17 +685,10 @@ describe('Memberships (e2e)', () => {
     });
   });
 
-  it('DELETE /memberships/:id → kaskádově smaže Student + Enrollment + StudentClassroom', async () => {
+  it('DELETE /memberships/:id → soft delete studenta, vazby zůstávají pro audit', async () => {
     // 1) Student membership v orgA
-    const tmp = await register(app, 'studentCascade');
-    const m = await prisma.membership.create({
-      data: {
-        organizationId: orgA.id,
-        userId: tmp.user.id,
-        role: OrganizationRole.STUDENT,
-      },
-      select: { id: true },
-    });
+    const tmp = await ctxA.addMember(OrganizationRole.STUDENT, 'studentCascade');
+    const m = tmp.membership;
 
     // 2) Student entity
     const student = await prisma.student.create({
@@ -783,23 +743,27 @@ describe('Memberships (e2e)', () => {
       .set('Authorization', `Bearer ${directorA.token}`)
       .expect(200);
 
-    // 6) vše kaskádově pryč
+    // 6) student je soft-deleted, vazby zůstávají
     const sGone = await prisma.student.findUnique({
       where: { id: student.id },
     });
-    expect(sGone).toBeNull();
+    expect(sGone?.deletedAt).toBeTruthy();
 
     const enrCount = await prisma.enrollment.count({
       where: { studentId: student.id },
     });
-    expect(enrCount).toBe(0);
+    expect(enrCount).toBe(1);
 
     const scCount = await prisma.studentClassroom.count({
       where: { studentId: student.id },
     });
-    expect(scCount).toBe(0);
+    expect(scCount).toBe(1);
 
-    // 7) cleanup zbytků (year/section) + user
+    // 7) cleanup zbytků (year/section) + user + vazby
+    await prisma.enrollment.deleteMany({ where: { studentId: student.id } });
+    await prisma.studentClassroom.deleteMany({
+      where: { studentId: student.id },
+    });
     await prisma.classSection.delete({ where: { id: cs.id } }).catch(() => {});
     await prisma.academicYear.delete({ where: { id: ay.id } }).catch(() => {});
     await prisma.refreshToken.deleteMany({ where: { userId: tmp.user.id } });

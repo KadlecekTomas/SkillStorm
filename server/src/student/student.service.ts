@@ -11,16 +11,19 @@ import {
   Prisma,
   SystemRole,
 } from '@prisma/client';
-import { CreateStudentDto } from './dto/create-student.dto';
-import { UpdateStudentDto } from './dto/update-student.dto';
-import { JwtPayload } from '@/auth/types/jwt-payload';
+import type { CreateStudentDto } from './dto/create-student.dto';
+import type { UpdateStudentDto } from './dto/update-student.dto';
+import type { JwtPayload } from '@/auth/types/jwt-payload';
 import { canAccessStudent } from './utils/access.utils';
-import { QueryStudentsDto } from './dto/query-students.dto';
+import type { QueryStudentsDto } from './dto/query-students.dto';
 import * as XLSX from 'xlsx';
-import { ExportStudentsDto, ExportTemplate } from './dto/export-students.dto';
+import type {
+  ExportStudentsDto,
+  ExportTemplate,
+} from './dto/export-students.dto';
 
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import type { Cache } from 'cache-manager';
+import { Cache } from 'cache-manager';
 import {
   buildVersionedListKey,
   bumpOrgVersion,
@@ -176,23 +179,26 @@ export class StudentsService {
 
   private async audit(opts: {
     userId?: string;
-    orgId?: string;
+    orgId?: string | null;
     action: string;
     entityId?: string;
-    metadata?: Record<string, any>;
-    changedFields?: Record<string, any>;
+    metadata?: Prisma.InputJsonValue;
+    changedFields?: Prisma.InputJsonValue;
   }) {
-    return this.prisma.auditLog.create({
-      data: {
-        userId: opts.userId ?? null,
-        organizationId: opts.orgId ?? null,
-        entityType: AuditEntityType.ORGANIZATION,
-        entityId: opts.entityId ?? null,
-        action: opts.action,
-        metadata: opts.metadata ?? null,
-        changedFields: opts.changedFields ?? null,
-      },
-    });
+    const data: Prisma.AuditLogUncheckedCreateInput = {
+      userId: opts.userId ?? null,
+      organizationId: opts.orgId ?? null,
+      entityType: AuditEntityType.ORGANIZATION,
+      entityId: opts.entityId ?? null,
+      action: opts.action,
+    };
+    if (opts.metadata !== undefined) {
+      data.metadata = opts.metadata as Prisma.InputJsonValue;
+    }
+    if (opts.changedFields !== undefined) {
+      data.changedFields = opts.changedFields as Prisma.InputJsonValue;
+    }
+    return this.prisma.auditLog.create({ data });
   }
 
   // ---------- CREATE ----------
@@ -230,8 +236,8 @@ export class StudentsService {
       data: {
         membershipId: dto.membershipId,
         orgId: dto.orgId,
-        studentNumber: dto.studentNumber,
-        externalId: dto.externalId,
+        studentNumber: dto.studentNumber ?? null,
+        externalId: dto.externalId ?? null,
       },
     });
 
@@ -259,10 +265,13 @@ export class StudentsService {
     const limit = q.limit ?? 20;
     const skip = (page - 1) * limit;
 
-    const baseWhere: Prisma.StudentWhereInput =
-      user.systemRole === SystemRole.SUPERADMIN
-        ? { deletedAt: null }
-        : { deletedAt: null, orgId: user.organizationId };
+    const baseWhere: Prisma.StudentWhereInput = { deletedAt: null };
+    if (user.systemRole !== SystemRole.SUPERADMIN) {
+      if (!user.organizationId) {
+        throw new ForbiddenException('Missing organization context.');
+      }
+      baseWhere.orgId = user.organizationId;
+    }
 
     const where: Prisma.StudentWhereInput = {
       ...baseWhere,
@@ -280,7 +289,7 @@ export class StudentsService {
       version: ver,
       page,
       limit,
-      search: q.search,
+      search: q.search ?? '',
       includeLevels: false,
       order: [{ 'membership.user.name': 'asc' }, { studentNumber: 'asc' }],
       filters: {
@@ -366,12 +375,17 @@ export class StudentsService {
     const student = await this.getStudentWithContext(id);
     canAccessStudent(student, user);
 
+    const data: Prisma.StudentUncheckedUpdateInput = {};
+    if (dto.studentNumber !== undefined) {
+      data.studentNumber = dto.studentNumber;
+    }
+    if (dto.externalId !== undefined) {
+      data.externalId = dto.externalId;
+    }
+
     const updated = await this.prisma.student.update({
       where: { id },
-      data: {
-        studentNumber: dto.studentNumber ?? undefined,
-        externalId: dto.externalId ?? undefined,
-      },
+      data,
     });
 
     await this.audit({
@@ -392,6 +406,7 @@ export class StudentsService {
 
   // ---------- DELETE (soft) ----------
   async remove(id: string, user: JwtPayload) {
+    // Soft delete: výsledky studenta musí zůstat auditně dohledatelné.
     const student = await this.getStudentWithContext(id);
 
     if (
@@ -459,10 +474,13 @@ export class StudentsService {
     const { columns, includeEnrollments, format, filenameBase } =
       resolveExportOptions(q);
 
-    const baseWhere: Prisma.StudentWhereInput =
-      user.systemRole === SystemRole.SUPERADMIN
-        ? { deletedAt: null }
-        : { deletedAt: null, orgId: user.organizationId };
+    const baseWhere: Prisma.StudentWhereInput = { deletedAt: null };
+    if (user.systemRole !== SystemRole.SUPERADMIN) {
+      if (!user.organizationId) {
+        throw new ForbiddenException('Missing organization context.');
+      }
+      baseWhere.orgId = user.organizationId;
+    }
 
     const where: Prisma.StudentWhereInput = {
       ...baseWhere,
@@ -545,21 +563,20 @@ export class StudentsService {
     const buffer = XLSX.write(wb, { type: 'buffer', bookType });
 
     // audit exportu
+    const exportOrgId =
+      user.systemRole === SystemRole.SUPERADMIN
+        ? null
+        : (user.organizationId ?? null);
+
     await this.audit({
       userId: user.userId,
-      orgId:
-        user.systemRole === SystemRole.SUPERADMIN
-          ? undefined
-          : user.organizationId,
+      orgId: exportOrgId,
       action: `STUDENT_EXPORT_${String(bookType).toUpperCase()}`,
-      entityId:
-        user.systemRole === SystemRole.SUPERADMIN
-          ? undefined
-          : (user.organizationId ?? undefined),
+      ...(exportOrgId ? { entityId: exportOrgId } : {}),
       metadata: {
         total,
         filters: {
-          search: q.search,
+          search: q.search ?? '',
           yearId: q.yearId,
           classSectionId: q.classSectionId,
         },
