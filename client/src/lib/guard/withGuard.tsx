@@ -6,8 +6,8 @@ import type { GuardOptions } from "@/lib/guard/useGuard";
 
 export const withGuard =
   (options?: GuardOptions) =>
-  <P extends object>(Component: ComponentType<P>) => {
-    const GuardedComponent = (props: P) => (
+  <P extends object>(Component: ComponentType<P>): ComponentType<P> => {
+    const GuardedComponent = (props: P): React.JSX.Element => (
       <GuardBoundary {...options}>
         <Component {...props} />
       </GuardBoundary>

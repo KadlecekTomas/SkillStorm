@@ -18,9 +18,9 @@ vi.mock("@/hooks/use-auth", () => ({
 describe("LoginForm", () => {
   it("validates inputs before submitting", async () => {
     render(<LoginForm />);
-    const submitButton = screen.getByRole("button", { name: /sign in/i });
+    const submitButton = screen.getByRole("button", { name: /přihlásit se/i });
     fireEvent.click(submitButton);
-    expect(await screen.findByText(/enter a valid email/i)).toBeInTheDocument();
+    expect(await screen.findByText(/zadej platný e-mail/i)).toBeInTheDocument();
     recordPolicyCheck("Auth", "login-form-validation", true, "Login form blocks empty submission.");
   });
 
@@ -33,10 +33,10 @@ describe("LoginForm", () => {
     fireEvent.change(screen.getByPlaceholderText(/••••••••/i), {
       target: { value: "password" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /sign in/i }));
+    fireEvent.click(screen.getByRole("button", { name: /přihlásit se/i }));
     await waitFor(() => {
       expect(loginMock).toHaveBeenCalledWith({
-        login: "teacher@atlas.test",
+        email: "teacher@atlas.test",
         password: "password",
       });
     });

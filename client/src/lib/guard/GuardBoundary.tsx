@@ -7,6 +7,8 @@ import { useGuard, type GuardOptions } from "@/lib/guard/useGuard";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { AccessDenied } from "@/components/access/access-denied";
 import { reportForbiddenAccess } from "@/utils/rbac-telemetry";
+import { AUTH_DEBUG } from "@/utils/env";
+import { useAuth } from "@/hooks/use-auth";
 
 type GuardBoundaryProps = GuardOptions & {
   children: ReactNode;
@@ -19,9 +21,10 @@ export const GuardBoundary = ({
   fallback,
   loadingFallback,
   ...options
-}: GuardBoundaryProps) => {
+}: GuardBoundaryProps): ReactNode => {
   const guard = useGuard(options);
   const router = useRouter();
+  const { user, authStatus } = useAuth();
 
   const readyMarker = (
     <div
@@ -32,12 +35,42 @@ export const GuardBoundary = ({
   );
 
   useEffect(() => {
-    if (guard.allowed || guard.isLoading) return;
-    if (guard.reason === "UNAUTHENTICATED") {
+    // ⛔ nikdy neredirectuj během bootstrapu
+    if (guard.isLoading) return;
+    if (authStatus !== "ready") return;
+
+    // ✅ pokud je přístup povolen, nic nedělej
+    if (guard.allowed) return;
+
+    if (AUTH_DEBUG) {
+      // eslint-disable-next-line no-console
+      console.log(
+        "%c[AUTH][GUARD]",
+        "color:#f97316;font-weight:600",
+        {
+          reason: guard.reason,
+          authStatus,
+          userId: user?.id ?? null,
+        },
+      );
+    }
+
+    // ❌ nepřihlášen → login
+    if (!user) {
+      if (AUTH_DEBUG) {
+        // eslint-disable-next-line no-console
+        console.log(
+          "%c[AUTH][REDIRECT]",
+          "color:#dc2626;font-weight:600",
+          "/login",
+        );
+      }
       router.replace("/login");
-    } else if (guard.reason === "NO_ORGANIZATION") {
-      router.replace("/select-organization");
-    } else if (guard.reason === "FORBIDDEN") {
+      return;
+    }
+
+    // ⛔ přihlášen, ale nemá oprávnění
+    if (guard.reason === "FORBIDDEN") {
       reportForbiddenAccess({
         route: typeof window !== "undefined" ? window.location.pathname : "",
         message: "GuardBoundary blocked access",
@@ -46,8 +79,16 @@ export const GuardBoundary = ({
           : {}),
       });
     }
-  }, [guard.allowed, guard.isLoading, guard.reason, options.requirePerms, router]);
-
+  }, [
+    guard.allowed,
+    guard.isLoading,
+    guard.reason,
+    authStatus,
+    user,
+    options.requirePerms,
+    options.requireRoles,
+    router,
+  ]);
   if (guard.isLoading) {
     return (
       loadingFallback ?? (
@@ -58,7 +99,7 @@ export const GuardBoundary = ({
     );
   }
 
-  if (!guard.allowed && guard.reason === "FORBIDDEN") {
+  if (!guard.allowed && (guard.reason === "FORBIDDEN" || guard.reason === "NO_ORGANIZATION")) {
     return (
       <>
         {readyMarker}

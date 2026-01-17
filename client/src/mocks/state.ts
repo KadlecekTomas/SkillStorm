@@ -212,7 +212,7 @@ const classrooms = [
   { id: "cl-102", label: "Literature Studio", grade: "GRADE_8", gradeLabel: "8th", section: "B", teacherName: "Teacher Atlas", studentsCount: 22 },
 ];
 
-export const getMockDiagnostics = () => ({
+export const getMockDiagnostics = (): { tests: number; materials: number; classrooms: number } => ({
   tests: policyTests.length,
   materials: learningMaterials.length,
   classrooms: classrooms.length,
@@ -269,7 +269,7 @@ const createId = () =>
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
-export const createSessionToken = () => {
+export const createSessionToken = (): string => {
   const token = `sess-${createId()}`;
   sessionStore.set(token, { userId: null, orgId: null, force401Once: false });
   return token;
@@ -336,7 +336,7 @@ const ensureOrgAccess = (requestOrgId: string | null, activeOrgId: string | null
   return activeOrgId;
 };
 
-export const resetMockState = () => {
+export const resetMockState = (): void => {
   submissions.clear();
   submissionAttempts.clear();
   auditEvents.length = 0;
@@ -347,12 +347,12 @@ export const resetMockState = () => {
   });
 };
 
-export const expireTokenOnce = (sessionToken?: string) => {
+export const expireTokenOnce = (sessionToken?: string): void => {
   const record = getSessionRecord(sessionToken);
   record.force401Once = true;
 };
 
-export const getAuditEventsSnapshot = () => [...auditEvents];
+export const getAuditEventsSnapshot = (): AuditEventPayload[] => [...auditEvents];
 
 export const login = (login: string, password: string, sessionToken?: string): AuthEnvelope => {
   const user = seedUsers[login];
@@ -366,7 +366,7 @@ export const login = (login: string, password: string, sessionToken?: string): A
   return loginEnvelope(user);
 };
 
-export const logout = (sessionToken?: string) => {
+export const logout = (sessionToken?: string): { success: boolean } => {
   const record = getSessionRecord(sessionToken);
   record.userId = null;
   record.orgId = null;
@@ -374,7 +374,7 @@ export const logout = (sessionToken?: string) => {
   return { success: true };
 };
 
-export const refreshSession = (sessionToken?: string) => {
+export const refreshSession = (sessionToken?: string): { ok: boolean } => {
   ensureSession(sessionToken);
   return { ok: true };
 };
@@ -401,13 +401,13 @@ export const switchOrganization = (orgId: string, sessionToken?: string): AuthEn
   return loginEnvelope(user, membership.organizationId);
 };
 
-export const listTests = (requestOrgId: string | null, sessionToken?: string) => {
+export const listTests = (requestOrgId: string | null, sessionToken?: string): { items: PolicyTest[] } => {
   const { orgId } = ensureSession(sessionToken);
   const allowedOrg = ensureOrgAccess(requestOrgId, orgId);
   return { items: policyTests.filter((test) => test.orgId === allowedOrg) };
 };
 
-export const getTest = (testId: string, requestOrgId: string | null, sessionToken?: string) => {
+export const getTest = (testId: string, requestOrgId: string | null, sessionToken?: string): { test: PolicyTest } => {
   const { orgId } = ensureSession(sessionToken);
   const allowedOrg = ensureOrgAccess(requestOrgId, orgId);
   const test = policyTests.find((item) => item.id === testId);
@@ -422,7 +422,7 @@ export const getTest = (testId: string, requestOrgId: string | null, sessionToke
   return { test };
 };
 
-export const listMaterials = (requestOrgId: string | null, sessionToken?: string) => {
+export const listMaterials = (requestOrgId: string | null, sessionToken?: string): { items: Array<{ id: string; title: string; scope: "GLOBAL" | "ORGANIZATION"; orgId: string | null }> } => {
   ensureSession(sessionToken);
   const items = learningMaterials.filter((material) => {
     if (material.scope === "GLOBAL") return true;
@@ -431,26 +431,26 @@ export const listMaterials = (requestOrgId: string | null, sessionToken?: string
   return { items };
 };
 
-export const listClassrooms = (requestOrgId: string | null, sessionToken?: string) => {
+export const listClassrooms = (requestOrgId: string | null, sessionToken?: string): Array<{ id: string; label: string; grade: string; gradeLabel: string; section: string; teacherName: string; studentsCount: number }> => {
   const { orgId } = ensureSession(sessionToken);
   ensureOrgAccess(requestOrgId, orgId);
   return classrooms;
 };
 
-export const logAnalytics = () => ({ ok: true });
+export const logAnalytics = (): { ok: boolean } => ({ ok: true });
 
-export const getGamificationSummary = (sessionToken?: string) => {
+export const getGamificationSummary = (sessionToken?: string): typeof gamificationSummary => {
   ensureSession(sessionToken);
   return gamificationSummary;
 };
 
-export const getAnalyticsSummary = () => analyticsSummary;
+export const getAnalyticsSummary = (): typeof analyticsSummary => analyticsSummary;
 
 export const createSubmission = (
   testId: string,
   requestOrgId: string | null,
   sessionToken?: string,
-) => {
+): { submission: SubmissionRecord } => {
   const { user, orgId } = ensureSession(sessionToken);
   const allowedOrg = ensureOrgAccess(requestOrgId, orgId);
   const test = policyTests.find((item) => item.id === testId);
@@ -478,7 +478,7 @@ export const updateSubmission = (
   _requestOrgId: string | null,
   answers: Record<string, string>,
   sessionToken?: string,
-) => {
+): { submission: SubmissionRecord } => {
   const { user } = ensureSession(sessionToken);
   const submission = submissions.get(submissionId);
   if (!submission || submission.userId !== user.id) {
@@ -516,7 +516,7 @@ export const finishSubmission = (
   submissionId: string,
   _requestOrgId: string | null,
   sessionToken?: string,
-) => {
+): { submission: SubmissionRecord; summary?: { score: number; correct: number; total: number } } => {
   const { user } = ensureSession(sessionToken);
   const submission = submissions.get(submissionId);
   if (!submission || submission.userId !== user.id) {
@@ -537,7 +537,7 @@ export const finishSubmission = (
   };
 };
 
-export const registerUser = (payload: { email?: string; name?: string }) => ({
+export const registerUser = (payload: { email?: string; name?: string }): { user: { id: string; email: string; name: string; organizationRole: null; organizationId: null } } => ({
   user: {
     id: `pending-${createId()}`,
     email: payload.email ?? "new@skillstorm.test",
@@ -547,7 +547,7 @@ export const registerUser = (payload: { email?: string; name?: string }) => ({
   },
 });
 
-export const recordAuditEvents = (events: AuditEventPayload[]) => {
+export const recordAuditEvents = (events: AuditEventPayload[]): { stored: number } => {
   auditEvents.push(...events);
   return { stored: events.length };
 };

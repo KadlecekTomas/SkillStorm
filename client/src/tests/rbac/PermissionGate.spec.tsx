@@ -11,7 +11,7 @@ describe("PermissionGate", () => {
       useAuthStore.setState({
         permissions: [],
         user: null,
-        token: null,
+        sessionToken: null,
         loading: false,
       } satisfies Partial<AuthState>);
     });

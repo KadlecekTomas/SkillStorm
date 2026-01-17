@@ -10,7 +10,9 @@ test("student submissions respect attempt limits and audit trails", async ({ pag
   await loginAs(page, "student@atlas.test");
 
   const loginLog = await getAuditLog(page);
-  expect(loginLog.events.some((event: { action: string }) => event.action === "LOGIN")).toBe(true);
+  expect(
+    (loginLog.events as Array<{ action: string }>).some((event) => event.action === "LOGIN"),
+  ).toBe(true);
   recordPolicyCheck("Audit", "audit-login-event", true, "LOGIN event pushed to audit log.");
 
   await page.goto("/dashboard/tests/test-algebra-org-a/submission");
@@ -26,7 +28,9 @@ test("student submissions respect attempt limits and audit trails", async ({ pag
 
   const afterSubmission = await getAuditLog(page);
   expect(
-    afterSubmission.events.some((event: { action: string }) => event.action === "SUBMISSION_FINISH"),
+    (afterSubmission.events as Array<{ action: string }>).some(
+      (event) => event.action === "SUBMISSION_FINISH",
+    ),
   ).toBe(true);
   recordPolicyCheck("Audit", "audit-submission-finish", true, "Finishing submission produces audit event.");
 

@@ -21,6 +21,7 @@ export type AuthState = {
   roles: OrganizationRole[];
   permissions: PermissionKey[];
   loading: boolean;
+  authStatus: "booting" | "ready";
   offline: boolean;
   sessionToken: string | null;
   hydrated: boolean;
@@ -32,6 +33,7 @@ export type AuthState = {
   }) => void;
   setOrg: (org: OrganizationContext | null) => void;
   setLoading: (loading: boolean) => void;
+  setAuthStatus: (status: "booting" | "ready") => void;
   setOffline: (offline: boolean) => void;
   setSessionToken: (token: string | null) => void;
   setHydrated: (hydrated: boolean) => void;
@@ -57,6 +59,7 @@ export const useAuthStore = create<AuthState>()(
       org: null,
       roles: [],
       loading: false,
+      authStatus: "booting",
       offline: false,
       permissions: [],
       sessionToken: null,
@@ -79,6 +82,7 @@ export const useAuthStore = create<AuthState>()(
         })),
       setOrg: (org) => set(() => ({ org })),
       setLoading: (loading) => set(() => ({ loading })),
+      setAuthStatus: (authStatus) => set(() => ({ authStatus })),
       setOffline: (offline) => set(() => ({ offline })),
       setSessionToken: (sessionToken) => set(() => ({ sessionToken })),
       setHydrated: (hydrated) => set(() => ({ hydrated })),
@@ -89,6 +93,7 @@ export const useAuthStore = create<AuthState>()(
           permissions: [],
           roles: [],
           loading: false,
+          authStatus: "ready",
           sessionToken: null,
         })),
     }),
@@ -106,6 +111,7 @@ export const useAuthStore = create<AuthState>()(
           return;
         }
         state?.setHydrated(true);
+        state?.setAuthStatus("booting");
       },
     },
   ),

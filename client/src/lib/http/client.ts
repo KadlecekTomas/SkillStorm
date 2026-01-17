@@ -1,13 +1,13 @@
 "use client";
 
-import { API_BASE_URL } from "@/utils/env";
+import { API_BASE_URL, AUTH_DEBUG } from "@/utils/env";
 import { useAuthStore, type OrganizationContext } from "@/store/use-auth-store";
 
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 export type ApiEnvelope<T> =
   | { success: true; data: T }
-  | { success: false; error: string; meta?: any };
+  | { success: false; error: string; meta?: unknown };
 
 export type RequestConfig<TBody = unknown> = {
   headers?: Record<string, string>;
@@ -29,6 +29,7 @@ export class HttpError extends Error {
     super(message);
     this.status = status;
     this.data = data;
+    this.name = "HttpError";
   }
 }
 
@@ -40,7 +41,8 @@ export class ForbiddenError extends HttpError {
 }
 
 const LOGIN_REDIRECT = "/login?reason=expired";
-const DEFAULT_HEADERS = {
+
+const DEFAULT_HEADERS: Record<string, string> = {
   "Content-Type": "application/json",
 };
 
@@ -50,9 +52,7 @@ type PersistedAuthState = {
 };
 
 const readPersistedAuthState = (): PersistedAuthState | null => {
-  if (typeof window === "undefined") {
-    return null;
-  }
+  if (typeof window === "undefined") return null;
   try {
     const raw = window.localStorage.getItem("skillstorm_auth");
     if (!raw) return null;
@@ -63,7 +63,7 @@ const readPersistedAuthState = (): PersistedAuthState | null => {
   }
 };
 
-const readCookie = (name: string) => {
+const readCookie = (name: string): string | null => {
   if (typeof document === "undefined") return null;
   const match = document.cookie
     .split(";")
@@ -73,19 +73,38 @@ const readCookie = (name: string) => {
   return decodeURIComponent(match.split("=").slice(1).join("="));
 };
 
-export const createCorrelationId = () => {
+export const createCorrelationId = (): string => {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     return crypto.randomUUID();
   }
   return `cid-${Date.now()}-${Math.floor(Math.random() * 10_000)}`;
 };
 
-const resolveUrl = (path: string) => {
-  if (/^https?:\/\//i.test(path)) {
-    return path;
-  }
+const resolveUrl = (path: string): string => {
+  if (/^https?:\/\//i.test(path)) return path;
   const sanitizedPath = path.startsWith("/") ? path : `/${path}`;
   return `${API_BASE_URL}${sanitizedPath}`;
+};
+
+const applyQuery = (
+  path: string,
+  query?: Record<string, string | number | boolean | undefined>,
+): string => {
+  if (!query || !Object.keys(query).length) return path;
+
+  const isAbsolute = /^https?:\/\//i.test(path);
+  const base = isAbsolute
+    ? path
+    : `https://dummy.base${path.startsWith("/") ? "" : "/"}${path}`;
+
+  const url = new URL(base);
+  Object.entries(query).forEach(([key, value]) => {
+    if (value === undefined) return;
+    url.searchParams.set(key, String(value));
+  });
+
+  if (isAbsolute) return url.toString();
+  return `${url.pathname}${url.search}`;
 };
 
 const waitWithSignal = (ms: number, signal?: AbortSignal) =>
@@ -108,26 +127,23 @@ const waitWithSignal = (ms: number, signal?: AbortSignal) =>
     };
 
     const cleanup = () => {
-      if (signal) {
-        signal.removeEventListener("abort", onAbort);
-      }
+      if (signal) signal.removeEventListener("abort", onAbort);
       clearTimeout(timer);
     };
 
     if (signal) {
       signal.addEventListener("abort", onAbort, { once: true });
-      if (signal.aborted) {
-        onAbort();
-      }
+      if (signal.aborted) onAbort();
     }
   });
 
 class RateLimiter {
   private active = 0;
+
   constructor(
     private readonly maxConcurrent = 5,
     private readonly baseDelay = 40,
-  ) {}
+  ) { }
 
   async acquire(signal?: AbortSignal): Promise<void> {
     let attempt = 0;
@@ -139,13 +155,84 @@ class RateLimiter {
     this.active += 1;
   }
 
-  release() {
+  release(): void {
     this.active = Math.max(0, this.active - 1);
   }
 }
 
 const limiter = new RateLimiter();
 let refreshPromise: Promise<void> | null = null;
+
+const normalizePath = (path: string): string => {
+  if (/^https?:\/\//i.test(path)) {
+    try {
+      const url = new URL(path);
+      return url.pathname ?? path;
+    } catch {
+      return path;
+    }
+  }
+  return path.startsWith("/") ? path : `/${path}`;
+};
+
+const shouldAllowProfileRetry = (path: string): boolean => {
+  const normalized = normalizePath(path).replace(/\/+$/, "");
+  return normalized.endsWith("/me");
+};
+
+const shouldBypassAuthRetry = (path: string): boolean => {
+  const normalized = normalizePath(path).replace(/\/+$/, "");
+  return (
+    normalized === "/auth/login" ||
+    normalized === "/auth/register" ||
+    normalized === "/auth/logout" ||
+    normalized === "/auth/refresh"
+  );
+};
+
+const logoutAndRedirect = (): void => {
+  // Clear local state first (avoid UI thinking it is still authed)
+  useAuthStore.getState().logout();
+
+  if (typeof window !== "undefined") {
+    const hasReason = window.location.search.includes("reason=");
+    const target = hasReason ? `/login${window.location.search}` : LOGIN_REDIRECT;
+    window.location.replace(target);
+  }
+};
+
+const buildHeaders = (configHeaders?: Record<string, string>): Record<string, string> => {
+  const state = useAuthStore.getState();
+  const persisted =
+    !state.sessionToken || !state.org ? readPersistedAuthState() : null;
+
+  const headers: Record<string, string> = {
+    ...DEFAULT_HEADERS,
+    ...configHeaders,
+    "x-cid": createCorrelationId(),
+  };
+
+  const orgId =
+    state.org?.id ?? persisted?.org?.id ?? state.user?.organizationId ?? null;
+  if (orgId) {
+    headers["x-org-id"] = orgId;
+  }
+
+  // If you are purely cookie-based auth, consider removing x-session-token entirely.
+  const sessionToken = state.sessionToken ?? persisted?.sessionToken ?? null;
+  if (sessionToken) {
+    headers["x-session-token"] = sessionToken;
+  }
+
+  if (typeof document !== "undefined") {
+    const csrf = readCookie("ss_csrf");
+    if (csrf) {
+      headers["x-csrf-token"] = csrf;
+    }
+  }
+
+  return headers;
+};
 
 const performFetch = async (
   method: HttpMethod,
@@ -162,128 +249,70 @@ const performFetch = async (
   }
 
   await limiter.acquire(controller.signal);
-  const state = useAuthStore.getState();
-  const persisted = !state.sessionToken || !state.org ? readPersistedAuthState() : null;
-
-  const headers: Record<string, string> = {
-    ...DEFAULT_HEADERS,
-    ...config.headers,
-    "x-cid": createCorrelationId(),
-  };
-
-  const orgId =
-    state.org?.id ??
-    persisted?.org?.id ??
-    state.user?.organizationId ??
-    null;
-  if (orgId) {
-    headers["x-org-id"] = orgId;
-  }
-  const sessionToken = state.sessionToken ?? persisted?.sessionToken ?? null;
-  if (sessionToken) {
-    headers["x-session-token"] = sessionToken;
-  }
-  if (typeof document !== "undefined") {
-    const csrf = readCookie("ss_csrf");
-    if (csrf) {
-      headers["x-csrf-token"] = csrf;
-    }
-  }
 
   const init: RequestInit = {
     method,
-    headers,
+    headers: buildHeaders(config.headers),
     credentials: "include",
     mode: "cors",
     signal: controller.signal,
   };
 
   if (config.body !== undefined) {
-    init.body = typeof config.body === "string" ? config.body : JSON.stringify(config.body);
+    if (
+      typeof config.body === "string" ||
+      config.body instanceof FormData
+    ) {
+      init.body = config.body;
+    } else {
+      init.body = JSON.stringify(config.body);
+    }
   }
+
 
   const url = resolveUrl(applyQuery(path, config.query));
 
   try {
-    const response = await fetch(url, init);
-    if (response.status === 401 && (config.authAttempt ?? 0) === 0) {
-      try {
-        await refreshSession();
-      } catch {
-        logoutAndRedirect();
-        throw new HttpError("Session expired", 401, null);
-      }
-      return performFetch(method, path, { ...config, authAttempt: 1 });
-    }
-    return response;
+    return await fetch(url, init);
   } finally {
     limiter.release();
   }
 };
 
-const applyQuery = (
-  path: string,
-  query?: Record<string, string | number | boolean | undefined>,
-) => {
-  if (!query || !Object.keys(query).length) return path;
-  const isAbsolute = /^https?:\/\//i.test(path);
-  const base = isAbsolute ? path : `https://dummy.base${path.startsWith("/") ? "" : "/"}`;
-  const url = new URL(base);
-  Object.entries(query).forEach(([key, value]) => {
-    if (value === undefined) return;
-    url.searchParams.set(key, String(value));
-  });
-  if (isAbsolute) {
-    return url.toString();
+const parseResponse = async <T>(response: Response): Promise<T> => {
+  if (response.status === 204) return undefined as T;
+
+  const text = await response.text();
+  if (!text) return undefined as T;
+
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    return text as unknown as T;
   }
-  return `${url.pathname}${url.search}`;
 };
 
-const refreshSession = async () => {
-  if (refreshPromise) {
-    return refreshPromise;
-  }
+const refreshSession = async (): Promise<void> => {
+  if (refreshPromise) return refreshPromise;
+
   refreshPromise = (async () => {
-    const response = await performFetch("POST", "/auth/refresh", {
-      authAttempt: 1,
-    });
+    const response = await performFetch("POST", "/auth/refresh", { authAttempt: 1 });
+
+    // Do not recurse refresh through handleUnauthorized
     if (!response.ok) {
-      throw new HttpError("Refresh failed", response.status, null);
+      const data = await parseResponse<unknown>(response).catch(() => null);
+      throw new HttpError("Refresh failed", response.status, data);
     }
-    await response.json().catch(() => null);
-    return;
+
+    // Backend might return 204 or JSON; ignore body
+    await parseResponse<unknown>(response).catch(() => null);
   })();
+
   try {
     await refreshPromise;
   } finally {
     refreshPromise = null;
   }
-};
-
-const normalizePath = (path: string) => {
-  if (/^https?:\/\//i.test(path)) {
-    try {
-      const url = new URL(path);
-      return url.pathname ?? path;
-    } catch {
-      return path;
-    }
-  }
-  return path.startsWith("/") ? path : `/${path}`;
-};
-
-const shouldAllowProfileRetry = (path: string) => {
-  const normalized = normalizePath(path).replace(/\/+$/, "");
-  return normalized.endsWith("/me");
-};
-
-const shouldBypassAuthRetry = (path: string) => {
-  const normalized = normalizePath(path).replace(/\/+$/, "");
-  return (
-    normalized === "/auth/login" ||
-    normalized === "/auth/register" ||
-    normalized === "/auth/logout"
-  );
 };
 
 const handleUnauthorized = async <TResponse, TBody>(
@@ -312,38 +341,25 @@ const handleUnauthorized = async <TResponse, TBody>(
   });
 };
 
-const logoutAndRedirect = () => {
-  useAuthStore.getState().logout();
-  if (typeof window !== "undefined") {
-    const reason = window.location.search.includes("reason=")
-      ? window.location.search
-      : "";
-    const target = reason ? `/login${reason}` : LOGIN_REDIRECT;
-    window.location.replace(target);
-  }
-};
-
-const parseResponse = async <T>(response: Response): Promise<T> => {
-  if (response.status === 204) {
-    return undefined as T;
-  }
-  const text = await response.text();
-  if (!text) {
-    return undefined as T;
-  }
-  try {
-    return JSON.parse(text) as T;
-  } catch {
-    return text as T;
-  }
-};
-
 export const request = async <TResponse = unknown, TBody = unknown>(
   method: HttpMethod,
   path: string,
   config: InternalRequestConfig<TBody> = {},
 ): Promise<TResponse> => {
   const response = await performFetch(method, path, config);
+
+  if (AUTH_DEBUG) {
+    const normalized = normalizePath(path);
+    if (normalized.startsWith("/auth/login") || normalized.startsWith("/auth/me")) {
+      // eslint-disable-next-line no-console
+      console.log(
+        "%c[AUTH][HTTP]",
+        "color:#16a34a;font-weight:600",
+        normalized,
+        response.status,
+      );
+    }
+  }
 
   if (response.status === 401) {
     if (shouldBypassAuthRetry(path)) {
@@ -360,7 +376,7 @@ export const request = async <TResponse = unknown, TBody = unknown>(
   if (response.status === 403) {
     const data = await parseResponse<unknown>(response);
     throw new ForbiddenError(
-      data && typeof data === "object" && "message" in data
+      data && typeof data === "object" && "message" in (data as Record<string, unknown>)
         ? String((data as { message?: string }).message)
         : "Nedostatečná oprávnění",
       data,
@@ -376,38 +392,86 @@ export const request = async <TResponse = unknown, TBody = unknown>(
     );
   }
 
-  const envelope = (await parseResponse<ApiEnvelope<TResponse>>(response)) as ApiEnvelope<TResponse>;
-  if (envelope && typeof envelope === "object" && "success" in envelope) {
+  // Your API typically responds with ApiEnvelope<T>.
+  // But some endpoints may return raw T; support both.
+  const parsed = await parseResponse<ApiEnvelope<TResponse> | TResponse>(response);
+
+  if (parsed && typeof parsed === "object" && "success" in (parsed as Record<string, unknown>)) {
+    const envelope = parsed as ApiEnvelope<TResponse>;
     if (envelope.success === false) {
       throw new HttpError(envelope.error ?? "API error", response.status, envelope.meta);
     }
-    return (envelope as { data: TResponse }).data;
+    return (envelope as { success: true; data: TResponse }).data;
   }
-  return envelope as unknown as TResponse;
+
+  return parsed as TResponse;
 };
+
+const withBody = <TBody>(
+  config: RequestConfig<TBody> | undefined,
+  body: TBody | undefined,
+): InternalRequestConfig<TBody> => {
+  if (body === undefined) {
+    return { ...(config ?? {}) };
+  }
+  return { ...(config ?? {}), body };
+};
+
 
 export const httpClient = {
   request,
-  get: <TResponse>(path: string, config?: RequestConfig) =>
-    request<TResponse>("GET", path, config),
-  post: <TResponse, TBody = unknown>(
+
+  get<TResponse>(
+    path: string,
+    config?: RequestConfig,
+  ): Promise<TResponse> {
+    return request<TResponse>("GET", path, config);
+  },
+
+  post<TResponse, TBody = unknown>(
     path: string,
     body?: TBody,
     config?: RequestConfig<TBody>,
-  ) => request<TResponse>("POST", path, { ...config, body }),
-  put: <TResponse, TBody = unknown>(
+  ): Promise<TResponse> {
+    return request<TResponse, TBody>(
+      "POST",
+      path,
+      withBody(config, body),
+    );
+  },
+
+  put<TResponse, TBody = unknown>(
     path: string,
     body?: TBody,
     config?: RequestConfig<TBody>,
-  ) => request<TResponse>("PUT", path, { ...config, body }),
-  patch: <TResponse, TBody = unknown>(
+  ): Promise<TResponse> {
+    return request<TResponse, TBody>(
+      "PUT",
+      path,
+      withBody(config, body),
+    );
+  },
+
+  patch<TResponse, TBody = unknown>(
     path: string,
     body?: TBody,
     config?: RequestConfig<TBody>,
-  ) => request<TResponse>("PATCH", path, { ...config, body }),
-  delete: <TResponse>(path: string, config?: RequestConfig) =>
-    request<TResponse>("DELETE", path, config),
+  ): Promise<TResponse> {
+    return request<TResponse, TBody>(
+      "PATCH",
+      path,
+      withBody(config, body),
+    );
+  },
+
+  delete<TResponse>(
+    path: string,
+    config?: RequestConfig,
+  ): Promise<TResponse> {
+    return request<TResponse>("DELETE", path, config);
+  },
 };
 
-// Backward-compatible alias with explicit envelope parsing
+
+// Backward-compatible alias
 export const fetchWithAuth = request;

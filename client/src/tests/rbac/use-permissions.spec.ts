@@ -8,7 +8,7 @@ describe("usePermissions", () => {
   afterEach(() => {
     useAuthStore.setState({
       user: null,
-      token: null,
+      sessionToken: null,
       loading: false,
       permissions: [],
     } satisfies Partial<AuthState>);
@@ -19,6 +19,7 @@ describe("usePermissions", () => {
       useAuthStore.setState({
         user: {
           id: "student-1",
+          name: "Test Student",
           organizationRole: "STUDENT",
           systemRole: null,
         },
@@ -36,7 +37,7 @@ describe("usePermissions", () => {
   it("detects superadmin roles via system role", () => {
     act(() => {
       useAuthStore.setState({
-        user: { id: "admin-1", systemRole: "SUPERADMIN" },
+        user: { id: "admin-1", name: "Test Admin", systemRole: "SUPERADMIN" },
         permissions: [],
       } satisfies Partial<AuthState>);
     });

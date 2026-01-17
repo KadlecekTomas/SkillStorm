@@ -1,12 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { fetchWithAuth } from "@/lib/http/client";
 import { useAuthStore, type OrganizationContext } from "@/store/use-auth-store";
 import type { OrganizationRole, PermissionKey, User } from "@/types";
-import { getRoleHomePath } from "@/utils/permissions";
 import { showToastOnce } from "@/utils/toast";
+import { AUTH_DEBUG } from "@/utils/env";
 import { audit } from "@/lib/audit/audit.client";
 
 type AuthEnvelope = {
@@ -15,6 +15,22 @@ type AuthEnvelope = {
   roles: OrganizationRole[];
   permissions: PermissionKey[];
 };
+
+export type UseAuthResult = {
+  user: User | null;
+  org: OrganizationContext | null;
+  roles: OrganizationRole[];
+  permissions: PermissionKey[];
+  isLoading: boolean;
+  isAuthenticated: boolean;
+  authStatus: "booting" | "ready";
+  isOffline: boolean;
+  login: (payload: LoginPayload) => Promise<void>;
+  logout: () => Promise<void>;
+  syncProfile: (options?: { force?: boolean }) => Promise<AuthEnvelope>;
+  switchOrganization: (orgId: string) => Promise<void>;
+};
+
 
 type AuthResponse = AuthEnvelope & {
   sessionToken?: string;
@@ -30,26 +46,21 @@ const delay = (ms: number) =>
     setTimeout(resolve, ms);
   });
 
-const isAuthRoute = (pathname: string | null) => {
-  if (!pathname) return false;
-  return pathname.startsWith("/login") || pathname.startsWith("/register");
-};
-
-export const useAuth = () => {
-  const router = useRouter();
+export const useAuth = (): UseAuthResult => {
   const pathname = usePathname();
-  const retryRef = useRef(0);
+  const syncRef = useRef<Promise<AuthEnvelope> | null>(null);
   const {
     user,
     org,
     roles,
     permissions,
     loading,
+    authStatus,
     offline,
-    sessionToken,
     hydrated,
     setProfile,
     setLoading,
+    setAuthStatus,
     setOffline,
     setSessionToken,
     logout: clearStore,
@@ -59,40 +70,68 @@ export const useAuth = () => {
     roles: state.roles,
     permissions: state.permissions,
     loading: state.loading,
+    authStatus: state.authStatus,
     offline: state.offline,
     hydrated: state.hydrated,
     setProfile: state.setProfile,
     setLoading: state.setLoading,
+    setAuthStatus: state.setAuthStatus,
     setOffline: state.setOffline,
-    sessionToken: state.sessionToken,
     setSessionToken: state.setSessionToken,
     logout: state.logout,
   }));
 
   const syncProfile = useCallback(
     async (options?: { force?: boolean }) => {
-      setLoading(true);
-      try {
-        const profile = await fetchWithAuth<AuthEnvelope>("GET", "/auth/me", {
-          retries: options?.force ? 0 : null,
-        });
-        setProfile(profile);
-        retryRef.current = 0;
-        return profile;
-      } catch (error) {
-        if (retryRef.current < 2) {
-          retryRef.current += 1;
-          await delay(250 * retryRef.current);
-          return syncProfile(options);
-        }
-        retryRef.current = 0;
-        clearStore();
-        throw error;
-      } finally {
-        setLoading(false);
+      if (syncRef.current) {
+        return syncRef.current;
       }
+      syncRef.current = (async () => {
+        setLoading(true);
+        if (AUTH_DEBUG) {
+          // eslint-disable-next-line no-console
+          console.log(
+            "%c[AUTH][BOOT]",
+            "color:#2563eb;font-weight:600",
+            { pathname, hydrated, authStatus, loading, userId: user?.id ?? null },
+          );
+        }
+        try {
+          let attempt = 0;
+          while (true) {
+            try {
+              const profile = await fetchWithAuth<AuthEnvelope>("GET", "/auth/me", {
+                retries: options?.force ? 0 : null,
+              });
+              setProfile(profile);
+              return profile;
+            } catch (error) {
+              if (attempt < 2) {
+                attempt += 1;
+                await delay(250 * attempt);
+                continue;
+              }
+              clearStore();
+              throw error;
+            }
+          }
+        } finally {
+          setAuthStatus("ready");
+          setLoading(false);
+          syncRef.current = null;
+          if (AUTH_DEBUG) {
+            // eslint-disable-next-line no-console
+            console.log(
+              "%c[AUTH][READY]",
+              "color:#0f766e;font-weight:600",
+              { pathname, hydrated, authStatus: "ready", userId: user?.id ?? null },
+            );
+          }
+        }
+      })();
+      return syncRef.current;
     },
-    [setLoading, setProfile, clearStore],
+    [setLoading, setProfile, setAuthStatus, clearStore, pathname, hydrated, authStatus, loading, user?.id],
   );
 
   useEffect(() => {
@@ -108,37 +147,37 @@ export const useAuth = () => {
   }, [setOffline]);
 
   useEffect(() => {
-    if (!hydrated) return;
-    if (user || loading || isAuthRoute(pathname)) return;
-    syncProfile().catch(() => {
-      if (!isAuthRoute(pathname)) {
-        router.replace("/login");
-      }
-    });
-  }, [hydrated, user, loading, pathname, router, syncProfile]);
+    if (!AUTH_DEBUG) return;
+    // eslint-disable-next-line no-console
+    console.log(
+      "%c[AUTH][STATE]",
+      "color:#9333ea;font-weight:600",
+      { pathname, hydrated, authStatus, loading, userId: user?.id ?? null },
+    );
+  }, [pathname, hydrated, authStatus, loading, user?.id]);
 
   useEffect(() => {
-    if (!user || org || isAuthRoute(pathname)) return;
-    if (pathname?.startsWith("/select-organization")) return;
-    router.replace("/select-organization");
-  }, [user, org, pathname, router]);
+    if (!hydrated) return;
+    if (loading) return;
+    if (authStatus === "ready") return;
+    syncProfile().catch(() => {
+      // Guard handles unauthenticated redirect after bootstrap.
+    });
+  }, [hydrated, loading, authStatus, syncProfile]);
 
   const login = useCallback(
     async (payload: LoginPayload) => {
       setLoading(true);
       try {
-        const loginResult = await fetchWithAuth<AuthResponse>("POST", "/auth/login", {
+        const loginResult = await fetchWithAuth<AuthResponse | undefined>("POST", "/auth/login", {
           body: payload,
         });
-        const { sessionToken: incomingToken } = loginResult;
-        setSessionToken(incomingToken ?? sessionToken ?? null);
-        const profile = await syncProfile({ force: true });
-        audit({
-          action: "LOGIN",
-          ...(profile?.org?.id ? { entityId: profile.org.id } : {}),
-        });
+        const incomingToken = loginResult?.sessionToken;
+        if (typeof incomingToken === "string" && incomingToken.length > 0) {
+          setSessionToken(incomingToken);
+        }
+        audit({ action: "LOGIN" });
         showToastOnce("Přihlášení proběhlo úspěšně! 🎉", { type: "success" });
-        router.replace(getRoleHomePath(profile.user));
       } catch (error) {
         showToastOnce("Neplatné přihlašovací údaje ❌", { type: "error" });
         throw error;
@@ -146,7 +185,7 @@ export const useAuth = () => {
         setLoading(false);
       }
     },
-    [router, setLoading, setProfile, sessionToken, syncProfile],
+    [setLoading, setSessionToken],
   );
 
   const logout = useCallback(async () => {
@@ -161,9 +200,8 @@ export const useAuth = () => {
       });
       clearStore();
       setSessionToken(null);
-      router.replace("/login");
     }
-  }, [router, clearStore, org?.id]);
+  }, [clearStore, org?.id, setSessionToken]);
 
   const switchOrganization = useCallback(
     async (orgId: string) => {
@@ -190,8 +228,9 @@ export const useAuth = () => {
       org,
       roles,
       permissions,
-      isLoading: loading,
+      isLoading: loading || !hydrated || authStatus === "booting",
       isAuthenticated: Boolean(user),
+      authStatus,
       isOffline: offline,
       login,
       logout,
@@ -204,6 +243,8 @@ export const useAuth = () => {
       roles,
       permissions,
       loading,
+      authStatus,
+      hydrated,
       offline,
       login,
       logout,

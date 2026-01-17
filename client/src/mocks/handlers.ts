@@ -49,7 +49,10 @@ export const handlers = [
     }));
   }),
 
-  http.post("*/auth/logout", () => respond(() => logout(MSW_SESSION))),
+  http.post("*/auth/logout", () => respond(() => {
+    logout(MSW_SESSION);
+    return { success: true };
+  })),
 
   http.post("*/auth/refresh", () => respond(() => refreshSession(MSW_SESSION))),
 

@@ -1,6 +1,6 @@
 import type { User } from "@/types";
+import type { PermissionKey } from "@/types";
 import {
-  PermissionKey,
   ROLE_PERMISSION_MATRIX,
   SYSTEM_ROLE_PERMISSIONS,
   roleHome,
