@@ -1,0 +1,54 @@
+name: Frontend CI Quality Gate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: ["*"]
+
+jobs:
+  frontend-quality-gate:
+    name: Frontend Quality Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: ./client
+
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: client/package-lock.json
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 🔍 Lint code
+        run: npm run lint
+
+      - name: 🔎 Type check
+        run: npm run typecheck
+
+      - name: 🧪 Run unit/component tests
+        run: npm run test:unit
+
+      - name: 🎭 Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: 🎬 Run E2E tests
+        run: npm run test:e2e
+        env:
+          CI: true
+          BASE_URL: http://127.0.0.1:3000
+
+      - name: 🏗️ Build Next.js application
+        run: npm run build
+        env:
+          NODE_ENV: production
