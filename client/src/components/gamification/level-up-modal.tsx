@@ -8,7 +8,7 @@ type LevelUpModalProps = {
   onOpenChange: (open: boolean) => void;
 };
 
-export const LevelUpModal = ({ open, level, onOpenChange }: LevelUpModalProps) => (
+export const LevelUpModal = ({ open, level, onOpenChange }: LevelUpModalProps): React.JSX.Element => (
   <AnimatePresence>
     {open && (
       <motion.div

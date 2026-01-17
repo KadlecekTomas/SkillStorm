@@ -10,7 +10,7 @@ type ContentLibraryListProps = {
   items: ContentItem[];
 };
 
-export const ContentLibraryList = ({ items }: ContentLibraryListProps) => (
+export const ContentLibraryList = ({ items }: ContentLibraryListProps): React.JSX.Element => (
   <div className="grid gap-4 md:grid-cols-2">
     {items.map((item) => (
       <motion.div

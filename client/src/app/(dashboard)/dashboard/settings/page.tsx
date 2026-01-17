@@ -31,7 +31,7 @@ const passwordSchema = z
 type ProfileValues = z.infer<typeof profileSchema>;
 type PasswordValues = z.infer<typeof passwordSchema>;
 
-export default function SettingsPage() {
+export default function SettingsPage(): React.JSX.Element {
   const profileForm = useForm<ProfileValues>({
     resolver: zodResolver(profileSchema),
     defaultValues: {

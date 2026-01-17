@@ -1,14 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { ClassroomList } from "@/components/content/classroom-list";
-import { BaseModal } from "@/components/modals/base-modal";
-import { Input } from "@/components/ui/input";
+import { useState } from "react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable, type Column } from "@/components/ui/table";
 import type { Classroom } from "@/types";
-import { fetchWithAuth } from "@/lib/http/client";
-import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { Alert } from "@/components/ui/alert";
 
 const columns: Column<Classroom>[] = [
   {
@@ -37,74 +34,36 @@ const columns: Column<Classroom>[] = [
   },
 ];
 
-export default function ClassroomsPage() {
-  const [classrooms, setClassrooms] = useState<Classroom[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [open, setOpen] = useState(false);
-  const [newName, setNewName] = useState("");
-
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const data = await fetchWithAuth<Classroom[]>("GET", "/classrooms");
-        setClassrooms(data ?? []);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
-  }, []);
-
-  const handleCreate = async () => {
-    if (!newName.trim()) return;
-    setClassrooms((prev) => [
-      {
-        id: crypto.randomUUID(),
-        label: newName,
-        grade: "GRADE_CUSTOM",
-        section: "A",
-        gradeLabel: "Custom",
-        teacherName: "Pending assignment",
-        studentsCount: 0,
-        updatedAt: "just now",
-      },
-      ...prev,
-    ]);
-    setNewName("");
-    setOpen(false);
-  };
+export default function ClassroomsPage(): React.JSX.Element {
+  const [classrooms] = useState<Classroom[]>([]);
 
   return (
     <div className="space-y-6">
-      <ClassroomList classrooms={classrooms.slice(0, 4)} onCreate={() => setOpen(true)} />
-      {loading ? (
-        <LoadingSpinner label="Loading classrooms" />
-      ) : (
-        <DataTable
-          data={classrooms}
-          columns={columns}
-          loading={loading}
-          emptyState="No classrooms yet"
-        />
-      )}
-
-      <BaseModal
-        title="Create classroom"
-        description="Assign grade, subject and invite learners."
-        open={open}
-        onOpenChange={setOpen}
-      >
-        <div className="space-y-4">
-          <Input
-            placeholder="e.g. Physics Lab 3B"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-          />
-          <Button className="w-full rounded-2xl" onClick={handleCreate}>
-            Save classroom
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold text-slate-900">Classrooms</h1>
+          <p className="text-sm text-slate-500">
+            Tato část UI zatím není napojená na backend.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Badge variant="neutral">NOT IMPLEMENTED</Badge>
+          <Button disabled title="Správa tříd není implementovaná.">
+            Create classroom
           </Button>
         </div>
-      </BaseModal>
+      </div>
+      <Alert
+        title="Not implemented"
+        description="Správa tříd přes UI není implementovaná. Použij API nebo seed."
+        variant="warning"
+      />
+      <DataTable
+        data={classrooms}
+        columns={columns}
+        loading={false}
+        emptyState="Classrooms nejsou dostupné v UI."
+      />
     </div>
   );
 }

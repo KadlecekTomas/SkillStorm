@@ -13,7 +13,7 @@ export const LoadingSpinner = ({
   label = "Loading data",
   fullScreen,
   className,
-}: LoadingSpinnerProps) => (
+}: LoadingSpinnerProps): React.JSX.Element => (
   <div
     className={cn(
       "flex items-center justify-center gap-3 text-sm text-slate-500",

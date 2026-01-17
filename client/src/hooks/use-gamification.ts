@@ -24,7 +24,7 @@ type GamificationSummary = {
   }>;
 };
 
-export const useGamification = () => {
+export const useGamification = (): { summary: GamificationSummary | null; loading: boolean } => {
   const [summary, setSummary] = useState<GamificationSummary | null>(null);
   const [loading, setLoading] = useState(true);
 

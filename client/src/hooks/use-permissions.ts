@@ -2,10 +2,14 @@
 
 import { useMemo, useCallback } from "react";
 import { useAuthStore } from "@/store/use-auth-store";
-import type { OrganizationRole } from "@/types";
-import { PermissionKey } from "@/types";
+import type { OrganizationRole, PermissionKey } from "@/types";
 
-export const usePermissions = () => {
+export const usePermissions = (): {
+  permissions: PermissionKey[];
+  can: (permission: PermissionKey) => boolean;
+  hasRole: (role: OrganizationRole | "SUPERADMIN") => boolean;
+  isSuperAdmin: boolean;
+} => {
   const { permissions, user } = useAuthStore((state) => ({
     permissions: state.permissions,
     user: state.user,

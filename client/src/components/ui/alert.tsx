@@ -23,7 +23,7 @@ export const Alert = ({
   title,
   description,
   variant = "default",
-}: AlertProps) => {
+}: AlertProps): React.JSX.Element => {
   const Icon = variantStyles[variant].icon;
   return (
     <div

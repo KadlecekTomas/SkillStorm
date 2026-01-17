@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Controller, FieldErrors, useForm } from "react-hook-form";
+import { Controller, type FieldErrors, useForm } from "react-hook-form";
 import { z } from "zod";
 import { motion } from "framer-motion";
 import { httpClient, HttpError } from "@/lib/http/client";
@@ -14,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useState } from "react";
+import { type JSX, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { Loader2 } from "lucide-react";
 import { showToastOnce } from "@/utils/toast";
@@ -38,8 +38,8 @@ type AuthFormProps = {
   mode: "login" | "register";
 };
 
-export const AuthForm = ({ mode }: AuthFormProps) => {
-  const { login, isLoading: authLoading } = useAuth();
+export const AuthForm = ({ mode }: AuthFormProps): JSX.Element => {
+  const { login, syncProfile, isLoading: authLoading } = useAuth();
   const [registering, setRegistering] = useState(false);
 
   const schema = mode === "login" ? loginSchema : registerSchema;
@@ -57,21 +57,16 @@ export const AuthForm = ({ mode }: AuthFormProps) => {
     try {
       if (mode === "login") {
         await login({ email: values.email, password: values.password });
+        await syncProfile({ force: true });
         showToastOnce("Přihlašuji…", { type: "success" });
         return;
       }
 
       setRegistering(true);
       const registerValues = values as RegisterValues;
-      const data = await httpClient.post<{ user?: unknown }>("/auth/register", registerValues);
-
-      if (data?.user) {
-        showToastOnce("Účet byl vytvořen. Pokračuj na přihlášení ✅", {
-          type: "success",
-        });
-      } else {
-        showToastOnce("Neočekávaná odpověď serveru.", { type: "error" });
-      }
+      await httpClient.post("/auth/register", registerValues);
+      await syncProfile({ force: true });
+      showToastOnce("Účet byl vytvořen. Přihlašuji…", { type: "success" });
     } catch (err) {
       const message =
         err instanceof HttpError

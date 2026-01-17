@@ -24,7 +24,7 @@ export const ClassroomList = ({
   classrooms,
   onCreate,
   onManage,
-}: ClassroomListProps) => {
+}: ClassroomListProps): React.JSX.Element => {
   const router = useRouter();
   return (
     <div className="space-y-4">

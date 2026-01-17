@@ -26,18 +26,18 @@ export class AppErrorBoundary extends React.Component<
     return { hasError: true, error };
   }
 
-  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo): void {
     console.error("AppErrorBoundary caught:", error, errorInfo);
   }
 
-  handleReset = () => {
+  handleReset = (): void => {
     this.setState({ hasError: false, error: null });
     if (typeof window !== "undefined") {
       window.location.reload();
     }
   };
 
-  render() {
+  render(): React.ReactNode {
     if (this.state.hasError) {
       return (
         <div className="flex min-h-screen flex-col items-center justify-center bg-secondary px-6 py-12 text-center">

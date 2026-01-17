@@ -2,7 +2,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 
-export default function DemoTestPage() {
+export default function DemoTestPage(): React.JSX.Element {
   return (
     <div className="min-h-screen bg-secondary px-6 py-12">
       <div className="mx-auto max-w-3xl space-y-6">

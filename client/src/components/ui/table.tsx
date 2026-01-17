@@ -33,7 +33,7 @@ export const DataTable = <T extends { id: string }>({
   pageSize = 6,
   emptyState,
   loading,
-}: DataTableProps<T>) => {
+}: DataTableProps<T>): React.JSX.Element => {
   const [page, setPage] = useState(1);
   const totalPages = Math.max(1, Math.ceil(data.length / pageSize));
   const rows = useMemo(() => {

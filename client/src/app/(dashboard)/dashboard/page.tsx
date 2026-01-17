@@ -4,12 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { OverviewCard } from "@/components/cards/overview-card";
 import { TestCard } from "@/components/cards/test-card";
-import { ClassroomList } from "@/components/content/classroom-list";
-import { StudentProgress } from "@/components/content/student-progress";
-import { TeacherOverview } from "@/components/content/teacher-overview";
 import { Card } from "@/components/ui/card";
 import { httpClient } from "@/lib/http/client";
-import type { Classroom, TestSummary } from "@/types";
+import type { TestSummary } from "@/types";
 import { BookOpenCheck, NotebookTabs, Users2 } from "lucide-react";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { usePermissions } from "@/hooks/use-permissions";
@@ -20,20 +17,19 @@ import { useGamification } from "@/hooks/use-gamification";
 import { GamificationPanel } from "@/components/gamification/gamification-panel";
 import { LevelUpModal } from "@/components/gamification/level-up-modal";
 import { withGuard } from "@/lib/guard/withGuard";
+import { Alert } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 
 function DashboardPage() {
   const router = useRouter();
-  const [classrooms, setClassrooms] = useState<Classroom[]>([]);
   const [tests, setTests] = useState<TestSummary[]>([]);
   const [testsLoading, setTestsLoading] = useState(false);
-  const [classroomsLoading, setClassroomsLoading] = useState(false);
   const { can } = usePermissions();
   const { summary: gamification } = useGamification();
   const [levelModalOpen, setLevelModalOpen] = useState(false);
   const previousLevelRef = useRef<number | null>(null);
 
   const canSeeTests = can(PermissionKey.VIEW_RESULTS);
-  const canManageStudents = can(PermissionKey.MANAGE_STUDENTS);
 
   useEffect(() => {
     if (gamification?.level && previousLevelRef.current !== null) {
@@ -56,9 +52,18 @@ function DashboardPage() {
       .get<TestSummary[]>("/tests")
       .then((data) => {
         if (cancelled) return;
-        if (data?.length) setTests(data);
+        // Handle null, undefined, or non-array responses
+        if (Array.isArray(data) && data.length > 0) {
+          setTests(data);
+        } else {
+          setTests([]);
+        }
       })
-      .catch((error) => console.warn("Dashboard tests fallback:", error))
+      .catch((error) => {
+        if (cancelled) return;
+        console.warn("Dashboard tests fallback:", error);
+        setTests([]);
+      })
       .finally(() => {
         if (!cancelled) setTestsLoading(false);
       });
@@ -67,48 +72,24 @@ function DashboardPage() {
     };
   }, [canSeeTests]);
 
-  useEffect(() => {
-    let cancelled = false;
-    if (!canManageStudents) {
-      setClassroomsLoading(false);
-      return;
-    }
-    setClassroomsLoading(true);
-    httpClient
-      .get<Classroom[]>("/classrooms")
-      .then((data) => {
-        if (cancelled) return;
-        if (data?.length) setClassrooms(data);
-      })
-      .catch((error) => console.warn("Dashboard classrooms fallback:", error))
-      .finally(() => {
-        if (!cancelled) setClassroomsLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [canManageStudents]);
-
   const handleViewTest = (testId: string) => {
     console.log("CLICKED: test details", testId);
     router.push(`/dashboard/tests?test=${testId}`);
   };
 
-  const handleManageClassroom = (classroom: Classroom) => {
-    console.log("CLICKED: manage classroom", classroom.id);
-    router.push(`/dashboard/classrooms?class=${classroom.id}`);
-  };
-
-  const handleTeacherAction = (href: string) => {
-    console.log("CLICKED: teacher action", href);
-    router.push(href);
-  };
-
   return (
     <>
     <div className="space-y-8">
+      <Alert
+        title="Demo data"
+        description="Dashboard obsahuje ukázková čísla a sekce, které nejsou napojené na backend."
+        variant="warning"
+      />
+      <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-500">
+        <Badge variant="neutral">DEMO</Badge>
+        <span>Ukázkové metriky</span>
+      </div>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {/* ✅ Fixed server/client separation – no function props passed */}
         <OverviewCard
           title="Active learners"
           value="248"
@@ -149,11 +130,15 @@ function DashboardPage() {
             </div>
             {testsLoading ? (
               <LoadingSpinner label="Loading tests" className="py-8" />
-            ) : (
+            ) : tests.length > 0 ? (
               <div className="grid gap-4 md:grid-cols-2">
                 {tests.map((test) => (
                   <TestCard key={test.id} test={test} onView={handleViewTest} />
                 ))}
+              </div>
+            ) : (
+              <div className="py-8 text-center text-sm text-slate-500">
+                Zatím žádné testy.
               </div>
             )}
           </Card>
@@ -162,14 +147,7 @@ function DashboardPage() {
           permission={PermissionKey.VIEW_RESULTS}
           fallback={<RestrictedView description="Výukový pokrok je dostupný jen s oprávněním k výsledkům." />}
         >
-          <StudentProgress
-            items={[
-              { id: "s1", name: "Emily Park", progress: 78, trend: 6 },
-              { id: "s2", name: "Joshua Chen", progress: 64, trend: -2 },
-              { id: "s3", name: "Sara Patel", progress: 88, trend: 4 },
-              { id: "s4", name: "Leo Kramer", progress: 59, trend: 3 },
-            ]}
-          />
+          <RestrictedView description="Student progress dashboard není v UI napojený na backend." />
         </PermissionGate>
       </div>
 
@@ -188,31 +166,22 @@ function DashboardPage() {
           <RestrictedView description="Pouze vedení může plánovat týmové akce a spravovat učitele." />
         }
       >
-        <TeacherOverview
-          highlight={{
-            title: "Teacher health",
-            description: "4 lessons planned for next week. Shareable agenda ready.",
-            metric: "Next sprint: STEM focus",
-          }}
-          actions={[
-            { label: "View roadmap", href: "/dashboard/tests" },
-            { label: "Invite co-teacher", href: "/dashboard/classrooms" },
-          ]}
-          onAction={handleTeacherAction}
-        />
+        <RestrictedView description="Teacher overview není v UI napojený na backend." />
       </PermissionGate>
 
       <PermissionGate
         permission={PermissionKey.MANAGE_STUDENTS}
         fallback={<RestrictedView description="Správa tříd je dostupná pouze uživatelům s oprávněním MANAGE_STUDENTS." />}
       >
-        {classroomsLoading ? (
-          <Card className="p-6">
-            <LoadingSpinner label="Načítám třídy" />
-          </Card>
-        ) : (
-          <ClassroomList classrooms={classrooms} onManage={handleManageClassroom} />
-        )}
+        <Card className="space-y-2 p-6">
+          <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-500">
+            <Badge variant="neutral">NOT IMPLEMENTED</Badge>
+            <span>Classrooms UI</span>
+          </div>
+          <p className="text-sm text-slate-600">
+            Správa tříd v dashboardu není napojená na backend. Použij API pro class sections a enrollments.
+          </p>
+        </Card>
       </PermissionGate>
     </div>
     <LevelUpModal

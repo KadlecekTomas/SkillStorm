@@ -15,7 +15,7 @@ type ResultsChartProps = {
   data: { label: string; teacher: number; student: number }[];
 };
 
-export const ResultsChart = ({ data }: ResultsChartProps) => (
+export const ResultsChart = ({ data }: ResultsChartProps): React.JSX.Element => (
   <Card>
     <div className="mb-4 flex items-center justify-between">
       <div>

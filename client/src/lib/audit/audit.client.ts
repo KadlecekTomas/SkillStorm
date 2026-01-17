@@ -57,7 +57,7 @@ const sendViaBeacon = (payload: AuditEvent[]) => {
   return navigator.sendBeacon(AUDIT_ENDPOINT, blob);
 };
 
-export const audit = (event: AuditInput) => {
+export const audit = (event: AuditInput): void => {
   const enriched: AuditEvent = {
     action: event.action,
     ts: Date.now(),
@@ -72,7 +72,7 @@ export const audit = (event: AuditInput) => {
 export const flushAuditQueue = async (options?: {
   force?: boolean;
   useBeacon?: boolean;
-}) => {
+}): Promise<boolean> => {
   if (!queue.length || flushing) return true;
   if (!options?.force && !canFlush()) return false;
 
@@ -95,7 +95,7 @@ export const flushAuditQueue = async (options?: {
     });
     retryAttempt = 0;
     return true;
-  } catch (error) {
+  } catch {
     queue.unshift(...payload);
     enqueueRetry();
     return false;

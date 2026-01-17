@@ -59,7 +59,7 @@ const assignTestingHelpers = () => {
   };
 };
 
-export const MswLoader = () => {
+export const MswLoader = (): React.ReactNode => {
   useEffect(() => {
     let cancelled = false;
     window.__MSW_READY__ = false;

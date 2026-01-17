@@ -6,6 +6,9 @@ import { Button } from "@/components/ui/button";
 import { fetchWithAuth } from "@/lib/http/client";
 import { useRouter } from "next/navigation";
 import { Alert } from "@/components/ui/alert";
+import { withGuard } from "@/lib/guard/withGuard";
+import type { OrganizationRole } from "@/types";
+import { useAuth } from "@/lib/guard/useAuth";
 
 type AssignmentRow = {
   id: string;
@@ -18,15 +21,20 @@ type AssignmentRow = {
   attemptNo: number;
 };
 
-export default function AssignmentsPage() {
+function AssignmentsPage() {
   const [items, setItems] = useState<AssignmentRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+  const { roles } = useAuth();
+  const isStudent = roles.includes("STUDENT");
 
   useEffect(() => {
     fetchWithAuth<AssignmentRow[]>("GET", "/assignments/my")
       .then((data) => setItems(data ?? []))
-      .catch((e: any) => setError(e?.message ?? "Nelze načíst assignmenty"));
+      .catch((e: unknown) => {
+        const message = e instanceof Error ? e.message : "Nelze načíst assignmenty";
+        setError(message);
+      });
   }, []);
 
   return (
@@ -41,7 +49,11 @@ export default function AssignmentsPage() {
               <p className="text-sm text-slate-600">Open: {new Date(a.openAt).toLocaleString()}</p>
               <p className="text-sm text-slate-600">Close: {new Date(a.closeAt).toLocaleString()}</p>
             </div>
-            <Button onClick={() => router.push(`/dashboard/tests/${a.testId}/submission?assignmentId=${a.id}`)}>
+            <Button
+              onClick={() => router.push(`/assignments/${a.id}`)}
+              disabled={!isStudent}
+              title={isStudent ? "" : "Pouze student může odevzdat assignment"}
+            >
               Otevřít test
             </Button>
           </Card>
@@ -51,3 +63,9 @@ export default function AssignmentsPage() {
     </div>
   );
 }
+
+const assignmentRoles: OrganizationRole[] = ["STUDENT", "TEACHER", "DIRECTOR"];
+
+export default withGuard({
+  requireRoles: assignmentRoles,
+})(AssignmentsPage);

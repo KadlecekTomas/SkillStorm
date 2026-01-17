@@ -10,7 +10,7 @@ import { fetchWithAuth } from "@/lib/http/client";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useAuth } from "@/hooks/use-auth";
 
-export default function LibraryPage() {
+export default function LibraryPage(): React.JSX.Element {
   const [grade, setGrade] = useState("All");
   const [subject, setSubject] = useState("All");
   const [search, setSearch] = useState("");

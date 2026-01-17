@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { useAuthStore } from "@/store/use-auth-store";
 
-export const useRoleView = () => {
+export const useRoleView = (): string => {
   const user = useAuthStore((state) => state.user);
   return useMemo(
     () =>

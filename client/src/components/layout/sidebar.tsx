@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useMemo } from "react";
 
-export const Sidebar = () => {
+export const Sidebar = (): React.JSX.Element => {
   const pathname = usePathname();
   const user = useAuthStore((state) => state.user);
   const { can, permissions } = usePermissions();

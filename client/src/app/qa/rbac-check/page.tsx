@@ -4,7 +4,7 @@ import { PermissionGate } from "@/components/access/permission-gate";
 import { PermissionKey } from "@/types";
 import { RestrictedView } from "@/components/access/restricted-view";
 
-export default function RbacCheckPage() {
+export default function RbacCheckPage(): React.JSX.Element {
   return (
     <div className="space-y-4 rounded-3xl border border-dashed border-slate-200 bg-white p-6 shadow-soft">
       <h1 className="text-xl font-semibold text-slate-900">

@@ -19,7 +19,7 @@ export const BaseModal = ({
   open,
   onOpenChange,
   children,
-}: BaseModalProps) => (
+}: BaseModalProps): React.JSX.Element => (
   <Dialog.Root open={open} onOpenChange={onOpenChange}>
     <Dialog.Portal>
       <Dialog.Overlay className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm" />

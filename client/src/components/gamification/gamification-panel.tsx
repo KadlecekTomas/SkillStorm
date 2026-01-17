@@ -17,7 +17,7 @@ export const GamificationPanel = ({
   level,
   nextLevelXp,
   achievements = [],
-}: GamificationPanelProps) => {
+}: GamificationPanelProps): React.JSX.Element => {
   const progress =
     nextLevelXp && nextLevelXp > 0 ? Math.min((xp / nextLevelXp) * 100, 100) : 100;
 

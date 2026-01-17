@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { PermissionKey } from "@/types";
+import type { PermissionKey } from "@/types";
 import { usePermissions } from "@/hooks/use-permissions";
 import { RestrictedView } from "@/components/access/restricted-view";
 
@@ -15,7 +15,7 @@ export const PermissionGate = ({
   permission,
   fallback,
   children,
-}: PermissionGateProps) => {
+}: PermissionGateProps): React.JSX.Element => {
   const { can } = usePermissions();
 
   if (!permission) {

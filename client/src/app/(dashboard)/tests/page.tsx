@@ -1,12 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { PermissionKey } from "@/types";
-import { PermissionGate } from "@/components/access/permission-gate";
 import { Button } from "@/components/ui/button";
 import { PlusCircle } from "lucide-react";
 import { RestrictedView } from "@/components/access/restricted-view";
 import { withGuard } from "@/lib/guard/withGuard";
+import { Badge } from "@/components/ui/badge";
 
 function TestsPage() {
   return (
@@ -16,24 +15,20 @@ function TestsPage() {
           <p className="text-sm text-slate-500">Test builder</p>
           <h2 className="text-xl font-semibold text-slate-900">Automated assessments</h2>
         </div>
-        <PermissionGate
-          permission={PermissionKey.CREATE_TEST}
-          fallback={
-            <Button variant="outline" disabled className="rounded-2xl">
-              <PlusCircle className="h-4 w-4" />
-              <span className="ml-2">Limited</span>
-            </Button>
-          }
-        >
-          <Button className="rounded-2xl" asChild>
-            <Link href="/tests/create">
-              <PlusCircle className="h-4 w-4" />
-              <span className="ml-2">Create test</span>
-            </Link>
+        <div className="flex items-center gap-2">
+          <Badge variant="neutral">NOT IMPLEMENTED</Badge>
+          <Button
+            variant="outline"
+            disabled
+            className="rounded-2xl"
+            title="Test builder není implementovaný."
+          >
+            <PlusCircle className="h-4 w-4" />
+            <span className="ml-2">Create test</span>
           </Button>
-        </PermissionGate>
+        </div>
       </div>
-      <RestrictedView description="Integrace na detailní builder je ve vývoji. Zatím můžeš prohlížet testy přes API /tests." />
+      <RestrictedView description="Test builder není implementovaný. Pro práci s testy použij API /tests." />
     </div>
   );
 }

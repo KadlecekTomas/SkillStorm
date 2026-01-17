@@ -13,7 +13,7 @@ export const RestrictedView = ({
   title = "Omezený přístup",
   description = "Pro zobrazení této sekce potřebuješ dodatečná oprávnění. Obrať se na administrátora organizace.",
   className,
-}: RestrictedViewProps) => (
+}: RestrictedViewProps): React.JSX.Element => (
   <div
     className={cn(
       "flex flex-col items-start gap-3 rounded-3xl border border-dashed border-rose-200 bg-rose-50/80 p-6 text-rose-700",

@@ -5,7 +5,7 @@ import { useRoleView } from "@/hooks/use-role-view";
 import { Badge } from "@/components/ui/badge";
 import { useAnalytics } from "@/hooks/use-analytics";
 import { usePathname } from "next/navigation";
-import { useCallback, useEffect } from "react";
+import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import {
@@ -20,7 +20,7 @@ type DashboardLayoutProps = {
   children: React.ReactNode;
 };
 
-export const DashboardLayout = ({ children }: DashboardLayoutProps) => {
+export const DashboardLayout = ({ children }: DashboardLayoutProps): React.JSX.Element => {
   const role = useRoleView();
   const { logEvent } = useAnalytics();
   const pathname = usePathname();

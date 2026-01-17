@@ -14,8 +14,8 @@ export const AccessDenied = ({
   title = "Access denied",
   description = "Nemáš oprávnění pro tento modul. Požádej správce organizace o přístup.",
   actionLabel = "Požádat správce",
-}: AccessDeniedProps) => {
-  const handleClick = () => {
+}: AccessDeniedProps): React.JSX.Element => {
+  const handleClick = (): void => {
     audit({
       action: "ACCESS_REQUEST",
       meta: { source: "GuardBoundary", message: description },

@@ -17,7 +17,7 @@ const highlights = [
   },
 ];
 
-export default function Home() {
+export default function Home(): React.JSX.Element {
   return (
     <main className="min-h-screen bg-secondary px-6 py-20 sm:px-10 lg:px-16">
       <section className="mx-auto max-w-4xl text-center">

@@ -12,8 +12,8 @@ import { useRouter } from "next/navigation";
 export const withPermission = <P extends object>(
   permission: PermissionKey | PermissionKey[],
 ) => {
-  return function withPermissionWrapper(Component: ComponentType<P>) {
-    const GuardedComponent = (props: P) => {
+  return function withPermissionWrapper(Component: ComponentType<P>): ComponentType<P> {
+    const GuardedComponent = (props: P): React.JSX.Element => {
       const { can } = usePermissions();
       const user = useAuthStore((state) => state.user);
       const router = useRouter();

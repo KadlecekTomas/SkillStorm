@@ -8,24 +8,33 @@ import { fetchWithAuth } from "@/lib/http/client";
 import { useEffect, useState } from "react";
 import { Alert } from "@/components/ui/alert";
 
-export default function ResultsPage() {
+export default function ResultsPage(): React.JSX.Element {
   const [chartData, setChartData] = useState<{ label: string; teacher: number; student: number }[]>([]);
   const [insights, setInsights] = useState<{ id: string; label: string; value: string; trend: "up" | "down" }[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchWithAuth<any[]>("GET", "/tests")
+    let cancelled = false;
+    fetchWithAuth<unknown[]>("GET", "/tests")
       .then((data) => {
-        const mapped =
-          (data ?? []).map((_, idx) => ({
-            label: `Test ${idx + 1}`,
-            teacher: 0,
-            student: 0,
-          })) ?? [];
+        if (cancelled) return;
+        const dataArray = Array.isArray(data) ? data : [];
+        const mapped = dataArray.map((_, idx) => ({
+          label: `Test ${idx + 1}`,
+          teacher: 0,
+          student: 0,
+        }));
         setChartData(mapped);
         setInsights([]);
       })
-      .catch((e: any) => setError(e?.message ?? "Nelze načíst výsledky"));
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        const message = e instanceof Error ? e.message : "Nelze načíst výsledky";
+        setError(message);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return (

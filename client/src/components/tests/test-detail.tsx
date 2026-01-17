@@ -40,7 +40,7 @@ export const TestDetail = ({
   onSubmit,
   submitting,
   showSubmit = true,
-}: TestDetailProps) => {
+}: TestDetailProps): React.JSX.Element => {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
 

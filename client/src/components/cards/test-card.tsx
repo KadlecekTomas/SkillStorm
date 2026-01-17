@@ -14,9 +14,9 @@ type TestCardProps = {
   onView?: (testId: string) => void;
 };
 
-export const TestCard = ({ test, onView }: TestCardProps) => {
+export const TestCard = ({ test, onView }: TestCardProps): React.JSX.Element => {
   const router = useRouter();
-  const handleView = () => {
+  const handleView = (): void => {
     console.log("CLICKED: test card", test.id);
     if (onView) {
       onView(test.id);

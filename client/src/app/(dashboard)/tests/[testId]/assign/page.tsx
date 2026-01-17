@@ -10,7 +10,7 @@ import { fetchWithAuth } from "@/lib/http/client";
 
 type ClassSection = { id: string; label?: string; grade?: string };
 
-export default function AssignTestPage() {
+export default function AssignTestPage(): React.JSX.Element {
   const { testId } = useParams<{ testId: string }>();
   const router = useRouter();
   const [classes, setClasses] = useState<ClassSection[]>([]);
@@ -28,7 +28,10 @@ export default function AssignTestPage() {
   useEffect(() => {
     fetchWithAuth<ClassSection[]>("GET", "/class-sections")
       .then((data) => setClasses(data ?? []))
-      .catch((e: any) => setError(e?.message ?? "Nepodařilo se načíst třídy"));
+      .catch((e: unknown) => {
+        const message = e instanceof Error ? e.message : "Nepodařilo se načíst třídy";
+        setError(message);
+      });
   }, []);
 
   const handleAssign = async () => {
@@ -47,8 +50,9 @@ export default function AssignTestPage() {
       });
       setSubmitted(true);
       router.back();
-    } catch (e: any) {
-      setError(e?.message ?? "Assign selhal");
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Assign selhal";
+      setError(message);
     }
   };
 

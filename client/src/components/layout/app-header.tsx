@@ -8,7 +8,7 @@ import { dashboardNav } from "@/utils/constants";
 import { PermissionGate } from "@/components/access/permission-gate";
 import { PermissionKey } from "@/types";
 
-export const AppHeader = () => {
+export const AppHeader = (): React.JSX.Element => {
   const pathname = usePathname();
   const active = dashboardNav.find((item) => pathname.startsWith(item.href));
 

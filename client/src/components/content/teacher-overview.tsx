@@ -20,10 +20,10 @@ export const TeacherOverview = ({
   actions = [],
   highlight,
   onAction,
-}: TeacherOverviewProps) => {
+}: TeacherOverviewProps): React.JSX.Element => {
   const router = useRouter();
 
-  const navigate = (href: string, label: string) => {
+  const navigate = (href: string, label: string): void => {
     if (onAction) {
       onAction(href, label);
       return;

@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 
-export default function AuthLayout({ children }: { children: ReactNode }) {
+export default function AuthLayout({ children }: { children: ReactNode }): React.JSX.Element {
   return (
     <div className="grid min-h-screen grid-cols-1 lg:grid-cols-[480px_1fr]">
       <motion.section

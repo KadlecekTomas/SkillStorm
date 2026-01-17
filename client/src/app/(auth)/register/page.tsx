@@ -1,6 +1,20 @@
-import { AuthForm } from "@/components/forms/auth-form";
+"use client";
 
-export default function RegisterPage() {
+import { type JSX, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { AuthForm } from "@/components/forms/auth-form";
+import { useAuth } from "@/hooks/use-auth";
+import { getRoleHomePath } from "@/utils/permissions";
+
+export default function RegisterPage(): JSX.Element {
+  const router = useRouter();
+  const { user } = useAuth();
+
+  useEffect(() => {
+    if (!user) return;
+    router.replace(getRoleHomePath(user));
+  }, [user, router]);
+
   return (
     <div className="space-y-6">
       <div>
@@ -11,11 +25,10 @@ export default function RegisterPage() {
           Register for EduTo
         </h1>
         <p className="text-sm text-slate-500">
-          Teachers can spin up organizations, invite students and co-manage
-          classrooms.
+          Teachers can spin up organizations, invite students and co-manage classrooms.
         </p>
       </div>
-      <AuthForm mode="register" />
+      <AuthForm key="register" mode="register" />
     </div>
   );
 }

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/use-auth";
 
-export default function SelectOrganizationPage() {
+export default function SelectOrganizationPage(): React.JSX.Element {
   const { user, switchOrganization, isLoading } = useAuth();
   const memberships = user?.memberships ?? [];
 

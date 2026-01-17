@@ -18,12 +18,21 @@ export type GuardResult = {
   missingPermissions: PermissionKey[];
   isLoading: boolean;
   isAuthenticated: boolean;
+  authStatus: "booting" | "ready";
 };
 
 export const useGuard = (options?: GuardOptions): GuardResult => {
-  const { roles, permissions, isAuthenticated, isLoading, org } = useAuth();
+  const { roles, permissions, isAuthenticated, isLoading, org, authStatus } = useAuth();
 
   const { allowed, reason, missingRoles, missingPermissions } = useMemo(() => {
+    if (isLoading) {
+      return {
+        allowed: false,
+        reason: null as GuardReason,
+        missingRoles: options?.requireRoles ?? [],
+        missingPermissions: options?.requirePerms ?? [],
+      };
+    }
     if (!isAuthenticated) {
       return {
         allowed: false,
@@ -76,8 +85,15 @@ export const useGuard = (options?: GuardOptions): GuardResult => {
       missingRoles: missingRoleList,
       missingPermissions: missingPermissionList,
     };
-  }, [isAuthenticated, org, roles, permissions, options]);
-
+}, [
+   isAuthenticated,
+   isLoading,
+   org,
+   roles,
+   permissions,
+   options?.requireRoles,
+   options?.requirePerms,
+ ]);
   return {
     allowed,
     reason,
@@ -85,5 +101,6 @@ export const useGuard = (options?: GuardOptions): GuardResult => {
     missingPermissions,
     isLoading,
     isAuthenticated,
+    authStatus,
   };
 };

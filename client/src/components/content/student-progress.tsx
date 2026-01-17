@@ -8,7 +8,7 @@ type StudentProgressProps = {
   items: { id: string; name: string; progress: number; trend: number }[];
 };
 
-export const StudentProgress = ({ items }: StudentProgressProps) => (
+export const StudentProgress = ({ items }: StudentProgressProps): React.JSX.Element => (
   <Card>
     <div className="mb-4 flex items-center justify-between">
       <div>

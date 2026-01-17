@@ -19,7 +19,7 @@ export const OverviewCard = ({
   delta,
   icon,
   accent = "bg-emerald-50 text-emerald-600",
-}: OverviewCardProps) => (
+}: OverviewCardProps): React.JSX.Element => (
   <motion.div whileHover={{ y: -4 }} transition={{ type: "spring", stiffness: 300 }}>
     <Card className="space-y-4">
       <div className={cn("flex h-12 w-12 items-center justify-center rounded-2xl", accent)}>

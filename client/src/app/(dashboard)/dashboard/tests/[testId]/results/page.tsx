@@ -15,15 +15,26 @@ type ResultRow = {
   isAnonymous?: boolean;
 };
 
-export default function TestResultsPage() {
+export default function TestResultsPage(): React.JSX.Element {
   const { testId } = useParams<{ testId: string }>();
   const [results, setResults] = useState<ResultRow[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
     fetchWithAuth<ResultRow[]>("GET", `/tests/${testId}/results`)
-      .then((data) => setResults(data ?? []))
-      .catch((e: any) => setError(e?.message ?? "Nelze načíst výsledky"));
+      .then((data) => {
+        if (cancelled) return;
+        setResults(Array.isArray(data) ? data : []);
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        const message = e instanceof Error ? e.message : "Nelze načíst výsledky";
+        setError(message);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [testId]);
 
   return (

@@ -1,7 +1,8 @@
 import { ContentLibraryList } from "@/components/content/content-library-list";
+import type { ContentItem } from "@/types";
 
-export default function PublicLibraryPage() {
-  const demoItems: any[] = [];
+export default function PublicLibraryPage(): React.JSX.Element {
+  const demoItems: ContentItem[] = [];
   return (
     <div className="min-h-screen bg-secondary px-6 py-12">
       <div className="mx-auto max-w-5xl space-y-6">

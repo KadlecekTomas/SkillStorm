@@ -15,7 +15,7 @@ declare global {
 const worker = setupWorker(...handlers);
 const MSW_SESSION_TOKEN = "msw-browser";
 
-export const startMockWorker = async () => {
+export const startMockWorker = async (): Promise<void> => {
   await worker.start({
     onUnhandledRequest: "bypass",
     serviceWorker: {

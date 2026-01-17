@@ -10,7 +10,7 @@ type ForbiddenPayload = {
 
 const METRIC_ENDPOINT = `${API_BASE_URL}/metrics/rbac`;
 
-export const reportForbiddenAccess = (error?: ForbiddenPayload | Error) => {
+export const reportForbiddenAccess = (error?: ForbiddenPayload | Error): void => {
   if (typeof window === "undefined") return;
 
   const state = useAuthStore.getState();
