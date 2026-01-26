@@ -4,10 +4,12 @@ import { MainLayout } from "@/components/layout/main-layout";
 import { useRoleView } from "@/hooks/use-role-view";
 import { Badge } from "@/components/ui/badge";
 import { useAnalytics } from "@/hooks/use-analytics";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
+import { useAcademicYears } from "@/hooks/use-academic-years";
 import {
   Select,
   SelectContent,
@@ -24,8 +26,15 @@ export const DashboardLayout = ({ children }: DashboardLayoutProps): React.JSX.E
   const role = useRoleView();
   const { logEvent } = useAnalytics();
   const pathname = usePathname();
-  const { user, org, logout, switchOrganization, isOffline, isLoading } = useAuth();
+  const { user, org, logout, switchOrganization, isOffline, isLoading, hasOrganization } = useAuth();
   const memberships = user?.memberships ?? [];
+  const {
+    years,
+    selectedYear,
+    isReadOnly,
+    setSelectedYearId,
+    loading: yearsLoading,
+  } = useAcademicYears();
 
   useEffect(() => {
     if (!pathname) return;
@@ -53,8 +62,8 @@ export const DashboardLayout = ({ children }: DashboardLayoutProps): React.JSX.E
                 }}
                 disabled={isLoading}
               >
-                <SelectTrigger className="w-52 rounded-2xl" aria-label="Organizace">
-                  <SelectValue placeholder="Vyber organizaci" />
+                <SelectTrigger className="w-52 rounded-2xl" aria-label="Organization">
+                  <SelectValue placeholder="Vyber školu" />
                 </SelectTrigger>
                 <SelectContent>
                   {memberships.map((membership) => (
@@ -64,6 +73,28 @@ export const DashboardLayout = ({ children }: DashboardLayoutProps): React.JSX.E
                   ))}
                 </SelectContent>
               </Select>
+            )}
+            {hasOrganization && years.length > 0 && (
+              <Select
+                value={selectedYear?.id ?? ""}
+                onValueChange={(value) => setSelectedYearId(value)}
+                disabled={yearsLoading}
+              >
+                <SelectTrigger className="w-48 rounded-2xl" aria-label="Academic year">
+                  <SelectValue placeholder="Školní rok" />
+                </SelectTrigger>
+                <SelectContent>
+                  {years.map((year) => (
+                    <SelectItem key={year.id} value={year.id}>
+                      {year.name}
+                      {!year.isActive ? " · read-only" : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            {hasOrganization && selectedYear && isReadOnly && (
+              <Badge variant="warning">Read-only rok</Badge>
             )}
             <Badge variant="success" className="capitalize">
               {role}
@@ -76,6 +107,24 @@ export const DashboardLayout = ({ children }: DashboardLayoutProps): React.JSX.E
         {isOffline && (
           <div className="rounded-2xl border border-amber-200 bg-amber-50/80 px-4 py-2 text-sm font-medium text-amber-700">
             Pracujete offline. Akce odešleme, jakmile se znovu připojíte.
+          </div>
+        )}
+        {!hasOrganization && (
+          <div className="rounded-3xl border border-emerald-200 bg-emerald-50/70 px-5 py-4">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                  Nejsi připojen ke škole
+                </p>
+                <p className="text-sm text-slate-600">
+                  Můžeš založit školu nebo se připojit pomocí kódu. Do té doby
+                  jsou školní funkce nedostupné.
+                </p>
+              </div>
+              <Button asChild variant="outline" className="rounded-2xl">
+                <Link href="/dashboard/onboarding">Založit nebo se připojit</Link>
+              </Button>
+            </div>
           </div>
         )}
       </div>

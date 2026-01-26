@@ -14,7 +14,7 @@
     "test:e2e:update": "playwright test --update-snapshots",
     "test:rbac:client": "vitest run src/tests/rbac && playwright test tests/rbac/rbac-route.spec.ts",
     "test:fe-components": "vitest run tests/fe-policy/components",
-    "test:fe-e2e": "playwright test tests/fe-policy/e2e",
+    "test:fe-e2e": "playwright test tests/e2e/fe-policy",
     "test:fe-policy": "node ./tests/fe-policy/reset-policy-score.mjs && npm run test:fe-components && npm run test:fe-e2e && vitest run tests/fe-policy/policy.summary.spec.ts"
   },
   "dependencies": {

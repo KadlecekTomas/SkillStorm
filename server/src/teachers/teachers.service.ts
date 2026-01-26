@@ -17,6 +17,7 @@ import {
   SystemRole,
   OrganizationRole,
 } from '@prisma/client';
+import { hasAtLeastRole } from '@/shared/access.utils';
 
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
@@ -112,16 +113,17 @@ export class TeachersService {
       throw new ForbiddenException('Membership nepatří do zadané organizace.');
     }
 
-    // povolení: superadmin nebo ředitel té organizace
+    // povolení: superadmin nebo ředitel/owner té organizace
     const sameOrg = user.organizationId === dto.organizationId;
     if (
       !(
         user.systemRole === SystemRole.SUPERADMIN ||
-        (sameOrg && user.organizationRole === OrganizationRole.DIRECTOR)
+        (sameOrg &&
+          hasAtLeastRole(user.organizationRole ?? null, OrganizationRole.DIRECTOR))
       )
     ) {
       throw new ForbiddenException(
-        'Pouze ředitel dané školy nebo superadmin může vytvořit učitele.',
+        'Pouze ředitel/owner dané školy nebo superadmin může vytvořit učitele.',
       );
     }
 
@@ -183,12 +185,12 @@ export class TeachersService {
         throw new ForbiddenException('Missing organization context.');
       }
 
-      // 2) Ověř, že volající je v té org ředitelem (RBAC z controlleru neřeší org-scoping)
+      // 2) Ověř, že volající je v té org ředitelem/ownerem (RBAC z controlleru neřeší org-scoping)
       const member = await this.prisma.membership.findFirst({
         where: {
           userId: user.userId,
           organizationId: effectiveOrgId,
-          role: OrganizationRole.DIRECTOR,
+          role: { in: [OrganizationRole.DIRECTOR, OrganizationRole.OWNER] },
           deletedAt: null,
         },
         select: { id: true },
@@ -292,16 +294,17 @@ export class TeachersService {
     if (!current || current.deletedAt)
       throw new NotFoundException('Učitel nebyl nalezen');
 
-    // superadmin nebo ředitel dané školy
+    // superadmin nebo ředitel/owner dané školy
     const sameOrg = user.organizationId === current.organizationId;
     if (
       !(
         user.systemRole === SystemRole.SUPERADMIN ||
-        (sameOrg && user.organizationRole === OrganizationRole.DIRECTOR)
+        (sameOrg &&
+          hasAtLeastRole(user.organizationRole ?? null, OrganizationRole.DIRECTOR))
       )
     ) {
       throw new ForbiddenException(
-        'Pouze ředitel dané školy nebo superadmin může upravit učitele.',
+        'Pouze ředitel/owner dané školy nebo superadmin může upravit učitele.',
       );
     }
 
@@ -347,11 +350,12 @@ export class TeachersService {
     if (
       !(
         user.systemRole === SystemRole.SUPERADMIN ||
-        (sameOrg && user.organizationRole === OrganizationRole.DIRECTOR)
+        (sameOrg &&
+          hasAtLeastRole(user.organizationRole ?? null, OrganizationRole.DIRECTOR))
       )
     ) {
       throw new ForbiddenException(
-        'Pouze ředitel dané školy nebo superadmin může smazat učitele.',
+        'Pouze ředitel/owner dané školy nebo superadmin může smazat učitele.',
       );
     }
 
@@ -376,7 +380,7 @@ export class TeachersService {
 
   /**
    * Přiřazení předmětů učiteli.
-   * - validace: superadmin nebo ředitel stejné školy
+   * - validace: superadmin nebo ředitel/owner stejné školy
    * - kontrola, že všechny subjectIds patří do stejné organizace jako teacher
    * - replaceAll=true → transakčně smaže ostatní vazby a přidá jen uvedené
    * - replaceAll=false/undefined → pouze doplní chybějící vazby
@@ -400,11 +404,12 @@ export class TeachersService {
     const sameOrg = user.organizationId === teacher.organizationId;
     const isAllowed =
       user.systemRole === SystemRole.SUPERADMIN ||
-      (sameOrg && user.organizationRole === OrganizationRole.DIRECTOR);
+      (sameOrg &&
+        hasAtLeastRole(user.organizationRole ?? null, OrganizationRole.DIRECTOR));
 
     if (!isAllowed) {
       throw new ForbiddenException(
-        'Pouze ředitel dané školy nebo superadmin může přiřazovat předměty.',
+        'Pouze ředitel/owner dané školy nebo superadmin může přiřazovat předměty.',
       );
     }
 
@@ -499,11 +504,12 @@ export class TeachersService {
     if (
       !(
         user.systemRole === SystemRole.SUPERADMIN ||
-        (sameOrg && user.organizationRole === OrganizationRole.DIRECTOR)
+        (sameOrg &&
+          hasAtLeastRole(user.organizationRole ?? null, OrganizationRole.DIRECTOR))
       )
     ) {
       throw new ForbiddenException(
-        'Pouze ředitel dané školy nebo superadmin může odebírat předměty.',
+        'Pouze ředitel/owner dané školy nebo superadmin může odebírat předměty.',
       );
     }
 

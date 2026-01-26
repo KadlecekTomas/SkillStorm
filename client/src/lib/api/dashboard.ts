@@ -1,0 +1,108 @@
+"use client";
+
+import { httpClient } from "@/lib/http/client";
+
+/**
+ * Stats Overview Response from backend
+ */
+export interface StatsOverviewResponse {
+  scope: "evaluated" | "all";
+  totalTests: number;
+  counts: {
+    approved: number;
+    rejected: number;
+    pending: number;
+    all: number;
+  };
+  totalSubmissions: number;
+  pendingSubmissions: number;
+  passRate: number;
+  passRateEvaluated: number;
+  passRateAll: number;
+  avgScore: number | null;
+  lastSubmittedAt: string | null;
+}
+
+/**
+ * Teacher Dashboard Response from backend
+ */
+export interface TeacherDashboardResponse {
+  classroomsCount: number;
+  studentsCount: number;
+  testsCreated: number;
+  avgScoreOnMyTests: number | null;
+  pendingSubmissions: number;
+  recentActivity: Array<{
+    id: string;
+    testId: string;
+    testTitle: string;
+    studentName: string | null;
+    score: number | null;
+    status: string;
+    submittedAt: string;
+  }>;
+}
+
+/**
+ * Student Dashboard Response from backend
+ */
+export interface StudentDashboardResponse {
+  member: {
+    id: string;
+    name: string | null;
+    organization: string | null;
+    xp: number | null;
+    level: number | null;
+  };
+  testsTaken: number;
+  avgScore: number | null;
+  lastSubmissions: Array<{
+    id: string;
+    testId: string;
+    testTitle: string;
+    score: number | null;
+    submittedAt: string;
+    status: string;
+  }>;
+  byTest: Array<{
+    testId: string;
+    latest: {
+      id: string;
+      testId: string;
+      score: number | null;
+      submittedAt: string;
+    } | null;
+    best: {
+      id: string;
+      testId: string;
+      score: number | null;
+      submittedAt: string;
+    } | null;
+  }>;
+}
+
+/**
+ * Fetch organization overview stats
+ * @param scope - 'evaluated' or 'all' (default: 'evaluated')
+ */
+export async function getDashboardOverview(
+  scope: "evaluated" | "all" = "evaluated"
+): Promise<StatsOverviewResponse> {
+  return httpClient.get<StatsOverviewResponse>("/stats/overview", {
+    query: { scope },
+  });
+}
+
+/**
+ * Fetch teacher dashboard data
+ */
+export async function getDashboardTeacher(): Promise<TeacherDashboardResponse> {
+  return httpClient.get<TeacherDashboardResponse>("/dashboards/teacher");
+}
+
+/**
+ * Fetch student dashboard data
+ */
+export async function getDashboardStudent(): Promise<StudentDashboardResponse> {
+  return httpClient.get<StudentDashboardResponse>("/dashboards/student");
+}

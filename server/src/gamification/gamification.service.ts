@@ -14,6 +14,7 @@ import { emitXpAwarded } from './events/xp.events';
 const XP_ALLOWED_ROLES = new Set<OrganizationRole>([
   OrganizationRole.STUDENT,
   OrganizationRole.TEACHER,
+  OrganizationRole.OWNER,
   OrganizationRole.DIRECTOR,
 ]);
 

@@ -9,14 +9,17 @@ import type { ContentItem } from "@/types";
 import { fetchWithAuth } from "@/lib/http/client";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useAuth } from "@/hooks/use-auth";
+import { withGuard } from "@/lib/guard/withGuard";
+import { Alert } from "@/components/ui/alert";
+import Link from "next/link";
 
-export default function LibraryPage(): React.JSX.Element {
+function LibraryPage(): React.JSX.Element {
   const [grade, setGrade] = useState("All");
   const [subject, setSubject] = useState("All");
   const [search, setSearch] = useState("");
   const [items, setItems] = useState<ContentItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const { org } = useAuth();
+  const { org, hasOrganization } = useAuth();
 
   useEffect(() => {
     let active = true;
@@ -80,6 +83,19 @@ export default function LibraryPage(): React.JSX.Element {
           </Select>
         </div>
       </div>
+      {!hasOrganization && (
+        <Alert
+          title="Osobní režim"
+          description={
+            <span>
+              Sdílená školní knihovna se aktivuje po připojení ke škole.{" "}
+              <Link className="font-semibold text-emerald-700 underline" href="/dashboard/onboarding">
+                Založit nebo se připojit
+              </Link>
+            </span>
+          }
+        />
+      )}
 
       {loading ? (
         <LoadingSpinner label="Načítám knihovnu" />
@@ -96,3 +112,5 @@ export default function LibraryPage(): React.JSX.Element {
     </div>
   );
 }
+
+export default withGuard()(LibraryPage);

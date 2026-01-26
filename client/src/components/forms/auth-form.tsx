@@ -1,25 +1,46 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Controller, type FieldErrors, useForm } from "react-hook-form";
+import { type FieldErrors, useForm } from "react-hook-form";
 import { z } from "zod";
 import { motion } from "framer-motion";
 import { httpClient, HttpError } from "@/lib/http/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { type JSX, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
+import { useAuthStore } from "@/store/use-auth-store";
 import { Loader2 } from "lucide-react";
 import { showToastOnce } from "@/utils/toast";
 
-const roleOptions = ["STUDENT", "TEACHER", "DIRECTOR"] as const;
+const registerModeOptions = ["INDIVIDUAL", "CREATE_ORG", "JOIN_ORG"] as const;
+type RegisterMode = (typeof registerModeOptions)[number];
+
+const registerModeDetails: Array<{
+  value: RegisterMode;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: "INDIVIDUAL",
+    label: "Individual",
+    description:
+      "Individuální účet bez školy. Kdykoliv můžeš školu založit nebo se připojit.",
+  },
+  {
+    value: "CREATE_ORG",
+    label: "Create org",
+    description:
+      "Založíš školu a staneš se ownerem. Pozvánky pošleš později.",
+  },
+  {
+    value: "JOIN_ORG",
+    label: "Join org",
+    description:
+      "Účet se vytvoří a připojení dokončíš pomocí kódu od ředitele.",
+  },
+];
 
 const loginSchema = z.object({
   email: z.string().email({ message: "Zadej platný e-mail" }),
@@ -28,7 +49,9 @@ const loginSchema = z.object({
 
 const registerSchema = loginSchema.extend({
   name: z.string().min(2, { message: "Jméno musí mít alespoň 2 znaky" }),
-  role: z.enum(roleOptions, { required_error: "Vyber roli" }),
+  mode: z.enum(registerModeOptions, {
+    required_error: "Vyber typ registrace",
+  }),
 });
 
 type LoginValues = z.infer<typeof loginSchema>;
@@ -36,27 +59,50 @@ type RegisterValues = z.infer<typeof registerSchema>;
 
 type AuthFormProps = {
   mode: "login" | "register";
+  initialMode?: RegisterMode;
+  initialJoinCode?: string;
+  initialJoinRole?: "STUDENT" | "TEACHER" | "PARENT" | undefined;
 };
 
-export const AuthForm = ({ mode }: AuthFormProps): JSX.Element => {
+export const AuthForm = ({
+  mode,
+  initialMode,
+  initialJoinCode,
+  initialJoinRole,
+}: AuthFormProps): JSX.Element => {
   const { login, syncProfile, isLoading: authLoading } = useAuth();
   const [registering, setRegistering] = useState(false);
 
   const schema = mode === "login" ? loginSchema : registerSchema;
+  const defaultRegisterMode = initialMode ?? "INDIVIDUAL";
 
   const form = useForm<LoginValues | RegisterValues>({
     resolver: zodResolver(schema),
     defaultValues:
       mode === "login"
         ? { email: "", password: "" }
-        : { email: "", password: "", name: "", role: undefined },
+        : {
+          email: "",
+          password: "",
+          name: "",
+          mode: defaultRegisterMode,
+        },
   });
+
+  const registerMode =
+    mode === "register"
+      ? ((form.watch("mode") as RegisterMode) ?? "INDIVIDUAL")
+      : "INDIVIDUAL";
+  const activeMode = registerModeDetails.find(
+    (item) => item.value === registerMode,
+  );
 
   // 🔹 oddělená submit logika
   const handleSubmit = async (values: LoginValues | RegisterValues) => {
     try {
       if (mode === "login") {
         await login({ email: values.email, password: values.password });
+        // ✅ Počkej na dokončení syncProfile před redirectem (redirect je v login/page.tsx)
         await syncProfile({ force: true });
         showToastOnce("Přihlašuji…", { type: "success" });
         return;
@@ -64,9 +110,36 @@ export const AuthForm = ({ mode }: AuthFormProps): JSX.Element => {
 
       setRegistering(true);
       const registerValues = values as RegisterValues;
-      await httpClient.post("/auth/register", registerValues);
+      const payload = {
+        ...registerValues,
+      };
+      const registerResult = await httpClient.post<{
+        user: unknown;
+        sessionToken?: string;
+      }>("/auth/register", payload);
+      
+      // ✅ Ulož sessionToken pokud je v odpovědi (kompatibilita s backendem)
+      if (registerResult?.sessionToken && typeof registerResult.sessionToken === "string") {
+        const { setSessionToken } = useAuthStore.getState();
+        setSessionToken(registerResult.sessionToken);
+      }
+      
+      if (registerValues.mode === "JOIN_ORG" && typeof window !== "undefined") {
+        const joinIntent = {
+          joinCode: (initialJoinCode ?? "").trim(),
+          ...(initialJoinRole ? { role: initialJoinRole } : {}),
+        };
+        window.sessionStorage.setItem("join_intent", JSON.stringify(joinIntent));
+      }
+
+      // ✅ Počkej na dokončení syncProfile před redirectem (redirect je v register/page.tsx)
       await syncProfile({ force: true });
-      showToastOnce("Účet byl vytvořen. Přihlašuji…", { type: "success" });
+      showToastOnce(
+        registerValues.mode === "JOIN_ORG"
+          ? "Účet byl vytvořen. Dokonči připojení v onboarding kroku."
+          : "Účet byl vytvořen. Přihlašuji…",
+        { type: "success" },
+      );
     } catch (err) {
       const message =
         err instanceof HttpError
@@ -92,12 +165,6 @@ export const AuthForm = ({ mode }: AuthFormProps): JSX.Element => {
     form.handleSubmit(handleSubmit)(e);
   };
 
-  const registerErrors =
-    mode === "register"
-      ? (form.formState.errors as FieldErrors<RegisterValues>)
-      : undefined;
-
-
   return (
     <motion.form
       initial={{ opacity: 0, y: 20 }}
@@ -106,6 +173,37 @@ export const AuthForm = ({ mode }: AuthFormProps): JSX.Element => {
       onSubmit={handleFormSubmit}
       noValidate
     >
+      {mode === "register" && (
+        <div className="space-y-3">
+          <label className="text-sm font-medium text-slate-700">
+            Typ účtu
+          </label>
+          <Tabs
+            value={registerMode}
+            onValueChange={(value) => {
+              form.setValue("mode", value as RegisterMode, {
+                shouldValidate: true,
+              });
+            }}
+          >
+            <TabsList className="w-full justify-between">
+              {registerModeDetails.map((option) => (
+                <TabsTrigger
+                  key={option.value}
+                  value={option.value}
+                  className="flex-1"
+                >
+                  {option.label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+          {activeMode?.description && (
+            <p className="text-sm text-slate-500">{activeMode.description}</p>
+          )}
+        </div>
+      )}
+
       {mode === "register" && (
         <div className="space-y-2">
           <label
@@ -158,42 +256,11 @@ export const AuthForm = ({ mode }: AuthFormProps): JSX.Element => {
         )}
       </div>
 
-      {mode === "register" && (
-        <Controller
-          control={form.control}
-          name="role"
-          render={({ field }) => (
-            <div className="space-y-2">
-              <label
-                htmlFor="role"
-                className="text-sm font-medium text-slate-700"
-              >
-                Role
-              </label>
-              <Select
-                onValueChange={(value) => field.onChange(value)}
-                value={field.value ?? ""}
-              >
-                <SelectTrigger id="role">
-                  <SelectValue placeholder="Vyber roli" />
-                </SelectTrigger>
-                <SelectContent>
-                  {roleOptions.map((r) => (
-                    <SelectItem key={r} value={r}>
-                      {r.charAt(0) + r.slice(1).toLowerCase()}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {registerErrors?.role && (
-                <p className="text-sm text-red-600">
-                  {registerErrors.role.message as string}
-                </p>
-              )}
 
-            </div>
-          )}
-        />
+      {mode === "register" && registerMode === "CREATE_ORG" && (
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+          Role po vytvoření organizace: <span className="font-semibold text-slate-800">OWNER</span>
+        </div>
       )}
 
       <Button

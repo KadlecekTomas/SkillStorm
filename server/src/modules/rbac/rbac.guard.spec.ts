@@ -1,7 +1,7 @@
 import type { ExecutionContext } from '@nestjs/common';
 import { ForbiddenException } from '@nestjs/common';
 import type { Reflector } from '@nestjs/core';
-import { PermissionKey, SystemRole } from '@prisma/client';
+import { PermissionKey, SystemRole, OrganizationRole } from '@prisma/client';
 import { RbacGuard } from './rbac.guard';
 import type { RbacService } from './rbac.service';
 
@@ -14,7 +14,7 @@ describe('RbacGuard', () => {
     canUser: jest.fn(),
   } as unknown as RbacService;
 
-  const guard = new RbacGuard(reflector, rbacService);
+  const guard = new RbacGuard(rbacService, reflector);
 
   const makeContext = (user: any): ExecutionContext =>
     ({
@@ -77,5 +77,18 @@ describe('RbacGuard', () => {
     await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(
       ForbiddenException,
     );
+  });
+
+  it('treats OWNER as DIRECTOR for role requirements', async () => {
+    (reflector.getAllAndOverride as jest.Mock).mockReturnValue([
+      OrganizationRole.DIRECTOR,
+    ]);
+    const ctx = makeContext({
+      userId: 'owner-1',
+      organizationId: 'org-1',
+      organizationRole: OrganizationRole.OWNER,
+    });
+
+    await expect(guard.canActivate(ctx)).resolves.toBe(true);
   });
 });

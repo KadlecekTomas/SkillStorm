@@ -14,6 +14,7 @@ const ROLE_MATRIX: Partial<Record<OrganizationRole, PermissionKey[]>> = {
     PermissionKey.EDIT_TEST,
     PermissionKey.VIEW_RESULTS,
     PermissionKey.MANAGE_STUDENTS,
+    PermissionKey.INVITE_STUDENTS,
   ],
   [OrganizationRole.STUDENT]: [PermissionKey.VIEW_RESULTS],
   [OrganizationRole.PARENT]: [PermissionKey.VIEW_RESULTS],

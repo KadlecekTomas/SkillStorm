@@ -23,6 +23,7 @@ export type UseAuthResult = {
   permissions: PermissionKey[];
   isLoading: boolean;
   isAuthenticated: boolean;
+  hasOrganization: boolean;
   authStatus: "booting" | "ready";
   isOffline: boolean;
   login: (payload: LoginPayload) => Promise<void>;
@@ -89,7 +90,6 @@ export const useAuth = (): UseAuthResult => {
       syncRef.current = (async () => {
         setLoading(true);
         if (AUTH_DEBUG) {
-          // eslint-disable-next-line no-console
           console.log(
             "%c[AUTH][BOOT]",
             "color:#2563eb;font-weight:600",
@@ -120,7 +120,6 @@ export const useAuth = (): UseAuthResult => {
           setLoading(false);
           syncRef.current = null;
           if (AUTH_DEBUG) {
-            // eslint-disable-next-line no-console
             console.log(
               "%c[AUTH][READY]",
               "color:#0f766e;font-weight:600",
@@ -148,7 +147,6 @@ export const useAuth = (): UseAuthResult => {
 
   useEffect(() => {
     if (!AUTH_DEBUG) return;
-    // eslint-disable-next-line no-console
     console.log(
       "%c[AUTH][STATE]",
       "color:#9333ea;font-weight:600",
@@ -222,6 +220,8 @@ export const useAuth = (): UseAuthResult => {
     [setLoading, syncProfile],
   );
 
+  const hasOrganization = Boolean(org?.id);
+
   const value = useMemo(
     () => ({
       user,
@@ -230,6 +230,7 @@ export const useAuth = (): UseAuthResult => {
       permissions,
       isLoading: loading || !hydrated || authStatus === "booting",
       isAuthenticated: Boolean(user),
+      hasOrganization,
       authStatus,
       isOffline: offline,
       login,
@@ -246,6 +247,7 @@ export const useAuth = (): UseAuthResult => {
       authStatus,
       hydrated,
       offline,
+      hasOrganization,
       login,
       logout,
       syncProfile,

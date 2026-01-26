@@ -16,51 +16,22 @@ export class SchoolAccessGuard implements CanActivate {
     // 1️⃣ Globální superadmin má přístup všude
     if (user.systemRole === 'SUPERADMIN') return true;
 
-    // 2️⃣ Ředitel – kontrola, zda má členství v organizaci jako DIRECTOR
-    if (user.organizationRole === 'DIRECTOR') {
-      const directorMembership = await this.prisma.membership.findFirst({
-        where: {
-          userId: user.userId,
-          organizationId,
-          role: 'DIRECTOR',
-        },
-      });
-      if (!directorMembership) {
-        throw new ForbiddenException('Nemáš přístup k této škole.');
-      }
-      return true;
+    if (!organizationId) {
+      throw new ForbiddenException('Chybí kontext organizace.');
     }
 
-    // 3️⃣ Učitel
-    if (user.organizationRole === 'TEACHER') {
-      const teacherMembership = await this.prisma.membership.findFirst({
-        where: {
-          userId: user.userId,
-          organizationId,
-          role: 'TEACHER',
-        },
-      });
-      if (!teacherMembership) {
-        throw new ForbiddenException('Nemáš přístup k této škole.');
-      }
-      return true;
+    // 2️⃣ Stačí platné členství v organizaci (role řeší Permission decorator)
+    const membership = await this.prisma.membership.findFirst({
+      where: {
+        userId: user.userId,
+        organizationId,
+        deletedAt: null,
+      },
+      select: { id: true },
+    });
+    if (!membership) {
+      throw new ForbiddenException('Nemáš přístup k této škole.');
     }
-
-    // 4️⃣ Student
-    if (user.organizationRole === 'STUDENT') {
-      const studentMembership = await this.prisma.membership.findFirst({
-        where: {
-          userId: user.userId,
-          organizationId,
-          role: 'STUDENT',
-        },
-      });
-      if (!studentMembership) {
-        throw new ForbiddenException('Nemáš přístup k této škole.');
-      }
-      return true;
-    }
-
-    throw new ForbiddenException('Nemáš oprávnění.');
+    return true;
   }
 }

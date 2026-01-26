@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { seed as seedRbac } from './rbac.seed';
 import { seed as seedOrgs } from './orgs.seed';
+import { seed as seedAcademicYears } from './academic-years.seed';
 import { seed as seedUsers } from './users.seed';
 import { seed as seedSubjects } from './subjects.seed';
 import { seed as seedMaterials } from './materials.seed';
@@ -12,6 +13,7 @@ export async function runSeedPipeline(prisma: PrismaClient) {
   await seedLevels(prisma);
   await seedRbac(prisma);
   await seedOrgs(prisma);
+  await seedAcademicYears(prisma);
   await seedUsers(prisma);
   await ensureTeachersSeeded(prisma);
   await seedSubjects(prisma);

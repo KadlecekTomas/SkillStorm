@@ -7,11 +7,15 @@ import { Download } from "lucide-react";
 import { fetchWithAuth } from "@/lib/http/client";
 import { useEffect, useState } from "react";
 import { Alert } from "@/components/ui/alert";
+import { withGuard } from "@/lib/guard/withGuard";
+import { useAuth } from "@/hooks/use-auth";
+import Link from "next/link";
 
-export default function ResultsPage(): React.JSX.Element {
+function ResultsPage(): React.JSX.Element {
   const [chartData, setChartData] = useState<{ label: string; teacher: number; student: number }[]>([]);
   const [insights, setInsights] = useState<{ id: string; label: string; value: string; trend: "up" | "down" }[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const { hasOrganization, org } = useAuth();
 
   useEffect(() => {
     let cancelled = false;
@@ -35,7 +39,7 @@ export default function ResultsPage(): React.JSX.Element {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [org?.id]);
 
   return (
     <div className="space-y-6">
@@ -46,11 +50,28 @@ export default function ResultsPage(): React.JSX.Element {
             Analytics synced with NestJS scoring engine, export ready.
           </p>
         </div>
-        <Button className="rounded-2xl">
+        <Button
+          className="rounded-2xl"
+          disabled={!hasOrganization}
+          title={hasOrganization ? undefined : "Vyžaduje školu"}
+        >
           <Download className="h-4 w-4" />
           Export PDF
         </Button>
       </div>
+      {!hasOrganization && (
+        <Alert
+          title="Osobní režim"
+          description={
+            <span>
+              Týmové výsledky a exporty se aktivují po připojení ke škole.{" "}
+              <Link className="font-semibold text-emerald-700 underline" href="/dashboard/onboarding">
+                Založit nebo se připojit
+              </Link>
+            </span>
+          }
+        />
+      )}
 
       <ResultsChart data={chartData} />
 
@@ -69,3 +90,5 @@ export default function ResultsPage(): React.JSX.Element {
     </div>
   );
 }
+
+export default withGuard()(ResultsPage);

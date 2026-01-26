@@ -38,6 +38,7 @@ import { ResponseEnvelopeInterceptor } from './common/http/response-envelope.int
 import { ScheduleModule } from '@nestjs/schedule';
 import { PrivacyModule } from './privacy/privacy.module';
 import { EnrollmentsModule } from './enrollments/enrollments.module';
+import { AcademicYearsModule } from './academic-years/academic-years.module';
 
 @Module({
   imports: [
@@ -90,6 +91,7 @@ import { EnrollmentsModule } from './enrollments/enrollments.module';
     AuditModule,
     PrivacyModule,
     EnrollmentsModule,
+    AcademicYearsModule,
   ],
   providers: [
     { provide: APP_INTERCEPTOR, useClass: ResponseEnvelopeInterceptor },

@@ -36,7 +36,7 @@ export class StudentsController {
   // ---------- EXPORT ----------
   // src/modules/students/student.controller.ts
   @Get('export')
-  @Permission(SystemRole.SUPERADMIN, OrganizationRole.DIRECTOR)
+  @Permission(SystemRole.SUPERADMIN, OrganizationRole.OWNER, OrganizationRole.DIRECTOR)
   async export(
     @Req() req: RequestWithUser,
     @Query() q: ExportStudentsDto,
@@ -75,7 +75,7 @@ export class StudentsController {
   // ---------- LIST ----------
   // Pozn.: Učitel v cizí org → 403 (RbacGuard ho sem nepustí)
   @Get()
-  @Permission(SystemRole.SUPERADMIN, OrganizationRole.DIRECTOR)
+  @Permission(SystemRole.SUPERADMIN, OrganizationRole.OWNER, OrganizationRole.DIRECTOR)
   @ApiOperation({ summary: 'List students (pagination + filters)' })
   @CacheTTL(0)
   findAll(@Req() req: RequestWithUser, @Query() q: QueryStudentsDto) {
@@ -109,7 +109,7 @@ export class StudentsController {
 
   // ---------- DELETE (soft) ----------
   @Delete(':id')
-  @Permission(SystemRole.SUPERADMIN, OrganizationRole.DIRECTOR)
+  @Permission(SystemRole.SUPERADMIN, OrganizationRole.OWNER, OrganizationRole.DIRECTOR)
   @ApiOperation({ summary: 'Soft delete student by ID' })
   @InvalidateScopes(({ result }) => (result?.orgId ? [result.orgId] : []))
   remove(

@@ -33,6 +33,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import type { Express } from 'express';
 import { GamificationService } from '@/gamification/gamification.service';
+import { hasAtLeastRole } from '@/shared/access.utils';
 
 function materialSearch(
   search?: string,
@@ -118,13 +119,12 @@ export class LearningMaterialsService {
       );
     }
 
-    // SUPERADMIN může vše, TEACHER/DIRECTOR jen v rámci své org
+    // SUPERADMIN může vše, TEACHER+ jen v rámci své org
     const sameOrg = !!orgId && user.organizationId === orgId;
     const allowed =
       user.systemRole === SystemRole.SUPERADMIN ||
       (sameOrg &&
-        (user.organizationRole === OrganizationRole.DIRECTOR ||
-          user.organizationRole === OrganizationRole.TEACHER));
+        hasAtLeastRole(user.organizationRole ?? null, OrganizationRole.TEACHER));
 
     if (!allowed) {
       throw new ForbiddenException(
@@ -386,7 +386,8 @@ export class LearningMaterialsService {
     const sameOrg =
       user.organizationId && current.organizationId === user.organizationId;
     const isDirector =
-      user.organizationRole === OrganizationRole.DIRECTOR && !!sameOrg;
+      !!sameOrg &&
+      hasAtLeastRole(user.organizationRole ?? null, OrganizationRole.DIRECTOR);
 
     const author = await this.prisma.membership.findFirst({
       where: { id: current.createdById, userId: uid },
@@ -468,10 +469,11 @@ export class LearningMaterialsService {
     const sameOrg = user.organizationId === current.organizationId;
     const allowed =
       user.systemRole === SystemRole.SUPERADMIN ||
-      (sameOrg && user.organizationRole === OrganizationRole.DIRECTOR);
+      (sameOrg &&
+        hasAtLeastRole(user.organizationRole ?? null, OrganizationRole.DIRECTOR));
     if (!allowed)
       throw new ForbiddenException(
-        'Pouze ředitel nebo superadmin může smazat materiál.',
+        'Pouze ředitel/owner nebo superadmin může smazat materiál.',
       );
 
     const deleted = await this.prisma.learningMaterial.update({
@@ -518,8 +520,7 @@ export class LearningMaterialsService {
     const allowed =
       user.systemRole === SystemRole.SUPERADMIN ||
       (sameOrg &&
-        (user.organizationRole === OrganizationRole.DIRECTOR ||
-          user.organizationRole === OrganizationRole.TEACHER));
+        hasAtLeastRole(user.organizationRole ?? null, OrganizationRole.TEACHER));
 
     if (!allowed)
       throw new ForbiddenException('Nemáte oprávnění nahrát soubor.');

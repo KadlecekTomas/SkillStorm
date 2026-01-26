@@ -10,6 +10,7 @@ import { JwtStrategy } from './jwt.strategy';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { GamificationModule } from '@/gamification/gamification.module';
 import { AuditModule } from '@/audit/audit.module';
+import { RbacModule } from '@/modules/rbac/rbac.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { AuditModule } from '@/audit/audit.module';
     PrismaModule,
     GamificationModule,
     AuditModule,
+    RbacModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       imports: [ConfigModule],

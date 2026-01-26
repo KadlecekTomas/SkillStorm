@@ -29,11 +29,13 @@ describe("GuardBoundary", () => {
   it("renders children when permissions satisfy guard", () => {
     useAuthMock.mockReturnValue({
       user: { id: "user", organizationRole: "TEACHER" },
-      org: { id: "org-a", name: "Atlas" },
+      org: { id: "org-a", name: "Atlas", type: "SCHOOL" },
       roles: ["TEACHER"],
       permissions: [PermissionKey.VIEW_RESULTS],
       isLoading: false,
       isAuthenticated: true,
+      hasOrganization: true,
+      authStatus: "ready",
       isOffline: false,
       login: vi.fn(),
       logout: vi.fn(),
@@ -54,11 +56,13 @@ describe("GuardBoundary", () => {
   it("shows AccessDenied when requirements fail", () => {
     useAuthMock.mockReturnValue({
       user: { id: "user", organizationRole: "STUDENT" },
-      org: { id: "org-a", name: "Atlas" },
+      org: { id: "org-a", name: "Atlas", type: "SCHOOL" },
       roles: ["STUDENT"],
       permissions: [],
       isLoading: false,
       isAuthenticated: true,
+      hasOrganization: true,
+      authStatus: "ready",
       isOffline: false,
       login: vi.fn(),
       logout: vi.fn(),
@@ -74,5 +78,31 @@ describe("GuardBoundary", () => {
 
     expect(screen.getByText(/Access denied/i)).toBeInTheDocument();
     recordPolicyCheck("RBAC", "guard-denies-manage-teachers", true, "Student without MANAGE_TEACHERS is blocked.");
+  });
+
+  it("shows onboarding when organization is required", () => {
+    useAuthMock.mockReturnValue({
+      user: { id: "user", organizationRole: "OWNER" },
+      org: null,
+      roles: ["OWNER"],
+      permissions: [],
+      isLoading: false,
+      isAuthenticated: true,
+      hasOrganization: false,
+      authStatus: "ready",
+      isOffline: false,
+      login: vi.fn(),
+      logout: vi.fn(),
+      syncProfile: vi.fn(),
+      switchOrganization: vi.fn(),
+    });
+
+    render(
+      <GuardBoundary requireSchoolWorkspace>
+        <div>school content</div>
+      </GuardBoundary>,
+    );
+
+    expect(screen.getByText(/Nejste připojeni ke škole/i)).toBeInTheDocument();
   });
 });

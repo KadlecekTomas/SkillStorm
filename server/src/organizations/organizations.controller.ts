@@ -42,7 +42,7 @@ export class OrganizationsController {
   @Post()
   @ApiOperation({
     summary:
-      'Create organization (PRIVATE/COMMUNITY: any user, SCHOOL: superadmin nebo aktuální director)',
+      'Create organization (SCHOOL: any authenticated user, COMMUNITY: superadmin)',
   })
   @InvalidateScopes(() => ['ALL']) // globální list → invaliduj ALL
   async create(
@@ -52,13 +52,16 @@ export class OrganizationsController {
     const userId = req.user?.userId;
     const isSuper = req.user?.systemRole === SystemRole.SUPERADMIN;
 
-    if (dto.type === OrganizationType.SCHOOL && !isSuper) {
-      const isDirectorSomewhere = await this.service.userIsDirector(userId);
-      if (!isDirectorSomewhere) {
-        throw new ForbiddenException(
-          'Školu může vytvořit pouze superadmin nebo uživatel, který je již ředitelem v jiné organizaci.',
-        );
-      }
+    if (dto.type === OrganizationType.COMMUNITY && !isSuper) {
+      throw new ForbiddenException(
+        'Community organizaci může vytvořit pouze superadmin.',
+      );
+    }
+
+    if (dto.type === OrganizationType.PRIVATE && !isSuper) {
+      throw new ForbiddenException(
+        'Private organizaci může vytvořit pouze superadmin.',
+      );
     }
 
     return ok(this.service.create(dto, userId));
@@ -81,6 +84,7 @@ export class OrganizationsController {
   @Get(':id')
   @UseGuards(SchoolAccessGuard)
   @Permission(
+    OrganizationRole.OWNER,
     OrganizationRole.DIRECTOR,
     OrganizationRole.TEACHER,
     OrganizationRole.STUDENT,
@@ -96,7 +100,7 @@ export class OrganizationsController {
 
   @Patch(':id')
   @UseGuards(SchoolAccessGuard)
-  @Permission(OrganizationRole.DIRECTOR, SystemRole.SUPERADMIN)
+  @Permission(OrganizationRole.OWNER, OrganizationRole.DIRECTOR, SystemRole.SUPERADMIN)
   @ApiOperation({ summary: 'Update organization (director or superadmin)' })
   @InvalidateScopes(() => ['ALL'])
   update(

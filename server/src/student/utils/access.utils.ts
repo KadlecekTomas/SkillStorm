@@ -1,6 +1,7 @@
 import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import type { JwtPayload } from '@/auth/types/jwt-payload';
 import { OrganizationRole, SystemRole } from '@prisma/client';
+import { hasAtLeastRole } from '@/shared/access.utils';
 
 export function canAccessStudent(student: any, user: JwtPayload): void {
   if (user.systemRole === SystemRole.SUPERADMIN) return;
@@ -18,7 +19,7 @@ export function canAccessStudent(student: any, user: JwtPayload): void {
   if (isSelf) return;
 
   if (
-    user.organizationRole === OrganizationRole.DIRECTOR &&
+    hasAtLeastRole(user.organizationRole ?? null, OrganizationRole.DIRECTOR) &&
     student.orgId === user.organizationId
   ) {
     return;

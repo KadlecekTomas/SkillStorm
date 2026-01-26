@@ -106,6 +106,27 @@ export async function createApp(): Promise<INestApplication> {
   const app = await NestFactory.create(AppModule, options);
   app.use(cookieParser());
 
+  // 🔒 Configured for Next.js (localhost:3000) – allows credentials & cross-origin cookies.
+  app.enableCors({
+    origin: [
+      'http://localhost:3000',
+      'http://127.0.0.1:3000',
+      'http://localhost:4200',
+    ],
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Requested-With',
+      'Accept',
+      'x-org-id',
+      'x-session-token',
+      'x-csrf-token',
+      'x-cid',
+    ],
+  });
+
   // CSRF double-submit protection for state-changing requests
   if (process.env.DISABLE_CSRF !== '1') {
     app.use((req: any, res: any, next: any) => {
@@ -131,26 +152,6 @@ export async function createApp(): Promise<INestApplication> {
       return next();
     });
   }
-
-  // 🔒 Configured for Next.js (localhost:3000) – allows credentials & cross-origin cookies.
-  app.enableCors({
-    origin: [
-      'http://localhost:3000',
-      'http://127.0.0.1:3000',
-      'http://localhost:4200',
-    ],
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: [
-      'Content-Type',
-      'Authorization',
-      'X-Requested-With',
-      'Accept',
-      'x-org-id',
-      'x-session-token',
-      'x-cid',
-    ],
-  });
 
   app.useGlobalPipes(
     new ValidationPipe({

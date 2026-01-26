@@ -6,12 +6,14 @@ import type {
   User,
   PermissionKey,
   OrganizationRole,
+  OrganizationType,
 } from "@/types";
 import { derivePermissions } from "@/utils/permissions";
 
 export type OrganizationContext = {
   id: string;
   name: string;
+  type: OrganizationType;
   slug?: string | null;
 };
 
@@ -75,6 +77,11 @@ export const useAuthStore = create<AuthState>()(
                   name: user.memberships?.find(
                     (membership) => membership.organizationId === user.organizationId,
                   )?.organization?.name ?? "Aktivní organizace",
+                  type:
+                    (user.memberships?.find(
+                      (membership) => membership.organizationId === user.organizationId,
+                    )?.organization?.type as OrganizationType | undefined) ??
+                    "SCHOOL",
                 }
               : null),
           roles: roles ?? deriveRoles(user),

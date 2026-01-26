@@ -5,6 +5,7 @@ import {
   Inject,
   ForbiddenException,
   ConflictException,
+  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
 import type { CreateClassSectionDto } from './dto/create-classroom.dto';
@@ -13,7 +14,8 @@ import { assertSameOrganization } from '@/shared/access.utils';
 import type { UpdateClassroomDto } from './dto/update-classroom.dto';
 import type { QueryClassSectionsDto } from './dto/query-class-sections.dto';
 import type { SetHomeroomDto } from './dto/set-homeroom.dto';
-import { Prisma, OrganizationRole, SystemRole } from '@prisma/client';
+import { Prisma, OrganizationRole, SystemRole, EnrollmentStatus } from '@prisma/client';
+import { hasAtLeastRole } from '@/shared/access.utils';
 
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
@@ -32,28 +34,25 @@ export class ClassSectionsService {
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
   ) {}
 
-  private async getDefaultAcademicYear(orgId: string) {
-    const label = 'DEFAULT';
-    const existing = await this.prisma.academicYear.findFirst({
-      where: { orgId, label },
-      select: { id: true, orgId: true },
+  private async getActiveAcademicYear(orgId: string) {
+    const active = await this.prisma.academicYear.findFirst({
+      where: { orgId, isCurrent: true },
+      select: { id: true, orgId: true, isCurrent: true },
     });
-    if (existing) return existing;
+    if (!active) {
+      throw new NotFoundException('Aktivní školní rok nebyl nalezen.');
+    }
+    return active;
+  }
 
-    const now = new Date();
-    const endsAt = new Date(now);
-    endsAt.setFullYear(endsAt.getFullYear() + 1);
-
-    return this.prisma.academicYear.create({
-      data: {
-        orgId,
-        label,
-        startsAt: now,
-        endsAt,
-        isCurrent: true,
-      },
-      select: { id: true, orgId: true },
-    });
+  private getGradeLabel(grade: string): string {
+    if (grade.startsWith('GRADE_')) {
+      return grade.replace('GRADE_', '');
+    }
+    if (grade.startsWith('PRIMARY_')) {
+      return grade.replace('PRIMARY_', '');
+    }
+    return grade;
   }
 
   // -------------------------
@@ -63,21 +62,28 @@ export class ClassSectionsService {
     if (!user?.organizationId && user.systemRole !== SystemRole.SUPERADMIN) {
       throw new ForbiddenException('Missing organization context.');
     }
-    const yearId = dto.yearId ?? null;
+    const yearId = dto.yearId ?? dto.academicYearId ?? null;
+    if (!yearId) {
+      throw new BadRequestException('Chybí školní rok (academicYearId).');
+    }
     const year = yearId
       ? await this.prisma.academicYear.findUnique({
           where: { id: yearId },
-          select: { id: true, orgId: true },
+          select: { id: true, orgId: true, isCurrent: true },
         })
       : null;
-    if (yearId && !year) throw new NotFoundException('Školní rok nebyl nalezen');
+    if (yearId && !year)
+      throw new NotFoundException('Školní rok nebyl nalezen');
     const resolvedYear =
       year ??
       (user.organizationId
-        ? await this.getDefaultAcademicYear(user.organizationId)
+        ? await this.getActiveAcademicYear(user.organizationId)
         : null);
     if (!resolvedYear) {
       throw new NotFoundException('Školní rok nebyl nalezen');
+    }
+    if (!resolvedYear.isCurrent) {
+      throw new ForbiddenException('Nelze upravovat uzavřený školní rok.');
     }
     assertSameOrganization(resolvedYear.orgId, user, 'třída');
 
@@ -102,7 +108,7 @@ export class ClassSectionsService {
           yearId: resolvedYear.id,
           grade: dto.grade,
           section: dto.section,
-          label: dto.label ?? null,
+          label: dto.label ?? `${this.getGradeLabel(dto.grade)}.${dto.section}`,
           teacherId,
           // TODO: Přidat studyField do modelu ClassSection a migrace
         },
@@ -135,21 +141,34 @@ export class ClassSectionsService {
     if (!user?.organizationId && user.systemRole !== SystemRole.SUPERADMIN) {
       throw new ForbiddenException('Missing organization context.');
     }
-    const yearId = q.yearId ?? null;
+    const yearId = q.yearId ?? q.academicYearId ?? null;
     const year = yearId
       ? await this.prisma.academicYear.findUnique({
           where: { id: yearId },
           select: { id: true, orgId: true },
         })
       : null;
-    if (yearId && !year) throw new NotFoundException('Školní rok nebyl nalezen');
+    if (yearId && !year)
+      throw new NotFoundException('Školní rok nebyl nalezen');
     const resolvedYear =
       year ??
       (user.organizationId
-        ? await this.getDefaultAcademicYear(user.organizationId)
+        ? await this.getActiveAcademicYear(user.organizationId)
         : null);
     if (!resolvedYear) throw new NotFoundException('Školní rok nebyl nalezen');
     assertSameOrganization(resolvedYear.orgId, user, 'třídy');
+
+    const membership = user.organizationId
+      ? await this.prisma.membership.findFirst({
+          where: {
+            userId: user.userId,
+            organizationId: user.organizationId,
+            deletedAt: null,
+          },
+          select: { id: true, role: true },
+        })
+      : null;
+    const role = membership?.role ?? user.organizationRole ?? null;
 
     const page = q.page ?? 1;
     const limit = q.limit ?? 50;
@@ -167,6 +186,42 @@ export class ClassSectionsService {
           }
         : {}),
     };
+
+    if (role === OrganizationRole.TEACHER) {
+      const teacher = membership
+        ? await this.prisma.teacher.findFirst({
+            where: { membershipId: membership.id, deletedAt: null },
+            select: { id: true },
+          })
+        : null;
+      if (!teacher) {
+        return { data: [], meta: { page, limit, total: 0, pages: 1 } };
+      }
+      where.teacherId = teacher.id;
+    } else if (role === OrganizationRole.STUDENT) {
+      const student = membership
+        ? await this.prisma.student.findFirst({
+            where: { membershipId: membership.id, deletedAt: null },
+            select: { id: true },
+          })
+        : null;
+      if (!student) {
+        return { data: [], meta: { page, limit, total: 0, pages: 1 } };
+      }
+      where.enrollments = {
+        some: {
+          studentId: student.id,
+          yearId: resolvedYear.id,
+          status: { not: EnrollmentStatus.LEFT },
+        },
+      };
+    } else if (
+      role &&
+      !hasAtLeastRole(role, OrganizationRole.DIRECTOR) &&
+      user.systemRole !== SystemRole.SUPERADMIN
+    ) {
+      throw new ForbiddenException('Access denied.');
+    }
 
     const orderBy: Prisma.ClassSectionOrderByWithRelationInput[] = [
       { grade: 'asc' },
@@ -213,7 +268,11 @@ export class ClassSectionsService {
               },
             },
           },
-          enrollments: true,
+          enrollments: {
+            where: { status: { not: EnrollmentStatus.LEFT } },
+            select: { id: true },
+          },
+          academicYear: { select: { isCurrent: true } },
         },
       });
 
@@ -236,12 +295,63 @@ export class ClassSectionsService {
             membership: { include: { user: true } },
           },
         },
-        enrollments: true,
+        enrollments: {
+          where: { status: { not: EnrollmentStatus.LEFT } },
+          include: {
+            student: {
+              include: { membership: { include: { user: true } } },
+            },
+          },
+        },
+        academicYear: { select: { isCurrent: true, id: true } },
       },
     });
     if (!classSection) throw new NotFoundException('Třída nebyla nalezena');
 
     assertSameOrganization(classSection.orgId, user, 'třída');
+    if (user.systemRole !== SystemRole.SUPERADMIN) {
+      const membership = await this.prisma.membership.findFirst({
+        where: {
+          userId: user.userId,
+          organizationId: classSection.orgId,
+          deletedAt: null,
+        },
+        select: { id: true, role: true },
+      });
+      const role = membership?.role ?? user.organizationRole ?? null;
+
+      if (role === OrganizationRole.TEACHER) {
+        const teacher = membership
+          ? await this.prisma.teacher.findFirst({
+              where: { membershipId: membership.id, deletedAt: null },
+              select: { id: true },
+            })
+          : null;
+        if (!teacher || classSection.teacherId !== teacher.id) {
+          throw new ForbiddenException('Učitel nemá přístup k této třídě.');
+        }
+      } else if (role === OrganizationRole.STUDENT) {
+        const student = membership
+          ? await this.prisma.student.findFirst({
+              where: { membershipId: membership.id, deletedAt: null },
+              select: { id: true },
+            })
+          : null;
+        const isEnrolled = student
+          ? classSection.enrollments.some(
+              (enrollment) => enrollment.studentId === student.id,
+            )
+          : false;
+        if (!isEnrolled) {
+          throw new ForbiddenException('Student nemá přístup k této třídě.');
+        }
+      } else if (
+        role &&
+        !hasAtLeastRole(role, OrganizationRole.DIRECTOR)
+      ) {
+        throw new ForbiddenException('Access denied.');
+      }
+    }
     return classSection;
   }
 
@@ -251,9 +361,13 @@ export class ClassSectionsService {
   async update(id: string, dto: UpdateClassroomDto, user: JwtPayload) {
     const classSection = await this.prisma.classSection.findUnique({
       where: { id },
+      include: { academicYear: { select: { isCurrent: true } } },
     });
     if (!classSection) throw new NotFoundException('Třída nebyla nalezena');
     assertSameOrganization(classSection.orgId, user, 'třída');
+    if (!classSection.academicYear?.isCurrent) {
+      throw new ForbiddenException('Nelze upravovat uzavřený školní rok.');
+    }
 
     let teacherId: string | null | undefined = dto.teacherId;
     if (dto.teacherId !== undefined) {
@@ -318,11 +432,14 @@ export class ClassSectionsService {
   async remove(id: string, user: JwtPayload) {
     const classSection = await this.prisma.classSection.findUnique({
       where: { id },
-      select: { id: true, orgId: true },
+      select: { id: true, orgId: true, academicYear: { select: { isCurrent: true } } },
     });
     if (!classSection) throw new NotFoundException('Třída nebyla nalezena');
 
     assertSameOrganization(classSection.orgId, user, 'třída');
+    if (!classSection.academicYear?.isCurrent) {
+      throw new ForbiddenException('Nelze upravovat uzavřený školní rok.');
+    }
 
     const deleted = await this.prisma.classSection.delete({ where: { id } });
 
@@ -340,18 +457,24 @@ export class ClassSectionsService {
   ) {
     const cls = await this.prisma.classSection.findUnique({
       where: { id: classSectionId },
-      select: { id: true, orgId: true, teacherId: true },
+      select: { id: true, orgId: true, teacherId: true, academicYear: { select: { isCurrent: true } } },
     });
     if (!cls) throw new NotFoundException('Třída nebyla nalezena.');
+    if (!cls.academicYear?.isCurrent) {
+      throw new ForbiddenException('Nelze upravovat uzavřený školní rok.');
+    }
 
     const sameOrg = user.organizationId === cls.orgId;
-    const isDirector = user.organizationRole === OrganizationRole.DIRECTOR;
+    const isDirector = hasAtLeastRole(
+      user.organizationRole ?? null,
+      OrganizationRole.DIRECTOR,
+    );
 
     if (
       !(user.systemRole === SystemRole.SUPERADMIN || (sameOrg && isDirector))
     ) {
       throw new ForbiddenException(
-        'Pouze ředitel dané školy nebo superadmin může měnit třídnictví.',
+        'Pouze ředitel/owner dané školy nebo superadmin může měnit třídnictví.',
       );
     }
 

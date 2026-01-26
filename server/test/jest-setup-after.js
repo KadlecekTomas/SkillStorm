@@ -45,10 +45,14 @@ async function setupDb() {
   });
 }
 
-setupDb().catch((err) => {
-  // eslint-disable-next-line no-console
-  console.error('[jest-setup-after] DB init failed', err);
-  process.exit(1);
+beforeAll(async () => {
+  try {
+    await setupDb();
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('[jest-setup-after] DB init failed', err);
+    throw err;
+  }
 });
 
 module.exports = setupDb;

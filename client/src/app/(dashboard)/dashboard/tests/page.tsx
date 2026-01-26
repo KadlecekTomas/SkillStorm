@@ -9,6 +9,9 @@ import type { TestSummary } from "@/types";
 import { fetchWithAuth } from "@/lib/http/client";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Alert } from "@/components/ui/alert";
+import { withGuard } from "@/lib/guard/withGuard";
+import { useAuth } from "@/hooks/use-auth";
+import Link from "next/link";
 
 const columns: Column<TestSummary>[] = [
   { key: "title", label: "Test" },
@@ -26,9 +29,10 @@ const columns: Column<TestSummary>[] = [
   { key: "submissions", label: "Submissions" },
 ];
 
-export default function TestsPage(): React.JSX.Element {
+function TestsPage(): React.JSX.Element {
   const [tests, setTests] = useState<TestSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const { hasOrganization, org } = useAuth();
 
   useEffect(() => {
     let cancelled = false;
@@ -50,7 +54,7 @@ export default function TestsPage(): React.JSX.Element {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [org?.id]);
 
   return (
     <div className="space-y-6">
@@ -76,6 +80,19 @@ export default function TestsPage(): React.JSX.Element {
         description="Vytváření testů přes UI není implementované. Použij API nebo seed."
         variant="warning"
       />
+      {!hasOrganization && (
+        <Alert
+          title="Osobní režim"
+          description={
+            <span>
+              Některé týmové funkce (publikování, třídy, sdílení) vyžadují školu.{" "}
+              <Link className="font-semibold text-emerald-700 underline" href="/dashboard/onboarding">
+                Založit nebo se připojit
+              </Link>
+            </span>
+          }
+        />
+      )}
       {!loading && tests.length > 0 && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {tests.slice(0, 3).map((test) => (
@@ -91,3 +108,5 @@ export default function TestsPage(): React.JSX.Element {
     </div>
   );
 }
+
+export default withGuard()(TestsPage);

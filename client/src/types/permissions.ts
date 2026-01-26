@@ -15,6 +15,8 @@ export enum PermissionKey {
   MANAGE_STUDENTS = "MANAGE_STUDENTS",
   MANAGE_TEACHERS = "MANAGE_TEACHERS",
   VIEW_ANALYTICS = "VIEW_ANALYTICS",
+  INVITE_STUDENTS = "INVITE_STUDENTS",
+  INVITE_TEACHERS = "INVITE_TEACHERS",
 }
 
 export const ROLE_PERMISSION_MATRIX: Record<
@@ -28,6 +30,7 @@ export const ROLE_PERMISSION_MATRIX: Record<
     PermissionKey.EDIT_TEST,
     PermissionKey.VIEW_RESULTS,
     PermissionKey.MANAGE_STUDENTS,
+    PermissionKey.INVITE_STUDENTS,
   ],
   STUDENT: [PermissionKey.VIEW_RESULTS],
   PARENT: [PermissionKey.VIEW_RESULTS],
@@ -39,6 +42,8 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
     PermissionKey.VIEW_RESULTS,
     PermissionKey.MANAGE_TEACHERS,
     PermissionKey.MANAGE_STUDENTS,
+    PermissionKey.INVITE_STUDENTS,
+    PermissionKey.INVITE_TEACHERS,
   ],
   SUPPORT: [PermissionKey.VIEW_RESULTS],
 };

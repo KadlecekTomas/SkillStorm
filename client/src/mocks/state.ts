@@ -1,4 +1,4 @@
-import { PermissionKey, type User, type OrganizationRole } from "@/types";
+import { PermissionKey, type User, type OrganizationRole, type OrganizationType } from "@/types";
 import { derivePermissions } from "@/utils/permissions";
 import type { OrganizationContext } from "@/store/use-auth-store";
 
@@ -55,9 +55,9 @@ type SessionRecord = {
   force401Once: boolean;
 };
 
-const organizations: Record<string, { id: string; name: string }> = {
-  "org-a": { id: "org-a", name: "Atlas International" },
-  "org-b": { id: "org-b", name: "Lumen Academy" },
+const organizations: Record<string, { id: string; name: string; type: OrganizationType }> = {
+  "org-a": { id: "org-a", name: "Atlas International", type: "SCHOOL" },
+  "org-b": { id: "org-b", name: "Lumen Academy", type: "SCHOOL" },
 };
 
 const seedUsers: Record<string, User & { password: string }> = {
@@ -74,7 +74,7 @@ const seedUsers: Record<string, User & { password: string }> = {
         id: "mem-1",
         organizationId: "org-a",
         role: "TEACHER",
-        organization: { name: organizations["org-a"]!.name, type: "PRIMARY" },
+        organization: { name: organizations["org-a"]!.name, type: "SCHOOL" },
       },
     ],
   },
@@ -91,7 +91,7 @@ const seedUsers: Record<string, User & { password: string }> = {
         id: "mem-2",
         organizationId: "org-b",
         role: "TEACHER",
-        organization: { name: organizations["org-b"]!.name, type: "PRIMARY" },
+        organization: { name: organizations["org-b"]!.name, type: "SCHOOL" },
       },
     ],
   },
@@ -108,7 +108,7 @@ const seedUsers: Record<string, User & { password: string }> = {
         id: "mem-3",
         organizationId: "org-a",
         role: "STUDENT",
-        organization: { name: organizations["org-a"]!.name, type: "PRIMARY" },
+        organization: { name: organizations["org-a"]!.name, type: "SCHOOL" },
       },
     ],
   },
@@ -125,7 +125,7 @@ const seedUsers: Record<string, User & { password: string }> = {
         id: "mem-4",
         organizationId: "org-a",
         role: "DIRECTOR",
-        organization: { name: organizations["org-a"]!.name, type: "PRIMARY" },
+        organization: { name: organizations["org-a"]!.name, type: "SCHOOL" },
       },
     ],
   },
@@ -142,13 +142,13 @@ const seedUsers: Record<string, User & { password: string }> = {
         id: "mem-5",
         organizationId: "org-a",
         role: "OWNER",
-        organization: { name: organizations["org-a"]!.name, type: "PRIMARY" },
+        organization: { name: organizations["org-a"]!.name, type: "SCHOOL" },
       },
       {
         id: "mem-6",
         organizationId: "org-b",
         role: "OWNER",
-        organization: { name: organizations["org-b"]!.name, type: "PRIMARY" },
+        organization: { name: organizations["org-b"]!.name, type: "SCHOOL" },
       },
     ],
   },
@@ -297,14 +297,15 @@ const loginEnvelope = (user: User, orgId?: string | null): AuthEnvelope => {
   const orgRecord = resolvedOrgId ? organizations[resolvedOrgId] : undefined;
   const org =
     resolvedOrgId && orgRecord
-      ? { id: resolvedOrgId, name: orgRecord.name }
+      ? { id: resolvedOrgId, name: orgRecord.name, type: orgRecord.type }
       : null;
   const roles = shapedUser.organizationRole ? [shapedUser.organizationRole] : [];
+  const basePermissions = derivePermissions(shapedUser);
   return {
     user: shapedUser,
     org,
     roles,
-    permissions: derivePermissions(shapedUser),
+    permissions: basePermissions,
   };
 };
 
@@ -399,6 +400,36 @@ export const switchOrganization = (orgId: string, sessionToken?: string): AuthEn
   }
   record.orgId = membership.organizationId;
   return loginEnvelope(user, membership.organizationId);
+};
+
+export const joinOrganization = (
+  payload: { joinCode: string; role: OrganizationRole },
+  sessionToken?: string,
+): AuthEnvelope => {
+  const { user } = ensureSession(sessionToken);
+  const org = organizations[payload.joinCode];
+  if (!org) {
+    throw new MockHttpError(404, "Organization not found");
+  }
+  if (org.type === "PRIVATE") {
+    throw new MockHttpError(400, "Private organizations cannot be joined");
+  }
+  const existing = user.memberships?.find((member) => member.organizationId === org.id);
+  if (existing) {
+    return loginEnvelope(user, org.id);
+  }
+  const membership = {
+    id: `mem-${createId()}`,
+    organizationId: org.id,
+    role: payload.role,
+    organization: { name: org.name, type: org.type },
+  };
+  user.memberships = [...(user.memberships ?? []), membership];
+  user.organizationId = org.id;
+  user.organizationRole = payload.role;
+  const record = getSessionRecord(sessionToken);
+  record.orgId = org.id;
+  return loginEnvelope(user, org.id);
 };
 
 export const listTests = (requestOrgId: string | null, sessionToken?: string): { items: PolicyTest[] } => {
@@ -537,15 +568,29 @@ export const finishSubmission = (
   };
 };
 
-export const registerUser = (payload: { email?: string; name?: string }): { user: { id: string; email: string; name: string; organizationRole: null; organizationId: null } } => ({
-  user: {
+export const registerUser = (
+  payload: { email?: string; name?: string },
+  sessionToken?: string,
+): { user: User; sessionToken: string } => {
+  const email = payload.email ?? `new-${createId()}@skillstorm.test`;
+  const user: User & { password: string } = {
     id: `pending-${createId()}`,
-    email: payload.email ?? "new@skillstorm.test",
+    email,
     name: payload.name ?? "Nový uživatel",
     organizationRole: null,
     organizationId: null,
-  },
-});
+    memberships: [],
+    permissions: [],
+    password: "password",
+  };
+  seedUsers[email] = user;
+  const token = sessionToken ?? createSessionToken();
+  const record = getSessionRecord(token);
+  record.userId = user.id;
+  record.orgId = null;
+  record.force401Once = false;
+  return { user, sessionToken: token };
+};
 
 export const recordAuditEvents = (events: AuditEventPayload[]): { stored: number } => {
   auditEvents.push(...events);

@@ -28,6 +28,7 @@ import type { CreateAnswerDto } from './dto/create-answer.dto';
 import type { UpdateAnswerDto } from './dto/update-answer.dto';
 import type { JwtPayload } from '@/auth/types/jwt-payload';
 import type { AssignTestDto } from './dto/assign-test.dto';
+import { hasAtLeastRole } from '@/shared/access.utils';
 
 import {
   buildVersionedListKey,
@@ -120,7 +121,10 @@ export class TestsService {
     const sameOrg = user.organizationId === test.organizationId;
     if (!sameOrg) throw new ForbiddenException('Cizí organizace.');
 
-    const isDirector = user.organizationRole === OrganizationRole.DIRECTOR;
+    const isDirector = hasAtLeastRole(
+      user.organizationRole ?? null,
+      OrganizationRole.DIRECTOR,
+    );
     if (isDirector) return;
 
     const isAuthor = await this.prisma.membership.findFirst({
@@ -128,7 +132,9 @@ export class TestsService {
       select: { id: true },
     });
     if (!isAuthor)
-      throw new ForbiddenException('Upravovat může jen autor nebo ředitel.');
+      throw new ForbiddenException(
+        'Upravovat může jen autor nebo ředitel/owner.',
+      );
   }
 
   private normalizeText(value?: string | null): string | null {
@@ -481,9 +487,11 @@ export class TestsService {
     if (user.systemRole !== SystemRole.SUPERADMIN) {
       if (
         user.organizationId !== current.organizationId ||
-        user.organizationRole !== OrganizationRole.DIRECTOR
+        !hasAtLeastRole(user.organizationRole ?? null, OrganizationRole.DIRECTOR)
       ) {
-        throw new ForbiddenException('Mazat smí jen ředitel nebo superadmin.');
+        throw new ForbiddenException(
+          'Mazat smí jen ředitel/owner nebo superadmin.',
+        );
       }
     }
 
@@ -541,7 +549,13 @@ export class TestsService {
       where: {
         userId: user.userId,
         organizationId,
-        role: { in: [OrganizationRole.TEACHER, OrganizationRole.DIRECTOR] },
+        role: {
+          in: [
+            OrganizationRole.TEACHER,
+            OrganizationRole.DIRECTOR,
+            OrganizationRole.OWNER,
+          ],
+        },
         deletedAt: null,
       },
       select: { id: true },

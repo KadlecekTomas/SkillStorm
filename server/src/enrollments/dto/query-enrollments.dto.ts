@@ -1,6 +1,11 @@
-import { IsUUID } from 'class-validator';
+import { IsOptional, IsUUID } from 'class-validator';
 
 export class QueryEnrollmentsDto {
+  @IsOptional()
   @IsUUID()
-  classSectionId!: string;
+  classSectionId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  classroomId?: string;
 }

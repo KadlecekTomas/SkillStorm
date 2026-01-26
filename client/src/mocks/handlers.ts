@@ -6,6 +6,7 @@ import {
   getProfile,
   switchOrganization,
   registerUser,
+  joinOrganization,
   listTests,
   getTest,
   listMaterials,
@@ -65,7 +66,24 @@ export const handlers = [
 
   http.post("*/auth/register", async ({ request }) => {
     const body = (await request.json()) as { email?: string; name?: string };
-    return respond(() => registerUser(body));
+    return respond(() => {
+      registerUser(body, MSW_SESSION);
+      return {
+        ...getProfile(MSW_SESSION),
+        sessionToken: MSW_SESSION,
+      };
+    });
+  }),
+
+  http.post("*/auth/join", async ({ request }) => {
+    const body = (await request.json()) as { joinCode: string; role: string };
+    return respond(() => ({
+      ...joinOrganization(
+        { joinCode: body.joinCode, role: body.role as "STUDENT" | "TEACHER" | "PARENT" },
+        MSW_SESSION,
+      ),
+      sessionToken: MSW_SESSION,
+    }));
   }),
 
   http.get("*/tests", ({ request }) =>

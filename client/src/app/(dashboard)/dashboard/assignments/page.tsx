@@ -64,8 +64,9 @@ function AssignmentsPage() {
   );
 }
 
-const assignmentRoles: OrganizationRole[] = ["STUDENT", "TEACHER", "DIRECTOR"];
+const assignmentRoles: OrganizationRole[] = ["STUDENT", "TEACHER", "DIRECTOR", "OWNER"];
 
 export default withGuard({
   requireRoles: assignmentRoles,
+  requireSchoolWorkspace: true,
 })(AssignmentsPage);

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useGuard, type GuardOptions } from "@/lib/guard/useGuard";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { AccessDenied } from "@/components/access/access-denied";
+import { NoOrganizationScreen } from "@/components/onboarding/NoOrganizationScreen";
 import { reportForbiddenAccess } from "@/utils/rbac-telemetry";
 import { AUTH_DEBUG } from "@/utils/env";
 import { useAuth } from "@/hooks/use-auth";
@@ -43,7 +44,6 @@ export const GuardBoundary = ({
     if (guard.allowed) return;
 
     if (AUTH_DEBUG) {
-      // eslint-disable-next-line no-console
       console.log(
         "%c[AUTH][GUARD]",
         "color:#f97316;font-weight:600",
@@ -58,7 +58,6 @@ export const GuardBoundary = ({
     // ❌ nepřihlášen → login
     if (!user) {
       if (AUTH_DEBUG) {
-        // eslint-disable-next-line no-console
         console.log(
           "%c[AUTH][REDIRECT]",
           "color:#dc2626;font-weight:600",
@@ -87,6 +86,7 @@ export const GuardBoundary = ({
     user,
     options.requirePerms,
     options.requireRoles,
+    options.requireSchoolWorkspace,
     router,
   ]);
   if (guard.isLoading) {
@@ -99,7 +99,16 @@ export const GuardBoundary = ({
     );
   }
 
-  if (!guard.allowed && (guard.reason === "FORBIDDEN" || guard.reason === "NO_ORGANIZATION")) {
+  if (!guard.allowed && guard.reason === "NO_ORGANIZATION") {
+    return (
+      <>
+        {readyMarker}
+        <NoOrganizationScreen />
+      </>
+    );
+  }
+
+  if (!guard.allowed && guard.reason === "FORBIDDEN") {
     return (
       <>
         {readyMarker}

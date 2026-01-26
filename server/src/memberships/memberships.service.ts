@@ -12,6 +12,7 @@ import type { UpdateMembershipDto } from './dto/update-membership.dto';
 import type { QueryMembershipsDto } from './dto/query-memberships.dto';
 import type { Prisma } from '@prisma/client';
 import { SystemRole, OrganizationRole, AuditEntityType } from '@prisma/client';
+import { hasAtLeastRole } from '@/shared/access.utils';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import {
@@ -107,14 +108,14 @@ export class MembershipsService {
         where: {
           userId: user?.userId ?? user?.sub,
           organizationId: q.organizationId,
-          role: OrganizationRole.DIRECTOR,
+          role: { in: [OrganizationRole.DIRECTOR, OrganizationRole.OWNER] },
           deletedAt: null,
         },
         select: { id: true },
       });
       if (!director) {
         throw new ForbiddenException(
-          'Access denied (not a director in this organization).',
+          'Access denied (not a director/owner in this organization).',
         );
       }
     }
@@ -269,12 +270,18 @@ export class MembershipsService {
 
     const isSuper = user?.systemRole === SystemRole.SUPERADMIN;
     const sameOrg = user?.organizationId === current.organizationId;
+    const isOwner = user?.organizationRole === OrganizationRole.OWNER;
 
     if (!isSuper) {
       if (!sameOrg)
         throw new ForbiddenException('Cross-organization update is forbidden.');
-      if (current.role === OrganizationRole.DIRECTOR) {
-        throw new ForbiddenException('Ředitele může upravit pouze SUPERADMIN.');
+      if (current.role === OrganizationRole.OWNER) {
+        throw new ForbiddenException('Ownera může upravit pouze SUPERADMIN.');
+      }
+      if (current.role === OrganizationRole.DIRECTOR && !isOwner) {
+        throw new ForbiddenException(
+          'Ředitele může upravit pouze SUPERADMIN nebo owner.',
+        );
       }
       if (current.userId === (user?.userId ?? user?.sub)) {
         throw new ForbiddenException('Nemůžeš měnit vlastní členství.');
@@ -324,12 +331,18 @@ export class MembershipsService {
 
     const isSuper = user?.systemRole === SystemRole.SUPERADMIN;
     const sameOrg = user?.organizationId === current.organizationId;
+    const isOwner = user?.organizationRole === OrganizationRole.OWNER;
 
     if (!isSuper) {
       if (!sameOrg)
         throw new ForbiddenException('Cross-organization delete is forbidden.');
-      if (current.role === OrganizationRole.DIRECTOR) {
-        throw new ForbiddenException('Ředitele může upravit pouze SUPERADMIN.');
+      if (current.role === OrganizationRole.OWNER) {
+        throw new ForbiddenException('Ownera může odstranit pouze SUPERADMIN.');
+      }
+      if (current.role === OrganizationRole.DIRECTOR && !isOwner) {
+        throw new ForbiddenException(
+          'Ředitele může odstranit pouze SUPERADMIN nebo owner.',
+        );
       }
       if (current.userId === (user?.userId ?? user?.sub)) {
         throw new ForbiddenException('Nemůžeš smazat vlastní členství.');

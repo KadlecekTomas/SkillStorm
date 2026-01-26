@@ -6,29 +6,17 @@ import { motion } from "framer-motion";
 import { dashboardNav } from "@/utils/constants";
 import { cn } from "@/utils/cn";
 import { GraduationCap } from "lucide-react";
-import { useAuthStore } from "@/store/use-auth-store";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { usePermissions } from "@/hooks/use-permissions";
-import { useMemo } from "react";
+import { useAuth } from "@/hooks/use-auth";
 
 export const Sidebar = (): React.JSX.Element => {
   const pathname = usePathname();
-  const user = useAuthStore((state) => state.user);
+  const { user, hasOrganization } = useAuth();
   const { can, permissions } = usePermissions();
   const displayName = user?.fullName ?? user?.name ?? "Guest Educator";
-
-  const accessibleNav = useMemo(
-    () =>
-      dashboardNav.filter((item) => {
-        if (!item.permission) return true;
-        const required = Array.isArray(item.permission)
-          ? item.permission
-          : [item.permission];
-        return required.some((perm) => can(perm));
-      }),
-    [can],
-  );
+  const navItems = dashboardNav;
 
   return (
     <aside className="glass-panel hidden min-h-screen w-72 flex-col justify-between rounded-3xl p-6 lg:flex">
@@ -44,8 +32,17 @@ export const Sidebar = (): React.JSX.Element => {
         </Link>
 
         <nav className="space-y-2">
-          {accessibleNav.map((item) => {
+          {navItems.map((item) => {
             const active = pathname.startsWith(item.href);
+            const required = item.permission
+              ? Array.isArray(item.permission)
+                ? item.permission
+                : [item.permission]
+              : [];
+            const orgOnly = item.orgOnly === true;
+            const allowed = !required.length || required.some((perm) => can(perm));
+            const disabled = (orgOnly && !hasOrganization) || !allowed;
+            if (disabled) return null;
             return (
               <Link
                 key={item.href}
@@ -68,7 +65,7 @@ export const Sidebar = (): React.JSX.Element => {
               </Link>
             );
           })}
-          {accessibleNav.length === 0 && (
+          {navItems.length === 0 && (
             <div className="rounded-2xl border border-dashed border-rose-200 bg-rose-50/70 px-4 py-3 text-sm text-rose-600">
               Žádný modul zatím nemáš k dispozici. Požádej správce o přidání oprávnění.
             </div>
@@ -98,7 +95,7 @@ export const Sidebar = (): React.JSX.Element => {
             </p>
             {user?.organizationRole && (
               <Badge variant="success" className="w-fit capitalize">
-                {user.organizationRole.toLowerCase()}
+                {hasOrganization ? user.organizationRole.toLowerCase() : "bez školy"}
               </Badge>
             )}
             {!permissions.length && (

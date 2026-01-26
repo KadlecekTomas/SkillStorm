@@ -16,6 +16,7 @@ import type { UpdateStudentDto } from './dto/update-student.dto';
 import type { JwtPayload } from '@/auth/types/jwt-payload';
 import { canAccessStudent } from './utils/access.utils';
 import type { QueryStudentsDto } from './dto/query-students.dto';
+import { hasAtLeastRole } from '@/shared/access.utils';
 import * as XLSX from 'xlsx';
 import type {
   ExportStudentsDto,
@@ -412,12 +413,12 @@ export class StudentsService {
     if (
       user.systemRole !== SystemRole.SUPERADMIN &&
       !(
-        user.organizationRole === OrganizationRole.DIRECTOR &&
+        hasAtLeastRole(user.organizationRole ?? null, OrganizationRole.DIRECTOR) &&
         user.organizationId === student.orgId
       )
     ) {
       throw new ForbiddenException(
-        'Mazat studenta může jen ředitel nebo superadmin.',
+        'Mazat studenta může jen ředitel/owner nebo superadmin.',
       );
     }
 

@@ -1,7 +1,21 @@
 import { PermissionKey, SystemRole } from '@prisma/client';
 import { RbacService } from '@/modules/rbac/rbac.service';
 import type { PrismaService } from '@/prisma/prisma.service';
+import type { RbacInvalidatePayload } from '@/modules/rbac/rbac.events';
 import { emitRbacInvalidation } from '@/modules/rbac/rbac.events';
+
+jest.mock('@/modules/rbac/rbac.events', () => {
+  const { EventEmitter } = require('events');
+  const rbacEvents = new EventEmitter();
+  rbacEvents.setMaxListeners(50);
+  const RBAC_INVALIDATE_EVENT = 'rbac.invalidate';
+  return {
+    RBAC_INVALIDATE_EVENT,
+    rbacEvents,
+    emitRbacInvalidation: (payload: RbacInvalidatePayload) =>
+      rbacEvents.emit(RBAC_INVALIDATE_EVENT, payload),
+  };
+});
 
 describe('RbacService (unit)', () => {
   let prismaMock: any;
@@ -31,7 +45,7 @@ describe('RbacService (unit)', () => {
     const allowed = await service.canUser(
       'super-1',
       null,
-      PermissionKey.CREATE_TEST,
+      PermissionKey.DELETE_TEST,
     );
 
     expect(allowed).toBe(true);
@@ -46,17 +60,17 @@ describe('RbacService (unit)', () => {
       role: 'TEACHER',
       organizationId: 'org-1',
     } as any);
-    prismaMock.rolePermission.findFirst.mockResolvedValue({} as any);
+    prismaMock.rolePermission.findFirst.mockResolvedValue({ allowed: true });
 
     const first = await service.canUser(
       'user-1',
       'org-1',
-      PermissionKey.CREATE_TEST,
+      PermissionKey.DELETE_TEST,
     );
     expect(first).toBe(true);
     expect(prismaMock.rolePermission.findFirst).toHaveBeenCalledTimes(1);
 
-    await service.canUser('user-1', 'org-1', PermissionKey.CREATE_TEST);
+    await service.canUser('user-1', 'org-1', PermissionKey.DELETE_TEST);
     expect(prismaMock.rolePermission.findFirst).toHaveBeenCalledTimes(1);
 
     emitRbacInvalidation({ organizationId: 'org-1' });
@@ -64,7 +78,7 @@ describe('RbacService (unit)', () => {
     const afterInvalidation = await service.canUser(
       'user-1',
       'org-1',
-      PermissionKey.CREATE_TEST,
+      PermissionKey.DELETE_TEST,
     );
     expect(prismaMock.rolePermission.findFirst).toHaveBeenCalledTimes(2);
     expect(afterInvalidation).toBe(false);
@@ -82,7 +96,7 @@ describe('RbacService (unit)', () => {
     const first = await service.canUser(
       'user-2',
       'org-2',
-      PermissionKey.VIEW_RESULTS,
+      PermissionKey.CREATE_TEST,
     );
     expect(first).toBe(false);
 
@@ -93,8 +107,9 @@ describe('RbacService (unit)', () => {
     const second = await service.canUser(
       'user-2',
       'org-2',
-      PermissionKey.VIEW_RESULTS,
+      PermissionKey.CREATE_TEST,
     );
     expect(second).toBe(true);
   });
+
 });

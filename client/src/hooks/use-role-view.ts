@@ -1,15 +1,19 @@
 "use client";
 
 import { useMemo } from "react";
-import { useAuthStore } from "@/store/use-auth-store";
+import { useAuth } from "@/hooks/use-auth";
 
 export const useRoleView = (): string => {
-  const user = useAuthStore((state) => state.user);
+  const { user, hasOrganization } = useAuth();
   return useMemo(
-    () =>
-      user?.organizationRole?.toLowerCase() ??
-      user?.systemRole?.toLowerCase() ??
-      "guest",
-    [user],
+    () => {
+      if (!hasOrganization) return "personal";
+      return (
+        user?.organizationRole?.toLowerCase() ??
+        user?.systemRole?.toLowerCase() ??
+        "guest"
+      );
+    },
+    [user, hasOrganization],
   );
 };

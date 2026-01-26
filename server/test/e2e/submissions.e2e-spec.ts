@@ -13,6 +13,7 @@ import {
   OrganizationType,
 } from '@prisma/client';
 import { authAs } from 'test/helpers';
+import { RegisterMode } from '@/auth/dto/register.dto';
 
 function uniqueIp() {
   const rnd = () => Math.floor(Math.random() * 250) + 1;
@@ -120,17 +121,17 @@ describe('Submissions (e2e)', () => {
     const regTeacher = await request(app.getHttpServer())
       .post('/auth/register')
       .set('X-Forwarded-For', uniqueIp())
-      .send({ ...teacher, role: OrganizationRole.TEACHER })
+      .send({ ...teacher, role: OrganizationRole.TEACHER, mode: RegisterMode.INDIVIDUAL })
       .expect(201);
     const regStudent = await request(app.getHttpServer())
       .post('/auth/register')
       .set('X-Forwarded-For', uniqueIp())
-      .send({ ...student, role: OrganizationRole.STUDENT })
+      .send({ ...student, role: OrganizationRole.STUDENT, mode: RegisterMode.INDIVIDUAL })
       .expect(201);
     const regOutsider = await request(app.getHttpServer())
       .post('/auth/register')
       .set('X-Forwarded-For', uniqueIp())
-      .send({ ...outsider, role: OrganizationRole.STUDENT })
+      .send({ ...outsider, role: OrganizationRole.STUDENT, mode: RegisterMode.INDIVIDUAL })
       .expect(201);
 
     // Memberships

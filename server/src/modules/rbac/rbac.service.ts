@@ -235,4 +235,6 @@ export class RbacService implements OnModuleDestroy {
   ): boolean {
     return isPermissionAllowedByDefault(role, key);
   }
+
+  // no system-workspace shortcuts; permissions are evaluated uniformly
 }

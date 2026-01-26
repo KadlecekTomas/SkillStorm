@@ -14,6 +14,7 @@ type NavItem = {
   href: string;
   icon: LucideIcon;
   permission?: PermissionKey | PermissionKey[];
+  orgOnly?: boolean;
 };
 
 export const dashboardNav: NavItem[] = [
@@ -22,7 +23,8 @@ export const dashboardNav: NavItem[] = [
     title: "Classrooms",
     href: "/dashboard/classrooms",
     icon: Users2,
-    permission: PermissionKey.MANAGE_STUDENTS,
+    permission: [PermissionKey.VIEW_RESULTS, PermissionKey.MANAGE_STUDENTS],
+    orgOnly: true,
   },
   {
     title: "Tests",
@@ -50,13 +52,13 @@ export const dashboardNav: NavItem[] = [
     title: "Settings",
     href: "/dashboard/settings",
     icon: Settings,
-    permission: PermissionKey.MANAGE_TEACHERS,
   },
   {
     title: "Analytics",
     href: "/dashboard/analytics",
     icon: LineChart,
     permission: PermissionKey.VIEW_ANALYTICS,
+    orgOnly: true,
   },
 ];
 

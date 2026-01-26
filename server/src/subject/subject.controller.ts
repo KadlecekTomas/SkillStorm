@@ -89,7 +89,7 @@ export class SubjectsController {
 
   // ---------- DELETE (soft) ----------
   @Delete(':id')
-  @Permission(SystemRole.SUPERADMIN, OrganizationRole.DIRECTOR)
+  @Permission(SystemRole.SUPERADMIN, OrganizationRole.OWNER, OrganizationRole.DIRECTOR)
   @ApiOperation({ summary: 'Soft smazání předmětu' })
   @InvalidateScopes(({ result }) =>
     result?.organizationId ? [result.organizationId] : [],

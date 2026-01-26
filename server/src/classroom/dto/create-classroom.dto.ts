@@ -13,6 +13,15 @@ export class CreateClassSectionDto {
   yearId?: string;
 
   @ApiProperty({
+    example: 'year-uuid',
+    description: 'Alias pro yearId',
+    required: false,
+  })
+  @IsOptional()
+  @IsUUID()
+  academicYearId?: string;
+
+  @ApiProperty({
     example: 'PRIMARY_1',
     description: 'Ročník třídy (např. PRIMARY_1, PRIMARY_2...)',
   })
@@ -30,8 +39,9 @@ export class CreateClassSectionDto {
     example: '1.A',
     description: 'Celé označení třídy',
   })
+  @IsOptional()
   @IsString()
-  label!: string;
+  label?: string;
 
   @ApiProperty({
     example: 'Informatika',

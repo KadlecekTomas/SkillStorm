@@ -85,4 +85,5 @@ function OrgTestPage() {
 
 export default withGuard({
   requirePerms: [PermissionKey.VIEW_RESULTS],
+  requireSchoolWorkspace: true,
 })(OrgTestPage);

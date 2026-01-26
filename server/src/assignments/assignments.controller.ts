@@ -48,6 +48,7 @@ export class AssignmentsController {
   @Permission(
     OrganizationRole.STUDENT,
     OrganizationRole.TEACHER,
+    OrganizationRole.OWNER,
     OrganizationRole.DIRECTOR,
   )
   @ApiOperation({ summary: 'List assignments for current user (student scope)' })

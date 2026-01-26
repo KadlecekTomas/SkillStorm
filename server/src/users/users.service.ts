@@ -9,11 +9,12 @@ import {
 import { Cache } from 'cache-manager';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Prisma } from '@prisma/client';
-import { SystemRole, AuditEntityType } from '@prisma/client';
+import { SystemRole, AuditEntityType, OrganizationRole } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import * as bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
+import { hasAtLeastRole } from '@/shared/access.utils';
 
 import type { CreateUserDto } from './dto/create-user.dto';
 import type { UpdateUserDto } from './dto/update-user.dto';
@@ -323,7 +324,10 @@ export class UsersService {
       const sameOrg = target.memberships.some(
         (m) => m.organizationId === requester.organizationId,
       );
-      const isDirector = requester.organizationRole === 'DIRECTOR';
+      const isDirector = hasAtLeastRole(
+        requester.organizationRole ?? null,
+        OrganizationRole.DIRECTOR,
+      );
       if (!(sameOrg && isDirector)) {
         throw new ForbiddenException(
           'Nemáš oprávnění smazat tohoto uživatele.',

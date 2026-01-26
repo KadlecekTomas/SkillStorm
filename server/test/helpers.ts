@@ -3,7 +3,8 @@ import * as request from 'supertest';
 import { INestApplication } from '@nestjs/common';
 import { OrganizationRole, SystemRole } from '@prisma/client';
 import { CSRF_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE } from '@/auth/token-cookies';
-import type { PrismaService } from '@/prisma/prisma.service';
+import { PrismaService } from '@/prisma/prisma.service';
+import { RegisterMode } from '@/auth/dto/register.dto';
 
 /**
  * Generuje jednoduchý, ale dostatečně unikátní suffix.
@@ -52,6 +53,7 @@ type AuthAsOptions = {
   email?: string;
   username?: string;
   password?: string;
+  mode?: RegisterMode;
 };
 
 /**
@@ -79,6 +81,7 @@ export async function authAs(
     username: options.username ?? shortTag,
     password,
     role,
+    mode: options.mode ?? RegisterMode.CREATE_ORG,
   };
 
   const agent = request.agent(app.getHttpServer());
@@ -94,6 +97,21 @@ export async function authAs(
     );
   }
   const regData = unwrapBody(reg);
+  const prisma = app.get(PrismaService);
+  if (
+    payload.mode === RegisterMode.CREATE_ORG &&
+    regData?.membership?.id &&
+    role !== OrganizationRole.OWNER
+  ) {
+    await prisma.membership.update({
+      where: { id: regData.membership.id },
+      data: { role },
+    });
+    regData.membership = await prisma.membership.findUnique({
+      where: { id: regData.membership.id },
+      select: { id: true, role: true, organizationId: true },
+    });
+  }
 
   const loginRes = await agent
     .post('/auth/login')

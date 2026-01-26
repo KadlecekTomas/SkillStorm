@@ -1,4 +1,4 @@
-import { renderHook, act } from "@testing-library/react";
+import { renderHook, act, waitFor } from "@testing-library/react";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useAuthStore } from "@/store/use-auth-store";
 import type { AuthState } from "@/store/use-auth-store";
@@ -6,15 +6,17 @@ import { PermissionKey } from "@/types";
 
 describe("usePermissions", () => {
   afterEach(() => {
-    useAuthStore.setState({
-      user: null,
-      sessionToken: null,
-      loading: false,
-      permissions: [],
-    } satisfies Partial<AuthState>);
+    act(() => {
+      useAuthStore.setState({
+        user: null,
+        sessionToken: null,
+        loading: false,
+        permissions: [],
+      } satisfies Partial<AuthState>);
+    });
   });
 
-  it("returns helpers for role and permission checks", () => {
+  it("returns helpers for role and permission checks", async () => {
     act(() => {
       useAuthStore.setState({
         user: {
@@ -29,12 +31,15 @@ describe("usePermissions", () => {
 
     const { result } = renderHook(() => usePermissions());
 
-    expect(result.current.can(PermissionKey.VIEW_RESULTS)).toBe(true);
+    await waitFor(() => {
+      expect(result.current.can(PermissionKey.VIEW_RESULTS)).toBe(true);
+    });
+
     expect(result.current.can(PermissionKey.CREATE_TEST)).toBe(false);
     expect(result.current.hasRole("STUDENT")).toBe(true);
   });
 
-  it("detects superadmin roles via system role", () => {
+  it("detects superadmin roles via system role", async () => {
     act(() => {
       useAuthStore.setState({
         user: { id: "admin-1", name: "Test Admin", systemRole: "SUPERADMIN" },
@@ -44,7 +49,10 @@ describe("usePermissions", () => {
 
     const { result } = renderHook(() => usePermissions());
 
-    expect(result.current.isSuperAdmin).toBe(true);
+    await waitFor(() => {
+      expect(result.current.isSuperAdmin).toBe(true);
+    });
+
     expect(result.current.hasRole("SUPERADMIN")).toBe(true);
   });
 });

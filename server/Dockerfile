@@ -20,11 +20,17 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=4200
 
+# potřebné pro entrypoint (nc)
+RUN apt-get update && apt-get install -y netcat-openbsd && rm -rf /var/lib/apt/lists/*
+
 COPY package*.json ./
 COPY prisma ./prisma
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
+COPY entrypoint.sh ./entrypoint.sh
+
+RUN chmod +x /app/entrypoint.sh
 
 EXPOSE 4200
 
-CMD ["node", "dist/main.js"]
+ENTRYPOINT ["/app/entrypoint.sh"]

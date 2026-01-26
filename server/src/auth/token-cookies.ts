@@ -5,9 +5,11 @@ export const ACCESS_TOKEN_COOKIE = 'ss_at';
 export const REFRESH_TOKEN_COOKIE = 'ss_rt';
 export const CSRF_TOKEN_COOKIE = 'ss_csrf';
 
+const isSecure = process.env.NODE_ENV === 'production';
+
 const base = {
   httpOnly: true,
-  secure: true,
+  secure: isSecure,
   sameSite: 'lax' as const,
   path: '/',
 };
@@ -15,7 +17,7 @@ const base = {
 export function setCsrfCookie(res: Response, token: string) {
   res.cookie(CSRF_TOKEN_COOKIE, token, {
     httpOnly: false,
-    secure: true,
+    secure: isSecure,
     sameSite: 'lax',
     path: '/',
     maxAge: 7 * 24 * 60 * 60 * 1000,

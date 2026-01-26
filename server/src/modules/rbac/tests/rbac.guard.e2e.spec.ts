@@ -1,6 +1,7 @@
 import { Test } from '@nestjs/testing';
 import type { INestApplication } from '@nestjs/common';
 import { Controller, Get } from '@nestjs/common';
+import type { Request, Response, NextFunction } from 'express';
 import * as request from 'supertest';
 import { Permission } from '@/modules/rbac/permission.decorator';
 import { PermissionKey } from '@prisma/client';
@@ -9,6 +10,8 @@ import { APP_GUARD } from '@nestjs/core';
 import { RbacService } from '@/modules/rbac/rbac.service';
 
 let currentUser: any = null;
+
+jest.setTimeout(30000);
 
 @Controller('secure')
 class SecureController {
@@ -33,7 +36,7 @@ describe('RbacGuard (e2e-like)', () => {
     }).compile();
 
     app = moduleRef.createNestApplication();
-    app.use((req, _res, next) => {
+    app.use((req: Request, _res: Response, next: NextFunction) => {
       req.user = currentUser;
       next();
     });

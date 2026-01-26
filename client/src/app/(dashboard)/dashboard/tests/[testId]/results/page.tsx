@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { fetchWithAuth } from "@/lib/http/client";
 import { Card } from "@/components/ui/card";
 import { Alert } from "@/components/ui/alert";
+import { withGuard } from "@/lib/guard/withGuard";
 
 type ResultRow = {
   id: string;
@@ -15,7 +16,7 @@ type ResultRow = {
   isAnonymous?: boolean;
 };
 
-export default function TestResultsPage(): React.JSX.Element {
+function TestResultsPage(): React.JSX.Element {
   const { testId } = useParams<{ testId: string }>();
   const [results, setResults] = useState<ResultRow[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -61,3 +62,5 @@ export default function TestResultsPage(): React.JSX.Element {
     </div>
   );
 }
+
+export default withGuard({ requireSchoolWorkspace: true })(TestResultsPage);

@@ -13,13 +13,13 @@ export default function SelectOrganizationPage(): React.JSX.Element {
     <div className="mx-auto max-w-2xl space-y-6">
       <div className="space-y-2">
         <p className="text-sm font-medium uppercase tracking-wide text-slate-400">
-          Aktivní organizace
+          Aktivní škola
         </p>
         <h1 className="text-3xl font-semibold text-slate-900">
           Vyber, kde chceš pokračovat
         </h1>
         <p className="text-sm text-slate-500">
-          Každá organizace má vlastní obsah, oprávnění i testy. Vyber jednu pro
+          Každá škola má vlastní obsah, oprávnění i testy. Vyber jednu pro
           pokračování v dashboardu.
         </p>
       </div>
@@ -36,7 +36,9 @@ export default function SelectOrganizationPage(): React.JSX.Element {
               </p>
               <p className="text-sm text-slate-500">
                 Role:{" "}
-                <span className="font-medium uppercase">{membership.role}</span>
+                <span className="font-medium uppercase">
+                  {membership.role}
+                </span>
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -54,8 +56,8 @@ export default function SelectOrganizationPage(): React.JSX.Element {
         ))}
         {!memberships.length && (
           <Card className="rounded-3xl border border-dashed border-amber-200 bg-amber-50/70 p-5 text-sm text-amber-800">
-            Tato identita zatím nemá přiřazenou organizaci. Požádej administrátora,
-            aby tě přidal k organizaci.
+            Tento účet zatím nemá přiřazenou školu. Zkus se znovu přihlásit nebo
+            kontaktuj podporu.
           </Card>
         )}
       </div>

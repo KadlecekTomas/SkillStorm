@@ -5,6 +5,7 @@ import { OrganizationRole, SystemRole } from '@prisma/client';
 import { PERMISSION_KEY } from './permission.decorator';
 import type { PermissionToken } from './rbac.types';
 import { RbacService } from './rbac.service';
+import { hasAtLeastRole } from '@/shared/access.utils';
 
 @Injectable()
 export class RbacGuard implements CanActivate {
@@ -73,6 +74,15 @@ export class RbacGuard implements CanActivate {
     }
 
     if (this.isOrganizationRole(token)) {
+      if (token === OrganizationRole.DIRECTOR) {
+        return hasAtLeastRole(
+          user.organizationRole ?? null,
+          OrganizationRole.DIRECTOR,
+        );
+      }
+      if (token === OrganizationRole.OWNER) {
+        return user.organizationRole === OrganizationRole.OWNER;
+      }
       return user.organizationRole === token;
     }
 

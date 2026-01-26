@@ -79,6 +79,7 @@ export const ACADEMIC_YEAR_ID =
 
 export const CLASS_SECTION_IDS = {
   chodovickaA: 'aaaa1111-bbbb-4000-b000-000000000090',
+  chodovickaB: 'aaaa1111-bbbb-4000-b000-000000000091',
 } as const;
 
 export const ASSIGNMENT_IDS = {

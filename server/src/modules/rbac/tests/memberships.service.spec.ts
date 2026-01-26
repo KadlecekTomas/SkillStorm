@@ -3,12 +3,12 @@ import type { PrismaService } from '@/prisma/prisma.service';
 import { SystemRole, OrganizationRole } from '@prisma/client';
 import { emitRbacInvalidation } from '@/modules/rbac/rbac.events';
 
-jest.mock('@/ modules/rbac/rbac.events', () => ({
+jest.mock('@/modules/rbac/rbac.events', () => ({
   emitRbacInvalidation: jest.fn(),
 }));
 
-jest.mock('@/ shared/cache/org-cache.utils', () => {
-  const actual = jest.requireActual('@/ shared/cache/org-cache.utils');
+jest.mock('@/shared/cache/org-cache.utils', () => {
+  const actual = jest.requireActual('@/shared/cache/org-cache.utils');
   return {
     ...actual,
     bumpOrgVersion: jest.fn(),

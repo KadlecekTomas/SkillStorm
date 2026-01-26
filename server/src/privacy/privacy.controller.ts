@@ -23,6 +23,7 @@ export class PrivacyController {
   @Permission(
     PermissionKey.MANAGE_TEACHERS,
     SystemRole.SUPERADMIN,
+    OrganizationRole.OWNER,
     OrganizationRole.DIRECTOR,
   )
   async anonymize(@Body() dto: AnonymizeUserDto, @Req() req: any) {

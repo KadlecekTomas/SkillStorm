@@ -35,7 +35,7 @@ export default function Home(): React.JSX.Element {
             <Link href="/login">Přihlásit se</Link>
           </Button>
           <Button asChild variant="outline" className="rounded-2xl px-6 py-3 text-base">
-            <Link href="/register">Vytvořit organizaci</Link>
+            <Link href="/register">Začít</Link>
           </Button>
         </div>
       </section>

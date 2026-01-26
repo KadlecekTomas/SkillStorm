@@ -364,4 +364,5 @@ const studentOnly: OrganizationRole[] = ["STUDENT"];
 
 export default withGuard({
   requireRoles: studentOnly,
+  requireSchoolWorkspace: true,
 })(AssignmentSubmissionPage);

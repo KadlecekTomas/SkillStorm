@@ -7,6 +7,7 @@ import type {
 } from "./permissions";
 
 export type PublishStatus = "DRAFT" | "PUBLISHED" | "ARCHIVED";
+export type OrganizationType = "SCHOOL" | "PRIVATE" | "COMMUNITY";
 
 export type ContentType =
   | "MATERIAL"
@@ -27,6 +28,16 @@ export type Classroom = {
   teacherEmail?: string | null;
   studentsCount: number;
   updatedAt?: string | null;
+};
+
+export type AcademicYear = {
+  id: string;
+  organizationId: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  isActive: boolean;
+  createdAt: string;
 };
 
 export type TestSummary = {
@@ -66,7 +77,7 @@ export type MembershipSummary = {
   role: OrganizationRole;
   organization?: {
     name: string;
-    type: string;
+    type: OrganizationType;
   };
 };
 

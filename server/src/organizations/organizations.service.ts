@@ -140,7 +140,7 @@ export class OrganizationsService {
     const count = await this.prisma.membership.count({
       where: {
         userId,
-        role: OrganizationRole.DIRECTOR,
+        role: { in: [OrganizationRole.DIRECTOR, OrganizationRole.OWNER] },
         deletedAt: null,
       },
     });
@@ -174,7 +174,7 @@ export class OrganizationsService {
         data: {
           userId: creatorUserId,
           organizationId: org.id,
-          role: OrganizationRole.DIRECTOR,
+          role: OrganizationRole.OWNER,
         },
       });
     }

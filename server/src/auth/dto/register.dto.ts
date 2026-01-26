@@ -9,6 +9,12 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { OrganizationRole, SystemRole } from '@prisma/client';
 import { Transform } from 'class-transformer';
 
+export enum RegisterMode {
+  INDIVIDUAL = 'INDIVIDUAL',
+  CREATE_ORG = 'CREATE_ORG',
+  JOIN_ORG = 'JOIN_ORG',
+}
+
 export class RegisterDto {
   @ApiProperty({
     description: 'Jméno uživatele',
@@ -43,13 +49,14 @@ export class RegisterDto {
   @MinLength(6)
   password!: string;
 
-  @ApiProperty({
-    description: 'Role v organizaci',
+  @ApiPropertyOptional({
+    description: 'Role v organizaci (použije se při JOIN_ORG během explicitního připojení)',
     enum: OrganizationRole,
     example: OrganizationRole.TEACHER,
   })
+  @IsOptional()
   @IsEnum(OrganizationRole)
-  role!: OrganizationRole;
+  role?: OrganizationRole;
 
   @ApiPropertyOptional({
     description: 'Systémová role',
@@ -60,4 +67,26 @@ export class RegisterDto {
   @IsOptional()
   @IsEnum(SystemRole)
   systemRole?: SystemRole;
+
+  @ApiProperty({
+    description:
+      'Režim registrace. INDIVIDUAL = účet bez organizace, CREATE_ORG = založení vlastní školy, JOIN_ORG = registrace s následným připojením ke škole.',
+    enum: RegisterMode,
+    example: RegisterMode.INDIVIDUAL,
+  })
+  @Transform(({ value }) =>
+    typeof value === 'string' && value.length ? value.toUpperCase() : undefined,
+  )
+  @IsEnum(RegisterMode)
+  mode!: RegisterMode;
+
+  @ApiPropertyOptional({
+    description:
+      'Kód organizace pro JOIN_ORG (aktuálně organizationId) – použije se při explicitním připojení.',
+    example: 'organization-id-uuid',
+  })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsOptional()
+  @IsString()
+  joinCode?: string;
 }

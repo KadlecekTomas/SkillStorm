@@ -195,6 +195,12 @@ const logoutAndRedirect = (): void => {
   useAuthStore.getState().logout();
 
   if (typeof window !== "undefined") {
+    // ⛔ Neredirectuj, pokud už jsme na login/register stránce (prevence loop)
+    const currentPath = window.location.pathname;
+    if (currentPath === "/login" || currentPath === "/register") {
+      return;
+    }
+
     const hasReason = window.location.search.includes("reason=");
     const target = hasReason ? `/login${window.location.search}` : LOGIN_REDIRECT;
     window.location.replace(target);
@@ -351,7 +357,6 @@ export const request = async <TResponse = unknown, TBody = unknown>(
   if (AUTH_DEBUG) {
     const normalized = normalizePath(path);
     if (normalized.startsWith("/auth/login") || normalized.startsWith("/auth/me")) {
-      // eslint-disable-next-line no-console
       console.log(
         "%c[AUTH][HTTP]",
         "color:#16a34a;font-weight:600",

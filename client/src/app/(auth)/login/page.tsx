@@ -8,13 +8,17 @@ import { AuthForm } from "@/components/forms/auth-form";
 
 export default function LoginPage(): JSX.Element {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, isLoading, authStatus } = useAuth();
 
   useEffect(() => {
+    // ⛔ Neredirectuj během načítání nebo bootstrapu
+    if (isLoading) return;
+    if (authStatus !== "ready") return;
+    // ⛔ Neredirectuj, pokud není uživatel
     if (!user) return;
 
     router.replace(getRoleHomePath(user));
-  }, [user, router]);
+  }, [user, router, isLoading, authStatus]);
 
   return (
     <div className="space-y-6">

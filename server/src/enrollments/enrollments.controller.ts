@@ -8,15 +8,17 @@ import {
   Query,
   Req,
   ParseUUIDPipe,
+  BadRequestException,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Permission } from '@/modules/rbac/permission.decorator';
-import { OrganizationRole, SystemRole } from '@prisma/client';
+import { PermissionKey } from '@prisma/client';
 import { RequestWithUser } from '@/types/request-with-user';
 import { ok } from '@/common/http/envelope';
 import { ApiStandardResponses } from '@/common/http/api-standard-responses.decorator';
 import { EnrollmentsService } from './enrollments.service';
 import { CreateEnrollmentDto } from './dto/create-enrollment.dto';
+import { BulkEnrollmentDto } from './dto/bulk-enrollment.dto';
 import { QueryEnrollmentsDto } from './dto/query-enrollments.dto';
 
 @ApiTags('Enrollments')
@@ -27,21 +29,40 @@ export class EnrollmentsController {
   constructor(private readonly service: EnrollmentsService) {}
 
   @Post()
-  @Permission(OrganizationRole.DIRECTOR, OrganizationRole.OWNER, SystemRole.SUPERADMIN)
+  @Permission(PermissionKey.MANAGE_STUDENTS)
   @ApiOperation({ summary: 'Create enrollment (student ↔ class section)' })
   create(@Body() dto: CreateEnrollmentDto, @Req() req: RequestWithUser) {
-    return ok(this.service.create(dto, req.user));
+    const classSectionId = dto.classSectionId ?? dto.classroomId;
+    if (!classSectionId) {
+      throw new BadRequestException('Chybí classroomId.');
+    }
+    return ok(this.service.create({ ...dto, classSectionId }, req.user));
+  }
+
+  @Post('bulk')
+  @Permission(PermissionKey.MANAGE_STUDENTS)
+  @ApiOperation({ summary: 'Bulk enrollment (create students and enroll them)' })
+  bulk(@Body() dto: BulkEnrollmentDto, @Req() req: RequestWithUser) {
+    const classSectionId = dto.classSectionId ?? dto.classroomId;
+    if (!classSectionId) {
+      throw new BadRequestException('Chybí classroomId.');
+    }
+    return ok(this.service.bulkCreate({ ...dto, classSectionId }, req.user));
   }
 
   @Get()
-  @Permission(OrganizationRole.TEACHER, OrganizationRole.STUDENT, SystemRole.SUPERADMIN)
+  @Permission(PermissionKey.MANAGE_STUDENTS, PermissionKey.VIEW_RESULTS)
   @ApiOperation({ summary: 'List enrollments for a class section' })
   list(@Query() q: QueryEnrollmentsDto, @Req() req: RequestWithUser) {
-    return ok(this.service.listByClassSection(q.classSectionId, req.user));
+    const classSectionId = q.classSectionId ?? q.classroomId;
+    if (!classSectionId) {
+      throw new BadRequestException('Chybí classroomId.');
+    }
+    return ok(this.service.listByClassSection(classSectionId, req.user));
   }
 
   @Delete(':id')
-  @Permission(OrganizationRole.DIRECTOR, OrganizationRole.OWNER, SystemRole.SUPERADMIN)
+  @Permission(PermissionKey.MANAGE_STUDENTS)
   @ApiOperation({ summary: 'Soft delete enrollment (set status=LEFT)' })
   remove(@Param('id', new ParseUUIDPipe()) id: string, @Req() req: RequestWithUser) {
     return ok(this.service.softDelete(id, req.user));

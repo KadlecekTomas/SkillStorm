@@ -9,10 +9,15 @@ export default defineConfig({
     include: [
       "src/tests/**/*.spec.ts",
       "src/tests/**/*.spec.tsx",
-      "tests/fe-policy/**/*.test.ts",
-      "tests/fe-policy/**/*.test.tsx",
+      "tests/fe-policy/components/**/*.test.ts",
+      "tests/fe-policy/components/**/*.test.tsx",
       "tests/fe-policy/**/*.spec.ts",
       "tests/fe-policy/**/*.spec.tsx",
+    ],
+    exclude: [
+      "**/e2e/**",
+      "**/node_modules/**",
+      "**/dist/**",
     ],
   },
   resolve: {

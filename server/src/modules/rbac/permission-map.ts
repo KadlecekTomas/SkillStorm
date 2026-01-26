@@ -14,6 +14,8 @@ export const PERMISSION_DESCRIPTIONS: Record<PermissionKey, string> = {
   [PermissionKey.MANAGE_TEACHERS]:
     'Allows inviting teachers and adjusting their organization roles.',
   [PermissionKey.VIEW_ANALYTICS]: 'View analytics',
+  [PermissionKey.INVITE_STUDENTS]: 'Allows sharing invite links for students.',
+  [PermissionKey.INVITE_TEACHERS]: 'Allows sharing invite links for teachers.',
 };
 
 export function buildPermissionMarkdownTable(): string {

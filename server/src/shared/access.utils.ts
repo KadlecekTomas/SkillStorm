@@ -1,8 +1,32 @@
 // src/modules/shared/access.utils.ts
 import { ForbiddenException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
-import { SystemRole, $Enums } from '@prisma/client';
+import { SystemRole, OrganizationRole } from '@prisma/client';
 import type { JwtPayload } from '@/auth/types/jwt-payload';
+
+const ROLE_ORDER: Record<OrganizationRole, number> = {
+  STUDENT: 1,
+  PARENT: 1,
+  TEACHER: 2,
+  DIRECTOR: 3,
+  OWNER: 4,
+};
+
+export function hasAtLeastRole(
+  roleOrMembership:
+    | OrganizationRole
+    | { role?: OrganizationRole | null }
+    | null
+    | undefined,
+  required: OrganizationRole,
+): boolean {
+  const role =
+    typeof roleOrMembership === 'string'
+      ? roleOrMembership
+      : roleOrMembership?.role ?? null;
+  if (!role) return false;
+  return ROLE_ORDER[role] >= ROLE_ORDER[required];
+}
 
 /**
  * Čtení v rámci stejné organizace (superadmin výjimka).
@@ -31,19 +55,12 @@ export function assertTeacherOrDirectorInOrgOrSuperadmin(
 ) {
   if (user.systemRole === SystemRole.SUPERADMIN) return;
 
-  // Typově bezpečné s Prisma enumy
-  const allowedRoles = new Set<$Enums.OrganizationRole>([
-    $Enums.OrganizationRole.TEACHER,
-    $Enums.OrganizationRole.DIRECTOR,
-  ]);
-
   if (
     user.organizationId !== orgId ||
-    !user.organizationRole ||
-    !allowedRoles.has(user.organizationRole as $Enums.OrganizationRole)
+    !hasAtLeastRole(user.organizationRole ?? null, OrganizationRole.TEACHER)
   ) {
     throw new ForbiddenException(
-      `Pouze učitel/ředitel dané školy nebo superadmin může spravovat tento ${context}.`,
+      `Pouze učitel/ředitel/owner dané školy nebo superadmin může spravovat tento ${context}.`,
     );
   }
 }

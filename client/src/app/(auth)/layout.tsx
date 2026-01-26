@@ -32,7 +32,7 @@ export default function AuthLayout({ children }: { children: ReactNode }): React
         </div>
         <div className="flex items-center gap-3 text-sm text-slate-500">
           <Button variant="ghost" asChild className="text-slate-600">
-            <Link href="/register">Need an organization space?</Link>
+            <Link href="/register">Create or join an organization</Link>
           </Button>
         </div>
       </motion.section>

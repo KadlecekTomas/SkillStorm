@@ -37,7 +37,7 @@ export class MembershipsController {
   @ApiOperation({
     summary: 'Add user to organization (SUPERADMIN or DIRECTOR)',
   })
-  @Permission(SystemRole.SUPERADMIN, OrganizationRole.DIRECTOR)
+  @Permission(SystemRole.SUPERADMIN, OrganizationRole.OWNER, OrganizationRole.DIRECTOR)
   @InvalidateScopes(({ req }) => [req.body?.organizationId].filter(Boolean))
   async create(@Body() dto: CreateMembershipDto, @Req() req: RequestWithUser) {
     // org‑scope kontrola probíhá v service (effectiveOrgId)
@@ -55,7 +55,7 @@ export class MembershipsController {
   @ApiQuery({ name: 'role', required: false })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
-  @Permission(SystemRole.SUPERADMIN, OrganizationRole.DIRECTOR)
+  @Permission(SystemRole.SUPERADMIN, OrganizationRole.OWNER, OrganizationRole.DIRECTOR)
   @CacheTTL(0)
   async findAll(@Query() q: QueryMembershipsDto, @Req() req: RequestWithUser) {
     return this.service.findAll(req.user, q);
@@ -63,7 +63,7 @@ export class MembershipsController {
 
   // UPDATE
   @Patch(':id')
-  @Permission(SystemRole.SUPERADMIN, OrganizationRole.DIRECTOR)
+  @Permission(SystemRole.SUPERADMIN, OrganizationRole.OWNER, OrganizationRole.DIRECTOR)
   @ApiOperation({ summary: 'Update role of member (SUPERADMIN or DIRECTOR)' })
   @InvalidateScopes(({ result }) =>
     result?.organizationId ? [result.organizationId] : [],
@@ -81,7 +81,7 @@ export class MembershipsController {
   @ApiOperation({
     summary: 'Remove user from organization (SUPERADMIN or DIRECTOR)',
   })
-  @Permission(SystemRole.SUPERADMIN, OrganizationRole.DIRECTOR)
+  @Permission(SystemRole.SUPERADMIN, OrganizationRole.OWNER, OrganizationRole.DIRECTOR)
   @InvalidateScopes(({ result }) =>
     result?.organizationId ? [result.organizationId] : [],
   )

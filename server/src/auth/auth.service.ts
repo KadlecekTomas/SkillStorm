@@ -1,16 +1,19 @@
 // src/auth/auth.service.ts
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   Logger,
   NotFoundException,
   UnauthorizedException,
+  Inject,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '@/prisma/prisma.service';
 import * as bcrypt from 'bcryptjs';
 import type { LoginDto } from './dto/login.dto';
-import type { RegisterDto } from './dto/register.dto';
+import { RegisterMode, type RegisterDto } from './dto/register.dto';
+import type { JoinOrganizationDto } from './dto/join-organization.dto';
 import { ConfigService } from '@nestjs/config';
 import type { Membership, SystemRole, User } from '@prisma/client';
 import {
@@ -25,8 +28,14 @@ import { addDays } from 'date-fns';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { GamificationService } from '@/gamification/gamification.service';
 import { AuditService } from '@/audit/audit.service';
+import { RbacService } from '@/modules/rbac/rbac.service';
+import { PermissionKey } from '@prisma/client';
 import type { Request } from 'express';
 import { REFRESH_TOKEN_COOKIE } from './token-cookies';
+import { isUUID } from 'class-validator';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import type { Cache } from 'cache-manager';
+import { bumpOrgVersion } from '@/shared/cache/org-cache.utils';
 
 type JwtClaims = {
   sub: string;
@@ -37,6 +46,14 @@ type JwtClaims = {
   organizationId: string | null;
 };
 
+export type MeContext = {
+  user: Awaited<ReturnType<AuthService["getUserProfile"]>>;
+  organization: { id: string; name: string; type: any } | null;
+  membership: { id: string; role: any; organizationId: string } | null;
+  roles: string[];
+  permissions: string[];
+};
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -45,7 +62,9 @@ export class AuthService {
     private readonly config: ConfigService,
     private readonly gamification: GamificationService,
     private readonly auditService: AuditService,
-  ) {}
+    private readonly rbac: RbacService,
+    @Inject(CACHE_MANAGER) private readonly cache: Cache,
+  ) { }
 
   private readonly logger = new Logger(AuthService.name);
 
@@ -77,6 +96,41 @@ export class AuthService {
     }
   }
 
+  private resolveJoinRole(role?: OrganizationRole): OrganizationRole {
+    if (!role) {
+      throw new BadRequestException('Role is required for joining an organization');
+    }
+    const allowed = new Set<OrganizationRole>([
+      OrganizationRole.STUDENT,
+      OrganizationRole.TEACHER,
+      OrganizationRole.PARENT,
+    ]);
+    if (!allowed.has(role)) {
+      throw new BadRequestException('Selected role is not allowed for joining');
+    }
+    return role;
+  }
+
+
+  private async resolveJoinOrganization(joinCode?: string) {
+    if (!joinCode) {
+      throw new BadRequestException('Join code is required');
+    }
+    if (!isUUID(joinCode)) {
+      throw new BadRequestException('Join code is not valid');
+    }
+    const org = await this.prisma.organization.findUnique({
+      where: { id: joinCode },
+    });
+    if (!org || org.deletedAt) {
+      throw new NotFoundException('Organization not found');
+    }
+    if (org.type === OrganizationType.PRIVATE) {
+      throw new BadRequestException('Private organizations cannot be joined');
+    }
+    return org;
+  }
+
   private buildClaims(user: User, membership: Membership | null): JwtClaims {
     return {
       sub: user.id,
@@ -86,18 +140,6 @@ export class AuthService {
       organizationRole: membership?.role ?? null,
       organizationId: membership?.organizationId ?? null,
     };
-  }
-
-  private async resolveDefaultOrganization() {
-    const existing = await this.prisma.organization.findFirst({
-      orderBy: { createdAt: 'asc' },
-    });
-    if (existing) return existing;
-    return this.prisma.organization.create({
-      data: {
-        name: 'Default School',
-      },
-    });
   }
 
   // ---------- Refresh token (opaque + retry na P2002) ----------
@@ -190,6 +232,11 @@ export class AuthService {
   // -------------------------
 
   async register(dto: RegisterDto) {
+    if (!dto.mode) {
+      throw new BadRequestException('Registration mode is required');
+    }
+    const mode = dto.mode;
+
     const existing = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
@@ -210,6 +257,98 @@ export class AuthService {
       );
 
       try {
+        if (mode === RegisterMode.CREATE_ORG) {
+          const result = await this.prisma.$transaction(async (tx) => {
+            const createdUser = await tx.user.create({
+              data: {
+                email: dto.email,
+                username,
+                name: dto.name,
+                passwordHash,
+                systemRole: null,
+                lastLoginAt: now,
+              },
+              select: {
+                id: true,
+                email: true,
+                username: true,
+                name: true,
+                systemRole: true,
+                lastLoginAt: true,
+              },
+            });
+
+            const organization = await tx.organization.create({
+              data: {
+                name: `${dto.name}'s School`,
+                type: OrganizationType.SCHOOL,
+              },
+              select: {
+                id: true,
+                name: true,
+                type: true,
+                createdAt: true,
+              },
+            });
+
+            const membership = await tx.membership.create({
+              data: {
+                userId: createdUser.id,
+                organizationId: organization.id,
+                role: OrganizationRole.OWNER,
+              },
+              select: {
+                id: true,
+                role: true,
+                organizationId: true,
+                createdAt: true,
+              },
+            });
+
+            await tx.user.update({
+              where: { id: createdUser.id },
+              data: { lastActiveMembershipId: membership.id },
+            });
+
+            return { user: createdUser, organization, membership };
+          });
+
+          const persistedUser = await this.prisma.user.findUnique({
+            where: { id: result.user.id },
+          });
+          if (!persistedUser) {
+            throw new NotFoundException('User not found after registration');
+          }
+
+          const tokens = await this.generateTokens(
+            persistedUser,
+            result.membership as unknown as Membership,
+          );
+
+          await this.auditService.log({
+            action: 'REGISTER',
+            entityType: AuditEntityType.USER,
+            userId: result.user.id,
+            organizationId: result.organization.id,
+            entityId: result.user.id,
+            metadata: {
+              requestedRole: dto.role ?? null,
+              mode,
+            },
+          });
+
+          this.logger.log(
+            `Registration complete for ${result.user.email} in org ${result.organization.id} (mode=${mode})`,
+          );
+
+          return {
+            tokens,
+            user: result.user,
+            organization: result.organization,
+            membership: result.membership,
+          };
+        }
+
         const result = await this.prisma.$transaction(async (tx) => {
           const createdUser = await tx.user.create({
             data: {
@@ -230,34 +369,7 @@ export class AuthService {
             },
           });
 
-          const organization = await tx.organization.create({
-            data: {
-              name: `${dto.name}'s School`,
-              type: OrganizationType.SCHOOL,
-            },
-            select: {
-              id: true,
-              name: true,
-              type: true,
-              createdAt: true,
-            },
-          });
-
-          const membership = await tx.membership.create({
-            data: {
-              userId: createdUser.id,
-              organizationId: organization.id,
-              role: dto.role ?? OrganizationRole.STUDENT,
-            },
-            select: {
-              id: true,
-              role: true,
-              organizationId: true,
-              createdAt: true,
-            },
-          });
-
-          return { user: createdUser, organization, membership };
+          return { user: createdUser };
         });
 
         const persistedUser = await this.prisma.user.findUnique({
@@ -266,30 +378,31 @@ export class AuthService {
         if (!persistedUser) {
           throw new NotFoundException('User not found after registration');
         }
-        const tokens = await this.generateTokens(
-          persistedUser,
-          result.membership as unknown as Membership,
-        );
+
+        const tokens = await this.generateTokens(persistedUser, null);
+
         await this.auditService.log({
           action: 'REGISTER',
           entityType: AuditEntityType.USER,
           userId: result.user.id,
-          organizationId: result.organization.id,
+          organizationId: null,
           entityId: result.user.id,
           metadata: {
-            requestedRole: dto.role ?? OrganizationRole.STUDENT,
+            requestedRole: dto.role ?? null,
+            mode,
+            joinCodeProvided: Boolean(dto.joinCode),
           },
         });
 
         this.logger.log(
-          `Registration complete for ${result.user.email} in org ${result.organization.id}`,
+          `Registration complete for ${result.user.email} (mode=${mode})`,
         );
 
         return {
           tokens,
           user: result.user,
-          organization: result.organization,
-          membership: result.membership,
+          organization: null,
+          membership: null,
         };
       } catch (e) {
         if (
@@ -300,6 +413,7 @@ export class AuthService {
           if (target?.includes('email')) {
             throw new ConflictException('Email already exists');
           }
+          // collision na username → zkus další pokus
           continue;
         }
         throw e;
@@ -333,27 +447,21 @@ export class AuthService {
       data: { lastLoginAt: new Date() },
     });
 
-    let membership = await this.prisma.membership.findFirst({
-      where: { userId: user.id },
-      orderBy: { createdAt: 'desc' }, // deterministicky – preferuj nejnovější členství
-    });
-
+    let membership: Membership | null = null;
+    if (updatedUser.lastActiveMembershipId) {
+      membership = await this.prisma.membership.findFirst({
+        where: {
+          id: updatedUser.lastActiveMembershipId,
+          userId: updatedUser.id,
+          deletedAt: null,
+        },
+      });
+    }
     if (!membership) {
-      this.logger.warn(`No membership for ${user.email}, creating fallback`);
-      const fallbackOrg = await this.prisma.organization.create({
-        data: {
-          name: `${user.name ?? 'Workspace'} Org`,
-          type: OrganizationType.PRIVATE,
-        },
+      membership = await this.prisma.membership.findFirst({
+        where: { userId: updatedUser.id, deletedAt: null },
+        orderBy: { createdAt: 'asc' },
       });
-      membership = await this.prisma.membership.create({
-        data: {
-          userId: user.id,
-          organizationId: fallbackOrg.id,
-          role: OrganizationRole.STUDENT,
-        },
-      });
-      this.logger.log(`Fallback membership created for ${user.email}`);
     }
 
     const tokens = await this.generateTokens(updatedUser, membership);
@@ -482,7 +590,7 @@ export class AuthService {
   }
 
   async getUserProfile(userId: string) {
-    const user = await this.prisma.user.findUnique({
+    let user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
         id: true,
@@ -512,6 +620,8 @@ export class AuthService {
 
     const primaryMembership = user.memberships?.[0] ?? null;
 
+    const mappedMemberships = user.memberships ?? [];
+
     return {
       id: user.id,
       email: user.email,
@@ -520,12 +630,141 @@ export class AuthService {
       systemRole: user.systemRole,
       createdAt: user.createdAt,
       lastLoginAt: user.lastLoginAt,
-      memberships: user.memberships ?? [],
+      memberships: mappedMemberships,
       organizationRole: primaryMembership?.role ?? null,
       organizationId: primaryMembership?.organizationId ?? null,
       needsOnboarding,
     };
   }
+
+  async getMeContext(userId: string, claims?: { organizationId?: string | null }) {
+    const user = await this.getUserProfile(userId);
+
+    // vyber aktivní membership (podle claims), jinak fallback na první
+    const activeMembership =
+      (claims?.organizationId
+        ? user.memberships?.find((m) => m.organizationId === claims.organizationId) ?? null
+        : null) ?? (user.memberships?.[0] ?? null);
+
+    const organization = activeMembership
+      ? {
+        id: activeMembership.organizationId,
+        name: activeMembership.organization?.name,
+        type: activeMembership.organization?.type ?? null,
+      }
+      : null;
+
+    const membership = activeMembership
+      ? {
+        id: activeMembership.id,
+        role: activeMembership.role,
+        organizationId: activeMembership.organizationId,
+      }
+      : null;
+
+    const userContext = {
+      ...user,
+      organizationRole: activeMembership?.role ?? null,
+      organizationId: activeMembership?.organizationId ?? null,
+    };
+
+    // RBAC: zatím prázdné, později napojíš resolver
+    const roles = activeMembership ? [activeMembership.role] : [];
+    const permissionKeys = Object.values(PermissionKey);
+    const permissionMap: Record<string, boolean> = activeMembership
+      ? await this.rbac.canUserMultiple(
+          user.id,
+          activeMembership.organizationId,
+          permissionKeys,
+        )
+      : {};
+    const permissions = permissionKeys.filter(
+      (key) => permissionMap[key],
+    );
+
+    return { user: userContext, organization, membership, roles, permissions };
+  }
+
+  async joinOrganization(userId: string, dto: JoinOrganizationDto) {
+    const organization = await this.resolveJoinOrganization(dto.joinCode);
+    const role = this.resolveJoinRole(dto.role);
+
+    const existing = await this.prisma.membership.findUnique({
+      where: {
+        userId_organizationId: {
+          userId,
+          organizationId: organization.id,
+        },
+      },
+    });
+    if (existing) {
+      throw new ConflictException('User is already a member of this organization');
+    }
+
+    const membership = await this.prisma.membership.create({
+      data: {
+        userId,
+        organizationId: organization.id,
+        role,
+      },
+      select: {
+        id: true,
+        role: true,
+        organizationId: true,
+      },
+    });
+
+    if (role === OrganizationRole.TEACHER) {
+      const existingTeacher = await this.prisma.teacher.findUnique({
+        where: { membershipId: membership.id },
+        select: { id: true },
+      });
+      if (!existingTeacher) {
+        await this.prisma.teacher.create({
+          data: {
+            membershipId: membership.id,
+            organizationId: organization.id,
+          },
+        });
+      }
+      await bumpOrgVersion(this.cache, organization.id);
+    }
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { lastActiveMembershipId: membership.id },
+    });
+
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new UnauthorizedException('User not found');
+
+    const tokens = await this.generateTokens(
+      user,
+      membership as unknown as Membership,
+    );
+
+    await this.auditService.log({
+      action: 'INVITE_ACCEPTED',
+      entityType: AuditEntityType.ORGANIZATION,
+      userId,
+      organizationId: organization.id,
+      entityId: membership.id,
+      metadata: { role },
+    });
+
+    const ctx = await this.getMeContext(userId, {
+      organizationId: organization.id,
+    });
+    return {
+      tokens,
+      user: ctx.user,
+      organization: ctx.organization,
+      membership: ctx.membership,
+      roles: ctx.roles,
+      permissions: ctx.permissions,
+    };
+  }
+
 
   async useOrganization(userId: string, orgId: string) {
     const membership = await this.prisma.membership.findFirst({
@@ -541,6 +780,11 @@ export class AuthService {
     if (!membership) {
       throw new UnauthorizedException('User is not a member of organization');
     }
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { lastActiveMembershipId: membership.id },
+    });
 
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -560,19 +804,17 @@ export class AuthService {
       entityId: orgId,
     });
 
+    const ctx = await this.getMeContext(userId, {
+      organizationId: membership.organizationId,
+    });
+
     return {
       tokens,
-      user: {
-        id: user.id,
-        email: user.email,
-        username: user.username,
-        name: user.name,
-        systemRole: user.systemRole,
-        organizationRole: membership.role,
-        organizationId: membership.organizationId,
-      },
-      organization: membership.organization,
-      membership,
+      user: ctx.user,
+      organization: ctx.organization,
+      membership: ctx.membership,
+      roles: ctx.roles,
+      permissions: ctx.permissions,
     };
   }
 }

@@ -7,9 +7,15 @@ import { useAuth } from "@/lib/guard/useAuth";
 export type GuardOptions = {
   requireRoles?: OrganizationRole[];
   requirePerms?: PermissionKey[];
+  requireOrganization?: boolean;
+  requireSchoolWorkspace?: boolean;
 };
 
-export type GuardReason = "UNAUTHENTICATED" | "NO_ORGANIZATION" | "FORBIDDEN" | null;
+export type GuardReason =
+  | "UNAUTHENTICATED"
+  | "NO_ORGANIZATION"
+  | "FORBIDDEN"
+  | null;
 
 export type GuardResult = {
   allowed: boolean;
@@ -22,7 +28,14 @@ export type GuardResult = {
 };
 
 export const useGuard = (options?: GuardOptions): GuardResult => {
-  const { roles, permissions, isAuthenticated, isLoading, org, authStatus } = useAuth();
+  const {
+    roles,
+    permissions,
+    isAuthenticated,
+    isLoading,
+    hasOrganization,
+    authStatus,
+  } = useAuth();
 
   const { allowed, reason, missingRoles, missingPermissions } = useMemo(() => {
     if (isLoading) {
@@ -42,17 +55,20 @@ export const useGuard = (options?: GuardOptions): GuardResult => {
       };
     }
 
-    if (!org) {
+    const requiredRoles = options?.requireRoles ?? [];
+    const requiredPermissions = options?.requirePerms ?? [];
+    const requiresOrganization =
+      options?.requireOrganization === true ||
+      options?.requireSchoolWorkspace === true;
+
+    if (requiresOrganization && !hasOrganization) {
       return {
         allowed: false,
         reason: "NO_ORGANIZATION" as GuardReason,
-        missingRoles: options?.requireRoles ?? [],
-        missingPermissions: options?.requirePerms ?? [],
+        missingRoles: requiredRoles,
+        missingPermissions: requiredPermissions,
       };
     }
-
-    const requiredRoles = options?.requireRoles ?? [];
-    const requiredPermissions = options?.requirePerms ?? [];
 
     const roleCheck =
       !requiredRoles.length ||
@@ -85,15 +101,17 @@ export const useGuard = (options?: GuardOptions): GuardResult => {
       missingRoles: missingRoleList,
       missingPermissions: missingPermissionList,
     };
-}, [
-   isAuthenticated,
-   isLoading,
-   org,
-   roles,
-   permissions,
-   options?.requireRoles,
-   options?.requirePerms,
- ]);
+  }, [
+    isAuthenticated,
+    isLoading,
+    hasOrganization,
+    roles,
+    permissions,
+    options?.requireRoles,
+    options?.requirePerms,
+    options?.requireOrganization,
+    options?.requireSchoolWorkspace,
+  ]);
   return {
     allowed,
     reason,

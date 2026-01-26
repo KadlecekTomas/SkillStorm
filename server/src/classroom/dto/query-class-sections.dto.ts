@@ -16,6 +16,14 @@ export class QueryClassSectionsDto {
   @IsUUID()
   yearId?: string;
 
+  @ApiPropertyOptional({
+    description: 'Alias pro yearId',
+    example: 'year-uuid',
+  })
+  @IsOptional()
+  @IsUUID()
+  academicYearId?: string;
+
   @ApiPropertyOptional({ enum: SchoolGrade, example: 'PRIMARY_1' })
   @IsOptional()
   @IsEnum(SchoolGrade)

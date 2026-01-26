@@ -63,4 +63,5 @@ function AnalyticsPage() {
 
 export default withGuard({
   requirePerms: [PermissionKey.VIEW_ANALYTICS],
+  requireSchoolWorkspace: true,
 })(AnalyticsPage);

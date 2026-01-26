@@ -2,6 +2,7 @@ import type { TestingModule } from '@nestjs/testing';
 import { Test } from '@nestjs/testing';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { PrismaService } from '@/prisma/prisma.service';
+import { GamificationService } from '@/gamification/gamification.service';
 import { LearningMaterialsService } from './learning-materials.service';
 
 describe('LearningMaterialsService', () => {
@@ -13,6 +14,7 @@ describe('LearningMaterialsService', () => {
         LearningMaterialsService,
         { provide: PrismaService, useValue: {} },
         { provide: CACHE_MANAGER, useValue: {} },
+        { provide: GamificationService, useValue: {} },
       ],
     }).compile();
 

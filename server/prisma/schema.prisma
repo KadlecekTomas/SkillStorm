@@ -18,6 +18,7 @@ model User {
   systemRole        SystemRole?        @map("system_role")
   status            UserStatus         @default(ACTIVE)
   lastLoginAt       DateTime?          @map("last_login_at")
+  lastActiveMembershipId String?       @unique @map("last_active_membership_id")
   createdAt         DateTime           @default(now()) @map("created_at")
   updatedAt         DateTime           @updatedAt @map("updated_at")
   deletedAt         DateTime?          @map("deleted_at")
@@ -30,6 +31,7 @@ model User {
   refreshTokens     RefreshToken[]
   revokedTokens     RevokedToken[]
   userPermissions   UserPermission[]
+  lastActiveMembership Membership?     @relation("LastActiveMembership", fields: [lastActiveMembershipId], references: [id], onDelete: SetNull)
 
   @@index([username])
   @@map("users")
@@ -101,6 +103,7 @@ model Membership {
   achievements       MembershipAchievement[]
   organization       Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   user               User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastActiveFor      User?                   @relation("LastActiveMembership")
   student            Student?
   submissions        Submission[]
   teacher            Teacher?
@@ -303,6 +306,7 @@ model AcademicYear {
   startsAt      DateTime
   endsAt        DateTime
   isCurrent     Boolean        @default(false)
+  createdAt     DateTime       @default(now()) @map("created_at")
   organization  Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
   classSections ClassSection[]
   enrollments   Enrollment[]
@@ -319,6 +323,7 @@ model ClassSection {
   section           String
   label             String?
   teacherId         String?            @map("teacher_id")
+  createdAt         DateTime           @default(now()) @map("created_at")
   assignments       Assignment[]
   academicYear      AcademicYear       @relation(fields: [yearId], references: [id], onDelete: Cascade)
   organization      Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
@@ -367,11 +372,12 @@ model Enrollment {
   classSectionId String           @map("class_section_id")
   yearId         String           @map("academic_year_id")
   status         EnrollmentStatus @default(ACTIVE)
+  createdAt      DateTime         @default(now()) @map("created_at")
   academicYear   AcademicYear     @relation(fields: [yearId], references: [id], onDelete: Cascade)
   classSection   ClassSection     @relation(fields: [classSectionId], references: [id], onDelete: Cascade)
   student        Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
-  @@unique([studentId, yearId])
+  @@index([studentId, yearId])
   @@index([classSectionId])
   @@map("enrollments")
 }
@@ -796,6 +802,8 @@ enum PermissionKey {
   MANAGE_STUDENTS
   MANAGE_TEACHERS
   VIEW_ANALYTICS
+  INVITE_STUDENTS
+  INVITE_TEACHERS
 }
 
 enum QuestionType {

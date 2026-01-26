@@ -42,7 +42,7 @@ export class UsersController {
 
   // -------- LIST (SUPERADMIN: všichni; DIRECTOR: jen jeho org) --------
   @Get()
-  @Permission(SystemRole.SUPERADMIN, OrganizationRole.DIRECTOR)
+  @Permission(SystemRole.SUPERADMIN, OrganizationRole.OWNER, OrganizationRole.DIRECTOR)
   @ApiOperation({
     summary: 'List users (search, filters, pagination, sorting)',
   })
@@ -115,7 +115,7 @@ export class UsersController {
 
   // -------- DELETE/ANONYMIZE (SUPERADMIN nebo DIRECTOR v téže org; nikdy ne mazat superadmina) --------
   @Delete(':id')
-  @Permission(SystemRole.SUPERADMIN, OrganizationRole.DIRECTOR)
+  @Permission(SystemRole.SUPERADMIN, OrganizationRole.OWNER, OrganizationRole.DIRECTOR)
   @ApiOperation({
     summary:
       'Delete/anonymize user (SUPERADMIN or DIRECTOR of same org, not superadmin target)',

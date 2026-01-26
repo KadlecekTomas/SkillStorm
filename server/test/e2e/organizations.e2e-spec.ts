@@ -87,7 +87,7 @@ describe('Organizations (e2e)', () => {
     orgB = await prisma.organization.create({
       data: {
         name: 'E2E Org B',
-        type: OrganizationType.PRIVATE,
+        type: OrganizationType.SCHOOL,
         memberships: {
           create: {
             userId: teacherOther.id,
@@ -129,25 +129,25 @@ describe('Organizations (e2e)', () => {
   });
 
   // --- CREATE ---
-  it('POST /organizations (PRIVATE) → může vytvořit libovolný uživatel', async () => {
-    const res = await request(app.getHttpServer())
-      .post('/organizations')
-      .set('Authorization', `Bearer ${normalUser.token}`)
-      .send({ name: 'User Private Org', type: OrganizationType.PRIVATE })
-      .expect(201);
-
-    expect(res.body.id).toBeTruthy();
-    expect(res.body.type).toBe('PRIVATE');
-
-    await prisma.organization.delete({ where: { id: res.body.id } });
-  });
-
-  it('POST /organizations (SCHOOL) → non-super, non-director dostane 403', async () => {
+  it('POST /organizations (PRIVATE) → non-super dostane 403', async () => {
     await request(app.getHttpServer())
       .post('/organizations')
       .set('Authorization', `Bearer ${normalUser.token}`)
-      .send({ name: 'ShouldFail SCHOOL', type: OrganizationType.SCHOOL })
+      .send({ name: 'User Private Org', type: OrganizationType.PRIVATE })
       .expect(403);
+  });
+
+  it('POST /organizations (SCHOOL) → může vytvořit libovolný přihlášený uživatel', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/organizations')
+      .set('Authorization', `Bearer ${normalUser.token}`)
+      .send({ name: 'User School', type: OrganizationType.SCHOOL })
+      .expect(201);
+
+    expect(res.body.id).toBeTruthy();
+    expect(res.body.type).toBe('SCHOOL');
+
+    await prisma.organization.delete({ where: { id: res.body.id } });
   });
 
   it('POST /organizations (SCHOOL) → user který je už DIRECTOR někde (ve SCHOOL) může', async () => {
@@ -249,7 +249,7 @@ describe('Organizations (e2e)', () => {
 
   it('DELETE /organizations/:id → DIRECTOR nemá právo (403)', async () => {
     const tmp = await prisma.organization.create({
-      data: { name: 'NoDeleteByDirector', type: OrganizationType.PRIVATE },
+      data: { name: 'NoDeleteByDirector', type: OrganizationType.SCHOOL },
       select: { id: true },
     });
 
@@ -294,14 +294,14 @@ describe('Organizations (e2e)', () => {
     await request(app.getHttpServer())
       .post('/organizations')
       .set('Authorization', `Bearer ${superUser.token}`)
-      .send({ name: 'AB', type: OrganizationType.PRIVATE })
+      .send({ name: 'AB', type: OrganizationType.SCHOOL })
       .expect(400);
   });
 
   // --- DELETE (only SUPERADMIN, soft-delete aware) ---
   it('DELETE /organizations/:id → jen SUPERADMIN a po smazání GET vrací 404', async () => {
     const tmp = await prisma.organization.create({
-      data: { name: 'ToDelete2', type: OrganizationType.PRIVATE },
+      data: { name: 'ToDelete2', type: OrganizationType.SCHOOL },
       select: { id: true },
     });
 

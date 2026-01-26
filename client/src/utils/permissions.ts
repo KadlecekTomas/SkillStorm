@@ -26,6 +26,13 @@ export const derivePermissions = (user: User | null): PermissionKey[] => {
 
 export const getRoleHomePath = (user: User | null): string => {
   if (!user) return roleHome.DEFAULT;
+  const activeMembership =
+    user.memberships?.find(
+      (membership) => membership.organizationId === user.organizationId,
+    ) ?? user.memberships?.[0];
+  if (!activeMembership?.organizationId) {
+    return roleHome.DEFAULT;
+  }
   if (user.organizationRole && roleHome[user.organizationRole]) {
     return roleHome[user.organizationRole];
   }

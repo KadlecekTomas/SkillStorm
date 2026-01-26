@@ -43,7 +43,7 @@ export class ClassSectionsController {
   }
 
   @Get()
-  @Permission(PermissionKey.MANAGE_STUDENTS)
+  @Permission(PermissionKey.MANAGE_STUDENTS, PermissionKey.VIEW_RESULTS)
   @ApiOperation({ summary: 'List class sections' })
   async findAll(@Req() req: RequestWithUser, @Query() q: QueryClassSectionsDto) {
     return ok(this.service.findAll(q, req.user));
@@ -51,7 +51,7 @@ export class ClassSectionsController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Detail třídy' })
-  @Permission(PermissionKey.MANAGE_STUDENTS)
+  @Permission(PermissionKey.MANAGE_STUDENTS, PermissionKey.VIEW_RESULTS)
   @CacheTTL(0)
   findOne(
     @Param('id', new ParseUUIDPipe()) id: string,

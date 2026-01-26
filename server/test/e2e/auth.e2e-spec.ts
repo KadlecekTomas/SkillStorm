@@ -5,6 +5,7 @@ import * as request from 'supertest';
 import { AppModule } from '../../src/app.module';
 import { PrismaService } from '@/prisma/prisma.service';
 import { OrganizationRole } from '@prisma/client';
+import { RegisterMode } from '@/auth/dto/register.dto';
 import * as cookieParser from 'cookie-parser';
 
 function getCookie(res: request.Response, name: string): string | null {
@@ -38,6 +39,7 @@ describe('Auth (e2e) – robust', () => {
     username: `u_${unique}`,
     password: 'Password123!',
     role: OrganizationRole.STUDENT,
+    mode: RegisterMode.INDIVIDUAL,
   };
 
   let accessToken = '';
