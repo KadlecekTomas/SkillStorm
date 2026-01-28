@@ -8,6 +8,7 @@ import {
   PASSWORDS,
   USER_EMAILS,
 } from './seed-constants';
+import { ACADEMIC_YEAR_ID, CLASS_SECTION_IDS } from './seed-constants';
 import {
   hashPassword,
   logStep,
@@ -162,11 +163,21 @@ export async function seed(prisma: PrismaClient) {
     // --- Student role ---
     if (membershipSeed.asStudent) {
       try {
-        await prisma.student.create({
-          data: {
-            membershipId: membership.id,
-            orgId: membership.organizationId,
-          },
+        await prisma.$transaction(async (tx) => {
+          const student = await tx.student.create({
+            data: {
+              membershipId: membership.id,
+              orgId: membership.organizationId,
+            },
+          });
+          await tx.enrollment.create({
+            data: {
+              studentId: student.id,
+              classSectionId: CLASS_SECTION_IDS.chodovickaA,
+              yearId: ACADEMIC_YEAR_ID,
+              orgId: membership.organizationId,
+            },
+          });
         });
         console.log(`✅ Users > Created student for ${membership.id}`);
       } catch (err: any) {

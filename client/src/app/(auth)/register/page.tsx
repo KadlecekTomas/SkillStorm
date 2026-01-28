@@ -30,7 +30,7 @@ export default function RegisterPage(): JSX.Element {
   useEffect(() => {
     // ⛔ Neredirectuj během načítání nebo bootstrapu
     if (isLoading) return;
-    if (authStatus !== "ready") return;
+    if (authStatus !== "authenticated") return;
     // ⛔ Neredirectuj, pokud není uživatel
     if (!user) return;
 

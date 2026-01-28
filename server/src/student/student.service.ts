@@ -2,11 +2,13 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  BadRequestException,
   Inject,
 } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
 import {
   AuditEntityType,
+  EnrollmentStatus,
   OrganizationRole,
   Prisma,
   SystemRole,
@@ -224,29 +226,64 @@ export class StudentsService {
     if (alreadyStudent)
       throw new ForbiddenException('Tento uživatel je již studentem.');
 
-    if (
-      user.systemRole !== SystemRole.SUPERADMIN &&
-      user.organizationId !== dto.orgId
-    ) {
-      throw new ForbiddenException(
-        'Nelze vytvářet studenta v jiné organizaci.',
-      );
+    const classSection = await this.prisma.classSection.findUnique({
+      where: { id: dto.classSectionId },
+      select: { id: true, orgId: true, yearId: true, academicYear: { select: { isCurrent: true } } },
+    });
+    if (!classSection) {
+      throw new NotFoundException('Třída nebyla nalezena.');
+    }
+    const orgId = classSection.orgId;
+    if (classSection.orgId !== dto.orgId) {
+      throw new ForbiddenException('Třída není ve stejné organizaci.');
+    }
+    if (membership.organizationId !== orgId) {
+      throw new ForbiddenException('Membership nepatří do zadané organizace.');
+    }
+    if (user.systemRole !== SystemRole.SUPERADMIN && user.organizationId !== orgId) {
+      throw new ForbiddenException('Nelze vytvářet studenta v jiné organizaci.');
+    }
+    if (classSection.yearId !== dto.academicYearId) {
+      throw new BadRequestException('Školní rok neodpovídá třídě.');
+    }
+    if (!classSection.academicYear?.isCurrent) {
+      throw new ForbiddenException('Nelze zapisovat do uzavřeného školního roku.');
     }
 
-    const created = await this.prisma.student.create({
-      data: {
-        membershipId: dto.membershipId,
-        orgId: dto.orgId,
-        studentNumber: dto.studentNumber ?? null,
-        externalId: dto.externalId ?? null,
-      },
+    const created = await this.prisma.$transaction(async (tx) => {
+      const classSectionTx = await tx.classSection.findUnique({
+        where: { id: dto.classSectionId },
+        select: { orgId: true, yearId: true },
+      });
+      if (!classSectionTx) {
+        throw new NotFoundException('Třída nebyla nalezena.');
+      }
+
+      const student = await tx.student.create({
+        data: {
+          membershipId: dto.membershipId,
+          orgId: classSectionTx.orgId,
+          studentNumber: dto.studentNumber ?? null,
+          externalId: dto.externalId ?? null,
+        },
+      });
+      await tx.enrollment.create({
+        data: {
+          studentId: student.id,
+          classSectionId: dto.classSectionId,
+          yearId: classSectionTx.yearId,
+          orgId: classSectionTx.orgId,
+          status: EnrollmentStatus.ACTIVE,
+        },
+      });
+      return student;
     });
 
     await this.audit({
       userId: user.userId,
-      orgId: dto.orgId,
+      orgId,
       action: 'STUDENT_CREATE',
-      entityId: dto.orgId,
+      entityId: orgId,
       metadata: { studentId: created.id, membershipId: dto.membershipId },
       changedFields: dto as any,
     });
@@ -254,7 +291,7 @@ export class StudentsService {
     // 🔔 invalidace org‑scoped cache (listy studentů)
     await bumpOrgVersion(
       this.cache,
-      cacheScopeForUser(user.systemRole, dto.orgId),
+      cacheScopeForUser(user.systemRole, orgId),
     );
 
     return created;

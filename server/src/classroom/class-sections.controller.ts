@@ -10,6 +10,7 @@ import {
   Req,
   ParseUUIDPipe,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import { RequestWithUser } from '@/types/request-with-user';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -24,11 +25,13 @@ import { InvalidateScopes } from '@/common/cache/invalidate.decorator';
 import { Permission } from '@/modules/rbac/permission.decorator';
 import { ok } from '@/common/http/envelope';
 import { ApiStandardResponses } from '@/common/http/api-standard-responses.decorator';
+import { RequireActiveAcademicYearGuard } from '@/academic-years/require-active-academic-year.guard';
 
 @ApiTags('ClassSections')
 @ApiStandardResponses()
 @ApiBearerAuth()
 @Controller('class-sections')
+@UseGuards(RequireActiveAcademicYearGuard)
 export class ClassSectionsController {
   constructor(private readonly service: ClassSectionsService) {}
 

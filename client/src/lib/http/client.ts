@@ -15,6 +15,7 @@ export type RequestConfig<TBody = unknown> = {
   signal?: AbortSignal;
   retries?: number | null;
   query?: Record<string, string | number | boolean | undefined>;
+  skipAuthRetry?: boolean;
 };
 
 type InternalRequestConfig<TBody> = RequestConfig<TBody> & {
@@ -41,6 +42,7 @@ export class ForbiddenError extends HttpError {
 }
 
 const LOGIN_REDIRECT = "/login?reason=expired";
+const PUBLIC_ROUTES = ["/login", "/register", "/forgot-password"];
 
 const DEFAULT_HEADERS: Record<string, string> = {
   "Content-Type": "application/json",
@@ -173,6 +175,11 @@ const normalizePath = (path: string): string => {
     }
   }
   return path.startsWith("/") ? path : `/${path}`;
+};
+
+const isOnPublicRoute = (): boolean => {
+  if (typeof window === "undefined") return false;
+  return PUBLIC_ROUTES.includes(window.location.pathname);
 };
 
 const shouldAllowProfileRetry = (path: string): boolean => {
@@ -326,6 +333,9 @@ const handleUnauthorized = async <TResponse, TBody>(
   path: string,
   config: InternalRequestConfig<TBody>,
 ): Promise<TResponse> => {
+  if (isOnPublicRoute()) {
+    throw new HttpError("Unauthorized", 401, null);
+  }
   const attempt = config.authAttempt ?? 0;
   const maxAttempts = shouldAllowProfileRetry(path) ? 2 : 1;
 
@@ -367,6 +377,14 @@ export const request = async <TResponse = unknown, TBody = unknown>(
   }
 
   if (response.status === 401) {
+    if (config.skipAuthRetry) {
+      const data = await parseResponse<unknown>(response);
+      throw new HttpError(
+        (data as { message?: string })?.message ?? "Unauthorized",
+        response.status,
+        data,
+      );
+    }
     if (shouldBypassAuthRetry(path)) {
       const data = await parseResponse<unknown>(response);
       throw new HttpError(

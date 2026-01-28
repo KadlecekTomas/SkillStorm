@@ -24,7 +24,12 @@ export type GuardResult = {
   missingPermissions: PermissionKey[];
   isLoading: boolean;
   isAuthenticated: boolean;
-  authStatus: "booting" | "ready";
+  authStatus:
+    | "anonymous"
+    | "authenticating"
+    | "authenticated"
+    | "refreshing"
+    | "unauthenticated";
 };
 
 export const useGuard = (options?: GuardOptions): GuardResult => {

@@ -33,6 +33,7 @@ export const DashboardLayout = ({ children }: DashboardLayoutProps): React.JSX.E
     selectedYear,
     isReadOnly,
     setSelectedYearId,
+    yearConfigError,
     loading: yearsLoading,
   } = useAcademicYears();
 
@@ -78,7 +79,7 @@ export const DashboardLayout = ({ children }: DashboardLayoutProps): React.JSX.E
               <Select
                 value={selectedYear?.id ?? ""}
                 onValueChange={(value) => setSelectedYearId(value)}
-                disabled={yearsLoading}
+                disabled={yearsLoading || !!yearConfigError}
               >
                 <SelectTrigger className="w-48 rounded-2xl" aria-label="Academic year">
                   <SelectValue placeholder="Školní rok" />

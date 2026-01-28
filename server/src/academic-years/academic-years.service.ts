@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -7,7 +8,7 @@ import {
 import { PrismaService } from '@/prisma/prisma.service';
 import type { JwtPayload } from '@/auth/types/jwt-payload';
 import type { CreateAcademicYearDto } from './dto/create-academic-year.dto';
-import { SystemRole } from '@prisma/client';
+import { Prisma, SystemRole } from '@prisma/client';
 
 type AcademicYearResponse = {
   id: string;
@@ -73,30 +74,42 @@ export class AcademicYearsService {
       throw new BadRequestException('Datum začátku musí být před koncem.');
     }
 
-    const created = await this.prisma.$transaction(async (tx) => {
-      const existingActive = await tx.academicYear.findFirst({
-        where: { orgId, isCurrent: true },
-        select: { id: true },
-      });
-
-      const shouldActivate = dto.isActive === true || !existingActive;
-      if (shouldActivate) {
-        await tx.academicYear.updateMany({
+    let created;
+    try {
+      created = await this.prisma.$transaction(async (tx) => {
+        const existingActive = await tx.academicYear.findFirst({
           where: { orgId, isCurrent: true },
-          data: { isCurrent: false },
+          select: { id: true },
         });
-      }
 
-      return tx.academicYear.create({
-        data: {
-          orgId,
-          label: dto.name.trim(),
-          startsAt,
-          endsAt,
-          isCurrent: shouldActivate,
-        },
+        if (dto.isActive === true && existingActive) {
+          throw new ConflictException('Aktivní školní rok už existuje.');
+        }
+
+        const shouldActivate = dto.isActive === true || !existingActive;
+        if (shouldActivate) {
+          await tx.academicYear.updateMany({
+            where: { orgId, isCurrent: true },
+            data: { isCurrent: false },
+          });
+        }
+
+        return tx.academicYear.create({
+          data: {
+            orgId,
+            label: dto.name.trim(),
+            startsAt,
+            endsAt,
+            isCurrent: shouldActivate,
+          },
+        });
       });
-    });
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        throw new ConflictException('Aktivní školní rok už existuje.');
+      }
+      throw err;
+    }
 
     return this.mapYear(created);
   }
@@ -112,16 +125,24 @@ export class AcademicYearsService {
       throw new ForbiddenException('Školní rok není ve vaší organizaci.');
     }
 
-    const updated = await this.prisma.$transaction(async (tx) => {
-      await tx.academicYear.updateMany({
-        where: { orgId, isCurrent: true },
-        data: { isCurrent: false },
+    let updated;
+    try {
+      updated = await this.prisma.$transaction(async (tx) => {
+        await tx.academicYear.updateMany({
+          where: { orgId, isCurrent: true },
+          data: { isCurrent: false },
+        });
+        return tx.academicYear.update({
+          where: { id },
+          data: { isCurrent: true },
+        });
       });
-      return tx.academicYear.update({
-        where: { id },
-        data: { isCurrent: true },
-      });
-    });
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        throw new ConflictException('Aktivní školní rok už existuje.');
+      }
+      throw err;
+    }
 
     return this.mapYear(updated);
   }
@@ -135,5 +156,54 @@ export class AcademicYearsService {
       throw new NotFoundException('Aktivní školní rok nebyl nalezen.');
     }
     return year;
+  }
+
+  async getActiveForOrgOrFail(orgId: string | null) {
+    if (!orgId) {
+      throw new ForbiddenException('Missing organization context.');
+    }
+    const years = await this.prisma.academicYear.findMany({
+      where: { orgId, isCurrent: true },
+      orderBy: { startsAt: 'desc' },
+    });
+
+    if (years.length === 0) {
+      throw new ConflictException({
+        code: 'NO_ACTIVE_ACADEMIC_YEAR',
+        message: 'Active academic year is not configured for this organization.',
+      });
+    }
+
+    if (years.length > 1) {
+      throw new ConflictException({
+        code: 'MULTIPLE_ACTIVE_ACADEMIC_YEARS',
+        message: 'Multiple academic years are marked as active.',
+      });
+    }
+
+    return this.mapYear(years[0]);
+  }
+
+  async assertOrgHasExactlyOneActiveYear(orgId: string | null) {
+    if (!orgId) {
+      throw new ForbiddenException('Missing organization context.');
+    }
+    const count = await this.prisma.academicYear.count({
+      where: { orgId, isCurrent: true },
+    });
+
+    if (count === 0) {
+      throw new ConflictException({
+        message: 'Active academic year is not configured for this organization.',
+        meta: { code: 'NO_ACTIVE_ACADEMIC_YEAR' },
+      });
+    }
+
+    if (count > 1) {
+      throw new ConflictException({
+        message: 'Multiple academic years are marked as active.',
+        meta: { code: 'MULTIPLE_ACTIVE_ACADEMIC_YEARS' },
+      });
+    }
   }
 }

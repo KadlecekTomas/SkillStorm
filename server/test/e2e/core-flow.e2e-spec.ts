@@ -87,24 +87,27 @@ describe('Core workflow (e2e)', () => {
     });
     classSectionId = classSection.id;
 
-    const studentRow = await prisma.student.create({
-      data: {
-        membershipId: membership.id,
-        orgId,
-      },
-      select: { id: true },
+    const studentRow = await prisma.$transaction(async (tx) => {
+      const student = await tx.student.create({
+        data: {
+          membershipId: membership.id,
+          orgId,
+        },
+        select: { id: true },
+      });
+      await tx.enrollment.create({
+        data: {
+          studentId: student.id,
+          classSectionId,
+          yearId: academicYear.id,
+          orgId,
+          status: 'ACTIVE',
+        },
+        select: { id: true },
+      });
+      return student;
     });
     studentId = studentRow.id;
-
-    await prisma.enrollment.create({
-      data: {
-        studentId: studentRow.id,
-        classSectionId,
-        yearId: academicYear.id,
-        status: 'ACTIVE',
-      },
-      select: { id: true },
-    });
 
     const useOrg = await request(app.getHttpServer())
       .post('/auth/use-org')

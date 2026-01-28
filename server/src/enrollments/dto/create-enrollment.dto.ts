@@ -4,6 +4,9 @@ export class CreateEnrollmentDto {
   @IsUUID()
   studentId!: string;
 
+  @IsUUID()
+  academicYearId!: string;
+
   @IsOptional()
   @IsUUID()
   classSectionId?: string;

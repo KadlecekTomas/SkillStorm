@@ -45,13 +45,18 @@ class AllExceptionsFilter implements ExceptionFilter {
     if (exception instanceof HttpException) {
       const status = exception.getStatus();
       const body = exception.getResponse();
-      return res
-        .status(status)
-        .json(
-          typeof body === 'string'
-            ? { success: false, error: body }
-            : { success: false, error: (body as any)?.message ?? body },
-        );
+      if (typeof body === 'string') {
+        return res.status(status).json({ success: false, error: body });
+      }
+      const message = (body as any)?.message ?? body;
+      const meta =
+        (body as any)?.meta ??
+        ((body as any)?.code ? { code: (body as any).code } : undefined);
+      return res.status(status).json({
+        success: false,
+        error: message,
+        ...(meta ? { meta } : {}),
+      });
     }
 
     if (exception instanceof ZodError) {

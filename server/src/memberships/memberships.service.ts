@@ -210,32 +210,6 @@ export class MembershipsService {
                     },
                   },
                 },
-                StudentClassroom: {
-                  include: {
-                    classSection: {
-                      select: {
-                        id: true,
-                        grade: true,
-                        section: true,
-                        label: true,
-                      },
-                    },
-                    TopicLevel: {
-                      select: {
-                        id: true,
-                        phase: true,
-                        difficulty: true,
-                        subjectLevel: {
-                          select: {
-                            id: true,
-                            grade: true,
-                            subject: { select: { id: true, name: true } },
-                          },
-                        },
-                      },
-                    },
-                  },
-                },
               },
             },
           },

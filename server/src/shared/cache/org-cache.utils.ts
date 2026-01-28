@@ -1,5 +1,5 @@
 import type { Cache } from 'cache-manager';
-import type { Prisma } from '@prisma/client';
+import type { Prisma, OrganizationRole } from '@prisma/client';
 import { SystemRole } from '@prisma/client';
 
 /**
@@ -78,6 +78,7 @@ export function buildVersionedListKey(opts: {
   includeLevels?: boolean;
   order?: unknown; // libovolný popis orderBy
   filters?: unknown; // extra filtry (yearId, classSectionId, atd.)
+  authz?: string; // authz scope (per-user)
 }) {
   const p = opts.page ?? 1;
   const l = opts.limit ?? 20;
@@ -85,6 +86,7 @@ export function buildVersionedListKey(opts: {
   const inc = opts.includeLevels ? '1' : '0';
   const ord = stableStringify(opts.order);
   const fil = stableStringify(opts.filters);
+  const authz = (opts.authz ?? '').trim();
 
   return [
     `${opts.namespace}:list`,
@@ -96,7 +98,20 @@ export function buildVersionedListKey(opts: {
     `lev:${inc}`,
     `ord:${ord}`,
     `f:${fil}`,
+    `az:${authz}`,
   ].join(':');
+}
+
+export function buildAuthzScopeKey(opts: {
+  userId: string;
+  systemRole?: SystemRole | null;
+  organizationRole?: OrganizationRole | null;
+}) {
+  const role = opts.organizationRole ?? opts.systemRole ?? 'none';
+  return [
+    `u:${opts.userId}`,
+    `r:${role}`,
+  ].join('|');
 }
 
 /**

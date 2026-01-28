@@ -9,6 +9,7 @@ import {
   Post,
   Req,
   Res,
+  UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
@@ -127,7 +128,7 @@ export class AuthController {
     const token = req.cookies?.[REFRESH_TOKEN_COOKIE];
     if (!token) {
       clearAuthCookies(res);
-      throw new BadRequestException('Refresh token is required');
+      throw new UnauthorizedException('Invalid or expired refresh token');
     }
     const tokens = await this.authService.refreshToken(token);
     setAuthCookies(res, tokens);

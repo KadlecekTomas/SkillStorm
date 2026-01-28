@@ -38,7 +38,7 @@ export const GuardBoundary = ({
   useEffect(() => {
     // ⛔ nikdy neredirectuj během bootstrapu
     if (guard.isLoading) return;
-    if (authStatus !== "ready") return;
+    if (authStatus === "authenticating" || authStatus === "refreshing") return;
 
     // ✅ pokud je přístup povolen, nic nedělej
     if (guard.allowed) return;
@@ -56,7 +56,7 @@ export const GuardBoundary = ({
     }
 
     // ❌ nepřihlášen → login
-    if (!user) {
+    if (!user && authStatus === "unauthenticated") {
       if (AUTH_DEBUG) {
         console.log(
           "%c[AUTH][REDIRECT]",

@@ -14,12 +14,11 @@ const prisma = new PrismaClient();
 
 const DEMO_PASSWORD = 'Password123!';
 
-function requireItem<T>(items: T[], index: number, label: string): T {
-  const item = items[index];
-  if (!item) {
-    throw new Error(`Seed invariant failed: missing ${label}`);
+function invariant<T>(value: T | null | undefined, message: string): T {
+  if (value == null) {
+    throw new Error(message);
   }
-  return item;
+  return value;
 }
 
 type EnsureUserInput = {
@@ -157,7 +156,11 @@ async function ensureTeacher(membershipId: string, organizationId: string) {
   });
 }
 
-async function ensureStudent(membershipId: string, orgId: string) {
+async function ensureStudent(
+  membershipId: string,
+  orgId: string,
+  enrollment?: { classSectionId: string; yearId: string; status: EnrollmentStatus },
+) {
   const existing = await prisma.student.findUnique({
     where: { membershipId },
   });
@@ -168,10 +171,45 @@ async function ensureStudent(membershipId: string, orgId: string) {
         data: { deletedAt: null, orgId },
       });
     }
+    if (enrollment) {
+      const current = await prisma.enrollment.findFirst({
+        where: {
+          studentId: existing.id,
+          yearId: enrollment.yearId,
+          status: { not: EnrollmentStatus.LEFT },
+        },
+      });
+      if (!current) {
+        await prisma.enrollment.create({
+          data: {
+            studentId: existing.id,
+            classSectionId: enrollment.classSectionId,
+            yearId: enrollment.yearId,
+            orgId,
+            status: enrollment.status,
+          },
+        });
+      }
+    }
     return existing;
   }
-  return prisma.student.create({
-    data: { membershipId, orgId },
+  if (!enrollment) {
+    throw new Error('Student creation requires enrollment context.');
+  }
+  return prisma.$transaction(async (tx) => {
+    const student = await tx.student.create({
+      data: { membershipId, orgId },
+    });
+    await tx.enrollment.create({
+      data: {
+        studentId: student.id,
+        classSectionId: enrollment.classSectionId,
+        yearId: enrollment.yearId,
+        orgId,
+        status: enrollment.status,
+      },
+    });
+    return student;
   });
 }
 
@@ -212,7 +250,15 @@ async function ensureEnrollment(
   yearId: string,
   status: EnrollmentStatus,
 ) {
-  // Uniqueness is enforced in the service layer to allow enrollment history.
+  const classSection = await prisma.classSection.findUnique({
+    where: { id: classSectionId },
+    select: { orgId: true },
+  });
+  if (!classSection) {
+    throw new Error('Class section not found for enrollment seeding.');
+  }
+
+  // Uniqueness is enforced at the DB level (student + academic year).
   const existing = await prisma.enrollment.findFirst({
     where: {
       studentId,
@@ -229,7 +275,7 @@ async function ensureEnrollment(
   }
 
   return prisma.enrollment.create({
-    data: { studentId, classSectionId, yearId, status },
+    data: { studentId, classSectionId, yearId, orgId: classSection.orgId, status },
   });
 }
 
@@ -497,9 +543,30 @@ async function main() {
       }),
     ),
   );
-  const studentMembership0 = requireItem(studentMemberships, 0, 'studentMemberships[0]');
-  const studentMembership1 = requireItem(studentMemberships, 1, 'studentMemberships[1]');
-  const studentMembership4 = requireItem(studentMemberships, 4, 'studentMemberships[4]');
+  const studentMembership0 = invariant(
+    studentMemberships[0],
+    'Seed error: studentMemberships[0] missing',
+  );
+  const studentMembership1 = invariant(
+    studentMemberships[1],
+    'Seed error: studentMemberships[1] missing',
+  );
+  const studentMembership2 = invariant(
+    studentMemberships[2],
+    'Seed error: studentMemberships[2] missing',
+  );
+  const studentMembership3 = invariant(
+    studentMemberships[3],
+    'Seed error: studentMemberships[3] missing',
+  );
+  const studentMembership4 = invariant(
+    studentMemberships[4],
+    'Seed error: studentMemberships[4] missing',
+  );
+  const studentMembership5 = invariant(
+    studentMemberships[5],
+    'Seed error: studentMemberships[5] missing',
+  );
   const superadminMembershipPrimary = await ensureMembership({
     userId: superadminUser.id,
     organizationId: primaryOrg.id,
@@ -550,46 +617,38 @@ async function main() {
   });
 
   // 5) Students + Enrollments
-  const studentEntities = await Promise.all(
-    studentMemberships.map((m) => ensureStudent(m.id, primaryOrg.id)),
-  );
-  const studentEntity0 = requireItem(studentEntities, 0, 'studentEntities[0]');
-  const studentEntity1 = requireItem(studentEntities, 1, 'studentEntities[1]');
-  const studentEntity2 = requireItem(studentEntities, 2, 'studentEntities[2]');
-  const studentEntity3 = requireItem(studentEntities, 3, 'studentEntities[3]');
-  const studentEntity4 = requireItem(studentEntities, 4, 'studentEntities[4]');
-
-  // Even distribution; student6 stays without enrollment
-  await ensureEnrollment(
-    studentEntity0.id,
-    class1A.id,
-    yearPrimary.id,
-    EnrollmentStatus.ACTIVE,
-  );
-  await ensureEnrollment(
-    studentEntity1.id,
-    class1A.id,
-    yearPrimary.id,
-    EnrollmentStatus.ACTIVE,
-  );
-  await ensureEnrollment(
-    studentEntity2.id,
-    class1B.id,
-    yearPrimary.id,
-    EnrollmentStatus.ACTIVE,
-  );
-  await ensureEnrollment(
-    studentEntity3.id,
-    class1B.id,
-    yearPrimary.id,
-    EnrollmentStatus.ACTIVE,
-  );
-  await ensureEnrollment(
-    studentEntity4.id,
-    class2A.id,
-    yearPrimary.id,
-    EnrollmentStatus.LEFT,
-  );
+  await Promise.all([
+    ensureStudent(studentMembership0.id, primaryOrg.id, {
+      classSectionId: class1A.id,
+      yearId: yearPrimary.id,
+      status: EnrollmentStatus.ACTIVE,
+    }),
+    ensureStudent(studentMembership1.id, primaryOrg.id, {
+      classSectionId: class1A.id,
+      yearId: yearPrimary.id,
+      status: EnrollmentStatus.ACTIVE,
+    }),
+    ensureStudent(studentMembership2.id, primaryOrg.id, {
+      classSectionId: class1B.id,
+      yearId: yearPrimary.id,
+      status: EnrollmentStatus.ACTIVE,
+    }),
+    ensureStudent(studentMembership3.id, primaryOrg.id, {
+      classSectionId: class1B.id,
+      yearId: yearPrimary.id,
+      status: EnrollmentStatus.ACTIVE,
+    }),
+    ensureStudent(studentMembership4.id, primaryOrg.id, {
+      classSectionId: class2A.id,
+      yearId: yearPrimary.id,
+      status: EnrollmentStatus.LEFT,
+    }),
+    ensureStudent(studentMembership5.id, primaryOrg.id, {
+      classSectionId: class2A.id,
+      yearId: yearPrimary.id,
+      status: EnrollmentStatus.ACTIVE,
+    }),
+  ]);
 
   // 6) Subjects
   const subjectMath = await ensureSubject(primaryOrg.id, 'Math');

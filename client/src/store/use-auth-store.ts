@@ -23,9 +23,15 @@ export type AuthState = {
   roles: OrganizationRole[];
   permissions: PermissionKey[];
   loading: boolean;
-  authStatus: "booting" | "ready";
+  authStatus:
+    | "anonymous"
+    | "authenticating"
+    | "authenticated"
+    | "refreshing"
+    | "unauthenticated";
   offline: boolean;
   sessionToken: string | null;
+  hadSession: boolean;
   hydrated: boolean;
   setProfile: (payload: {
     user: User | null;
@@ -35,9 +41,10 @@ export type AuthState = {
   }) => void;
   setOrg: (org: OrganizationContext | null) => void;
   setLoading: (loading: boolean) => void;
-  setAuthStatus: (status: "booting" | "ready") => void;
+  setAuthStatus: (status: AuthState["authStatus"]) => void;
   setOffline: (offline: boolean) => void;
   setSessionToken: (token: string | null) => void;
+  setHadSession: (hadSession: boolean) => void;
   setHydrated: (hydrated: boolean) => void;
   logout: () => void;
 };
@@ -61,10 +68,11 @@ export const useAuthStore = create<AuthState>()(
       org: null,
       roles: [],
       loading: false,
-      authStatus: "booting",
+      authStatus: "anonymous",
       offline: false,
       permissions: [],
       sessionToken: null,
+      hadSession: false,
       hydrated: false,
       setProfile: ({ user, org, roles, permissions }) =>
         set(() => ({
@@ -92,6 +100,7 @@ export const useAuthStore = create<AuthState>()(
       setAuthStatus: (authStatus) => set(() => ({ authStatus })),
       setOffline: (offline) => set(() => ({ offline })),
       setSessionToken: (sessionToken) => set(() => ({ sessionToken })),
+      setHadSession: (hadSession) => set(() => ({ hadSession })),
       setHydrated: (hydrated) => set(() => ({ hydrated })),
       logout: () =>
         set(() => ({
@@ -100,25 +109,27 @@ export const useAuthStore = create<AuthState>()(
           permissions: [],
           roles: [],
           loading: false,
-          authStatus: "ready",
+          authStatus: "unauthenticated",
           sessionToken: null,
+          hadSession: false,
         })),
     }),
     {
       name: "skillstorm_auth",
-      partialize: ({ user, permissions, roles, org, sessionToken }) => ({
+      partialize: ({ user, permissions, roles, org, sessionToken, hadSession }) => ({
         user,
         permissions,
         roles,
         org,
         sessionToken,
+        hadSession,
       }),
       onRehydrateStorage: () => (state, error) => {
         if (error) {
           return;
         }
         state?.setHydrated(true);
-        state?.setAuthStatus("booting");
+        state?.setAuthStatus("authenticating");
       },
     },
   ),

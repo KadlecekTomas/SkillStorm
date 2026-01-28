@@ -9,6 +9,7 @@ import {
   Req,
   ParseUUIDPipe,
   BadRequestException,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Permission } from '@/modules/rbac/permission.decorator';
@@ -20,11 +21,13 @@ import { EnrollmentsService } from './enrollments.service';
 import { CreateEnrollmentDto } from './dto/create-enrollment.dto';
 import { BulkEnrollmentDto } from './dto/bulk-enrollment.dto';
 import { QueryEnrollmentsDto } from './dto/query-enrollments.dto';
+import { RequireActiveAcademicYearGuard } from '@/academic-years/require-active-academic-year.guard';
 
 @ApiTags('Enrollments')
 @ApiStandardResponses()
 @ApiBearerAuth()
 @Controller('enrollments')
+@UseGuards(RequireActiveAcademicYearGuard)
 export class EnrollmentsController {
   constructor(private readonly service: EnrollmentsService) {}
 
@@ -35,6 +38,9 @@ export class EnrollmentsController {
     const classSectionId = dto.classSectionId ?? dto.classroomId;
     if (!classSectionId) {
       throw new BadRequestException('Chybí classroomId.');
+    }
+    if (!dto.academicYearId) {
+      throw new BadRequestException('Chybí academicYearId.');
     }
     return ok(this.service.create({ ...dto, classSectionId }, req.user));
   }
@@ -47,6 +53,9 @@ export class EnrollmentsController {
     if (!classSectionId) {
       throw new BadRequestException('Chybí classroomId.');
     }
+    if (!dto.academicYearId) {
+      throw new BadRequestException('Chybí academicYearId.');
+    }
     return ok(this.service.bulkCreate({ ...dto, classSectionId }, req.user));
   }
 
@@ -58,7 +67,16 @@ export class EnrollmentsController {
     if (!classSectionId) {
       throw new BadRequestException('Chybí classroomId.');
     }
-    return ok(this.service.listByClassSection(classSectionId, req.user));
+    if (!q.academicYearId) {
+      throw new BadRequestException('Chybí academicYearId.');
+    }
+    return ok(
+      this.service.listByClassSection(
+        classSectionId,
+        q.academicYearId,
+        req.user,
+      ),
+    );
   }
 
   @Delete(':id')

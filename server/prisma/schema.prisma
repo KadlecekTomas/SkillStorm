@@ -371,14 +371,18 @@ model Enrollment {
   studentId      String           @map("student_id")
   classSectionId String           @map("class_section_id")
   yearId         String           @map("academic_year_id")
+  orgId          String           @map("organization_id")
   status         EnrollmentStatus @default(ACTIVE)
   createdAt      DateTime         @default(now()) @map("created_at")
   academicYear   AcademicYear     @relation(fields: [yearId], references: [id], onDelete: Cascade)
   classSection   ClassSection     @relation(fields: [classSectionId], references: [id], onDelete: Cascade)
   student        Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  organization   Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
+  @@unique([studentId, yearId])
   @@index([studentId, yearId])
   @@index([classSectionId])
+  @@index([orgId])
   @@map("enrollments")
 }
 

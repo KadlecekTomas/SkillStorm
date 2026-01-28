@@ -31,6 +31,12 @@ export class AcademicYearsController {
     return ok(this.service.list(req.user));
   }
 
+  @Get('active')
+  @ApiOperation({ summary: 'Get active academic year for organization' })
+  getActive(@Req() req: RequestWithUser) {
+    return ok(this.service.getActiveForOrgOrFail(req.user.organizationId ?? null));
+  }
+
   @Post()
   @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'Create academic year' })

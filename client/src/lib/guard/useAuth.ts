@@ -24,7 +24,12 @@ export type UseAuthResult = {
   isLoading: boolean;
   isAuthenticated: boolean;
   hasOrganization: boolean;
-  authStatus: "booting" | "ready";
+  authStatus:
+    | "anonymous"
+    | "authenticating"
+    | "authenticated"
+    | "refreshing"
+    | "unauthenticated";
   isOffline: boolean;
   login: (payload: LoginPayload) => Promise<void>;
   logout: () => Promise<void>;
@@ -42,14 +47,12 @@ export type LoginPayload = {
   password: string;
 };
 
-const delay = (ms: number) =>
-  new Promise<void>((resolve) => {
-    setTimeout(resolve, ms);
-  });
+const PUBLIC_ROUTES = ["/login", "/register", "/forgot-password"];
 
 export const useAuth = (): UseAuthResult => {
   const pathname = usePathname();
   const syncRef = useRef<Promise<AuthEnvelope> | null>(null);
+  const refreshAttemptedRef = useRef(false);
   const {
     user,
     org,
@@ -59,11 +62,13 @@ export const useAuth = (): UseAuthResult => {
     authStatus,
     offline,
     hydrated,
+    hadSession,
     setProfile,
     setLoading,
     setAuthStatus,
     setOffline,
     setSessionToken,
+    setHadSession,
     logout: clearStore,
   } = useAuthStore((state) => ({
     user: state.user,
@@ -74,13 +79,20 @@ export const useAuth = (): UseAuthResult => {
     authStatus: state.authStatus,
     offline: state.offline,
     hydrated: state.hydrated,
+    hadSession: state.hadSession,
     setProfile: state.setProfile,
     setLoading: state.setLoading,
     setAuthStatus: state.setAuthStatus,
     setOffline: state.setOffline,
     setSessionToken: state.setSessionToken,
+    setHadSession: state.setHadSession,
     logout: state.logout,
   }));
+
+  const isPublicRoute = useMemo(
+    () => (pathname ? PUBLIC_ROUTES.includes(pathname) : false),
+    [pathname],
+  );
 
   const syncProfile = useCallback(
     async (options?: { force?: boolean }) => {
@@ -88,7 +100,9 @@ export const useAuth = (): UseAuthResult => {
         return syncRef.current;
       }
       syncRef.current = (async () => {
+        refreshAttemptedRef.current = false;
         setLoading(true);
+        setAuthStatus("authenticating");
         if (AUTH_DEBUG) {
           console.log(
             "%c[AUTH][BOOT]",
@@ -97,40 +111,62 @@ export const useAuth = (): UseAuthResult => {
           );
         }
         try {
-          let attempt = 0;
-          while (true) {
-            try {
-              const profile = await fetchWithAuth<AuthEnvelope>("GET", "/auth/me", {
-                retries: options?.force ? 0 : null,
-              });
-              setProfile(profile);
-              return profile;
-            } catch (error) {
-              if (attempt < 2) {
-                attempt += 1;
-                await delay(250 * attempt);
-                continue;
-              }
-              clearStore();
-              throw error;
-            }
+          const profile = await fetchWithAuth<AuthEnvelope>("GET", "/auth/me", {
+            retries: options?.force ? 0 : null,
+            skipAuthRetry: true,
+          });
+          setProfile(profile);
+          setAuthStatus("authenticated");
+          return profile;
+        } catch (error) {
+          if (refreshAttemptedRef.current) {
+            clearStore();
+            setAuthStatus("unauthenticated");
+            throw error;
+          }
+          refreshAttemptedRef.current = true;
+          setAuthStatus("refreshing");
+          try {
+            await fetchWithAuth("POST", "/auth/refresh", {
+              skipAuthRetry: true,
+            });
+            const profile = await fetchWithAuth<AuthEnvelope>("GET", "/auth/me", {
+              retries: 0,
+              skipAuthRetry: true,
+            });
+            setProfile(profile);
+            setAuthStatus("authenticated");
+            return profile;
+          } catch (refreshError) {
+            clearStore();
+            setAuthStatus("unauthenticated");
+            throw refreshError;
           }
         } finally {
-          setAuthStatus("ready");
           setLoading(false);
           syncRef.current = null;
           if (AUTH_DEBUG) {
             console.log(
               "%c[AUTH][READY]",
               "color:#0f766e;font-weight:600",
-              { pathname, hydrated, authStatus: "ready", userId: user?.id ?? null },
+              { pathname, hydrated, authStatus: "authenticated", userId: user?.id ?? null },
             );
           }
         }
       })();
       return syncRef.current;
     },
-    [setLoading, setProfile, setAuthStatus, clearStore, pathname, hydrated, authStatus, loading, user?.id],
+    [
+      setLoading,
+      setProfile,
+      setAuthStatus,
+      clearStore,
+      pathname,
+      hydrated,
+      authStatus,
+      loading,
+      user?.id,
+    ],
   );
 
   useEffect(() => {
@@ -157,11 +193,20 @@ export const useAuth = (): UseAuthResult => {
   useEffect(() => {
     if (!hydrated) return;
     if (loading) return;
-    if (authStatus === "ready") return;
+    if (isPublicRoute) {
+      setAuthStatus("anonymous");
+      return;
+    }
+    if (!hadSession) {
+      setAuthStatus("unauthenticated");
+      return;
+    }
+    if (authStatus === "authenticated") return;
+    if (authStatus === "authenticating" || authStatus === "refreshing") return;
     syncProfile().catch(() => {
       // Guard handles unauthenticated redirect after bootstrap.
     });
-  }, [hydrated, loading, authStatus, syncProfile]);
+  }, [hydrated, loading, authStatus, syncProfile, isPublicRoute, hadSession, setAuthStatus]);
 
   const login = useCallback(
     async (payload: LoginPayload) => {
@@ -169,11 +214,17 @@ export const useAuth = (): UseAuthResult => {
       try {
         const loginResult = await fetchWithAuth<AuthResponse | undefined>("POST", "/auth/login", {
           body: payload,
+          skipAuthRetry: true,
         });
         const incomingToken = loginResult?.sessionToken;
         if (typeof incomingToken === "string" && incomingToken.length > 0) {
           setSessionToken(incomingToken);
         }
+        if (loginResult) {
+          setProfile(loginResult);
+        }
+        setHadSession(true);
+        setAuthStatus("authenticated");
         audit({ action: "LOGIN" });
         showToastOnce("Přihlášení proběhlo úspěšně! 🎉", { type: "success" });
       } catch (error) {
@@ -183,7 +234,7 @@ export const useAuth = (): UseAuthResult => {
         setLoading(false);
       }
     },
-    [setLoading, setSessionToken],
+    [setLoading, setSessionToken, setProfile, setHadSession, setAuthStatus],
   );
 
   const logout = useCallback(async () => {
@@ -198,8 +249,10 @@ export const useAuth = (): UseAuthResult => {
       });
       clearStore();
       setSessionToken(null);
+      setHadSession(false);
+      setAuthStatus("unauthenticated");
     }
-  }, [clearStore, org?.id, setSessionToken]);
+  }, [clearStore, org?.id, setSessionToken, setHadSession, setAuthStatus]);
 
   const switchOrganization = useCallback(
     async (orgId: string) => {
@@ -228,8 +281,12 @@ export const useAuth = (): UseAuthResult => {
       org,
       roles,
       permissions,
-      isLoading: loading || !hydrated || authStatus === "booting",
-      isAuthenticated: Boolean(user),
+      isLoading:
+        loading ||
+        !hydrated ||
+        authStatus === "authenticating" ||
+        authStatus === "refreshing",
+      isAuthenticated: authStatus === "authenticated",
       hasOrganization,
       authStatus,
       isOffline: offline,

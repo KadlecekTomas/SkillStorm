@@ -21,17 +21,20 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import {
   buildVersionedListKey,
+  buildAuthzScopeKey,
   cacheGetOrSet,
   cacheScopeForUser,
   getOrgVersion,
   bumpOrgVersion,
 } from '@/shared/cache/org-cache.utils';
+import { AcademicYearsService } from '@/academic-years/academic-years.service';
 
 @Injectable()
 export class ClassSectionsService {
   constructor(
     private prisma: PrismaService,
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
+    private readonly academicYears: AcademicYearsService,
   ) {}
 
   private async getActiveAcademicYear(orgId: string) {
@@ -74,11 +77,7 @@ export class ClassSectionsService {
       : null;
     if (yearId && !year)
       throw new NotFoundException('Školní rok nebyl nalezen');
-    const resolvedYear =
-      year ??
-      (user.organizationId
-        ? await this.getActiveAcademicYear(user.organizationId)
-        : null);
+    const resolvedYear = year;
     if (!resolvedYear) {
       throw new NotFoundException('Školní rok nebyl nalezen');
     }
@@ -142,6 +141,9 @@ export class ClassSectionsService {
       throw new ForbiddenException('Missing organization context.');
     }
     const yearId = q.yearId ?? q.academicYearId ?? null;
+    if (!yearId) {
+      throw new BadRequestException('Chybí školní rok (academicYearId).');
+    }
     const year = yearId
       ? await this.prisma.academicYear.findUnique({
           where: { id: yearId },
@@ -150,13 +152,10 @@ export class ClassSectionsService {
       : null;
     if (yearId && !year)
       throw new NotFoundException('Školní rok nebyl nalezen');
-    const resolvedYear =
-      year ??
-      (user.organizationId
-        ? await this.getActiveAcademicYear(user.organizationId)
-        : null);
+    const resolvedYear = year;
     if (!resolvedYear) throw new NotFoundException('Školní rok nebyl nalezen');
     assertSameOrganization(resolvedYear.orgId, user, 'třídy');
+    await this.academicYears.assertOrgHasExactlyOneActiveYear(resolvedYear.orgId);
 
     const membership = user.organizationId
       ? await this.prisma.membership.findFirst({
@@ -229,6 +228,13 @@ export class ClassSectionsService {
       { id: 'asc' },
     ];
 
+    // Per-user cache is mandatory: teacher/student visibility is user-scoped.
+    const authzKey = buildAuthzScopeKey({
+      userId: user.userId,
+      systemRole: user.systemRole,
+      organizationRole: role ?? null,
+    });
+
     // org‑scoped verzovaná cache
     const scope = cacheScopeForUser(user.systemRole, resolvedYear.orgId);
     const ver = await getOrgVersion(this.cache, scope);
@@ -236,6 +242,7 @@ export class ClassSectionsService {
       namespace: 'classSections',
       scopeId: scope,
       version: ver,
+      authz: authzKey,
       page,
       limit,
       search: q.search ?? '',
@@ -272,7 +279,7 @@ export class ClassSectionsService {
             where: { status: { not: EnrollmentStatus.LEFT } },
             select: { id: true },
           },
-          academicYear: { select: { isCurrent: true } },
+          academicYear: { select: { id: true, label: true, isCurrent: true } },
         },
       });
 
@@ -303,7 +310,7 @@ export class ClassSectionsService {
             },
           },
         },
-        academicYear: { select: { isCurrent: true, id: true } },
+        academicYear: { select: { isCurrent: true, id: true, label: true } },
       },
     });
     if (!classSection) throw new NotFoundException('Třída nebyla nalezena');

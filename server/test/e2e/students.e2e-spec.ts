@@ -262,6 +262,8 @@ describe('Students (e2e)', () => {
       .send({
         membershipId: memberA_student1.id,
         orgId: orgA.id,
+        academicYearId: yearA_current.id,
+        classSectionId: classA1.id,
         studentNumber: '2025-00001',
         externalId: 'EXT-1',
       })
@@ -274,26 +276,21 @@ describe('Students (e2e)', () => {
       .send({
         membershipId: memberA_student2.id,
         orgId: orgA.id,
+        academicYearId: yearA_current.id,
+        classSectionId: classA2.id,
         studentNumber: '2025-00002',
         externalId: 'EXT-2',
       })
       .expect(201);
     studentA2 = { id: s2.body.id };
 
-    // enroll studentA1 into classA1 in current year (so teacherA1 gets access)
-    await prisma.enrollment.create({
-      data: {
-        studentId: studentA1.id,
-        classSectionId: classA1.id,
-        yearId: yearA_current.id,
-      },
-    });
     // also one old enrollment (past year homeroom should NOT give access)
     await prisma.enrollment.create({
       data: {
         studentId: studentA1.id,
         yearId: yearA_past.id,
         classSectionId: classA2.id,
+        orgId: orgA.id,
       },
     });
   });
@@ -389,6 +386,8 @@ describe('Students (e2e)', () => {
       .send({
         membershipId: mb.id,
         orgId: orgA.id,
+        academicYearId: yearA_current.id,
+        classSectionId: classA1.id,
         studentNumber: '2025-00999',
       })
       .expect(201);
@@ -419,7 +418,12 @@ describe('Students (e2e)', () => {
     await request(app.getHttpServer())
       .post('/students')
       .set('Authorization', `Bearer ${directorA.token}`)
-      .send({ membershipId: mb.id, orgId: orgA.id })
+      .send({
+        membershipId: mb.id,
+        orgId: orgA.id,
+        academicYearId: yearA_current.id,
+        classSectionId: classA1.id,
+      })
       .expect(403);
 
     await prisma.membership.delete({ where: { id: mb.id } });
@@ -441,7 +445,12 @@ describe('Students (e2e)', () => {
     await request(app.getHttpServer())
       .post('/students')
       .set('Authorization', `Bearer ${directorA.token}`)
-      .send({ membershipId: mb.id, orgId: orgA.id })
+      .send({
+        membershipId: mb.id,
+        orgId: orgA.id,
+        academicYearId: yearA_current.id,
+        classSectionId: classA1.id,
+      })
       .expect(403);
 
     await prisma.membership.delete({ where: { id: mb.id } });
@@ -464,7 +473,12 @@ describe('Students (e2e)', () => {
     await request(app.getHttpServer())
       .post('/students')
       .set('Authorization', `Bearer ${teacherB1.token}`)
-      .send({ membershipId: mb.id, orgId: orgA.id })
+      .send({
+        membershipId: mb.id,
+        orgId: orgA.id,
+        academicYearId: yearA_current.id,
+        classSectionId: classA1.id,
+      })
       .expect(403);
 
     await prisma.membership.delete({ where: { id: mb.id } });
@@ -477,7 +491,12 @@ describe('Students (e2e)', () => {
     await request(app.getHttpServer())
       .post('/students')
       .set('Authorization', `Bearer ${directorA.token}`)
-      .send({ membershipId: memberA_student1.id, orgId: orgA.id })
+      .send({
+        membershipId: memberA_student1.id,
+        orgId: orgA.id,
+        academicYearId: yearA_current.id,
+        classSectionId: classA1.id,
+      })
       .expect(403);
   });
 
@@ -485,7 +504,12 @@ describe('Students (e2e)', () => {
     await request(app.getHttpServer())
       .post('/students')
       .set('Authorization', `Bearer ${directorA.token}`)
-      .send({ membershipId: 'not-uuid', orgId: 'not-uuid' })
+      .send({
+        membershipId: 'not-uuid',
+        orgId: 'not-uuid',
+        academicYearId: 'not-uuid',
+        classSectionId: 'not-uuid',
+      })
       .expect(400);
   });
 
@@ -598,9 +622,20 @@ describe('Students (e2e)', () => {
       },
       select: { id: true },
     });
-    const created = await prisma.student.create({
-      data: { membershipId: mb.id, orgId: orgA.id, studentNumber: 'DEL-1' },
-      select: { id: true },
+    const created = await prisma.$transaction(async (tx) => {
+      const student = await tx.student.create({
+        data: { membershipId: mb.id, orgId: orgA.id, studentNumber: 'DEL-1' },
+        select: { id: true },
+      });
+      await tx.enrollment.create({
+        data: {
+          studentId: student.id,
+          classSectionId: classA1.id,
+          yearId: yearA_current.id,
+          orgId: orgA.id,
+        },
+      });
+      return student;
     });
 
     const res = await request(app.getHttpServer())
@@ -676,27 +711,25 @@ describe('Students (e2e)', () => {
     );
     const studs = await Promise.all(
       mbs.map((m, i) =>
-        prisma.student.create({
-          data: {
-            membershipId: m.id,
-            orgId: orgA.id,
-            studentNumber: `SN-${i + 1}`,
-            externalId: `EX-${i + 1}`,
-          },
-          select: { id: true },
-        }),
-      ),
-    );
-
-    // enroll je do isoYear / classA2
-    await Promise.all(
-      studs.map((s) =>
-        prisma.enrollment.create({
-          data: {
-            studentId: s.id,
-            classSectionId: classA2.id,
-            yearId: isoYear.id,
-          },
+        prisma.$transaction(async (tx) => {
+          const student = await tx.student.create({
+            data: {
+              membershipId: m.id,
+              orgId: orgA.id,
+              studentNumber: `SN-${i + 1}`,
+              externalId: `EX-${i + 1}`,
+            },
+            select: { id: true },
+          });
+          await tx.enrollment.create({
+            data: {
+              studentId: student.id,
+              classSectionId: classA2.id,
+              yearId: isoYear.id,
+              orgId: orgA.id,
+            },
+          });
+          return student;
         }),
       ),
     );

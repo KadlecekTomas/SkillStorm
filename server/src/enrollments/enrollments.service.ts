@@ -10,6 +10,7 @@ import {
   EnrollmentStatus,
   OrganizationRole,
   SystemRole,
+  Prisma,
 } from '@prisma/client';
 import type { JwtPayload } from '@/auth/types/jwt-payload';
 import { hasAtLeastRole } from '@/shared/access.utils';
@@ -36,7 +37,10 @@ export class EnrollmentsService {
     return membership;
   }
 
-  async create(dto: { studentId: string; classSectionId: string }, user: JwtPayload) {
+  async create(
+    dto: { studentId: string; classSectionId: string; academicYearId: string },
+    user: JwtPayload,
+  ) {
     const student = await this.prisma.student.findUnique({
       where: { id: dto.studentId },
       select: { id: true, orgId: true, deletedAt: true, membershipId: true },
@@ -51,6 +55,9 @@ export class EnrollmentsService {
     });
     if (!classSection) {
       throw new NotFoundException('Class section not found.');
+    }
+    if (classSection.yearId !== dto.academicYearId) {
+      throw new BadRequestException('Školní rok neodpovídá třídě.');
     }
 
     if (
@@ -83,26 +90,55 @@ export class EnrollmentsService {
       select: { id: true, classSectionId: true },
     });
     if (existing) {
+      if (existing.classSectionId === classSection.id) {
+        const current = await this.prisma.enrollment.findUnique({
+          where: { id: existing.id },
+        });
+        if (!current) {
+          throw new NotFoundException('Enrollment not found.');
+        }
+        return current;
+      }
       throw new ConflictException(
-        existing.classSectionId === classSection.id
-          ? 'Student je už zapsán v této třídě.'
-          : 'Student už je zapsán v jiné třídě v tomto školním roce.',
+        'Student už je zapsán v jiné třídě v tomto školním roce.',
       );
     }
 
-    return this.prisma.enrollment.create({
-      data: {
-        studentId: student.id,
-        classSectionId: classSection.id,
-        yearId: classSection.yearId,
-        status: EnrollmentStatus.ACTIVE,
-      },
-    });
+    try {
+      return await this.prisma.enrollment.create({
+        data: {
+          studentId: student.id,
+          classSectionId: classSection.id,
+          yearId: classSection.yearId,
+          orgId: classSection.orgId,
+          status: EnrollmentStatus.ACTIVE,
+        },
+      });
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        const current = await this.prisma.enrollment.findFirst({
+          where: {
+            studentId: student.id,
+            yearId: classSection.yearId,
+            status: { not: EnrollmentStatus.LEFT },
+          },
+        });
+        if (current?.classSectionId === classSection.id) return current;
+        throw new ConflictException(
+          'Student už je zapsán v jiné třídě v tomto školním roce.',
+        );
+      }
+      if (err instanceof Error && err.message.includes('academic_year_id')) {
+        throw new BadRequestException('Školní rok neodpovídá třídě.');
+      }
+      throw err;
+    }
   }
 
   async bulkCreate(
     dto: {
       classSectionId: string;
+      academicYearId: string;
       entries: Array<{ name: string; email?: string }>;
     },
     user: JwtPayload,
@@ -118,6 +154,9 @@ export class EnrollmentsService {
     });
     if (!classSection) {
       throw new NotFoundException('Class section not found.');
+    }
+    if (classSection.yearId !== dto.academicYearId) {
+      throw new BadRequestException('Školní rok neodpovídá třídě.');
     }
 
     if (
@@ -135,11 +174,20 @@ export class EnrollmentsService {
       createdUsers: number;
       errors: Array<{ index: number; name: string; message: string }>;
       enrollments: Array<{ enrollmentId: string; studentId: string; name: string }>;
+      results: Array<{
+        index: number;
+        name: string;
+        status: 'CREATED' | 'SKIPPED' | 'ERROR';
+        message?: string;
+        enrollmentId?: string;
+        studentId?: string;
+      }>;
     } = {
       enrolled: 0,
       createdUsers: 0,
       errors: [],
       enrollments: [],
+      results: [],
     };
 
     for (const [index, entry] of dto.entries.entries()) {
@@ -177,9 +225,12 @@ export class EnrollmentsService {
                 email: email ?? null,
                 passwordHash,
               },
-              select: { id: true, name: true },
+              select: { id: true, name: true, deletedAt: true, anonymized: true },
             });
             createdUser = true;
+          }
+          if (!userRecord) {
+            throw new Error('User record missing after creation.');
           }
 
           let membership = await tx.membership.findUnique({
@@ -230,49 +281,113 @@ export class EnrollmentsService {
             select: { id: true, classSectionId: true },
           });
           if (existing) {
+            if (existing.classSectionId === classSection.id) {
+              return {
+                enrollmentId: existing.id,
+                studentId: student.id,
+                createdUser,
+                name: userRecord.name,
+                status: 'SKIPPED' as const,
+                message: 'Student je už zapsán v této třídě.',
+              };
+            }
             throw new ConflictException(
-              existing.classSectionId === classSection.id
-                ? 'Student je už zapsán v této třídě.'
-                : 'Student už je zapsán v jiné třídě v tomto školním roce.',
+              'Student už je zapsán v jiné třídě v tomto školním roce.',
             );
           }
 
-          const enrollment = await tx.enrollment.create({
-            data: {
-              studentId: student.id,
-              classSectionId: classSection.id,
-              yearId: classSection.yearId,
-              status: EnrollmentStatus.ACTIVE,
-            },
-            select: { id: true },
-          });
+          try {
+            const enrollment = await tx.enrollment.create({
+              data: {
+                studentId: student.id,
+                classSectionId: classSection.id,
+                yearId: classSection.yearId,
+                orgId: classSection.orgId,
+                status: EnrollmentStatus.ACTIVE,
+              },
+              select: { id: true },
+            });
 
-          return { enrollmentId: enrollment.id, studentId: student.id, createdUser, name: userRecord.name };
+              return {
+                enrollmentId: enrollment.id,
+                studentId: student.id,
+                createdUser,
+                name: userRecord.name,
+                status: 'CREATED' as const,
+              };
+          } catch (err) {
+            if (
+              err instanceof Prisma.PrismaClientKnownRequestError &&
+              err.code === 'P2002'
+            ) {
+              const current = await tx.enrollment.findFirst({
+                where: {
+                  studentId: student.id,
+                  yearId: classSection.yearId,
+                  status: { not: EnrollmentStatus.LEFT },
+                },
+              });
+              if (current?.classSectionId === classSection.id) {
+                return {
+                  enrollmentId: current.id,
+                  studentId: student.id,
+                  createdUser,
+                  name: userRecord.name,
+                  status: 'SKIPPED' as const,
+                  message: 'Student je už zapsán v této třídě.',
+                };
+              }
+            }
+            throw err;
+          }
         });
 
-        results.enrolled += 1;
+        if (outcome.status === 'CREATED') {
+          results.enrolled += 1;
+        }
         if (outcome.createdUser) results.createdUsers += 1;
         results.enrollments.push({
           enrollmentId: outcome.enrollmentId,
           studentId: outcome.studentId,
           name: outcome.name,
         });
+        results.results.push({
+          index,
+          name: rawName,
+          status: outcome.status,
+          enrollmentId: outcome.enrollmentId,
+          studentId: outcome.studentId,
+          ...(outcome.message ? { message: outcome.message } : {}),
+        });
       } catch (err) {
         const message =
           err instanceof Error ? err.message : 'Nepodařilo se zapsat studenta.';
         results.errors.push({ index, name: rawName, message });
+        results.results.push({
+          index,
+          name: rawName,
+          status: 'ERROR',
+          message,
+        });
       }
     }
 
     return results;
   }
 
-  async listByClassSection(classSectionId: string, user: JwtPayload) {
+  async listByClassSection(
+    classSectionId: string,
+    academicYearId: string,
+    user: JwtPayload,
+  ) {
     const classSection = await this.prisma.classSection.findUnique({
       where: { id: classSectionId },
-      select: { id: true, orgId: true, teacherId: true },
+      select: { id: true, orgId: true, teacherId: true, yearId: true },
     });
     if (!classSection) throw new NotFoundException('Class section not found.');
+    if (classSection.yearId !== academicYearId) {
+      throw new BadRequestException('Školní rok neodpovídá třídě.');
+    }
 
     if (user.systemRole === SystemRole.SUPERADMIN) {
       return this.prisma.enrollment.findMany({

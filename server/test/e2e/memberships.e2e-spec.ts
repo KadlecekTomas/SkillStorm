@@ -690,13 +690,7 @@ describe('Memberships (e2e)', () => {
     const tmp = await ctxA.addMember(OrganizationRole.STUDENT, 'studentCascade');
     const m = tmp.membership;
 
-    // 2) Student entity
-    const student = await prisma.student.create({
-      data: { membershipId: m.id, orgId: orgA.id },
-      select: { id: true },
-    });
-
-    // 3) AcademicYear + ClassSection (minimální)
+    // 2) AcademicYear + ClassSection (minimální)
     const label = `AY_${Date.now()}`;
     const ay = await prisma.academicYear.create({
       data: {
@@ -720,14 +714,24 @@ describe('Memberships (e2e)', () => {
       select: { id: true },
     });
 
-    // 4) Enrollment + StudentClassroom (TopicLevel je volitelný)
-    await prisma.enrollment.create({
-      data: {
-        studentId: student.id,
-        classSectionId: cs.id,
-        yearId: ay.id,
-      },
+    // 3) Student entity + Enrollment
+    const student = await prisma.$transaction(async (tx) => {
+      const created = await tx.student.create({
+        data: { membershipId: m.id, orgId: orgA.id },
+        select: { id: true },
+      });
+      await tx.enrollment.create({
+        data: {
+          studentId: created.id,
+          classSectionId: cs.id,
+          yearId: ay.id,
+          orgId: orgA.id,
+        },
+      });
+      return created;
     });
+
+    // 4) Enrollment + StudentClassroom (TopicLevel je volitelný)
 
     await prisma.studentClassroom.create({
       data: {

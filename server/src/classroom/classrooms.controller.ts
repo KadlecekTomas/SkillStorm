@@ -17,11 +17,14 @@ import { RequestWithUser } from '@/types/request-with-user';
 import { ClassSectionsService } from './class-sections.service';
 import { CreateClassSectionDto } from './dto/create-classroom.dto';
 import { QueryClassSectionsDto } from './dto/query-class-sections.dto';
+import { UseGuards } from '@nestjs/common';
+import { RequireActiveAcademicYearGuard } from '@/academic-years/require-active-academic-year.guard';
 
 @ApiTags('Classrooms')
 @ApiStandardResponses()
 @ApiBearerAuth()
 @Controller('classrooms')
+@UseGuards(RequireActiveAcademicYearGuard)
 export class ClassroomsController {
   constructor(private readonly service: ClassSectionsService) {}
 

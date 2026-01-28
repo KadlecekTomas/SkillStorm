@@ -21,6 +21,10 @@ class BulkEnrollmentEntryDto {
 }
 
 export class BulkEnrollmentDto {
+  @ApiProperty({ example: 'year-uuid' })
+  @IsUUID()
+  academicYearId!: string;
+
   @ApiPropertyOptional({ example: 'class-section-uuid' })
   @IsOptional()
   @IsUUID()
@@ -37,4 +41,3 @@ export class BulkEnrollmentDto {
   @Type(() => BulkEnrollmentEntryDto)
   entries!: BulkEnrollmentEntryDto[];
 }
-

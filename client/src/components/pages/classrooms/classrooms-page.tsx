@@ -23,6 +23,7 @@ type ApiClassroom = {
   section: string;
   teacher?: { membership?: { user?: { name?: string | null; email?: string | null } } };
   enrollments?: { id: string }[];
+  academicYear?: { id: string; label: string; isCurrent: boolean };
 };
 
 /**
@@ -42,6 +43,8 @@ type ClassroomDetail = Omit<ApiClassroom, "enrollments"> & {
     };
   }[];
 };
+
+type AcademicYearUIState = "loading" | "empty" | "needs-selection" | "selected";
 
 const GRADE_OPTIONS = [
   { value: "GRADE_1", label: "1" },
@@ -68,6 +71,7 @@ export function ClassroomsPageContent(): React.JSX.Element {
     selectedYearId,
     isReadOnly,
     status: academicYearStatus,
+    yearConfigError,
     setSelectedYearId,
     refresh: refreshYears,
   } = useAcademicYears();
@@ -162,11 +166,13 @@ export function ClassroomsPageContent(): React.JSX.Element {
     () =>
       classrooms.map((cls) => ({
         ...cls,
-        displayName: cls.label ?? `${gradeLabel(cls.grade)}.${cls.section}`,
+        classLabel: cls.label ?? `${gradeLabel(cls.grade)}.${cls.section}`,
+        yearLabel: cls.academicYear?.label ?? selectedYear?.name ?? "—",
+        displayName: `${cls.label ?? `${gradeLabel(cls.grade)}.${cls.section}`} (${cls.academicYear?.label ?? selectedYear?.name ?? "—"})`,
         teacherName: cls.teacher?.membership?.user?.name ?? "—",
         studentsCount: cls.enrollments?.length ?? 0,
       })),
-    [classrooms],
+    [classrooms, selectedYear?.name],
   );
 
   const selectedSummary = summary.find((item) => item.id === selectedId) ?? null;
@@ -206,6 +212,9 @@ export function ClassroomsPageContent(): React.JSX.Element {
   };
 
   const handleCreateYear = async () => {
+    if (process.env.NODE_ENV !== "production" && years.length > 0) {
+      throw new Error("AcademicYear creation called while years already exist.");
+    }
     setCreateYearSubmitting(true);
     setCreateYearError(null);
     try {
@@ -272,12 +281,12 @@ export function ClassroomsPageContent(): React.JSX.Element {
     const dataRows = hasHeader ? rows.slice(1) : rows;
     return dataRows
       .map((cols) => ({
-        name: cols[nameIndex] ?? "",
-        email: cols[emailIndex] ?? undefined,
+        name: (cols[nameIndex] ?? "").trim(),
+        email: (cols[emailIndex] ?? "").trim(),
       }))
       .map((entry) => ({
-        name: entry.name.trim(),
-        email: entry.email?.trim() || undefined,
+        name: entry.name,
+        ...(entry.email ? { email: entry.email } : {}),
       }))
       .filter((entry) => entry.name.length > 0);
   };
@@ -297,6 +306,10 @@ export function ClassroomsPageContent(): React.JSX.Element {
   const handleBulkEnroll = async () => {
     if (!selectedId) {
       setAddError("Nejdřív vyber třídu.");
+      return;
+    }
+    if (!selectedYearId) {
+      setAddError("Nejdřív vyber školní rok.");
       return;
     }
     if (isReadOnly) {
@@ -324,8 +337,9 @@ export function ClassroomsPageContent(): React.JSX.Element {
         enrolled: number;
         createdUsers: number;
         errors: Array<{ index: number; name: string; message: string }>;
+        results?: Array<{ index: number; name: string; status: string; message?: string }>;
       }>("POST", "/enrollments/bulk", {
-        body: { classroomId: selectedId, entries },
+        body: { classroomId: selectedId, academicYearId: selectedYearId, entries },
       });
 
       setBulkResult(result);
@@ -362,9 +376,56 @@ export function ClassroomsPageContent(): React.JSX.Element {
     }
   };
 
-  const hasYear = Boolean(selectedYear);
-  const isInitializingYear = academicYearStatus === "loading";
+  const yearUiState: AcademicYearUIState =
+    academicYearStatus !== "ready"
+      ? "loading"
+      : years.length === 0
+        ? "empty"
+        : selectedYearId
+          ? "selected"
+          : "needs-selection";
+  const hasYear = yearUiState === "selected";
+  const isInitializingYear = yearUiState === "loading";
   const emptyState = hasYear && !loading && summary.length === 0;
+  const needsYearSelection = yearUiState === "needs-selection";
+
+  if (process.env.NODE_ENV !== "production" && academicYearStatus === "loading" && years.length === 0) {
+    throw new Error("AcademicYear empty UI rendered while data is still loading.");
+  }
+
+  if (yearConfigError === "NO_ACTIVE_ACADEMIC_YEAR") {
+    return (
+      <div className="space-y-6">
+        <div className="rounded-3xl border border-slate-200 bg-white px-5 py-4">
+          <p className="text-sm text-slate-600">
+            Pro práci s třídami potřebujete aktivní školní rok.
+          </p>
+          {createYearError && (
+            <Alert title="Chyba" description={createYearError} variant="warning" />
+          )}
+          <Button
+            className="mt-3"
+            onClick={handleCreateYear}
+            disabled={createYearSubmitting || !canCreateYear}
+          >
+            Vytvořit školní rok
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (yearConfigError === "MULTIPLE_ACTIVE_ACADEMIC_YEARS") {
+    return (
+      <div className="space-y-6">
+        <Alert
+          title="Konflikt školních roků"
+          description="V organizaci je více aktivních školních roků. Oprav to v administraci."
+          variant="warning"
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -414,7 +475,7 @@ export function ClassroomsPageContent(): React.JSX.Element {
         </div>
       )}
 
-      {!hasYear && academicYearStatus === "ready" && canCreateYear && years.length === 0 && (
+      {yearUiState === "empty" && canCreateYear && (
         <div className="rounded-3xl border border-slate-200 bg-white px-5 py-4">
           <p className="text-sm text-slate-600">
             Pro práci s třídami potřebujete školní rok.
@@ -432,7 +493,7 @@ export function ClassroomsPageContent(): React.JSX.Element {
         </div>
       )}
 
-      {!hasYear && academicYearStatus === "ready" && !canCreateYear && (
+      {yearUiState === "empty" && !canCreateYear && (
         <div className="rounded-3xl border border-slate-200 bg-white px-5 py-4">
           <p className="text-sm text-slate-600">
             Pro práci s třídami potřebujete školní rok.
@@ -447,6 +508,14 @@ export function ClassroomsPageContent(): React.JSX.Element {
           >
             Požádat správce o vytvoření školního roku
           </Button>
+        </div>
+      )}
+
+      {needsYearSelection && (
+        <div className="rounded-3xl border border-slate-200 bg-white px-5 py-4">
+          <p className="text-sm text-slate-600">
+            Vyber školní rok, se kterým chceš pracovat.
+          </p>
         </div>
       )}
 
@@ -493,7 +562,8 @@ export function ClassroomsPageContent(): React.JSX.Element {
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <h2 className="text-xl font-semibold text-slate-900">
-                      {detail.label ?? `${gradeLabel(detail.grade)}.${detail.section}`}
+                      {(detail.label ?? `${gradeLabel(detail.grade)}.${detail.section}`) +
+                        ` (${detail.academicYear?.label ?? selectedYear?.name ?? "—"})`}
                     </h2>
                     <p className="text-sm text-slate-500">
                       Třídní učitel: {detail.teacher?.membership?.user?.name ?? "Neuveden"}
@@ -603,7 +673,11 @@ export function ClassroomsPageContent(): React.JSX.Element {
 
       <BaseModal
         title="Přidat žáky"
-        {...(selectedSummary ? { description: `Třída ${selectedSummary.displayName}` } : {})}
+        {...(selectedSummary
+          ? {
+              description: `Třída ${selectedSummary.displayName}`,
+            }
+          : {})}
         open={addOpen}
         onOpenChange={setAddOpen}
       >
