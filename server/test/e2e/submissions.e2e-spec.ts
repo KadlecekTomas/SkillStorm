@@ -71,6 +71,8 @@ describe('Submissions (e2e)', () => {
   let assignmentId = '';
   let closedAssignmentId = '';
   let futureAssignmentId = '';
+  let academicYearId = '';
+  let otherOrgAcademicYearId = '';
 
   beforeAll(async () => {
     const mod = await Test.createTestingModule({
@@ -203,6 +205,31 @@ describe('Submissions (e2e)', () => {
       .expect(201);
     outsiderToken = oUseOrg.body.sessionToken;
 
+    // Academic year (required for assignments)
+    const academicYear = await prisma.academicYear.create({
+      data: {
+        orgId: org.id,
+        label: `E2E ${unique}`,
+        startsAt: new Date('2024-09-01'),
+        endsAt: new Date('2025-06-30'),
+        isCurrent: true,
+      },
+      select: { id: true },
+    });
+    academicYearId = academicYear.id;
+
+    const otherYear = await prisma.academicYear.create({
+      data: {
+        orgId: otherOrg.id,
+        label: `E2E Other ${unique}`,
+        startsAt: new Date('2024-09-01'),
+        endsAt: new Date('2025-06-30'),
+        isCurrent: true,
+      },
+      select: { id: true },
+    });
+    otherOrgAcademicYearId = otherYear.id;
+
     // Test se 3 otázkami
     const createdTest = await prisma.test.create({
       data: {
@@ -248,6 +275,7 @@ describe('Submissions (e2e)', () => {
     const assignment = await prisma.assignment.create({
       data: {
         organizationId: org.id,
+        yearId: academicYearId,
         testId,
         targetType: 'STUDENTS' as any,
         openAt,
@@ -264,6 +292,7 @@ describe('Submissions (e2e)', () => {
     const closed = await prisma.assignment.create({
       data: {
         organizationId: org.id,
+        yearId: academicYearId,
         testId,
         targetType: 'STUDENTS' as any,
         openAt: new Date(now.getTime() - 2 * 60_000),
@@ -280,6 +309,7 @@ describe('Submissions (e2e)', () => {
     const future = await prisma.assignment.create({
       data: {
         organizationId: org.id,
+        yearId: academicYearId,
         testId,
         targetType: 'STUDENTS' as any,
         openAt: new Date(now.getTime() + 60_000),
@@ -450,6 +480,7 @@ describe('Submissions (e2e)', () => {
     const single = await prisma.assignment.create({
       data: {
         organizationId: org.id,
+        yearId: academicYearId,
         testId,
         targetType: 'STUDENTS' as any,
         openAt: new Date(now.getTime() - 60_000),
@@ -484,6 +515,7 @@ describe('Submissions (e2e)', () => {
     const soon = await prisma.assignment.create({
       data: {
         organizationId: org.id,
+        yearId: academicYearId,
         testId,
         targetType: 'STUDENTS' as any,
         openAt: new Date(Date.now() - 60_000),
@@ -556,6 +588,7 @@ describe('Submissions (e2e)', () => {
     const tmpAssignment = await prisma.assignment.create({
       data: {
         organizationId: org.id,
+        yearId: academicYearId,
         testId,
         targetType: 'STUDENTS' as any,
         openAt: new Date(Date.now() - 60_000),
@@ -594,6 +627,7 @@ describe('Submissions (e2e)', () => {
     const tmpAssignment = await prisma.assignment.create({
       data: {
         organizationId: org.id,
+        yearId: academicYearId,
         testId,
         targetType: 'STUDENTS' as any,
         openAt: new Date(Date.now() - 60_000),
@@ -633,6 +667,7 @@ describe('Submissions (e2e)', () => {
     const otherAss = await prisma.assignment.create({
       data: {
         organizationId: otherOrg.id,
+        yearId: otherOrgAcademicYearId,
         testId, // POZOR: test je v org, ale pro test účely to necháme – real implementace může odmítnout (409/400).
         targetType: 'STUDENTS' as any,
         openAt: new Date(now.getTime() - 60_000),

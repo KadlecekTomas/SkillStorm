@@ -181,7 +181,15 @@ export class AcademicYearsService {
       });
     }
 
-    return this.mapYear(years[0]);
+    const year = years[0];
+    if (!year) {
+      throw new ConflictException({
+        code: 'NO_ACTIVE_ACADEMIC_YEAR',
+        message: 'Active academic year is not configured for this organization.',
+      });
+    }
+
+    return this.mapYear(year);
   }
 
   async assertOrgHasExactlyOneActiveYear(orgId: string | null) {

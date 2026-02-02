@@ -227,6 +227,24 @@ export class AuthService {
     return tokens;
   }
 
+  /**
+   * Issue tokens for a user and membership (used by invites.accept).
+   */
+  async issueTokensForMembership(
+    userId: string,
+    membershipId: string,
+  ): Promise<{ accessToken: string; refreshToken: string }> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+    if (!user) throw new UnauthorizedException('User not found');
+    const membership = await this.prisma.membership.findUnique({
+      where: { id: membershipId },
+    });
+    if (!membership) throw new UnauthorizedException('Membership not found');
+    return this.generateTokens(user, membership);
+  }
+
   // -------------------------
   // Public API
   // -------------------------
@@ -258,6 +276,7 @@ export class AuthService {
 
       try {
         if (mode === RegisterMode.CREATE_ORG) {
+          // CREATE_ORG: create User only. Organization is created in onboarding step.
           const result = await this.prisma.$transaction(async (tx) => {
             const createdUser = await tx.user.create({
               data: {
@@ -277,40 +296,7 @@ export class AuthService {
                 lastLoginAt: true,
               },
             });
-
-            const organization = await tx.organization.create({
-              data: {
-                name: `${dto.name}'s School`,
-                type: OrganizationType.SCHOOL,
-              },
-              select: {
-                id: true,
-                name: true,
-                type: true,
-                createdAt: true,
-              },
-            });
-
-            const membership = await tx.membership.create({
-              data: {
-                userId: createdUser.id,
-                organizationId: organization.id,
-                role: OrganizationRole.OWNER,
-              },
-              select: {
-                id: true,
-                role: true,
-                organizationId: true,
-                createdAt: true,
-              },
-            });
-
-            await tx.user.update({
-              where: { id: createdUser.id },
-              data: { lastActiveMembershipId: membership.id },
-            });
-
-            return { user: createdUser, organization, membership };
+            return { user: createdUser };
           });
 
           const persistedUser = await this.prisma.user.findUnique({
@@ -320,32 +306,29 @@ export class AuthService {
             throw new NotFoundException('User not found after registration');
           }
 
-          const tokens = await this.generateTokens(
-            persistedUser,
-            result.membership as unknown as Membership,
-          );
+          const tokens = await this.generateTokens(persistedUser, null);
 
           await this.auditService.log({
             action: 'REGISTER',
             entityType: AuditEntityType.USER,
             userId: result.user.id,
-            organizationId: result.organization.id,
+            organizationId: null,
             entityId: result.user.id,
             metadata: {
-              requestedRole: dto.role ?? null,
               mode,
+              onboardingState: 'CREATE_ORG_PENDING',
             },
           });
 
           this.logger.log(
-            `Registration complete for ${result.user.email} in org ${result.organization.id} (mode=${mode})`,
+            `Registration complete for ${result.user.email} (mode=${mode}, org pending)`,
           );
 
           return {
             tokens,
             user: result.user,
-            organization: result.organization,
-            membership: result.membership,
+            organization: null,
+            membership: null,
           };
         }
 
@@ -686,6 +669,11 @@ export class AuthService {
   }
 
   async joinOrganization(userId: string, dto: JoinOrganizationDto) {
+    if (dto.role === OrganizationRole.STUDENT) {
+      throw new BadRequestException(
+        'Student join requires a class-bound invite. Use the invite link from your teacher (includes class + year).',
+      );
+    }
     const organization = await this.resolveJoinOrganization(dto.joinCode);
     const role = this.resolveJoinRole(dto.role);
 

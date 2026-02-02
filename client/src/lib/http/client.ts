@@ -1,6 +1,6 @@
 "use client";
 
-import { API_BASE_URL, AUTH_DEBUG } from "@/utils/env";
+import { API_BASE_PATH, AUTH_DEBUG } from "@/utils/env";
 import { useAuthStore, type OrganizationContext } from "@/store/use-auth-store";
 
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -85,7 +85,8 @@ export const createCorrelationId = (): string => {
 const resolveUrl = (path: string): string => {
   if (/^https?:\/\//i.test(path)) return path;
   const sanitizedPath = path.startsWith("/") ? path : `/${path}`;
-  return `${API_BASE_URL}${sanitizedPath}`;
+  const base = sanitizedPath.startsWith(API_BASE_PATH) ? "" : API_BASE_PATH;
+  return `${base}${sanitizedPath}`;
 };
 
 const applyQuery = (

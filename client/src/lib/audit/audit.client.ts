@@ -1,6 +1,6 @@
 "use client";
 
-import { API_BASE_URL } from "@/utils/env";
+import { API_BASE_PATH } from "@/utils/env";
 import { createCorrelationId } from "@/lib/http/client";
 
 export type AuditAction =
@@ -23,7 +23,7 @@ type AuditInput = Omit<AuditEvent, "ts" | "cid"> & {
   cid?: string;
 };
 
-const AUDIT_ENDPOINT = `${API_BASE_URL}/audit`;
+const AUDIT_ENDPOINT = `${API_BASE_PATH}/audit`;
 const queue: AuditEvent[] = [];
 let flushing = false;
 let retryAttempt = 0;

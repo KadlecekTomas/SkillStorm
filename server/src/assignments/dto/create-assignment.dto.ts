@@ -18,6 +18,9 @@ export class CreateAssignmentDto {
   organizationId!: string;
 
   @IsUUID()
+  academicYearId!: string;
+
+  @IsUUID()
   testId!: string;
 
   @IsString()

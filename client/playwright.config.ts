@@ -27,7 +27,7 @@ export default defineConfig({
     stdout: "pipe",
     env: {
       NEXT_PUBLIC_ENABLE_MSW: "false",
-      NEXT_PUBLIC_API_URL: "/api",
+      API_PROXY_TARGET: process.env.API_PROXY_TARGET ?? "http://localhost:4200",
     },
   },
 });

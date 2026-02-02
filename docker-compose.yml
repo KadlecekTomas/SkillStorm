@@ -49,19 +49,21 @@ services:
       redis:
         condition: service_healthy
     ports:
-      - "4200:4200"
+      - "${BACKEND_PORT:-4201}:4200"
 
   frontend:
     build:
       context: ./client
       dockerfile: Dockerfile
       target: runner
+      args:
+        API_PROXY_TARGET: http://backend:4200
     profiles: ["dev", "staging", "prod"]
     env_file:
       - .env
     environment:
       PORT: 3000
-      NEXT_PUBLIC_API_URL: http://localhost:4200
+      API_PROXY_TARGET: http://backend:4200
       NODE_ENV: ${NODE_ENV:-production}
     depends_on:
       backend:

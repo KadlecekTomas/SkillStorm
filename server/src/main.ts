@@ -111,12 +111,12 @@ export async function createApp(): Promise<INestApplication> {
   const app = await NestFactory.create(AppModule, options);
   app.use(cookieParser());
 
-  // 🔒 Configured for Next.js (localhost:3000) – allows credentials & cross-origin cookies.
+  // 🔒 Frontend origins only. API is proxied via Next.js /api, so browser Origin is frontend URL.
   app.enableCors({
     origin: [
       'http://localhost:3000',
       'http://127.0.0.1:3000',
-      'http://localhost:4200',
+      'http://frontend:3000',
     ],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],

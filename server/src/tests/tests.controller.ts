@@ -11,6 +11,7 @@ import {
   Req,
   ParseUUIDPipe,
   ForbiddenException,
+  UseGuards,
 } from '@nestjs/common';
 import { RequestWithUser } from '@/types/request-with-user';
 import {
@@ -38,11 +39,13 @@ import { UpdateAnswerDto } from './dto/update-answer.dto';
 import { ok } from '@/common/http/envelope';
 import { AssignTestDto } from './dto/assign-test.dto';
 import { ApiStandardResponses } from '@/common/http/api-standard-responses.decorator';
+import { RequireActiveAcademicYearGuard } from '@/academic-years/require-active-academic-year.guard';
 
 @ApiTags('tests')
 @ApiStandardResponses()
 @ApiBearerAuth()
 @Controller('tests')
+@UseGuards(RequireActiveAcademicYearGuard)
 export class TestsController {
   constructor(private readonly service: TestsService) {}
 

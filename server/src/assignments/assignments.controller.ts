@@ -1,3 +1,4 @@
+// YEAR-SCOPED: Requires active academic year (RequireActiveAcademicYearGuard)
 // src/assignments/assignments.controller.ts
 import {
   Controller,
@@ -9,6 +10,7 @@ import {
   Body,
   Req,
   ForbiddenException,
+  UseGuards,
 } from '@nestjs/common';
 import { RequestWithUser } from '@/types/request-with-user';
 import { PermissionKey, OrganizationRole } from '@prisma/client';
@@ -19,11 +21,13 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ok } from '@/common/http/envelope';
 import { ApiStandardResponses } from '@/common/http/api-standard-responses.decorator';
 import { MyAssignmentDto } from './my-assignments.dto';
+import { RequireActiveAcademicYearGuard } from '@/academic-years/require-active-academic-year.guard';
 
 @ApiTags('assignments')
 @ApiStandardResponses()
 @ApiBearerAuth()
 @Controller('assignments')
+@UseGuards(RequireActiveAcademicYearGuard)
 export class AssignmentsController {
   constructor(private readonly assignmentsService: AssignmentsService) {}
 

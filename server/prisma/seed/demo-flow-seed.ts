@@ -375,6 +375,7 @@ async function ensureQuestion(params: {
 
 async function ensureAssignment(params: {
   orgId: string;
+  yearId: string;
   testId: string;
   classSectionId: string;
   createdById: string;
@@ -406,6 +407,7 @@ async function ensureAssignment(params: {
   return prisma.assignment.create({
     data: {
       organizationId: params.orgId,
+      yearId: params.yearId,
       testId: params.testId,
       targetType: 'CLASS',
       classSectionId: params.classSectionId,
@@ -421,7 +423,7 @@ async function ensureAssignment(params: {
 }
 
 async function ensureSubmission(params: {
-  assignmentId: string | null;
+  assignmentId: string;
   testId: string;
   studentMembershipId: string;
   status: 'APPROVED' | 'REJECTED';
@@ -729,6 +731,7 @@ async function main() {
   // 8) Assignments (only Test A)
   const assignmentA = await ensureAssignment({
     orgId: primaryOrg.id,
+    yearId: yearPrimary.id,
     testId: testA.id,
     classSectionId: class1A.id,
     createdById: teacherMembershipA.id,
@@ -763,17 +766,6 @@ async function main() {
     ],
   });
 
-  // Rejected submission for Test C (no assignment by design)
-  await ensureSubmission({
-    assignmentId: null,
-    testId: testC.id,
-    studentMembershipId: studentMembership4.id,
-    status: 'REJECTED',
-    score: null,
-    submittedAt: new Date('2025-01-15T09:20:00.000Z'),
-    responses: [],
-  });
-
   const summary = {
     organizations: 2,
     users: 1 + 2 + 6 + 1,
@@ -783,7 +775,7 @@ async function main() {
     subjects: 3,
     tests: 3,
     assignments: 1,
-    submissions: 3,
+    submissions: 2,
   };
 
   console.log('✅ Demo seed complete');

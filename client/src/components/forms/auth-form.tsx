@@ -110,9 +110,28 @@ export const AuthForm = ({
 
       setRegistering(true);
       const registerValues = values as RegisterValues;
-      const payload = {
-        ...registerValues,
+      // Explicit payload – only fields allowed by backend RegisterDto (forbidNonWhitelisted).
+      const selectedRegisterMode = registerModeOptions.includes(registerValues.mode)
+        ? registerValues.mode
+        : "INDIVIDUAL";
+      const payload: {
+        name: string;
+        email: string;
+        password: string;
+        mode: (typeof registerModeOptions)[number];
+        joinCode?: string;
+        role?: "STUDENT" | "TEACHER" | "PARENT";
+      } = {
+        name: registerValues.name.trim(),
+        email: registerValues.email.trim(),
+        password: registerValues.password,
+        mode: selectedRegisterMode,
       };
+      if (selectedRegisterMode === "JOIN_ORG") {
+        const code = (initialJoinCode ?? "").trim();
+        if (code) payload.joinCode = code;
+        if (initialJoinRole) payload.role = initialJoinRole;
+      }
       const registerResult = await httpClient.post<{
         user: unknown;
         sessionToken?: string;
@@ -124,7 +143,10 @@ export const AuthForm = ({
         setSessionToken(registerResult.sessionToken);
       }
       
-      if (registerValues.mode === "JOIN_ORG" && typeof window !== "undefined") {
+      if (selectedRegisterMode === "CREATE_ORG" && typeof window !== "undefined") {
+        window.sessionStorage.setItem("create_org_intent", "1");
+      }
+      if (selectedRegisterMode === "JOIN_ORG" && typeof window !== "undefined") {
         const joinIntent = {
           joinCode: (initialJoinCode ?? "").trim(),
           ...(initialJoinRole ? { role: initialJoinRole } : {}),
@@ -135,7 +157,7 @@ export const AuthForm = ({
       // ✅ Počkej na dokončení syncProfile před redirectem (redirect je v register/page.tsx)
       await syncProfile({ force: true });
       showToastOnce(
-        registerValues.mode === "JOIN_ORG"
+        selectedRegisterMode === "JOIN_ORG"
           ? "Účet byl vytvořen. Dokonči připojení v onboarding kroku."
           : "Účet byl vytvořen. Přihlašuji…",
         { type: "success" },

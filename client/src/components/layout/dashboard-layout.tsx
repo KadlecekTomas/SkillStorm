@@ -8,6 +8,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import { Alert } from "@/components/ui/alert";
 import { useAuth } from "@/hooks/use-auth";
 import { useAcademicYears } from "@/hooks/use-academic-years";
 import {
@@ -34,6 +35,7 @@ export const DashboardLayout = ({ children }: DashboardLayoutProps): React.JSX.E
     isReadOnly,
     setSelectedYearId,
     yearConfigError,
+    bootstrapState,
     loading: yearsLoading,
   } = useAcademicYears();
 
@@ -41,6 +43,38 @@ export const DashboardLayout = ({ children }: DashboardLayoutProps): React.JSX.E
     if (!pathname) return;
     logEvent("navigation", "page_view", { path: pathname });
   }, [pathname, logEvent]);
+
+  const shouldBlockChildren = hasOrganization && bootstrapState !== "READY";
+  let blockedContent: React.ReactNode | null = null;
+  if (hasOrganization && (bootstrapState === "LOADING" || bootstrapState === "INIT")) {
+    blockedContent = (
+      <div className="space-y-4">
+        <div className="rounded-3xl border border-slate-200 bg-white px-5 py-4">
+          <p className="text-sm text-slate-600">Načítám aktivní školní rok…</p>
+        </div>
+      </div>
+    );
+  }
+  if (hasOrganization && bootstrapState === "ERROR") {
+    let title = "Konfigurační chyba";
+    let description = "Aktivní školní rok není dostupný.";
+    if (yearConfigError === "NO_ACTIVE_ACADEMIC_YEAR") {
+      title = "Chybí aktivní školní rok";
+      description =
+        "V organizaci není nastaven aktivní školní rok. Kontaktujte ředitele nebo vlastníka školy. Pokud jste vlastník, měli byste být přesměrováni na stránku pro vytvoření školního roku.";
+    } else if (yearConfigError === "MULTIPLE_ACTIVE_ACADEMIC_YEARS") {
+      title = "Konflikt školních roků";
+      description = "V organizaci je více aktivních školních roků.";
+    } else if (yearConfigError === "ACTIVE_YEAR_FETCH_FAILED") {
+      title = "Nelze načíst aktivní školní rok";
+      description = "Zkontroluj připojení nebo to zkus znovu.";
+    }
+    blockedContent = (
+      <div className="space-y-4">
+        <Alert title={title} description={description} variant="warning" />
+      </div>
+    );
+  }
 
   return (
     <MainLayout>
@@ -79,7 +113,7 @@ export const DashboardLayout = ({ children }: DashboardLayoutProps): React.JSX.E
               <Select
                 value={selectedYear?.id ?? ""}
                 onValueChange={(value) => setSelectedYearId(value)}
-                disabled={yearsLoading || !!yearConfigError}
+                disabled={yearsLoading || !!yearConfigError || bootstrapState !== "READY"}
               >
                 <SelectTrigger className="w-48 rounded-2xl" aria-label="Academic year">
                   <SelectValue placeholder="Školní rok" />
@@ -129,7 +163,7 @@ export const DashboardLayout = ({ children }: DashboardLayoutProps): React.JSX.E
           </div>
         )}
       </div>
-      {children}
+      {shouldBlockChildren ? blockedContent : children}
     </MainLayout>
   );
 };

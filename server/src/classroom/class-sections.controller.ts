@@ -1,3 +1,4 @@
+// YEAR-SCOPED: Requires active academic year (RequireActiveAcademicYearGuard)
 // src/modules/classroom/class-sections.controller.ts
 import {
   Body,

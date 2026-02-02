@@ -1,3 +1,4 @@
+// YEAR-SCOPED: Requires active academic year (RequireActiveAcademicYearGuard)
 // src/modules/students/student.controller.ts
 import {
   Controller,
@@ -11,6 +12,7 @@ import {
   ParseUUIDPipe,
   Query,
   Res,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { CacheTTL } from '@nestjs/cache-manager';
@@ -26,10 +28,12 @@ import { RequestWithUser } from '@/types/request-with-user';
 
 import { InvalidateScopes } from '@/common/cache/invalidate.decorator';
 import { Permission } from '@/modules/rbac/permission.decorator';
+import { RequireActiveAcademicYearGuard } from '@/academic-years/require-active-academic-year.guard';
 
 @ApiTags('Students')
 @ApiBearerAuth()
 @Controller('students')
+@UseGuards(RequireActiveAcademicYearGuard)
 export class StudentsController {
   constructor(private readonly service: StudentsService) {}
 

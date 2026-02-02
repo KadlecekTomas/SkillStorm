@@ -90,13 +90,13 @@ Poznámka: v ukázkách se používá `sessionToken` jako Bearer token.
 
 1) Register + login (DIRECTOR)
 ```bash
-DIRECTOR_REGISTER=$(curl -s -X POST http://localhost:3000/auth/register \
+DIRECTOR_REGISTER=$(curl -s -X POST http://localhost:3000/api/auth/register \
   -H "Content-Type: application/json" \
-  -d '{"name":"Director","email":"director@example.com","username":"director1","password":"Password123!","role":"DIRECTOR"}')
+  -d '{"name":"Director","email":"director@example.com","username":"director1","password":"Password123!","mode":"CREATE_ORG"}')
 
 ORG_ID=$(echo "$DIRECTOR_REGISTER" | jq -r '.data.organization.id')
 
-DIRECTOR_TOKEN=$(curl -s -X POST http://localhost:3000/auth/login \
+DIRECTOR_TOKEN=$(curl -s -X POST http://localhost:3000/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"director@example.com","password":"Password123!"}' \
   | jq -r '.data.sessionToken')
@@ -104,13 +104,13 @@ DIRECTOR_TOKEN=$(curl -s -X POST http://localhost:3000/auth/login \
 
 2) Register student user + add membership to org
 ```bash
-STUDENT_REGISTER=$(curl -s -X POST http://localhost:3000/auth/register \
+STUDENT_REGISTER=$(curl -s -X POST http://localhost:3000/api/auth/register \
   -H "Content-Type: application/json" \
   -d '{"name":"Student","email":"student@example.com","username":"student1","password":"Password123!","role":"STUDENT"}')
 
 STUDENT_USER_ID=$(echo "$STUDENT_REGISTER" | jq -r '.data.user.id')
 
-STUDENT_MEMBERSHIP=$(curl -s -X POST http://localhost:3000/memberships \
+STUDENT_MEMBERSHIP=$(curl -s -X POST http://localhost:3000/api/memberships \
   -H "Authorization: Bearer $DIRECTOR_TOKEN" \
   -H "Content-Type: application/json" \
   -d "{\"userId\":\"$STUDENT_USER_ID\",\"organizationId\":\"$ORG_ID\",\"role\":\"STUDENT\"}")
@@ -120,7 +120,7 @@ STUDENT_MEMBERSHIP_ID=$(echo "$STUDENT_MEMBERSHIP" | jq -r '.data.id')
 
 3) Create student entity (linked to membership)
 ```bash
-STUDENT_ENTITY=$(curl -s -X POST http://localhost:3000/students \
+STUDENT_ENTITY=$(curl -s -X POST http://localhost:3000/api/students \
   -H "Authorization: Bearer $DIRECTOR_TOKEN" \
   -H "Content-Type: application/json" \
   -d "{\"membershipId\":\"$STUDENT_MEMBERSHIP_ID\",\"orgId\":\"$ORG_ID\"}")
@@ -130,12 +130,12 @@ STUDENT_ID=$(echo "$STUDENT_ENTITY" | jq -r '.data.id')
 
 4) Student login + use org
 ```bash
-STUDENT_TOKEN=$(curl -s -X POST http://localhost:3000/auth/login \
+STUDENT_TOKEN=$(curl -s -X POST http://localhost:3000/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"student@example.com","password":"Password123!"}' \
   | jq -r '.data.sessionToken')
 
-STUDENT_TOKEN=$(curl -s -X POST http://localhost:3000/auth/use-org \
+STUDENT_TOKEN=$(curl -s -X POST http://localhost:3000/api/auth/use-org \
   -H "Authorization: Bearer $STUDENT_TOKEN" \
   -H "Content-Type: application/json" \
   -d "{\"orgId\":\"$ORG_ID\"}" \
@@ -144,14 +144,14 @@ STUDENT_TOKEN=$(curl -s -X POST http://localhost:3000/auth/use-org \
 
 5) Create class section + enroll student
 ```bash
-CLASS_SECTION=$(curl -s -X POST http://localhost:3000/class-sections \
+CLASS_SECTION=$(curl -s -X POST http://localhost:3000/api/class-sections \
   -H "Authorization: Bearer $DIRECTOR_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"grade":"GRADE_1","section":"A","label":"1.A"}')
 
 CLASS_SECTION_ID=$(echo "$CLASS_SECTION" | jq -r '.data.id')
 
-curl -s -X POST http://localhost:3000/enrollments \
+curl -s -X POST http://localhost:3000/api/enrollments \
   -H "Authorization: Bearer $DIRECTOR_TOKEN" \
   -H "Content-Type: application/json" \
   -d "{\"studentId\":\"$STUDENT_ID\",\"classSectionId\":\"$CLASS_SECTION_ID\"}" >/dev/null
@@ -159,21 +159,21 @@ curl -s -X POST http://localhost:3000/enrollments \
 
 6) Create test + add question + publish
 ```bash
-TEST=$(curl -s -X POST http://localhost:3000/tests \
+TEST=$(curl -s -X POST http://localhost:3000/api/tests \
   -H "Authorization: Bearer $DIRECTOR_TOKEN" \
   -H "Content-Type: application/json" \
   -d "{\"title\":\"Core Test\",\"organizationId\":\"$ORG_ID\"}")
 
 TEST_ID=$(echo "$TEST" | jq -r '.data.id')
 
-QUESTION=$(curl -s -X POST http://localhost:3000/tests/$TEST_ID/questions \
+QUESTION=$(curl -s -X POST http://localhost:3000/api/tests/$TEST_ID/questions \
   -H "Authorization: Bearer $DIRECTOR_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"text":"Is 1 < 2?","type":"TRUE_FALSE","correctAnswer":"true","order":1}')
 
 QUESTION_ID=$(echo "$QUESTION" | jq -r '.data.id')
 
-curl -s -X PATCH http://localhost:3000/tests/$TEST_ID \
+curl -s -X PATCH http://localhost:3000/api/tests/$TEST_ID \
   -H "Authorization: Bearer $DIRECTOR_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"status":"PUBLISHED"}' >/dev/null
@@ -181,29 +181,29 @@ curl -s -X PATCH http://localhost:3000/tests/$TEST_ID \
 
 7) Assign test + student submits + finish
 ```bash
-ASSIGNMENT=$(curl -s -X POST http://localhost:3000/tests/$TEST_ID/assign \
+ASSIGNMENT=$(curl -s -X POST http://localhost:3000/api/tests/$TEST_ID/assign \
   -H "Authorization: Bearer $DIRECTOR_TOKEN" \
   -H "Content-Type: application/json" \
   -d "{\"classSectionId\":\"$CLASS_SECTION_ID\",\"openAt\":\"2025-01-01T10:00:00Z\",\"closeAt\":\"2025-01-01T12:00:00Z\",\"maxAttempts\":1,\"shuffle\":false,\"showExplain\":\"NEVER\"}")
 
 ASSIGNMENT_ID=$(echo "$ASSIGNMENT" | jq -r '.data.id')
 
-curl -s -X GET http://localhost:3000/assignments/my \
+curl -s -X GET http://localhost:3000/api/assignments/my \
   -H "Authorization: Bearer $STUDENT_TOKEN" >/dev/null
 
-SUBMISSION=$(curl -s -X POST http://localhost:3000/submissions \
+SUBMISSION=$(curl -s -X POST http://localhost:3000/api/submissions \
   -H "Authorization: Bearer $STUDENT_TOKEN" \
   -H "Content-Type: application/json" \
   -d "{\"assignmentId\":\"$ASSIGNMENT_ID\"}")
 
 SUBMISSION_ID=$(echo "$SUBMISSION" | jq -r '.data.id')
 
-curl -s -X PATCH http://localhost:3000/submissions/$SUBMISSION_ID/responses \
+curl -s -X PATCH http://localhost:3000/api/submissions/$SUBMISSION_ID/responses \
   -H "Authorization: Bearer $STUDENT_TOKEN" \
   -H "Content-Type: application/json" \
   -d "{\"responses\":[{\"questionId\":\"$QUESTION_ID\",\"givenText\":\"true\"}]}" >/dev/null
 
-curl -s -X POST http://localhost:3000/submissions/$SUBMISSION_ID/finish \
+curl -s -X POST http://localhost:3000/api/submissions/$SUBMISSION_ID/finish \
   -H "Authorization: Bearer $STUDENT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{}' >/dev/null
@@ -211,7 +211,7 @@ curl -s -X POST http://localhost:3000/submissions/$SUBMISSION_ID/finish \
 
 8) Read results
 ```bash
-curl -s -X GET http://localhost:3000/tests/$TEST_ID/results \
+curl -s -X GET http://localhost:3000/api/tests/$TEST_ID/results \
   -H "Authorization: Bearer $DIRECTOR_TOKEN"
 ```
 

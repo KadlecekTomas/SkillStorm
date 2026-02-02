@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,12 +10,27 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { BaseModal } from "@/components/modals/base-modal";
-import { fetchWithAuth } from "@/lib/http/client";
+import { fetchWithAuth, HttpError } from "@/lib/http/client";
 import { useAcademicYears } from "@/hooks/use-academic-years";
 import { useAuth } from "@/hooks/use-auth";
 import { usePermissions } from "@/hooks/use-permissions";
 import { PermissionKey } from "@/types";
 import { showToastOnce } from "@/utils/toast";
+
+function getApiErrorMessage(err: unknown): string {
+  if (err instanceof HttpError) {
+    const data = err.data as { message?: string; meta?: unknown } | undefined;
+    return (data?.message as string) ?? err.message ?? "Nepodařilo se provést požadavek.";
+  }
+  return err instanceof Error ? err.message : "Nepodařilo se provést požadavek.";
+}
+
+function isNoActiveAcademicYear(err: unknown): boolean {
+  if (!(err instanceof HttpError) || err.status !== 409) return false;
+  const data = err.data as { meta?: { code?: string }; code?: string } | undefined;
+  const code = data?.meta?.code ?? data?.code;
+  return code === "NO_ACTIVE_ACADEMIC_YEAR";
+}
 
 type ApiClassroom = {
   id: string;
@@ -45,6 +61,7 @@ type ClassroomDetail = Omit<ApiClassroom, "enrollments"> & {
 };
 
 type AcademicYearUIState = "loading" | "empty" | "needs-selection" | "selected";
+type ClassroomsDataStatus = "idle" | "loading" | "success" | "error";
 
 const GRADE_OPTIONS = [
   { value: "GRADE_1", label: "1" },
@@ -65,6 +82,7 @@ const gradeLabel = (grade: string) => {
 };
 
 export function ClassroomsPageContent(): React.JSX.Element {
+  const router = useRouter();
   const {
     years,
     selectedYear,
@@ -72,6 +90,7 @@ export function ClassroomsPageContent(): React.JSX.Element {
     isReadOnly,
     status: academicYearStatus,
     yearConfigError,
+    bootstrapState,
     setSelectedYearId,
     refresh: refreshYears,
   } = useAcademicYears();
@@ -97,7 +116,7 @@ export function ClassroomsPageContent(): React.JSX.Element {
   const [createYearError, setCreateYearError] = useState<string | null>(null);
 
   const [addOpen, setAddOpen] = useState(false);
-  const [addMode, setAddMode] = useState<"PASTE" | "CSV" | "INVITE">("PASTE");
+  const [addMode, setAddMode] = useState<"PASTE" | "CSV" | "INVITE" | "EXISTING">("EXISTING");
   const [pasteValue, setPasteValue] = useState("");
   const [csvEntries, setCsvEntries] = useState<Array<{ name: string; email?: string }>>([]);
   const [csvFileName, setCsvFileName] = useState<string | null>(null);
@@ -110,33 +129,64 @@ export function ClassroomsPageContent(): React.JSX.Element {
   } | null>(null);
   const [origin, setOrigin] = useState("");
 
-  const loadClassrooms = async (): Promise<boolean> => {
-    if (!selectedYearId) {
-      setClassrooms([]);
-      setSelectedId(null);
-      return false;
-    }
-    setLoading(true);
-    try {
-      const response = await fetchWithAuth<{ data: ApiClassroom[] }>("GET", "/classrooms", {
-        query: { academicYearId: selectedYearId },
-      });
-      const data = response?.data ?? [];
-      setClassrooms(data);
-      setError(null);
-      const stillSelected = selectedId && data.some((item) => item.id === selectedId);
-      if (!stillSelected) {
-        setSelectedId(data[0]?.id ?? null);
+  const [availableStudents, setAvailableStudents] = useState<
+    { id: string; membership?: { user?: { name?: string | null; email?: string | null } } }[]
+  >([]);
+  const [availableStudentsLoading, setAvailableStudentsLoading] = useState(false);
+  const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(new Set());
+  const [dataStatus, setDataStatus] = useState<ClassroomsDataStatus>("idle");
+  const loadClassroomsRef = useRef<AbortController | null>(null);
+
+  const loadClassrooms = useCallback(
+    async (bustCache = false): Promise<boolean> => {
+      if (bootstrapState !== "READY" || !selectedYearId) {
+        setClassrooms([]);
+        setSelectedId(null);
+        setDataStatus("idle");
+        return false;
       }
-      return true;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Nepodařilo se načíst třídy";
-      setError(message);
-      return false;
-    } finally {
-      setLoading(false);
-    }
-  };
+      loadClassroomsRef.current?.abort();
+      loadClassroomsRef.current = new AbortController();
+      const ac = loadClassroomsRef.current;
+      setDataStatus("loading");
+      setLoading(true);
+      try {
+        const query: Record<string, string> = { yearId: selectedYearId };
+        if (bustCache) query._t = String(Date.now());
+        const response = await fetchWithAuth<{ data?: ApiClassroom[] } | ApiClassroom[]>("GET", "/classrooms", {
+          query,
+          signal: ac.signal,
+        });
+        if (ac.signal.aborted) return false;
+        const data = Array.isArray(response) ? response : (response?.data ?? []);
+        setClassrooms(data);
+        setError(null);
+        setDataStatus("success");
+        const stillSelected = selectedId && data.some((item: ApiClassroom) => item.id === selectedId);
+        if (!stillSelected) {
+          setSelectedId(data[0]?.id ?? null);
+        }
+        return true;
+      } catch (err) {
+        if (ac.signal.aborted) return false;
+        const message = err instanceof Error ? err.message : "Nepodařilo se načíst třídy";
+        setError(message);
+        setDataStatus("error");
+        return false;
+      } finally {
+        if (!ac.signal.aborted) setLoading(false);
+      }
+    },
+    [bootstrapState, selectedYearId, selectedId],
+  );
+
+  useEffect(() => {
+    if (bootstrapState !== "READY" || !selectedYearId) return;
+    void loadClassrooms();
+    return () => {
+      loadClassroomsRef.current?.abort();
+    };
+  }, [selectedYearId, bootstrapState, loadClassrooms]);
 
   const loadDetail = async (classroomId: string) => {
     setDetailLoading(true);
@@ -149,10 +199,6 @@ export function ClassroomsPageContent(): React.JSX.Element {
       setDetailLoading(false);
     }
   };
-
-  useEffect(() => {
-    void loadClassrooms();
-  }, [selectedYearId]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -180,14 +226,21 @@ export function ClassroomsPageContent(): React.JSX.Element {
   const handleCreateClassroom = async () => {
     if (!selectedYearId) {
       setCreateError("Nejdřív vyber školní rok.");
+      showToastOnce("Nejdřív vyber školní rok.", { type: "warning" });
       return;
     }
     setCreateSubmitting(true);
     setCreateError(null);
     try {
-      const created = await fetchWithAuth<{ id: string }>("POST", "/classrooms", {
+      const created = await fetchWithAuth<{
+        id: string;
+        yearId: string;
+        grade: string;
+        section: string;
+        label?: string | null;
+      }>("POST", "/classrooms", {
         body: {
-          academicYearId: selectedYearId,
+          yearId: selectedYearId,
           grade: createForm.grade,
           section: createForm.section.trim(),
           label: createForm.label.trim() || undefined,
@@ -196,16 +249,55 @@ export function ClassroomsPageContent(): React.JSX.Element {
       if (!created?.id) {
         throw new Error("Třídu se nepodařilo vytvořit.");
       }
-      const refreshed = await loadClassrooms();
-      if (!refreshed) {
-        setCreateError("Třída byla vytvořena, ale nepodařilo se obnovit seznam.");
+      if (created.yearId !== selectedYearId) {
+        setCreateError("Třída byla vytvořena pro jiný školní rok. Obnovuji seznam.");
+        showToastOnce("Třída byla vytvořena pro jiný rok.", { type: "warning" });
+        await loadClassrooms(true);
+        setCreateOpen(false);
         return;
       }
+      const optimistic: ApiClassroom = {
+        id: created.id,
+        grade: created.grade,
+        section: created.section,
+        label: created.label ?? null,
+        enrollments: [],
+        ...(selectedYear && {
+          academicYear: {
+            id: selectedYear.id,
+            label: selectedYear.name,
+            isCurrent: selectedYear.isActive ?? true,
+          },
+        }),
+      };
+      setClassrooms((prev) => [...prev, optimistic].sort(
+        (a, b) =>
+          String(a.grade).localeCompare(String(b.grade)) ||
+          (a.section ?? "").localeCompare(b.section ?? ""),
+      ));
+      setSelectedId(created.id);
+      showToastOnce("Třída vytvořena", { type: "success" });
       setCreateOpen(false);
       setCreateForm({ grade: createForm.grade, section: "", label: "" });
+      void loadClassrooms(true);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Nepodařilo se vytvořit třídu";
+      if (isNoActiveAcademicYear(err)) {
+        setCreateOpen(false);
+        showToastOnce("Pro práci s třídami potřebujete aktivní školní rok.", {
+          type: "error",
+        });
+        router.push("/onboarding/academic-year");
+        return;
+      }
+      if (err instanceof HttpError && err.status === 403) {
+        const msg = "Nemáte oprávnění vytvářet třídy.";
+        setCreateError(msg);
+        showToastOnce(msg, { type: "error" });
+        return;
+      }
+      const message = getApiErrorMessage(err);
       setCreateError(message);
+      showToastOnce(message, { type: "error" });
     } finally {
       setCreateSubmitting(false);
     }
@@ -253,7 +345,31 @@ export function ClassroomsPageContent(): React.JSX.Element {
     if (!addOpen) return;
     setAddError(null);
     setBulkResult(null);
+    setSelectedStudentIds(new Set());
   }, [addOpen]);
+
+  useEffect(() => {
+    if (!addOpen || addMode !== "EXISTING" || !selectedId || !selectedYearId) {
+      setAvailableStudents([]);
+      return;
+    }
+    setAvailableStudentsLoading(true);
+    setAvailableStudents([]);
+    fetchWithAuth<{ data: { id: string; membership?: { user?: { name?: string | null; email?: string | null } } }[] }>(
+      "GET",
+      "/students",
+      {
+        query: {
+          availableForClassSectionId: selectedId,
+          availableForYearId: selectedYearId,
+          limit: "200",
+        },
+      }
+    )
+      .then((res) => setAvailableStudents(res?.data ?? []))
+      .catch(() => setAvailableStudents([]))
+      .finally(() => setAvailableStudentsLoading(false));
+  }, [addOpen, addMode, selectedId, selectedYearId]);
 
   const parsePasteEntries = (value: string) => {
     return value
@@ -303,6 +419,59 @@ export function ClassroomsPageContent(): React.JSX.Element {
     setCsvFileName(file.name);
   };
 
+  const handleEnrollExisting = async () => {
+    if (!selectedId || !selectedYearId) {
+      setAddError("Nejdřív vyber třídu a školní rok.");
+      return;
+    }
+    if (selectedStudentIds.size === 0) {
+      setAddError("Vyber alespoň jednoho studenta.");
+      return;
+    }
+    if (isReadOnly) {
+      setAddError("Do minulého roku nelze zapisovat.");
+      return;
+    }
+
+    setAddSubmitting(true);
+    setAddError(null);
+    const ids = Array.from(selectedStudentIds);
+    const errors: Array<{ index: number; name: string; message: string }> = [];
+    let enrolled = 0;
+
+    for (let i = 0; i < ids.length; i++) {
+      try {
+        await fetchWithAuth("POST", "/enrollments", {
+          body: {
+            studentId: ids[i],
+            classSectionId: selectedId,
+            yearId: selectedYearId,
+          },
+        });
+        enrolled++;
+      } catch (err) {
+        const s = availableStudents.find((x) => x.id === ids[i]);
+        const name = s?.membership?.user?.name ?? "Student";
+        errors.push({
+          index: i,
+          name,
+          message: err instanceof Error ? err.message : "Nepodařilo se zapsat.",
+        });
+      }
+    }
+
+    setBulkResult({ enrolled, createdUsers: 0, errors });
+    await loadDetail(selectedId);
+    void loadClassrooms(true);
+
+    if (errors.length === 0) {
+      setAddOpen(false);
+      setSelectedStudentIds(new Set());
+      showToastOnce(`${enrolled} žáků zapsáno.`, { type: "success" });
+    }
+    setAddSubmitting(false);
+  };
+
   const handleBulkEnroll = async () => {
     if (!selectedId) {
       setAddError("Nejdřív vyber třídu.");
@@ -314,6 +483,11 @@ export function ClassroomsPageContent(): React.JSX.Element {
     }
     if (isReadOnly) {
       setAddError("Do minulého roku nelze zapisovat.");
+      return;
+    }
+
+    if (addMode === "EXISTING") {
+      await handleEnrollExisting();
       return;
     }
 
@@ -386,7 +560,7 @@ export function ClassroomsPageContent(): React.JSX.Element {
           : "needs-selection";
   const hasYear = yearUiState === "selected";
   const isInitializingYear = yearUiState === "loading";
-  const emptyState = hasYear && !loading && summary.length === 0;
+  const emptyState = hasYear && dataStatus === "success" && summary.length === 0;
   const needsYearSelection = yearUiState === "needs-selection";
 
   if (process.env.NODE_ENV !== "production" && academicYearStatus === "loading" && years.length === 0) {
@@ -427,6 +601,28 @@ export function ClassroomsPageContent(): React.JSX.Element {
     );
   }
 
+  if (yearConfigError === "ACTIVE_YEAR_FETCH_FAILED") {
+    return (
+      <div className="space-y-6">
+        <Alert
+          title="Nelze načíst aktivní školní rok"
+          description="Zkontroluj připojení nebo to zkus znovu."
+          variant="warning"
+        />
+      </div>
+    );
+  }
+
+  if (bootstrapState === "LOADING") {
+    return (
+      <div className="space-y-6">
+        <div className="rounded-3xl border border-slate-200 bg-white px-5 py-4">
+          <p className="text-sm text-slate-600">Načítám aktivní školní rok…</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -459,6 +655,7 @@ export function ClassroomsPageContent(): React.JSX.Element {
           {isReadOnly && <Badge variant="warning">Read-only</Badge>}
           {canManageClasses && (
             <Button
+              data-testid="create-classroom-btn"
               onClick={() => setCreateOpen(true)}
               disabled={!hasYear || isReadOnly || academicYearStatus !== "ready"}
               title={isReadOnly ? "Minulý rok je pouze ke čtení" : undefined}
@@ -521,18 +718,25 @@ export function ClassroomsPageContent(): React.JSX.Element {
 
       {error && <Alert title="Chyba" description={error} variant="warning" />}
 
+      {dataStatus === "loading" && (
+        <Card className="border-slate-200 p-6">
+          <p className="text-sm text-slate-600">Načítám třídy…</p>
+        </Card>
+      )}
+
       {emptyState && (
         <Card className="border-dashed p-6">
           <p className="text-sm text-slate-600">Zatím žádné třídy – vytvoř první.</p>
         </Card>
       )}
 
-      {!emptyState && (
+      {dataStatus === "success" && summary.length > 0 && (
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
           <div className="space-y-3">
             {summary.map((cls) => (
               <button
                 key={cls.id}
+                data-testid={`classroom-item-${cls.id}`}
                 className={`w-full rounded-2xl border p-4 text-left transition ${cls.id === selectedId
                   ? "border-slate-900 bg-slate-900 text-white"
                   : "border-slate-200 bg-white hover:border-slate-400"
@@ -662,7 +866,7 @@ export function ClassroomsPageContent(): React.JSX.Element {
               Zrušit
             </Button>
             <Button
-              onClick={handleCreateClassroom}
+              onClick={() => void handleCreateClassroom()}
               disabled={!createForm.section.trim() || createSubmitting}
             >
               Vytvořit
@@ -684,6 +888,12 @@ export function ClassroomsPageContent(): React.JSX.Element {
         <div className="space-y-4">
           <div className="flex flex-wrap gap-2">
             <Button
+              variant={addMode === "EXISTING" ? "default" : "outline"}
+              onClick={() => setAddMode("EXISTING")}
+            >
+              Vybrat existující
+            </Button>
+            <Button
               variant={addMode === "PASTE" ? "default" : "outline"}
               onClick={() => setAddMode("PASTE")}
             >
@@ -702,6 +912,53 @@ export function ClassroomsPageContent(): React.JSX.Element {
               Invite link
             </Button>
           </div>
+
+          {addMode === "EXISTING" && (
+            <div className="space-y-2">
+              <p className="text-sm text-slate-600">
+                Žáci v organizaci, kteří ještě nejsou zapsáni v této třídě.
+              </p>
+              {availableStudentsLoading ? (
+                <p className="text-sm text-slate-500">Načítám…</p>
+              ) : availableStudents.length === 0 ? (
+                <p className="text-sm text-slate-500">
+                  Žádní dostupní žáci. Všechny už mohou být zapsáni.
+                </p>
+              ) : (
+                <div className="max-h-48 overflow-y-auto rounded-2xl border border-slate-200 p-2">
+                  {availableStudents.map((s) => {
+                    const name = s.membership?.user?.name ?? s.membership?.user?.email ?? "Student";
+                    const checked = selectedStudentIds.has(s.id);
+                    return (
+                      <label
+                        key={s.id}
+                        className="flex cursor-pointer items-center gap-2 rounded-xl px-3 py-2 hover:bg-slate-50"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => {
+                            setSelectedStudentIds((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(s.id)) next.delete(s.id);
+                              else next.add(s.id);
+                              return next;
+                            });
+                          }}
+                        />
+                        <span className="text-sm text-slate-700">{name}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+              {availableStudents.length > 0 && (
+                <p className="text-xs text-slate-500">
+                  Vybráno {selectedStudentIds.size} z {availableStudents.length}
+                </p>
+              )}
+            </div>
+          )}
 
           {addMode === "PASTE" && (
             <div className="space-y-2">
@@ -800,7 +1057,15 @@ export function ClassroomsPageContent(): React.JSX.Element {
               Zrušit
             </Button>
             {addMode !== "INVITE" && (
-              <Button onClick={handleBulkEnroll} disabled={addSubmitting}>
+              <Button
+                onClick={() => void handleBulkEnroll()}
+                disabled={
+                  addSubmitting ||
+                  (addMode === "EXISTING" ? selectedStudentIds.size === 0 : false) ||
+                  (addMode === "PASTE" ? !parsePasteEntries(pasteValue).length : false) ||
+                  (addMode === "CSV" ? !csvEntries.length : false)
+                }
+              >
                 Zapsat
               </Button>
             )}

@@ -2,11 +2,14 @@ import { ApiProperty } from '@nestjs/swagger';
 import { IsUUID, IsEnum, IsString, IsOptional } from 'class-validator';
 import { SchoolGrade } from '@prisma/client';
 
+/**
+ * CreateClassSectionDto – yearId/academicYearId je POVINNÝ.
+ * Bez roku nelze vytvořit třídu. Backend vrací 400 pokud chybí.
+ */
 export class CreateClassSectionDto {
   @ApiProperty({
     example: 'year-uuid',
-    description: 'ID školního roku (AcademicYear)',
-    required: false,
+    description: 'ID školního roku (AcademicYear) – POVINNÉ',
   })
   @IsOptional()
   @IsUUID()
@@ -14,8 +17,7 @@ export class CreateClassSectionDto {
 
   @ApiProperty({
     example: 'year-uuid',
-    description: 'Alias pro yearId',
-    required: false,
+    description: 'Alias pro yearId – alespoň jeden z yearId/academicYearId MUSÍ být vyplněn',
   })
   @IsOptional()
   @IsUUID()

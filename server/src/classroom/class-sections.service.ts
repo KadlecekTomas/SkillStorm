@@ -231,7 +231,7 @@ export class ClassSectionsService {
     // Per-user cache is mandatory: teacher/student visibility is user-scoped.
     const authzKey = buildAuthzScopeKey({
       userId: user.userId,
-      systemRole: user.systemRole,
+      systemRole: user.systemRole ?? null,
       organizationRole: role ?? null,
     });
 

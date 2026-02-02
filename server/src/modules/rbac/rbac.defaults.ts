@@ -23,6 +23,7 @@ export const RBAC_DEFAULT_PERMISSIONS: RoleDefaults = {
     PermissionKey.CREATE_TEST,
     PermissionKey.EDIT_TEST,
     PermissionKey.VIEW_RESULTS,
+    PermissionKey.VIEW_ANALYTICS,
     PermissionKey.INVITE_STUDENTS,
   ],
   STUDENT: [PermissionKey.VIEW_RESULTS],

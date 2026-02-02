@@ -42,4 +42,20 @@ export class QueryStudentsDto {
   @IsOptional()
   @IsUUID()
   classSectionId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Žáci dostupní pro zápis: NE v této třídě v daném roce',
+    example: 'class-section-uuid',
+  })
+  @IsOptional()
+  @IsUUID()
+  availableForClassSectionId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Žáci dostupní pro zápis: yearId pro availableForClassSectionId',
+    example: 'academic-year-uuid',
+  })
+  @IsOptional()
+  @IsUUID()
+  availableForYearId?: string;
 }

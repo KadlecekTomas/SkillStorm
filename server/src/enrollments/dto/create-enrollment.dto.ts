@@ -4,8 +4,13 @@ export class CreateEnrollmentDto {
   @IsUUID()
   studentId!: string;
 
+  @IsOptional()
   @IsUUID()
-  academicYearId!: string;
+  academicYearId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  yearId?: string;
 
   @IsOptional()
   @IsUUID()

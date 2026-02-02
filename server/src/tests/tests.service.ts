@@ -539,7 +539,7 @@ export class TestsService {
 
     const classSection = await this.prisma.classSection.findUnique({
       where: { id: dto.classSectionId },
-      select: { id: true, orgId: true },
+      select: { id: true, orgId: true, yearId: true },
     });
     if (!classSection || classSection.orgId !== organizationId) {
       throw new BadRequestException('Class section neexistuje nebo cizí org');
@@ -567,6 +567,7 @@ export class TestsService {
     const assignment = await this.prisma.assignment.create({
       data: {
         organizationId,
+        yearId: classSection.yearId,
         testId: testId,
         targetType: 'CLASS',
         classSectionId: dto.classSectionId,

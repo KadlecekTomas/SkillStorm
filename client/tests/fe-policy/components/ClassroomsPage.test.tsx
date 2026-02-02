@@ -20,8 +20,10 @@ const academicYearsState = {
   selectedYearId: "year-1",
   activeYear: { id: "year-1", name: "2024/25", isActive: true },
   isReadOnly: false,
+  bootstrapState: "READY",
   loading: false,
   error: null,
+  yearConfigError: null,
   refresh: vi.fn(),
   setSelectedYear: vi.fn(),
 };
@@ -113,7 +115,7 @@ describe("ClassroomsPageContent", () => {
 
     await waitFor(() => {
       expect(fetchWithAuth).toHaveBeenCalledWith("GET", "/classrooms", {
-        query: { academicYearId: "year-1" },
+        query: { yearId: "year-1" },
       });
     });
 
@@ -127,7 +129,7 @@ describe("ClassroomsPageContent", () => {
 
     await waitFor(() => {
       expect(fetchWithAuth).toHaveBeenCalledWith("GET", "/classrooms", {
-        query: { academicYearId: "year-2" },
+        query: { yearId: "year-2" },
       });
     });
 

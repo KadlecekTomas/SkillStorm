@@ -44,6 +44,7 @@ describe('Assignments (e2e)', () => {
 
   // content infra
   let testA!: { id: string };
+  let academicYearId!: string;
   let assignmentIdForGetPatchDelete: string | null = null;
 
   beforeAll(async () => {
@@ -108,6 +109,19 @@ describe('Assignments (e2e)', () => {
       login: superUserAuth.login,
     };
 
+    // academic year (required for assignments)
+    const year = await prisma.academicYear.create({
+      data: {
+        orgId: org.id,
+        label: `E2E ${Date.now()}`,
+        startsAt: new Date('2024-09-01'),
+        endsAt: new Date('2025-06-30'),
+        isCurrent: true,
+      },
+      select: { id: true },
+    });
+    academicYearId = year.id;
+
     // test entity v rámci org
     testA = await prisma.test.create({
       data: {
@@ -132,6 +146,7 @@ describe('Assignments (e2e)', () => {
     const seeded = await prisma.assignment.create({
       data: {
         organizationId: org.id,
+        yearId: academicYearId,
         testId: testA.id,
         targetType: 'STUDENTS',
         openAt: new Date(Date.now() - 60_000).toISOString() as unknown as Date,
@@ -150,7 +165,8 @@ describe('Assignments (e2e)', () => {
   });
 
   afterAll(async () => {
-    // cleanup – assignments
+    // cleanup – assignments, academic year
+    await prisma.academicYear.deleteMany({ where: { id: academicYearId } }).catch(() => {});
     await prisma.assignment
       .deleteMany({
         where: { testId: { in: [testA?.id].filter(Boolean) as string[] } },
@@ -196,6 +212,7 @@ describe('Assignments (e2e)', () => {
   const mkPayload = (over: Partial<any> = {}) => {
     const base = {
       organizationId: org.id,
+      academicYearId,
       testId: testA.id,
       targetType: 'STUDENTS' as const,
       studentIds: [mStudent.id],
@@ -376,9 +393,20 @@ describe('Assignments (e2e)', () => {
       },
       select: { id: true },
     });
+    const otherYear = await prisma.academicYear.create({
+      data: {
+        orgId: otherCtx.organization.id,
+        label: `Foreign ${Date.now()}`,
+        startsAt: new Date('2024-09-01'),
+        endsAt: new Date('2025-06-30'),
+        isCurrent: true,
+      },
+      select: { id: true },
+    });
     const foreignAssignment = await prisma.assignment.create({
       data: {
         organizationId: otherCtx.organization.id,
+        yearId: otherYear.id,
         testId: foreignTest.id,
         targetType: 'STUDENTS',
         openAt: new Date().toISOString() as unknown as Date,
@@ -399,6 +427,7 @@ describe('Assignments (e2e)', () => {
     // cleanup
     await prisma.assignment.delete({ where: { id: foreignAssignment.id } });
     await prisma.test.delete({ where: { id: foreignTest.id } });
+    await prisma.academicYear.delete({ where: { id: otherYear.id } });
     await prisma.membership.deleteMany({
       where: { organizationId: otherCtx.organization.id },
     });
@@ -517,6 +546,7 @@ describe('Assignments (e2e)', () => {
     const toDelete = await prisma.assignment.create({
       data: {
         organizationId: org.id,
+        yearId: academicYearId,
         testId: testA.id,
         targetType: 'STUDENTS',
         openAt: new Date().toISOString() as unknown as Date,

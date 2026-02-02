@@ -449,6 +449,64 @@ export class EnrollmentsService {
     throw new ForbiddenException('Access denied.');
   }
 
+  /**
+   * Přestup studenta: změní classSectionId v rámci téhož školního roku.
+   * Pouze pro aktivní školní rok. Nová třída musí být v témže roce.
+   */
+  async transfer(
+    id: string,
+    dto: { newClassSectionId: string },
+    user: JwtPayload,
+  ) {
+    const enrollment = await this.prisma.enrollment.findUnique({
+      where: { id },
+      include: {
+        classSection: {
+          select: {
+            orgId: true,
+            yearId: true,
+            academicYear: { select: { isCurrent: true } },
+          },
+        },
+      },
+    });
+    if (!enrollment) throw new NotFoundException('Enrollment not found.');
+
+    if (
+      user.systemRole !== SystemRole.SUPERADMIN &&
+      enrollment.classSection.orgId !== user.organizationId
+    ) {
+      throw new ForbiddenException('Foreign organization.');
+    }
+    if (!enrollment.classSection.academicYear?.isCurrent) {
+      throw new ForbiddenException('Nelze upravovat uzavřený školní rok.');
+    }
+
+    const newClass = await this.prisma.classSection.findUnique({
+      where: { id: dto.newClassSectionId },
+      select: { id: true, orgId: true, yearId: true },
+    });
+    if (!newClass) {
+      throw new NotFoundException('Nová třída nenalezena.');
+    }
+    if (newClass.orgId !== enrollment.classSection.orgId) {
+      throw new BadRequestException('Nová třída musí být ve stejné organizaci.');
+    }
+    if (newClass.yearId !== enrollment.classSection.yearId) {
+      throw new BadRequestException(
+        'Přestup je možný pouze v rámci téhož školního roku.',
+      );
+    }
+    if (newClass.id === enrollment.classSectionId) {
+      return this.prisma.enrollment.findUniqueOrThrow({ where: { id } });
+    }
+
+    return this.prisma.enrollment.update({
+      where: { id },
+      data: { classSectionId: dto.newClassSectionId },
+    });
+  }
+
   async softDelete(id: string, user: JwtPayload) {
     const enrollment = await this.prisma.enrollment.findUnique({
       where: { id },

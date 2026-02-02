@@ -14,6 +14,7 @@ type UseAcademicYearsResult = {
   selectedYearId: string | null;
   isReadOnly: boolean;
   status: "loading" | "ready" | "error";
+  bootstrapState: "INIT" | "LOADING" | "READY" | "ERROR";
   loading: boolean;
   error: string | null;
   yearConfigError: string | null;
@@ -28,6 +29,7 @@ export const useAcademicYears = (): UseAcademicYearsResult => {
   const [years, setYears] = useState<AcademicYear[]>([]);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [bootstrapState, setBootstrapState] = useState<"INIT" | "LOADING" | "READY" | "ERROR">("INIT");
   const [error, setError] = useState<string | null>(null);
   const [yearConfigError, setYearConfigError] = useState<string | null>(null);
 
@@ -43,20 +45,35 @@ export const useAcademicYears = (): UseAcademicYearsResult => {
       setStatus("loading");
       return;
     }
+
+    // Capture orgId at request start to guard against org switches during the fetch.
+    const requestOrgId = orgId;
+
     setLoading(true);
     setStatus("loading");
     try {
       const data = await fetchWithAuth<AcademicYear[]>("GET", "/academic-years");
       const list = data ?? [];
+
+      // Ignore stale responses that complete after an organization switch.
+      if (requestOrgId !== orgId) {
+        return;
+      }
+
       setYears(list);
       setError(null);
       setStatus("ready");
     } catch (err) {
+      if (requestOrgId !== orgId) {
+        return;
+      }
       const message = err instanceof Error ? err.message : "Nepodařilo se načíst školní roky";
       setError(message);
       setStatus("error");
     } finally {
-      setLoading(false);
+      if (requestOrgId === orgId) {
+        setLoading(false);
+      }
     }
   }, [orgId]);
 
@@ -65,6 +82,7 @@ export const useAcademicYears = (): UseAcademicYearsResult => {
       setYears([]);
       setError(null);
       setYearConfigError(null);
+      setBootstrapState("INIT");
       return;
     }
     void refresh();
@@ -79,23 +97,33 @@ export const useAcademicYears = (): UseAcademicYearsResult => {
 
   useEffect(() => {
     if (!orgId) return;
+    setBootstrapState("LOADING");
+    let cancelled = false;
+    const activeOrgId = orgId;
     fetchActiveAcademicYear()
       .then((active) => {
-        setSelected(orgId, active.id);
+        if (cancelled) return;
+        setSelected(activeOrgId, active.id);
         setYearConfigError(null);
+        setBootstrapState("READY");
       })
       .catch((err) => {
+        if (cancelled) return;
         const code =
           err instanceof HttpError && err.status === 409
             ? (err.data as { meta?: { code?: string } } | undefined)?.meta?.code ??
               (err.data as { code?: string } | undefined)?.code ??
               null
             : "ACTIVE_YEAR_FETCH_FAILED";
-        clearOrg(orgId);
+        clearOrg(activeOrgId);
         setYearConfigError(code ?? "UNKNOWN");
+        setBootstrapState("ERROR");
         const message = err instanceof Error ? err.message : "Nepodařilo se načíst aktivní školní rok";
         setError(message);
       });
+    return () => {
+      cancelled = true;
+    };
   }, [orgId, setSelected, clearOrg]);
 
   const selectedYear = useMemo(
@@ -103,25 +131,28 @@ export const useAcademicYears = (): UseAcademicYearsResult => {
     [years, selectedYearId],
   );
 
-  const activeYear = selectedYear;
-  const isReadOnly = selectedYear ? !selectedYear.isActive : false;
+  const effectiveSelectedYear = bootstrapState === "READY" ? selectedYear : null;
+  const activeYear = effectiveSelectedYear;
+  const isReadOnly = effectiveSelectedYear ? !effectiveSelectedYear.isActive : false;
 
   const setSelectedYearId = useCallback(
     (yearId: string) => {
       if (!orgId) return;
+      if (bootstrapState !== "READY") return;
       if (yearConfigError) return;
       setSelected(orgId, yearId);
     },
-    [orgId, setSelected, yearConfigError],
+    [orgId, setSelected, yearConfigError, bootstrapState],
   );
 
   return {
     years,
     activeYear,
-    selectedYear,
-    selectedYearId: selectedYear?.id ?? null,
+    selectedYear: effectiveSelectedYear,
+    selectedYearId: effectiveSelectedYear?.id ?? null,
     isReadOnly,
     status,
+    bootstrapState,
     loading,
     error,
     yearConfigError,

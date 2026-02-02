@@ -1,0 +1,54 @@
+{
+  "Auth": [
+    {
+      "id": "login-form-validation",
+      "passed": true,
+      "timestamp": "2026-02-01T21:15:30.946Z",
+      "description": "Login form blocks empty submission."
+    },
+    {
+      "id": "login-form-submit",
+      "passed": true,
+      "timestamp": "2026-02-01T21:15:30.965Z",
+      "description": "Login form triggers hook with credentials."
+    }
+  ],
+  "RBAC": [
+    {
+      "id": "guard-allows-view-results",
+      "passed": true,
+      "timestamp": "2026-02-01T21:15:30.921Z",
+      "description": "Teacher with VIEW_RESULTS can access module."
+    },
+    {
+      "id": "guard-denies-manage-teachers",
+      "passed": true,
+      "timestamp": "2026-02-01T21:15:30.941Z",
+      "description": "Student without MANAGE_TEACHERS is blocked."
+    }
+  ],
+  "Multitenancy": [],
+  "Content": [
+    {
+      "id": "test-detail-validation",
+      "passed": true,
+      "timestamp": "2026-02-01T21:15:30.770Z",
+      "description": "Test detail enforces validation on policy questions."
+    }
+  ],
+  "Submissions": [
+    {
+      "id": "submission-page-loading-state",
+      "passed": true,
+      "timestamp": "2026-02-01T21:15:30.706Z",
+      "description": "Submission page shows loading state while fetching assignment."
+    },
+    {
+      "id": "submission-page-error-handling",
+      "passed": true,
+      "timestamp": "2026-02-01T21:15:30.723Z",
+      "description": "Submission page handles missing assignment gracefully."
+    }
+  ],
+  "Audit": []
+}

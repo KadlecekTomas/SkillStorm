@@ -79,6 +79,25 @@ function toEnrollmentFilter(
   };
 }
 
+/**
+ * Žáci dostupní pro zápis: nemají aktivní Enrollment v dané třídě v daném roce.
+ */
+function toAvailableForEnrollmentFilter(
+  classSectionId?: string,
+  yearId?: string,
+): Prisma.StudentWhereInput | undefined {
+  if (!classSectionId || !yearId) return undefined;
+  return {
+    enrollments: {
+      none: {
+        classSectionId,
+        yearId,
+        status: { not: EnrollmentStatus.LEFT },
+      },
+    },
+  };
+}
+
 // ---- export helpers (beze změny) ----
 const DEFAULT_COLUMNS = [
   'studentId',
@@ -311,10 +330,22 @@ export class StudentsService {
       baseWhere.orgId = user.organizationId;
     }
 
+    const availableFor = toAvailableForEnrollmentFilter(
+      q.availableForClassSectionId,
+      q.availableForYearId,
+    );
+    const enrollmentFilter = toEnrollmentFilter(q.yearId, q.classSectionId);
+    if (availableFor && enrollmentFilter) {
+      throw new BadRequestException(
+        'availableForClassSectionId/availableForYearId nelze kombinovat s yearId/classSectionId.',
+      );
+    }
+
     const where: Prisma.StudentWhereInput = {
       ...baseWhere,
       ...(toPrismaSearch(q.search) ?? {}),
-      ...(toEnrollmentFilter(q.yearId, q.classSectionId) ?? {}),
+      ...(enrollmentFilter ?? {}),
+      ...(availableFor ?? {}),
     };
 
     // verze podle scope (superadmin → 'ALL', jinak orgId)
@@ -333,6 +364,8 @@ export class StudentsService {
       filters: {
         yearId: q.yearId ?? null,
         classSectionId: q.classSectionId ?? null,
+        availableForClassSectionId: q.availableForClassSectionId ?? null,
+        availableForYearId: q.availableForYearId ?? null,
       },
     });
 

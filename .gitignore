@@ -1,6 +1,11 @@
 node_modules/
 dist/
 .env
+
+# Prevent stale compiled artifacts in src/ from shadowing .ts (causes "X is not a function")
+server/src/shared/cache/*.js
+server/src/shared/cache/*.d.ts
+server/src/shared/cache/*.js.map
 client/.env
 server/.env
 audit-report.json

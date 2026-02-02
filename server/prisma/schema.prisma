@@ -50,6 +50,7 @@ model Organization {
   academicYears     AcademicYear[]
   analyticsEvents   AnalyticsEvent[]
   assignments       Assignment[]
+  enrollments       Enrollment[]
   auditLogs         AuditLog[]
   classSections     ClassSection[]
   exportLogs        ExportLog[]
@@ -65,6 +66,7 @@ model Organization {
   teachers          Teacher[]
   tests             Test[]
   userPermissions   UserPermission[]
+  invitations       Invitation[]
 
   @@index([name])
   @@index([city])
@@ -299,6 +301,31 @@ model AnalyticsEvent {
   @@map("analytics_events")
 }
 
+model Invitation {
+  id                    String         @id @default(uuid()) @map("invitation_id")
+  organizationId        String         @map("organization_id")
+  type                  InvitationType @default(ORG_ONLY)
+  role                  OrganizationRole?
+  classSectionId        String?        @map("class_section_id")
+  yearId                String?        @map("academic_year_id")
+  code                  String         @unique @db.VarChar(64)
+  expiresAt             DateTime       @map("expires_at")
+  createdAt             DateTime       @default(now()) @map("created_at")
+  createdByMembershipId String?        @map("created_by_membership_id")
+  organization          Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  classSection          ClassSection?  @relation(fields: [classSectionId], references: [id], onDelete: Cascade)
+  academicYear          AcademicYear?  @relation(fields: [yearId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([code])
+  @@map("invitations")
+}
+
+enum InvitationType {
+  ORG_ONLY
+  STUDENT_CLASS
+}
+
 model AcademicYear {
   id            String         @id @default(uuid()) @map("academic_year_id")
   orgId         String         @map("organization_id")
@@ -308,8 +335,10 @@ model AcademicYear {
   isCurrent     Boolean        @default(false)
   createdAt     DateTime       @default(now()) @map("created_at")
   organization  Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  assignments   Assignment[]
   classSections ClassSection[]
   enrollments   Enrollment[]
+  invitations   Invitation[]
 
   @@unique([orgId, label])
   @@map("academic_years")
@@ -330,6 +359,7 @@ model ClassSection {
   teacher           Teacher?           @relation("Homeroom", fields: [teacherId], references: [id])
   enrollments       Enrollment[]
   studentClassrooms StudentClassroom[]
+  invitations       Invitation[]
 
   @@unique([orgId, yearId, grade, section])
   @@index([orgId, grade])
@@ -503,6 +533,9 @@ model LearningMaterial {
   @@map("learning_materials")
 }
 
+/// LEGACY: Read-only. Enrollment is the source of truth for student↔class assignments.
+/// Blocked by DB trigger (block_student_classrooms_writes). Kept for backward compatibility
+/// with views/reports that may still reference it. Do NOT use in new code.
 model StudentClassroom {
   id             String       @id @default(uuid()) @map("student_classroom_id")
   studentId      String       @map("student_id")
@@ -628,13 +661,13 @@ model Submission {
   status       SubmissionStatus @default(PENDING)
   submittedAt  DateTime?        @map("submitted_at")
   deletedAt    DateTime?        @map("deleted_at")
-  assignmentId String?          @map("assignment_id")
+  assignmentId String           @map("assignment_id")
   attemptNo    Int              @default(1) @map("attempt_no")
   createdAt    DateTime         @default(now()) @map("created_at")
   updatedAt    DateTime         @updatedAt @map("updated_at")
   isAnonymous  Boolean          @default(false)
   responses    Response[]
-  assignment   Assignment?      @relation(fields: [assignmentId], references: [id])
+  assignment   Assignment      @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
   student      Membership       @relation(fields: [studentId], references: [id], onDelete: Cascade)
   test         Test             @relation(fields: [testId], references: [id], onDelete: Cascade)
 
@@ -735,6 +768,7 @@ model vw_classroom_results {
 model Assignment {
   id             String              @id @default(uuid()) @map("assignment_id")
   organizationId String              @map("organization_id")
+  yearId         String              @map("academic_year_id")
   testId         String              @map("test_id")
   targetType     String              @default("CLASS")
   classSectionId String?             @map("class_section_id")
@@ -748,6 +782,7 @@ model Assignment {
   createdById    String              @map("created_by_id")
   createdAt      DateTime            @default(now()) @map("created_at")
   students       AssignmentStudent[]
+  academicYear   AcademicYear        @relation(fields: [yearId], references: [id], onDelete: Cascade)
   classSection   ClassSection?       @relation(fields: [classSectionId], references: [id])
   createdBy      Membership          @relation("AssignmentCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
   organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -756,6 +791,7 @@ model Assignment {
   submissions    Submission[]
 
   @@index([organizationId, classSectionId])
+  @@index([yearId])
   @@index([testId])
   @@map("assignments")
 }

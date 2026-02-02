@@ -1,3 +1,4 @@
+// YEAR-SCOPED: Requires active academic year (RequireActiveAcademicYearGuard)
 import {
   Body,
   Controller,

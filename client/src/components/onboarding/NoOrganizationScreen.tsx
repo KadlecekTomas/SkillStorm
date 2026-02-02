@@ -14,31 +14,41 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { BaseModal } from "@/components/modals/base-modal";
-import { httpClient } from "@/lib/http/client";
+import { fetchWithAuth, httpClient, HttpError } from "@/lib/http/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useAuthStore } from "@/store/use-auth-store";
+import { useAcademicYearStore } from "@/store/use-academic-year-store";
 import { showToastOnce } from "@/utils/toast";
 
 type CreateOrganizationPayload = {
   name: string;
 };
 
-type JoinOrganizationPayload = {
-  joinCode: string;
-  role: "STUDENT" | "TEACHER" | "PARENT";
+type InvitePreview = {
+  type: "ORG_ONLY" | "STUDENT_CLASS";
+  organizationId: string;
+  organizationName: string;
+  role?: string;
+  classSectionId?: string;
+  yearId?: string;
+  classLabel?: string;
+  yearLabel?: string;
 };
 
 export const NoOrganizationScreen = (): React.JSX.Element => {
   const router = useRouter();
   const { syncProfile } = useAuth();
+  const clearOrg = useAcademicYearStore((s) => s.clearOrg);
   const [modalOpen, setModalOpen] = useState(false);
   const [joinModalOpen, setJoinModalOpen] = useState(false);
   const [orgName, setOrgName] = useState("");
   const [joinCode, setJoinCode] = useState("");
-  const [joinRole, setJoinRole] = useState<JoinOrganizationPayload["role"]>("STUDENT");
-  const [joinRoleLock, setJoinRoleLock] = useState<JoinOrganizationPayload["role"] | null>(null);
+  const [joinStep, setJoinStep] = useState<"code" | "preview" | "confirm">("code");
+  const [preview, setPreview] = useState<InvitePreview | null>(null);
+  const [joinRole, setJoinRole] = useState<"TEACHER" | "DIRECTOR">("TEACHER");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [joinSubmitting, setJoinSubmitting] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [joinErrorMessage, setJoinErrorMessage] = useState<string | null>(null);
 
@@ -47,12 +57,8 @@ export const NoOrganizationScreen = (): React.JSX.Element => {
     const raw = window.sessionStorage.getItem("join_intent");
     if (!raw) return;
     try {
-      const parsed = JSON.parse(raw) as { joinCode?: string; role?: JoinOrganizationPayload["role"] };
+      const parsed = JSON.parse(raw) as { joinCode?: string; role?: string };
       if (parsed.joinCode) setJoinCode(parsed.joinCode);
-      if (parsed.role) {
-        setJoinRole(parsed.role);
-        setJoinRoleLock(parsed.role);
-      }
       setJoinModalOpen(true);
     } catch {
       // ignore malformed intent
@@ -71,16 +77,17 @@ export const NoOrganizationScreen = (): React.JSX.Element => {
     setIsSubmitting(true);
     setErrorMessage(null);
     try {
-      await httpClient.post<unknown, CreateOrganizationPayload>("/organizations", {
+      const org = await httpClient.post<{ id: string }, CreateOrganizationPayload>("/organizations", {
         name: trimmed,
       });
+      await httpClient.post("/auth/use-org", { orgId: org.id });
       await syncProfile({ force: true });
-      showToastOnce("Organizace je připravena. Vítej v dashboardu!", {
+      showToastOnce("Organizace je připravena. Pokračuj nastavením školního roku.", {
         type: "success",
       });
       setModalOpen(false);
       setOrgName("");
-      router.replace("/dashboard");
+      router.replace("/onboarding/academic-year");
     } catch (error) {
       setErrorMessage("Nepodařilo se vytvořit organizaci. Zkus to prosím znovu.");
       showToastOnce("Organizaci se nepodařilo vytvořit.", { type: "error" });
@@ -89,40 +96,65 @@ export const NoOrganizationScreen = (): React.JSX.Element => {
     }
   };
 
-  const handleJoinOrganization = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const handlePreviewInvite = async () => {
     const trimmed = joinCode.trim();
     if (!trimmed) {
-      setJoinErrorMessage("Zadej prosím kód organizace.");
+      setJoinErrorMessage("Zadej prosím kód pozvánky.");
       return;
     }
+    setPreviewLoading(true);
+    setJoinErrorMessage(null);
+    setPreview(null);
+    try {
+      const data = await httpClient.get<InvitePreview>(`/invites/preview?code=${encodeURIComponent(trimmed)}`);
+      setPreview(data);
+      setJoinStep("preview");
+    } catch (err) {
+      const msg = err instanceof HttpError ? (err.data as { message?: string })?.message ?? err.message : "Pozvánku se nepodařilo načíst.";
+      setJoinErrorMessage(msg);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const handleAcceptInvite = async () => {
+    const trimmed = joinCode.trim();
+    if (!trimmed || !preview) return;
     setJoinSubmitting(true);
     setJoinErrorMessage(null);
     try {
-      const result = await httpClient.post<{ sessionToken?: string }, JoinOrganizationPayload>(
-        "/auth/join",
-        {
-          joinCode: trimmed,
-          role: joinRole,
-        },
-      );
-      if (result?.sessionToken && typeof result.sessionToken === "string") {
-        const { setSessionToken } = useAuthStore.getState();
-        setSessionToken(result.sessionToken);
-      }
-      await syncProfile({ force: true });
-      showToastOnce("Připojení k organizaci proběhlo úspěšně.", {
-        type: "success",
+      const result = await fetchWithAuth<{
+        sessionToken?: string;
+        organization?: { id: string };
+      }>("POST", "/invites/accept", {
+        body: preview.type === "ORG_ONLY" ? { code: trimmed, role: joinRole } : { code: trimmed },
       });
+      const token = result?.sessionToken;
+      const orgId = (result as { organization?: { id: string } })?.organization?.id ?? preview.organizationId;
+      if (token) {
+        useAuthStore.getState().setSessionToken(token);
+      }
+      clearOrg(orgId);
+      await syncProfile({ force: true });
+      showToastOnce("Připojení proběhlo úspěšně.", { type: "success" });
       setJoinModalOpen(false);
       setJoinCode("");
+      setPreview(null);
+      setJoinStep("code");
       router.replace("/dashboard");
-    } catch (error) {
-      setJoinErrorMessage("Nepodařilo se připojit. Zkus to prosím znovu.");
-      showToastOnce("Připojení k organizaci se nezdařilo.", { type: "error" });
+    } catch (err) {
+      const msg = err instanceof HttpError ? (err.data as { message?: string })?.message ?? err.message : "Připojení se nezdařilo.";
+      setJoinErrorMessage(msg);
+      showToastOnce(msg, { type: "error" });
     } finally {
       setJoinSubmitting(false);
     }
+  };
+
+  const handleJoinBack = () => {
+    setJoinStep("code");
+    setPreview(null);
+    setJoinErrorMessage(null);
   };
 
   return (
@@ -156,8 +188,8 @@ export const NoOrganizationScreen = (): React.JSX.Element => {
                 <Button
                   variant="outline"
                   onClick={() => {
-                    setJoinRoleLock(null);
-                    setJoinRole("STUDENT");
+                    setJoinStep("code");
+                    setPreview(null);
                     setJoinModalOpen(true);
                   }}
                 >
@@ -236,68 +268,86 @@ export const NoOrganizationScreen = (): React.JSX.Element => {
 
       <BaseModal
         title="Připojit se k organizaci"
-        description="Zadej kód od ředitele a vyber roli v organizaci."
+        description={joinStep === "code" ? "Zadej kód pozvánky od ředitele nebo učitele." : (preview?.organizationName ?? "Zadej kód pozvánky.")}
         open={joinModalOpen}
         onOpenChange={(open) => {
           if (!open) {
             setJoinErrorMessage(null);
+            setJoinStep("code");
+            setPreview(null);
           }
           setJoinModalOpen(open);
         }}
       >
-        <form onSubmit={handleJoinOrganization} className="space-y-4">
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-700" htmlFor="join-code">
-              Kód organizace
-            </label>
-            <Input
-              id="join-code"
-              value={joinCode}
-              onChange={(event) => setJoinCode(event.target.value)}
-              placeholder="Např. 9f4d0e2c-..."
-              disabled={joinSubmitting}
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-700">
-              Role
-            </label>
-            <Select
-              value={joinRole}
-              onValueChange={(value) => setJoinRole(value as JoinOrganizationPayload["role"])}
-              disabled={joinSubmitting}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Vyber roli" />
-              </SelectTrigger>
-              <SelectContent>
-                {(joinRoleLock ? [joinRoleLock] : ["STUDENT", "TEACHER", "PARENT"]).map((role) => (
-                  <SelectItem key={role} value={role}>
-                    {role === "STUDENT" ? "Student" : role === "TEACHER" ? "Učitel" : "Rodič"}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          {joinErrorMessage && (
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-700">
-              {joinErrorMessage}
-            </div>
+        <div className="space-y-4">
+          {joinStep === "code" && (
+            <>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-700" htmlFor="join-code">
+                  Kód pozvánky
+                </label>
+                <Input
+                  id="join-code"
+                  value={joinCode}
+                  onChange={(e) => setJoinCode(e.target.value)}
+                  placeholder="Kód nebo odkaz z pozvánky"
+                  disabled={previewLoading}
+                />
+              </div>
+              {joinErrorMessage && (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-700">
+                  {joinErrorMessage}
+                </div>
+              )}
+              <div className="flex flex-wrap justify-end gap-3">
+                <Button variant="outline" onClick={() => setJoinModalOpen(false)} disabled={previewLoading}>
+                  Zrušit
+                </Button>
+                <Button onClick={() => void handlePreviewInvite()} disabled={previewLoading || !joinCode.trim()}>
+                  {previewLoading ? "Kontroluji…" : "Zkontrolovat"}
+                </Button>
+              </div>
+            </>
           )}
-          <div className="flex flex-wrap justify-end gap-3">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setJoinModalOpen(false)}
-              disabled={joinSubmitting}
-            >
-              Zrušit
-            </Button>
-            <Button type="submit" disabled={joinSubmitting || !joinCode.trim()}>
-              {joinSubmitting ? "Připojuji…" : "Připojit se"}
-            </Button>
-          </div>
-        </form>
+
+          {joinStep === "preview" && preview && (
+            <>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                <p className="font-medium">{preview.organizationName}</p>
+                {preview.type === "STUDENT_CLASS" && (
+                  <p className="mt-1 text-slate-600">
+                    Třída: {preview.classLabel ?? "—"} · Rok: {preview.yearLabel ?? "—"}
+                  </p>
+                )}
+              </div>
+              {preview.type === "ORG_ONLY" && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-700">Role</label>
+                  <Select value={joinRole} onValueChange={(v) => setJoinRole(v as "TEACHER" | "DIRECTOR")} disabled={joinSubmitting}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="TEACHER">Učitel</SelectItem>
+                      <SelectItem value="DIRECTOR">Ředitel</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              {joinErrorMessage && (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-700">
+                  {joinErrorMessage}
+                </div>
+              )}
+              <div className="flex flex-wrap justify-end gap-3">
+                <Button variant="outline" onClick={handleJoinBack} disabled={joinSubmitting}>
+                  Zpět
+                </Button>
+                <Button onClick={() => void handleAcceptInvite()} disabled={joinSubmitting}>
+                  {joinSubmitting ? "Připojuji…" : "Připojit se"}
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
       </BaseModal>
     </>
   );

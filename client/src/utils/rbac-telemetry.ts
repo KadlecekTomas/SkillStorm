@@ -1,4 +1,4 @@
-import { API_BASE_URL } from "@/utils/env";
+import { API_BASE_PATH } from "@/utils/env";
 import { useAuthStore } from "@/store/use-auth-store";
 import type { PermissionKey } from "@/types";
 
@@ -8,7 +8,7 @@ type ForbiddenPayload = {
   message?: string;
 };
 
-const METRIC_ENDPOINT = `${API_BASE_URL}/metrics/rbac`;
+const METRIC_ENDPOINT = `${API_BASE_PATH}/metrics/rbac`;
 
 export const reportForbiddenAccess = (error?: ForbiddenPayload | Error): void => {
   if (typeof window === "undefined") return;

@@ -170,12 +170,16 @@ export class OrganizationsService {
     });
 
     if (creatorUserId) {
-      await this.prisma.membership.create({
+      const membership = await this.prisma.membership.create({
         data: {
           userId: creatorUserId,
           organizationId: org.id,
           role: OrganizationRole.OWNER,
         },
+      });
+      await this.prisma.user.update({
+        where: { id: creatorUserId },
+        data: { lastActiveMembershipId: membership.id },
       });
     }
 

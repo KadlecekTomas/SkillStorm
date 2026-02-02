@@ -39,6 +39,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { PrivacyModule } from './privacy/privacy.module';
 import { EnrollmentsModule } from './enrollments/enrollments.module';
 import { AcademicYearsModule } from './academic-years/academic-years.module';
+import { InvitesModule } from './invites/invites.module';
 
 @Module({
   imports: [
@@ -92,6 +93,7 @@ import { AcademicYearsModule } from './academic-years/academic-years.module';
     PrivacyModule,
     EnrollmentsModule,
     AcademicYearsModule,
+    InvitesModule,
   ],
   providers: [
     { provide: APP_INTERCEPTOR, useClass: ResponseEnvelopeInterceptor },

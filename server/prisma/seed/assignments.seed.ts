@@ -177,6 +177,7 @@ export async function seed(prisma: PrismaClient) {
       assignment = await prisma.assignment.create({
         data: {
           organizationId: ORG_IDS.chodovicka,
+          yearId: academicYear.id,
           testId: test.id,
           targetType: 'CLASS',
           classSectionId: classSection.id,

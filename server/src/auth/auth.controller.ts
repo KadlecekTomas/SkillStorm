@@ -55,8 +55,10 @@ export class AuthController {
       setAuthCookies(res, result.tokens);
       setCsrfCookie(res, generateCsrfToken());
 
+      const orgId =
+        result.organization != null ? (result.organization as { id: string }).id : null;
       const ctx = await this.authService.getMeContext(result.user.id, {
-        organizationId: result.organization?.id ?? null,
+        organizationId: orgId,
       });
 
       return ok({

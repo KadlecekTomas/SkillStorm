@@ -98,7 +98,18 @@ export class AssignmentsService {
     }
     await this.ensureTestScoreable(test.id);
 
-    // 5) classSection (pokud je) v rámci org
+    // 5) AcademicYear v rámci org
+    const year = await this.prisma.academicYear.findUnique({
+      where: { id: dto.academicYearId },
+      select: { id: true, orgId: true },
+    });
+    if (!year || year.orgId !== dto.organizationId) {
+      throw new BadRequestException(
+        'academicYearId neexistuje nebo nepatří do organizace',
+      );
+    }
+
+    // 6) classSection (pokud je) v rámci org + yearId shoda
     if (dto.targetType === 'CLASS' && !dto.classSectionId) {
       throw new BadRequestException(
         'Pro targetType=CLASS je nutné zadat classSectionId',
@@ -107,16 +118,21 @@ export class AssignmentsService {
     if (dto.classSectionId) {
       const cs = await this.prisma.classSection.findUnique({
         where: { id: dto.classSectionId },
-        select: { id: true, orgId: true },
+        select: { id: true, orgId: true, yearId: true },
       });
       if (!cs || cs.orgId !== dto.organizationId) {
         throw new BadRequestException(
           'classSectionId neexistuje nebo nepatří do organizace',
         );
       }
+      if (cs.yearId !== dto.academicYearId) {
+        throw new BadRequestException(
+          'classSectionId musí patřit do zadaného akademického roku',
+        );
+      }
     }
 
-    // 6) createdById membership existuje v org + role TEACHER/DIRECTOR
+    // 7) createdById membership existuje v org + role TEACHER/DIRECTOR
     const creator = await this.prisma.membership.findFirst({
       where: {
         id: dto.createdById,
@@ -132,7 +148,7 @@ export class AssignmentsService {
       );
     }
 
-    // 7) STUDENTS -> studentIds povinné + všichni studenti z téže org
+    // 8) STUDENTS -> studentIds povinné + všichni studenti z téže org
     if (dto.targetType === 'STUDENTS') {
       const ids = dto.studentIds ?? [];
       if (!Array.isArray(ids) || ids.length === 0) {
@@ -156,23 +172,22 @@ export class AssignmentsService {
       }
     }
 
-    // 8) Vytvoření assignmentu (studentIds nejsou sloupec assignmentu)
+    // 9) Vytvoření assignmentu (studentIds nejsou sloupec assignmentu)
+    const { academicYearId: yearId, studentIds, ...rest } = dto;
     if (dto.targetType === 'STUDENTS') {
-      // Vytvoř Assignment a AssignmentStudent záznamy
-      const { studentIds, ...rest } = dto;
       return this.prisma.assignment.create({
         data: {
           ...rest,
+          yearId,
           students: {
             create: (studentIds ?? []).map((id) => ({ studentId: id })),
           },
         },
       });
     } else {
-      // CLASS: bez students
-      const { studentIds: _unused, ...rest } = dto;
+      const { studentIds: _unused } = dto;
       void _unused;
-      return this.prisma.assignment.create({ data: rest });
+      return this.prisma.assignment.create({ data: { ...rest, yearId } });
     }
   }
 
@@ -193,9 +208,9 @@ export class AssignmentsService {
 
     // Nepovoluj měnit identitu/kontext assignmentu,
     // držíme to jednoduché a bezpečné (není požadavek to dynamicky migrovat).
-    if (dto.organizationId || dto.testId || dto.createdById || dto.studentIds) {
+    if (dto.organizationId || dto.academicYearId || dto.testId || dto.createdById || dto.studentIds) {
       throw new BadRequestException(
-        'Pole organizationId/testId/createdById/studentIds nelze měnit PATCHem',
+        'Pole organizationId/academicYearId/testId/createdById/studentIds nelze měnit PATCHem',
       );
     }
 

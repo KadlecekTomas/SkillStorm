@@ -6,6 +6,8 @@ RUN npm ci
 FROM node:20-slim AS builder
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
+ARG API_PROXY_TARGET
+ENV API_PROXY_TARGET=${API_PROXY_TARGET}
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build

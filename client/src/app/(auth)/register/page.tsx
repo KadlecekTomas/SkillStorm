@@ -35,6 +35,12 @@ export default function RegisterPage(): JSX.Element {
     if (!user) return;
 
     if (typeof window !== "undefined") {
+      const createOrgIntent = window.sessionStorage.getItem("create_org_intent");
+      if (createOrgIntent) {
+        window.sessionStorage.removeItem("create_org_intent");
+        router.replace("/onboarding/create-organization");
+        return;
+      }
       const joinIntent = window.sessionStorage.getItem("join_intent");
       if (joinIntent) {
         router.replace("/dashboard/onboarding");

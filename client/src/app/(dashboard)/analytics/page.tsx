@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { PermissionKey } from "@/types";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { httpClient } from "@/lib/http/client";
 import { withGuard } from "@/lib/guard/withGuard";
 
@@ -23,6 +25,15 @@ function AnalyticsPage() {
   }, []);
 
   return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center gap-3">
+        <Button variant="outline" asChild>
+          <Link href="/analytics/student-timeline">Student timeline</Link>
+        </Button>
+        <Button variant="outline" asChild>
+          <Link href="/analytics/class-heatmap">Class heatmap</Link>
+        </Button>
+      </div>
     <Card className="space-y-4 rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">
       <div>
         <p className="text-sm text-slate-500">Analytics</p>
@@ -58,6 +69,7 @@ function AnalyticsPage() {
         </table>
       </div>
     </Card>
+    </div>
   );
 }
 

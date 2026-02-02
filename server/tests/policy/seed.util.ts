@@ -310,6 +310,7 @@ export async function seedPolicyData(
       studentId: student.id,
       classSectionId: classSection.id,
       yearId: currentYear.id,
+      orgId: orgA.id,
       status: 'ACTIVE',
     },
   });
@@ -458,6 +459,7 @@ export async function seedPolicyData(
   const assignment = await prisma.assignment.create({
     data: {
       organizationId: orgA.id,
+      yearId: currentYear.id,
       testId: test.id,
       classSectionId: classSection.id,
       topicLevelId: topicLevel.id,

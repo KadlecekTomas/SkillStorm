@@ -127,42 +127,31 @@ describe('Auth & Role Policy (integration)', () => {
       mode: RegisterMode.CREATE_ORG,
     };
     let userId: string;
-    let organizationId: string;
-    let membershipId: string;
     let cookies: string[] | undefined;
     let accessToken: string | null = null;
 
-    it('registers successfully and issues cookies', async () => {
+    it('registers successfully and issues cookies (CREATE_ORG: user only, no org yet)', async () => {
       const res = await request(app.getHttpServer())
         .post('/auth/register')
         .send(payload)
         .expect(201);
 
       expect(res.body.user).toBeDefined();
-      expect(res.body.organization).toBeDefined();
-      expect(res.body.membership).toBeDefined();
+      expect(res.body.organization).toBeNull();
+      expect(res.body.membership).toBeNull();
 
       userId = res.body.user.id;
-      organizationId = res.body.organization.id;
-      membershipId = res.body.membership.id;
       createdUsers.push(userId);
-      createdOrgs.push(organizationId);
-      createdMemberships.push(membershipId);
 
       const dbUser = await prisma.user.findUnique({
         where: { id: userId },
       });
       expect(dbUser?.systemRole).toBeNull();
 
-      const dbOrg = await prisma.organization.findUnique({
-        where: { id: organizationId },
+      const dbMemberships = await prisma.membership.findMany({
+        where: { userId },
       });
-      expect(dbOrg?.type).toBe(OrganizationType.SCHOOL);
-
-      const dbMembership = await prisma.membership.findUnique({
-        where: { id: membershipId },
-      });
-      expect(dbMembership?.role).toBe(OrganizationRole.OWNER);
+      expect(dbMemberships).toHaveLength(0);
 
       const raw = res.headers['set-cookie'];
       cookies = Array.isArray(raw) ? raw : raw ? [raw] : undefined;
@@ -181,7 +170,8 @@ describe('Auth & Role Policy (integration)', () => {
       expect(res.body.user.id).toBe(userId);
       expect(res.body.user.systemRole).toBeNull();
       expect(Array.isArray(res.body.user.memberships)).toBe(true);
-      expect(res.body.user.needsOnboarding).toBe(false);
+      expect(res.body.user.memberships).toHaveLength(0);
+      expect(res.body.user.needsOnboarding).toBe(true);
     });
 
     it('ignores provided systemRole in registration body', async () => {
@@ -202,9 +192,9 @@ describe('Auth & Role Policy (integration)', () => {
         where: { id: res.body.user.id },
       });
       expect(user?.systemRole).toBeNull();
+      expect(res.body.organization).toBeNull();
+      expect(res.body.membership).toBeNull();
       createdUsers.push(res.body.user.id);
-      createdOrgs.push(res.body.organization.id);
-      createdMemberships.push(res.body.membership.id);
     });
   });
 
@@ -229,8 +219,6 @@ describe('Auth & Role Policy (integration)', () => {
 
       userId = res.body.user.id;
       createdUsers.push(userId);
-      createdOrgs.push(res.body.organization.id);
-      createdMemberships.push(res.body.membership.id);
     });
 
     it('logs in and stores hashed refresh tokens', async () => {

@@ -1,3 +1,4 @@
+// YEAR-SCOPED: Requires active academic year (RequireActiveAcademicYearGuard)
 import {
   Controller,
   Post,
@@ -25,12 +26,13 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ok } from '@/common/http/envelope';
 import { ForbiddenException } from '@nestjs/common';
 import { ApiStandardResponses } from '@/common/http/api-standard-responses.decorator';
+import { RequireActiveAcademicYearGuard } from '@/academic-years/require-active-academic-year.guard';
 
 @ApiTags('submissions')
 @ApiStandardResponses()
 @ApiBearerAuth()
 @Controller('submissions')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RequireActiveAcademicYearGuard)
 export class SubmissionsController {
   constructor(private readonly submissionsService: SubmissionsService) {}
 

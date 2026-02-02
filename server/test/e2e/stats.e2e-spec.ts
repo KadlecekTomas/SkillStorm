@@ -53,7 +53,9 @@ describe('Stats (e2e)', () => {
   // tests & submissions (orgA)
   let tA1!: { id: string; title: string };
   let tA2!: { id: string; title: string };
+  let aA1!: { id: string };
   let aA2!: { id: string };
+  let academicYearId!: string;
 
   beforeAll(async () => {
     const modRef = await Test.createTestingModule({
@@ -197,16 +199,47 @@ describe('Stats (e2e)', () => {
       select: { id: true, title: true },
     });
 
+    // Academic year (required for assignments)
+    const year = await prisma.academicYear.create({
+      data: {
+        orgId: orgA.id,
+        label: `Stats ${Date.now()}`,
+        startsAt: new Date('2024-09-01'),
+        endsAt: new Date('2025-06-30'),
+        isCurrent: true,
+      },
+      select: { id: true },
+    });
+    academicYearId = year.id;
+
+    // Assignment pro tA1 (STUDENTS)
+    aA1 = await prisma.assignment.create({
+      data: {
+        organizationId: orgA.id,
+        yearId: academicYearId,
+        testId: tA1.id,
+        targetType: 'STUDENTS',
+        openAt: new Date(Date.now() - 60000),
+        closeAt: new Date(Date.now() + 3600 * 1000),
+        maxAttempts: 5,
+        createdById: mTeacherA1.id,
+        students: { create: [{ studentId: mStudentA1.id }] },
+      },
+      select: { id: true },
+    });
+
     // Assignment pro tA2
     aA2 = await prisma.assignment.create({
       data: {
         organizationId: orgA.id,
+        yearId: academicYearId,
         testId: tA2.id,
         targetType: 'STUDENTS',
         openAt: new Date(Date.now() - 10000),
         closeAt: new Date(Date.now() + 3600 * 1000),
         maxAttempts: 3,
         createdById: mTeacherA1.id,
+        students: { create: [{ studentId: mStudentA1.id }] },
       },
       select: { id: true },
     });
@@ -217,32 +250,40 @@ describe('Stats (e2e)', () => {
     await prisma.submission.createMany({
       data: [
         {
+          assignmentId: aA1.id,
           studentId: mStudentA1.id,
           testId: tA1.id,
           score: 0.8,
           status: SubmissionStatus.APPROVED,
           submittedAt: new Date(now.getTime() - 40000),
+          attemptNo: 1,
         },
         {
+          assignmentId: aA1.id,
           studentId: mStudentA1.id,
           testId: tA1.id,
           score: 0.9,
           status: SubmissionStatus.APPROVED,
           submittedAt: new Date(now.getTime() - 30000),
+          attemptNo: 2,
         },
         {
+          assignmentId: aA1.id,
           studentId: mStudentA1.id,
           testId: tA1.id,
           score: 0.4,
           status: SubmissionStatus.REJECTED,
           submittedAt: new Date(now.getTime() - 20000),
+          attemptNo: 3,
         },
         {
+          assignmentId: aA1.id,
           studentId: mStudentA1.id,
           testId: tA1.id,
           score: null,
           status: SubmissionStatus.PENDING,
           submittedAt: new Date(now.getTime() - 10000),
+          attemptNo: 4,
         },
       ],
     });
@@ -278,6 +319,14 @@ describe('Stats (e2e)', () => {
           testId: { in: [tA1?.id, tA2?.id].filter(Boolean) as string[] },
         },
       })
+      .catch(() => {});
+    await prisma.assignment
+      .deleteMany({
+        where: { id: { in: [aA1?.id, aA2?.id].filter(Boolean) as string[] } },
+      })
+      .catch(() => {});
+    await prisma.academicYear
+      .deleteMany({ where: { id: academicYearId } })
       .catch(() => {});
     await prisma.test
       .deleteMany({
@@ -609,11 +658,13 @@ describe('Stats (e2e)', () => {
     // přidej více submissionů pro studentA1/tA1
     await prisma.submission.createMany({
       data: Array.from({ length: 6 }).map((_, i) => ({
+        assignmentId: aA1.id,
         studentId: mStudentA1.id,
         testId: tA1.id,
         score: 0.5,
         status: SubmissionStatus.APPROVED,
         submittedAt: new Date(Date.now() + i * 1000),
+        attemptNo: 10 + i,
       })),
     });
 
