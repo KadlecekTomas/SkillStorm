@@ -8,25 +8,36 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 const CREATE_ORG_PATH = "/onboarding/create-organization";
 const DASHBOARD_ONBOARDING_PATH = "/dashboard/onboarding";
+const DASHBOARD_PLATFORM_PATH = "/dashboard/platform";
 
 /**
- * Redirects users without organization to /onboarding/create-organization.
- * Exception: /dashboard/onboarding (join flow) is allowed without org.
+ * Organization gate – jediný zdroj pravdy: /auth/me (hasOrganization z memberships).
+ * - Bez org: redirect na create-organization (kromě join flow a platform admin)
+ * - S org na join stránce: redirect na dashboard (AcademicYearGate doplní redirect na academic-year)
  */
 export function OrganizationGate({ children }: { children: ReactNode }): ReactNode {
   const router = useRouter();
   const pathname = usePathname();
-  const { hasOrganization, isLoading } = useAuth();
+  const { user, hasOrganization, isLoading } = useAuth();
 
   const isJoinOnboarding =
     pathname === DASHBOARD_ONBOARDING_PATH || pathname?.startsWith(`${DASHBOARD_ONBOARDING_PATH}/`);
+  const isPlatformAdminRoute =
+    pathname === DASHBOARD_PLATFORM_PATH || pathname?.startsWith(`${DASHBOARD_PLATFORM_PATH}/`);
+  const isPlatformAdmin = user?.isPlatformAdmin === true;
 
   useEffect(() => {
     if (isLoading) return;
-    if (hasOrganization) return;
+    if (hasOrganization) {
+      if (isJoinOnboarding) {
+        router.replace("/dashboard");
+      }
+      return;
+    }
     if (isJoinOnboarding) return;
+    if (isPlatformAdminRoute && isPlatformAdmin) return;
     router.replace(CREATE_ORG_PATH);
-  }, [hasOrganization, isLoading, isJoinOnboarding, router]);
+  }, [hasOrganization, isLoading, isJoinOnboarding, isPlatformAdminRoute, isPlatformAdmin, router]);
 
   if (isLoading) {
     return (
@@ -36,7 +47,15 @@ export function OrganizationGate({ children }: { children: ReactNode }): ReactNo
     );
   }
 
-  if (!hasOrganization && !isJoinOnboarding) {
+  if (hasOrganization && isJoinOnboarding) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center">
+        <LoadingSpinner label="Přesměrovávám…" />
+      </div>
+    );
+  }
+
+  if (!hasOrganization && !isJoinOnboarding && !(isPlatformAdminRoute && isPlatformAdmin)) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center">
         <LoadingSpinner label="Přesměrovávám…" />

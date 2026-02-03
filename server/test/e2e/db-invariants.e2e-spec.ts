@@ -2,6 +2,7 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { AppModule } from '../../src/app.module';
 import { PrismaService } from '@/prisma/prisma.service';
+import { OrganizationRole } from '@prisma/client';
 
 describe('DB invariants for Sprint 1 (raw SQL)', () => {
   let app: INestApplication;
@@ -29,6 +30,12 @@ describe('DB invariants for Sprint 1 (raw SQL)', () => {
 
     prisma = app.get(PrismaService);
     await prisma.$connect();
+
+    // E2E uses db push (no migrations), so enforce one-active-per-org index manually
+    await prisma.$executeRawUnsafe(`
+      CREATE UNIQUE INDEX IF NOT EXISTS academic_years_one_active_per_org_idx
+      ON academic_years(organization_id) WHERE "isCurrent" = true
+    `);
 
     const orgA = await prisma.organization.create({
       data: { name: `DB Inv Org A ${Date.now()}` },
@@ -101,22 +108,24 @@ describe('DB invariants for Sprint 1 (raw SQL)', () => {
       select: { id: true },
     });
 
+    const membership = await prisma.membership.create({
+      data: {
+        user: {
+          create: {
+            email: `db_inv_student_${Date.now()}@example.com`,
+            name: 'DB Inv Student',
+            passwordHash: 'x',
+          },
+        },
+        organization: { connect: { id: orgId } },
+        role: OrganizationRole.STUDENT,
+      },
+      select: { id: true },
+    });
     const student = await prisma.student.create({
       data: {
         orgId,
-        membership: {
-          create: {
-            user: {
-              create: {
-                email: `db_inv_student_${Date.now()}@example.com`,
-                name: 'DB Inv Student',
-                passwordHash: 'x',
-              },
-            },
-            organizationId: orgId,
-            role: 'STUDENT',
-          },
-        },
+        membershipId: membership.id,
       },
       select: { id: true },
     });
@@ -151,11 +160,28 @@ describe('DB invariants for Sprint 1 (raw SQL)', () => {
     await expect(
       prisma.$executeRawUnsafe(
         `
-        UPDATE public.academic_years
+        UPDATE academic_years
         SET "isCurrent" = true
         WHERE academic_year_id = $1
         `,
         anotherYear.id,
+      ),
+    ).rejects.toThrow();
+  });
+
+  it('rejects raw INSERT of second isCurrent=true academic year for the same org (partial unique index)', async () => {
+    const duplicateId = `db-inv-dup-year-${Date.now()}`;
+    await expect(
+      prisma.$executeRawUnsafe(
+        `
+        INSERT INTO academic_years (academic_year_id, organization_id, label, "startsAt", "endsAt", "isCurrent", created_at)
+        VALUES ($1, $2, $3, $4, $5, true, CURRENT_TIMESTAMP)
+        `,
+        duplicateId,
+        orgId,
+        `DB Inv Duplicate ${Date.now()}`,
+        new Date('2028-09-01'),
+        new Date('2029-08-31'),
       ),
     ).rejects.toThrow();
   });

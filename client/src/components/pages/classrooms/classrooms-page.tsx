@@ -601,6 +601,18 @@ export function ClassroomsPageContent(): React.JSX.Element {
     );
   }
 
+  if (yearConfigError === "ACADEMIC_YEAR_INVARIANT_BROKEN") {
+    return (
+      <div className="space-y-6">
+        <Alert
+          title="Chybí aktivní školní rok"
+          description="Organizace nemá správně nastavený aktivní školní rok. Kontaktujte správce."
+          variant="warning"
+        />
+      </div>
+    );
+  }
+
   if (yearConfigError === "ACTIVE_YEAR_FETCH_FAILED") {
     return (
       <div className="space-y-6">

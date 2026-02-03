@@ -29,6 +29,8 @@ export const DashboardLayout = ({ children }: DashboardLayoutProps): React.JSX.E
   const pathname = usePathname();
   const { user, org, logout, switchOrganization, isOffline, isLoading, hasOrganization } = useAuth();
   const memberships = user?.memberships ?? [];
+  const activeMembershipId =
+    memberships.find((m) => m.organizationId === org?.id)?.id ?? "";
   const {
     years,
     selectedYear,
@@ -44,6 +46,19 @@ export const DashboardLayout = ({ children }: DashboardLayoutProps): React.JSX.E
     logEvent("navigation", "page_view", { path: pathname });
   }, [pathname, logEvent]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key !== "skillstorm_activeMembershipId" || !e.newValue) return;
+      const currentId = memberships.find((m) => m.organizationId === org?.id)?.id ?? "";
+      if (e.newValue !== currentId) {
+        switchOrganization(e.newValue);
+      }
+    };
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, [org?.id, memberships, switchOrganization]);
+
   const shouldBlockChildren = hasOrganization && bootstrapState !== "READY";
   let blockedContent: React.ReactNode | null = null;
   if (hasOrganization && (bootstrapState === "LOADING" || bootstrapState === "INIT")) {
@@ -58,13 +73,16 @@ export const DashboardLayout = ({ children }: DashboardLayoutProps): React.JSX.E
   if (hasOrganization && bootstrapState === "ERROR") {
     let title = "Konfigurační chyba";
     let description = "Aktivní školní rok není dostupný.";
-    if (yearConfigError === "NO_ACTIVE_ACADEMIC_YEAR") {
+    if (
+      yearConfigError === "ACADEMIC_YEAR_INVARIANT_BROKEN" ||
+      yearConfigError === "NO_ACTIVE_ACADEMIC_YEAR" ||
+      yearConfigError === "MULTIPLE_ACTIVE_ACADEMIC_YEARS"
+    ) {
       title = "Chybí aktivní školní rok";
       description =
-        "V organizaci není nastaven aktivní školní rok. Kontaktujte ředitele nebo vlastníka školy. Pokud jste vlastník, měli byste být přesměrováni na stránku pro vytvoření školního roku.";
-    } else if (yearConfigError === "MULTIPLE_ACTIVE_ACADEMIC_YEARS") {
-      title = "Konflikt školních roků";
-      description = "V organizaci je více aktivních školních roků.";
+        yearConfigError === "ACADEMIC_YEAR_INVARIANT_BROKEN"
+          ? "Organizace nemá správně nastavený aktivní školní rok. Kontaktujte správce."
+          : "V organizaci není nastaven aktivní školní rok. Kontaktujte ředitele nebo vlastníka školy. Pokud jste vlastník, měli byste být přesměrováni na stránku pro vytvoření školního roku.";
     } else if (yearConfigError === "ACTIVE_YEAR_FETCH_FAILED") {
       title = "Nelze načíst aktivní školní rok";
       description = "Zkontroluj připojení nebo to zkus znovu.";
@@ -89,9 +107,9 @@ export const DashboardLayout = ({ children }: DashboardLayoutProps): React.JSX.E
           <div className="flex flex-wrap items-center gap-3">
             {memberships.length > 1 && (
               <Select
-                value={org?.id ?? ""}
+                value={activeMembershipId}
                 onValueChange={(value) => {
-                  if (value !== org?.id) {
+                  if (value && value !== activeMembershipId) {
                     void switchOrganization(value);
                   }
                 }}
@@ -102,8 +120,9 @@ export const DashboardLayout = ({ children }: DashboardLayoutProps): React.JSX.E
                 </SelectTrigger>
                 <SelectContent>
                   {memberships.map((membership) => (
-                    <SelectItem key={membership.organizationId} value={membership.organizationId}>
+                    <SelectItem key={membership.id} value={membership.id}>
                       {membership.organization?.name ?? membership.organizationId}
+                      {membership.role ? ` (${membership.role.toLowerCase()})` : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>

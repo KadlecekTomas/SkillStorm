@@ -24,6 +24,7 @@ model User {
   deletedAt         DateTime?          @map("deleted_at")
   anonymized        Boolean            @default(false)
   anonymizedAt      DateTime?          @map("anonymized_at")
+  isPlatformAdmin   Boolean            @default(false) @map("is_platform_admin")
   analyticsEvents   AnalyticsEvent[]
   auditLogs         AuditLog[]
   materialPurchases MaterialPurchase[]
@@ -32,6 +33,7 @@ model User {
   revokedTokens     RevokedToken[]
   userPermissions   UserPermission[]
   lastActiveMembership Membership?     @relation("LastActiveMembership", fields: [lastActiveMembershipId], references: [id], onDelete: SetNull)
+  ownedOrganizations   Organization[]   @relation("OrganizationOwner")
 
   @@index([username])
   @@map("users")
@@ -44,9 +46,12 @@ model Organization {
   city              String?               @db.VarChar(100)
   country           String?               @db.VarChar(100)
   type              OrganizationType      @default(SCHOOL)
+  status            OrganizationStatus    @default(PENDING)
+  ownerUserId       String?               @unique @map("owner_user_id")
   createdAt         DateTime              @default(now()) @map("created_at")
   updatedAt         DateTime              @updatedAt @map("updated_at")
   deletedAt         DateTime?             @map("deleted_at")
+  owner             User?                 @relation("OrganizationOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
   academicYears     AcademicYear[]
   analyticsEvents   AnalyticsEvent[]
   assignments       Assignment[]
@@ -70,7 +75,14 @@ model Organization {
 
   @@index([name])
   @@index([city])
+  @@index([status])
   @@map("organizations")
+}
+
+enum OrganizationStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
 }
 
 model OrganizationSettings {

@@ -1,11 +1,12 @@
 // src/modules/organizations/organizations.service.ts
-import { Injectable, NotFoundException, Inject } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, Inject } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
 import type { CreateOrganizationDto } from './dto/create-organization.dto';
 import type { UpdateOrganizationDto } from './dto/update-organization.dto';
 import type { Prisma } from '@prisma/client';
 import {
   OrganizationType,
+  OrganizationStatus,
   AuditEntityType,
   OrganizationRole,
 } from '@prisma/client';
@@ -18,6 +19,7 @@ import {
   cacheGetOrSet,
   getOrgVersion,
 } from '@/shared/cache/org-cache.utils';
+import { getDefaultCzechSchoolYear } from '@/shared/czech-school-year';
 
 @Injectable()
 export class OrganizationsService {
@@ -148,14 +150,27 @@ export class OrganizationsService {
   }
 
   async create(dto: CreateOrganizationDto, creatorUserId?: string | null) {
+    if (creatorUserId) {
+      const existingOwned = await this.prisma.organization.findFirst({
+        where: { ownerUserId: creatorUserId, deletedAt: null },
+        select: { id: true },
+      });
+      if (existingOwned) {
+        throw new ConflictException({
+          statusCode: 409,
+          code: 'ORG_OWNER_LIMIT_REACHED',
+          message: 'User can own at most one organization',
+        });
+      }
+    }
+
     if (dto.name && dto.city) {
-      // soft unique hint (nezastavuje create)
       const existing = await this.prisma.organization.findFirst({
         where: { name: dto.name, city: dto.city, deletedAt: null },
         select: { id: true },
       });
       if (existing) {
-        // volitelně zalogovat warn
+        // soft unique hint (nezastavuje create)
       }
     }
 
@@ -166,6 +181,8 @@ export class OrganizationsService {
         city: dto.city ?? null,
         country: dto.country ?? null,
         type: dto.type ?? OrganizationType.SCHOOL,
+        status: OrganizationStatus.PENDING,
+        ownerUserId: creatorUserId ?? null,
       },
     });
 
@@ -190,6 +207,24 @@ export class OrganizationsService {
       orgId: org.id,
       metadata: { type: org.type },
     });
+
+    // Invariant: every organization has exactly one active academic year.
+    const existingActive = await this.prisma.academicYear.findFirst({
+      where: { orgId: org.id, isCurrent: true },
+      select: { id: true },
+    });
+    if (!existingActive) {
+      const { startDate, endDate, label } = getDefaultCzechSchoolYear();
+      await this.prisma.academicYear.create({
+        data: {
+          orgId: org.id,
+          label,
+          startsAt: startDate,
+          endsAt: endDate,
+          isCurrent: true,
+        },
+      });
+    }
 
     await bumpOrgVersion(this.cache, 'ALL'); // invaliduj globální list
     return org;

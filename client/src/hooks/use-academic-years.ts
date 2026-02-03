@@ -109,11 +109,10 @@ export const useAcademicYears = (): UseAcademicYearsResult => {
       })
       .catch((err) => {
         if (cancelled) return;
+        const data = err instanceof HttpError ? (err.data as { code?: string; meta?: { code?: string } } | undefined) : undefined;
         const code =
-          err instanceof HttpError && err.status === 409
-            ? (err.data as { meta?: { code?: string } } | undefined)?.meta?.code ??
-              (err.data as { code?: string } | undefined)?.code ??
-              null
+          err instanceof HttpError && (err.status === 409 || err.status === 500)
+            ? data?.code ?? data?.meta?.code ?? null
             : "ACTIVE_YEAR_FETCH_FAILED";
         clearOrg(activeOrgId);
         setYearConfigError(code ?? "UNKNOWN");

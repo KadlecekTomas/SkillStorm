@@ -2,6 +2,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -44,6 +45,7 @@ type JwtClaims = {
   systemRole: SystemRole | null;
   organizationRole: OrganizationRole | null;
   organizationId: string | null;
+  membershipId: string | null;
 };
 
 export type MeContext = {
@@ -139,6 +141,7 @@ export class AuthService {
       systemRole: user.systemRole ?? null,
       organizationRole: membership?.role ?? null,
       organizationId: membership?.organizationId ?? null,
+      membershipId: membership?.id ?? null,
     };
   }
 
@@ -211,12 +214,30 @@ export class AuthService {
     });
     if (!user) throw new UnauthorizedException('User not found');
 
-    const membership = await this.prisma.membership.findFirst({
-      where: { userId: user.id },
-      orderBy: { createdAt: 'asc' },
-    });
+    let membership: { id: string; role: any; organizationId: string } | null = null;
+    if (user.lastActiveMembershipId) {
+      const m = await this.prisma.membership.findFirst({
+        where: {
+          id: user.lastActiveMembershipId,
+          userId: user.id,
+          deletedAt: null,
+        },
+        select: { id: true, role: true, organizationId: true },
+      });
+      membership = m;
+    }
+    if (!membership) {
+      membership = await this.prisma.membership.findFirst({
+        where: { userId: user.id, deletedAt: null },
+        orderBy: { createdAt: 'asc' },
+        select: { id: true, role: true, organizationId: true },
+      });
+    }
 
-    const tokens = await this.generateTokens(user, membership);
+    const tokens = await this.generateTokens(
+      user,
+      membership as unknown as Membership,
+    );
     await this.auditService.log({
       action: 'REFRESH',
       entityType: AuditEntityType.USER,
@@ -445,6 +466,12 @@ export class AuthService {
         where: { userId: updatedUser.id, deletedAt: null },
         orderBy: { createdAt: 'asc' },
       });
+      if (membership?.id) {
+        await this.prisma.user.update({
+          where: { id: updatedUser.id },
+          data: { lastActiveMembershipId: membership.id },
+        });
+      }
     }
 
     const tokens = await this.generateTokens(updatedUser, membership);
@@ -581,6 +608,7 @@ export class AuthService {
         username: true,
         name: true,
         systemRole: true,
+        isPlatformAdmin: true,
         createdAt: true,
         lastLoginAt: true,
         memberships: {
@@ -611,6 +639,7 @@ export class AuthService {
       username: user.username,
       name: user.name,
       systemRole: user.systemRole,
+      isPlatformAdmin: user.isPlatformAdmin ?? false,
       createdAt: user.createdAt,
       lastLoginAt: user.lastLoginAt,
       memberships: mappedMemberships,
@@ -620,43 +649,136 @@ export class AuthService {
     };
   }
 
-  async getMeContext(userId: string, claims?: { organizationId?: string | null }) {
-    const user = await this.getUserProfile(userId);
+  /**
+   * Canonical membership resolution for /me and bootstrap:
+   * (1) claims.membershipId if provided and valid (belongs to user, not deleted)
+   * (2) user.lastActiveMembershipId if valid
+   * (3) first membership (orderBy createdAt)
+   * Invalid lastActiveMembershipId is cleaned up (set to null).
+   */
+  async getMeContext(userId: string, claims?: { membershipId?: string | null; organizationId?: string | null }) {
+    const userRow = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        username: true,
+        name: true,
+        systemRole: true,
+        isPlatformAdmin: true,
+        createdAt: true,
+        lastLoginAt: true,
+        lastActiveMembershipId: true,
+        memberships: {
+          where: { deletedAt: null },
+          orderBy: { createdAt: 'asc' },
+          select: {
+            id: true,
+            role: true,
+            organizationId: true,
+            organization: { select: { name: true, type: true } },
+          },
+        },
+      },
+    });
 
-    // vyber aktivní membership (podle claims), jinak fallback na první
-    const activeMembership =
-      (claims?.organizationId
-        ? user.memberships?.find((m) => m.organizationId === claims.organizationId) ?? null
-        : null) ?? (user.memberships?.[0] ?? null);
+    if (!userRow) {
+      throw new NotFoundException('User not found');
+    }
+
+    const memberships = userRow.memberships ?? [];
+    const needsOnboarding = memberships.length === 0;
+
+    let activeMembership: (typeof memberships)[0] | null = null;
+
+    if (claims?.membershipId) {
+      const m = await this.prisma.membership.findFirst({
+        where: {
+          id: claims.membershipId,
+          userId,
+          deletedAt: null,
+        },
+        select: {
+          id: true,
+          role: true,
+          organizationId: true,
+          organization: { select: { name: true, type: true } },
+        },
+      });
+      if (m) {
+        activeMembership = m;
+      }
+    }
+
+    if (!activeMembership && userRow.lastActiveMembershipId) {
+      const m = await this.prisma.membership.findFirst({
+        where: {
+          id: userRow.lastActiveMembershipId,
+          userId,
+          deletedAt: null,
+        },
+        select: { id: true, role: true, organizationId: true, organization: { select: { name: true, type: true } } },
+      });
+      if (m) {
+        activeMembership = m;
+      } else {
+        await this.prisma.user.update({
+          where: { id: userId },
+          data: { lastActiveMembershipId: null },
+        });
+      }
+    }
+
+    if (!activeMembership && claims?.organizationId) {
+      activeMembership = memberships.find((m) => m.organizationId === claims.organizationId) ?? null;
+    }
+
+    if (!activeMembership && memberships.length) {
+      activeMembership = memberships[0] ?? null;
+      if (activeMembership && userRow.lastActiveMembershipId !== activeMembership.id) {
+        await this.prisma.user.update({
+          where: { id: userId },
+          data: { lastActiveMembershipId: activeMembership.id },
+        });
+      }
+    }
 
     const organization = activeMembership
       ? {
-        id: activeMembership.organizationId,
-        name: activeMembership.organization?.name,
-        type: activeMembership.organization?.type ?? null,
-      }
+          id: activeMembership.organizationId,
+          name: activeMembership.organization?.name,
+          type: activeMembership.organization?.type ?? null,
+        }
       : null;
 
     const membership = activeMembership
       ? {
-        id: activeMembership.id,
-        role: activeMembership.role,
-        organizationId: activeMembership.organizationId,
-      }
+          id: activeMembership.id,
+          role: activeMembership.role,
+          organizationId: activeMembership.organizationId,
+        }
       : null;
 
     const userContext = {
-      ...user,
+      id: userRow.id,
+      email: userRow.email,
+      username: userRow.username,
+      name: userRow.name,
+      systemRole: userRow.systemRole,
+      isPlatformAdmin: userRow.isPlatformAdmin ?? false,
+      createdAt: userRow.createdAt,
+      lastLoginAt: userRow.lastLoginAt,
+      memberships,
       organizationRole: activeMembership?.role ?? null,
       organizationId: activeMembership?.organizationId ?? null,
+      needsOnboarding,
     };
 
-    // RBAC: zatím prázdné, později napojíš resolver
     const roles = activeMembership ? [activeMembership.role] : [];
     const permissionKeys = Object.values(PermissionKey);
     const permissionMap: Record<string, boolean> = activeMembership
       ? await this.rbac.canUserMultiple(
-          user.id,
+          userId,
           activeMembership.organizationId,
           permissionKeys,
         )
@@ -794,6 +916,64 @@ export class AuthService {
 
     const ctx = await this.getMeContext(userId, {
       organizationId: membership.organizationId,
+    });
+
+    return {
+      tokens,
+      user: ctx.user,
+      organization: ctx.organization,
+      membership: ctx.membership,
+      roles: ctx.roles,
+      permissions: ctx.permissions,
+    };
+  }
+
+  /**
+   * Switch active organization by membership ID. Issues new JWT; no DB write except audit.
+   * Invariant: API is always called with organizationId + membershipId from JWT.
+   */
+  async switchOrganization(userId: string, membershipId: string) {
+    const membership = await this.prisma.membership.findFirst({
+      where: { id: membershipId, userId, deletedAt: null },
+      select: {
+        id: true,
+        role: true,
+        organizationId: true,
+        organization: { select: { id: true, name: true, type: true } },
+      },
+    });
+
+    if (!membership) {
+      throw new ForbiddenException(
+        'Membership not found or does not belong to the current user',
+      );
+    }
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { lastActiveMembershipId: membershipId },
+    });
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+    if (!user) throw new UnauthorizedException('User not found');
+
+    const tokens = await this.generateTokens(
+      user,
+      membership as unknown as Membership,
+    );
+
+    await this.auditService.log({
+      action: 'SWITCH_ORGANIZATION',
+      entityType: AuditEntityType.ORGANIZATION,
+      userId,
+      organizationId: membership.organizationId,
+      entityId: membership.id,
+    });
+
+    const ctx = await this.getMeContext(userId, {
+      membershipId: membership.id,
     });
 
     return {

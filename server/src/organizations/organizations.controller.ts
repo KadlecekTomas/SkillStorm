@@ -30,6 +30,7 @@ import { CacheTTL } from '@nestjs/cache-manager';
 import { InvalidateScopes } from '@/common/cache/invalidate.decorator';
 import { Permission } from '@/modules/rbac/permission.decorator';
 import { ok } from '@/common/http/envelope';
+import { AllowAnyOrgStatus } from '@/common/decorators/allow-any-org-status.decorator';
 import { ApiStandardResponses } from '@/common/http/api-standard-responses.decorator';
 
 @ApiTags('organizations')
@@ -40,6 +41,7 @@ export class OrganizationsController {
   constructor(private readonly service: OrganizationsService) {}
 
   @Post()
+  @AllowAnyOrgStatus()
   @ApiOperation({
     summary:
       'Create organization (SCHOOL: any authenticated user, COMMUNITY: superadmin)',

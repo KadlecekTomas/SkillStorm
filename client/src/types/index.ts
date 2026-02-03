@@ -95,4 +95,5 @@ export type User = {
   permissions?: PermissionKey[];
   memberships?: MembershipSummary[];
   needsOnboarding?: boolean;
+  isPlatformAdmin?: boolean;
 };

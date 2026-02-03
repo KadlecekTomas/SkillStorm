@@ -7,4 +7,5 @@ export type JwtPayload = {
   organizationRole?: OrganizationRole;
   organizationId?: string;
   membershipId?: string;
+  isPlatformAdmin?: boolean;
 };

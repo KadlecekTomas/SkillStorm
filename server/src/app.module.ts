@@ -28,6 +28,8 @@ import { SubmissionsModule } from './submissions/submissions.module';
 import { RbacModule } from './modules/rbac/rbac.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { RbacGuard } from './modules/rbac/rbac.guard';
+import { RequireActiveOrganizationGuard } from './platform/require-active-organization.guard';
+import { RequireOrgReadyGuard } from './platform/require-org-ready.guard';
 import { RolesGuard } from './auth/guards/roles.guard';
 import { HealthModule } from './health/health.module';
 import { MetricsModule } from './metrics/metrics.module';
@@ -40,6 +42,7 @@ import { PrivacyModule } from './privacy/privacy.module';
 import { EnrollmentsModule } from './enrollments/enrollments.module';
 import { AcademicYearsModule } from './academic-years/academic-years.module';
 import { InvitesModule } from './invites/invites.module';
+import { PlatformModule } from './platform/platform.module';
 
 @Module({
   imports: [
@@ -94,12 +97,15 @@ import { InvitesModule } from './invites/invites.module';
     EnrollmentsModule,
     AcademicYearsModule,
     InvitesModule,
+    PlatformModule,
   ],
   providers: [
     { provide: APP_INTERCEPTOR, useClass: ResponseEnvelopeInterceptor },
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RbacGuard },
+    { provide: APP_GUARD, useClass: RequireActiveOrganizationGuard },
+    { provide: APP_GUARD, useClass: RequireOrgReadyGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
     { provide: APP_INTERCEPTOR, useClass: UserScopedCacheInterceptor },
     { provide: APP_INTERCEPTOR, useClass: InvalidateInterceptor },

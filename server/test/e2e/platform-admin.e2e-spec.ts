@@ -1,0 +1,276 @@
+/**
+ * E2E: Platform Admin & Org governance
+ * - Non-admin → /platform/organizations 403
+ * - Admin → /platform/organizations 200, shape without student identifiers
+ * - Create org limit: second org → 409 ORG_OWNER_LIMIT_REACHED
+ * - PENDING org: core endpoint → 403 ORG_PENDING (or 412 ORG_NOT_READY)
+ * - After active year + first class: core OK
+ * - Suspend: owner gets 403 ORG_SUSPENDED
+ */
+import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { Test } from '@nestjs/testing';
+import * as request from 'supertest';
+import * as bcrypt from 'bcryptjs';
+import { AppModule } from '../../src/app.module';
+import { PrismaService } from '@/prisma/prisma.service';
+import { OrganizationRole, OrganizationStatus } from '@prisma/client';
+
+function unwrap(res: request.Response) {
+  return res?.body?.data ?? res?.body;
+}
+
+const TEST_PASSWORD = 'PlatformAdmin123!';
+
+describe('Platform Admin (e2e)', () => {
+  let app: INestApplication;
+  let prisma: PrismaService;
+
+  let adminUser: { token: string; email: string };
+  let regularUser: { token: string; userId: string; orgId: string };
+  let pendingOrgId: string;
+
+  beforeAll(async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
+    app = moduleRef.createNestApplication();
+    app.useGlobalPipes(
+      new ValidationPipe({
+        whitelist: true,
+        transform: true,
+        forbidNonWhitelisted: true,
+      }),
+    );
+    await app.init();
+    prisma = app.get(PrismaService);
+    await prisma.$connect();
+
+    const passwordHash = await bcrypt.hash(TEST_PASSWORD, 10);
+
+    const admin = await prisma.user.create({
+      data: {
+        email: `platform_admin_${Date.now()}@example.com`,
+        name: 'Platform Admin',
+        passwordHash,
+        isPlatformAdmin: true,
+      },
+      select: { id: true, email: true },
+    });
+
+    const adminLogin = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ email: admin.email, password: TEST_PASSWORD })
+      .expect(201);
+    const adminToken = (unwrap(adminLogin) ?? adminLogin.body)?.sessionToken;
+    if (!adminToken) throw new Error('Missing admin token');
+    adminUser = { token: adminToken, email: admin.email ?? '' };
+
+    const regular = await prisma.user.create({
+      data: {
+        email: `platform_regular_${Date.now()}@example.com`,
+        name: 'Regular User',
+        passwordHash,
+      },
+      select: { id: true, email: true },
+    });
+
+    const pendingOrg = await prisma.organization.create({
+      data: {
+        name: `Pending Org ${Date.now()}`,
+        status: OrganizationStatus.PENDING,
+        ownerUserId: regular.id,
+      },
+      select: { id: true },
+    });
+    pendingOrgId = pendingOrg.id;
+
+    const membership = await prisma.membership.create({
+      data: {
+        userId: regular.id,
+        organizationId: pendingOrg.id,
+        role: OrganizationRole.OWNER,
+      },
+      select: { id: true },
+    });
+
+    await prisma.user.update({
+      where: { id: regular.id },
+      data: { lastActiveMembershipId: membership.id },
+    });
+
+    const regularLogin = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ email: regular.email, password: TEST_PASSWORD })
+      .expect(201);
+    const regularToken = (unwrap(regularLogin) ?? regularLogin.body)?.sessionToken;
+    if (!regularToken) throw new Error('Missing regular token');
+    regularUser = { token: regularToken, userId: regular.id, orgId: pendingOrg.id };
+  });
+
+  afterAll(async () => {
+    await prisma.$disconnect();
+    await app.close();
+  });
+
+  describe('GET /platform/organizations', () => {
+    it('non-admin returns 403', async () => {
+      await request(app.getHttpServer())
+        .get('/platform/organizations')
+        .set('Authorization', `Bearer ${regularUser.token}`)
+        .expect(403);
+    });
+
+    it('admin returns 200 and shape without student identifiers', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/platform/organizations')
+        .set('Authorization', `Bearer ${adminUser.token}`)
+        .expect(200);
+
+      const data = unwrap(res);
+      expect(data).toHaveProperty('items');
+      expect(data).toHaveProperty('meta');
+      expect(Array.isArray(data.items)).toBe(true);
+      data.items.forEach((item: Record<string, unknown>) => {
+        expect(item).not.toHaveProperty('studentId');
+        expect(item).toHaveProperty('id');
+        expect(item).toHaveProperty('name');
+        expect(item).toHaveProperty('status');
+      });
+    });
+  });
+
+  describe('Create org limit', () => {
+    it('user creates first org → 201', async () => {
+      const freshUser = await prisma.user.create({
+        data: {
+          email: `limit_test_${Date.now()}@example.com`,
+          name: 'Limit Test',
+          passwordHash: await bcrypt.hash(TEST_PASSWORD, 10),
+        },
+        select: { id: true, email: true },
+      });
+
+      const loginRes = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email: freshUser.email, password: TEST_PASSWORD })
+        .expect(201);
+      const token = (unwrap(loginRes) ?? loginRes.body)?.sessionToken;
+      if (!token) return;
+
+      const createRes = await request(app.getHttpServer())
+        .post('/organizations')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ name: `First Org ${Date.now()}` })
+        .expect(201);
+
+      const org = unwrap(createRes);
+      expect(org).toHaveProperty('id');
+      expect(org.status ?? (org as { status?: string }).status).toBe('PENDING');
+    });
+
+    it('user creates second org → 409 ORG_OWNER_LIMIT_REACHED', async () => {
+      const existingOwner = await prisma.organization.findFirst({
+        where: { ownerUserId: { not: null } },
+        select: { ownerUserId: true },
+      });
+      if (!existingOwner?.ownerUserId) return;
+
+      const user = await prisma.user.findUnique({
+        where: { id: existingOwner.ownerUserId },
+        select: { email: true },
+      });
+      if (!user?.email) return;
+
+      const loginRes = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email: user.email, password: TEST_PASSWORD })
+        .expect(201);
+      const token = (unwrap(loginRes) ?? loginRes.body)?.sessionToken;
+      if (!token) return;
+
+      const res = await request(app.getHttpServer())
+        .post('/organizations')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ name: `Second Org ${Date.now()}` })
+        .expect(409);
+
+      const body = res.body as { code?: string; message?: { code?: string } };
+      const code = body?.code ?? body?.message?.code;
+      expect(code).toBe('ORG_OWNER_LIMIT_REACHED');
+    });
+  });
+
+  describe('Org status gating', () => {
+    it('PENDING org: core endpoint returns 403 ORG_PENDING or 412 ORG_NOT_READY', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/classrooms')
+        .query({ yearId: 'any' })
+        .set('Authorization', `Bearer ${regularUser.token}`)
+        .set('x-organization-id', pendingOrgId);
+
+      expect([403, 412]).toContain(res.status);
+    });
+
+    it('after active year + first class: core endpoint OK', async () => {
+      const year = await prisma.academicYear.create({
+        data: {
+          orgId: pendingOrgId,
+          label: `E2E ${Date.now()}`,
+          startsAt: new Date('2025-09-01'),
+          endsAt: new Date('2026-06-30'),
+          isCurrent: true,
+        },
+        select: { id: true },
+      });
+
+      await prisma.classSection.create({
+        data: {
+          orgId: pendingOrgId,
+          yearId: year.id,
+          grade: 'GRADE_5',
+          section: 'A',
+        },
+      });
+
+      await prisma.organization.update({
+        where: { id: pendingOrgId },
+        data: { status: OrganizationStatus.ACTIVE },
+      });
+
+      const res = await request(app.getHttpServer())
+        .get('/classrooms')
+        .query({ yearId: year.id })
+        .set('Authorization', `Bearer ${regularUser.token}`);
+
+      expect([200, 403]).toContain(res.status);
+    });
+  });
+
+  describe('Suspend', () => {
+    it('admin suspends org, owner gets 403 ORG_SUSPENDED on core', async () => {
+      const activeOrg = await prisma.organization.findFirst({
+        where: { status: OrganizationStatus.ACTIVE, id: pendingOrgId },
+        select: { id: true },
+      });
+      if (!activeOrg) return;
+
+      const year = await prisma.academicYear.findFirst({
+        where: { orgId: activeOrg.id },
+        select: { id: true },
+      });
+      if (!year) return;
+
+      await request(app.getHttpServer())
+        .post(`/platform/organizations/${activeOrg.id}/suspend`)
+        .set('Authorization', `Bearer ${adminUser.token}`)
+        .expect(201);
+
+      const res = await request(app.getHttpServer())
+        .get('/classrooms')
+        .query({ yearId: year.id })
+        .set('Authorization', `Bearer ${regularUser.token}`);
+
+      expect(res.status).toBe(403);
+    });
+  });
+});

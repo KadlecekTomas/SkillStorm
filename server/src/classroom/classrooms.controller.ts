@@ -20,6 +20,7 @@ import { CreateClassSectionDto } from './dto/create-classroom.dto';
 import { QueryClassSectionsDto } from './dto/query-class-sections.dto';
 import { UseGuards } from '@nestjs/common';
 import { RequireActiveAcademicYearGuard } from '@/academic-years/require-active-academic-year.guard';
+import { AllowPendingOrg } from '@/common/decorators/allow-pending-org.decorator';
 
 @ApiTags('Classrooms')
 @ApiStandardResponses()
@@ -47,6 +48,7 @@ export class ClassroomsController {
   }
 
   @Post()
+  @AllowPendingOrg()
   @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'Create classroom for academic year' })
   create(@Body() dto: CreateClassSectionDto, @Req() req: RequestWithUser) {

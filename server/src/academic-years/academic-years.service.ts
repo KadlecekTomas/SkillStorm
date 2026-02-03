@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
@@ -81,10 +82,6 @@ export class AcademicYearsService {
           where: { orgId, isCurrent: true },
           select: { id: true },
         });
-
-        if (dto.isActive === true && existingActive) {
-          throw new ConflictException('Aktivní školní rok už existuje.');
-        }
 
         const shouldActivate = dto.isActive === true || !existingActive;
         if (shouldActivate) {
@@ -167,24 +164,20 @@ export class AcademicYearsService {
       orderBy: { startsAt: 'desc' },
     });
 
-    if (years.length === 0) {
-      throw new ConflictException({
-        code: 'NO_ACTIVE_ACADEMIC_YEAR',
-        message: 'Active academic year is not configured for this organization.',
-      });
-    }
-
-    if (years.length > 1) {
-      throw new ConflictException({
-        code: 'MULTIPLE_ACTIVE_ACADEMIC_YEARS',
-        message: 'Multiple academic years are marked as active.',
+    if (years.length === 0 || years.length > 1) {
+      throw new InternalServerErrorException({
+        code: 'ACADEMIC_YEAR_INVARIANT_BROKEN',
+        message:
+          years.length === 0
+            ? 'Active academic year is not configured for this organization.'
+            : 'Multiple academic years are marked as active.',
       });
     }
 
     const year = years[0];
     if (!year) {
-      throw new ConflictException({
-        code: 'NO_ACTIVE_ACADEMIC_YEAR',
+      throw new InternalServerErrorException({
+        code: 'ACADEMIC_YEAR_INVARIANT_BROKEN',
         message: 'Active academic year is not configured for this organization.',
       });
     }

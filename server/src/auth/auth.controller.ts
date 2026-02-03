@@ -32,6 +32,8 @@ import {
 } from './token-cookies';
 import { ok } from '@/common/http/envelope';
 import { UseOrgDto } from './dto/use-org.dto';
+import { SwitchOrganizationDto } from './dto/switch-organization.dto';
+import { AllowAnyOrgStatus } from '@/common/decorators/allow-any-org-status.decorator';
 import { ApiStandardResponses } from '@/common/http/api-standard-responses.decorator';
 
 @ApiTags('auth')
@@ -159,9 +161,11 @@ export class AuthController {
   @Get('me')
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
+  @AllowAnyOrgStatus()
   @ApiOperation({ summary: 'Get current user profile (auth context)' })
   async me(@Req() req: RequestWithUser) {
     const ctx = await this.authService.getMeContext(req.user.userId, {
+      membershipId: req.user.membershipId ?? null,
       organizationId: req.user.organizationId ?? null,
     });
 
@@ -194,9 +198,10 @@ export class AuthController {
 
 
   @Post('use-org')
+  @AllowAnyOrgStatus()
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  @ApiOperation({ summary: 'Switch active organization' })
+  @ApiOperation({ summary: 'Switch active organization (by orgId, persists lastActiveMembershipId)' })
   @Throttle({ default: { limit: 10, ttl: 60 } })
   async useOrganization(
     @Req() req: RequestWithUser,
@@ -206,6 +211,33 @@ export class AuthController {
     const result = await this.authService.useOrganization(
       req.user.userId,
       dto.orgId,
+    );
+    setAuthCookies(res, result.tokens);
+    setCsrfCookie(res, generateCsrfToken());
+    return ok({
+      user: result.user,
+      organization: result.organization,
+      membership: result.membership,
+      roles: result.roles ?? [],
+      permissions: result.permissions ?? [],
+      sessionToken: result.tokens.accessToken,
+    });
+  }
+
+  @Post('switch-organization')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @AllowAnyOrgStatus()
+  @ApiOperation({ summary: 'Switch active organization by membershipId (persists lastActiveMembershipId)' })
+  @Throttle({ default: { limit: 10, ttl: 60 } })
+  async switchOrganization(
+    @Req() req: RequestWithUser,
+    @Body() dto: SwitchOrganizationDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.authService.switchOrganization(
+      req.user.userId,
+      dto.membershipId,
     );
     setAuthCookies(res, result.tokens);
     setCsrfCookie(res, generateCsrfToken());

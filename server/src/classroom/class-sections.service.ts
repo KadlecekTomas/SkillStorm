@@ -14,7 +14,7 @@ import { assertSameOrganization } from '@/shared/access.utils';
 import type { UpdateClassroomDto } from './dto/update-classroom.dto';
 import type { QueryClassSectionsDto } from './dto/query-class-sections.dto';
 import type { SetHomeroomDto } from './dto/set-homeroom.dto';
-import { Prisma, OrganizationRole, SystemRole, EnrollmentStatus } from '@prisma/client';
+import { Prisma, OrganizationRole, OrganizationStatus, SystemRole, EnrollmentStatus } from '@prisma/client';
 import { hasAtLeastRole } from '@/shared/access.utils';
 
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
@@ -101,16 +101,28 @@ export class ClassSectionsService {
     }
 
     try {
-      const created = await this.prisma.classSection.create({
-        data: {
-          orgId: resolvedYear.orgId,
-          yearId: resolvedYear.id,
-          grade: dto.grade,
-          section: dto.section,
-          label: dto.label ?? `${this.getGradeLabel(dto.grade)}.${dto.section}`,
-          teacherId,
-          // TODO: Přidat studyField do modelu ClassSection a migrace
-        },
+      const created = await this.prisma.$transaction(async (tx) => {
+        const section = await tx.classSection.create({
+          data: {
+            orgId: resolvedYear.orgId,
+            yearId: resolvedYear.id,
+            grade: dto.grade,
+            section: dto.section,
+            label: dto.label ?? `${this.getGradeLabel(dto.grade)}.${dto.section}`,
+            teacherId,
+          },
+        });
+        const org = await tx.organization.findUnique({
+          where: { id: resolvedYear.orgId },
+          select: { status: true },
+        });
+        if (org?.status === OrganizationStatus.PENDING) {
+          await tx.organization.update({
+            where: { id: resolvedYear.orgId },
+            data: { status: OrganizationStatus.ACTIVE },
+          });
+        }
+        return section;
       });
 
       await bumpOrgVersion(

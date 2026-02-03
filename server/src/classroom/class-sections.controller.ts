@@ -27,6 +27,7 @@ import { Permission } from '@/modules/rbac/permission.decorator';
 import { ok } from '@/common/http/envelope';
 import { ApiStandardResponses } from '@/common/http/api-standard-responses.decorator';
 import { RequireActiveAcademicYearGuard } from '@/academic-years/require-active-academic-year.guard';
+import { AllowPendingOrg } from '@/common/decorators/allow-pending-org.decorator';
 
 @ApiTags('ClassSections')
 @ApiStandardResponses()
@@ -37,6 +38,7 @@ export class ClassSectionsController {
   constructor(private readonly service: ClassSectionsService) {}
 
   @Post()
+  @AllowPendingOrg()
   @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'Create class section' })
   @InvalidateScopes(({ result, req }) =>

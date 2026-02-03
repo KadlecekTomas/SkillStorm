@@ -16,13 +16,14 @@ import {
 import { httpClient, HttpError } from "@/lib/http/client";
 import { useAuth } from "@/hooks/use-auth";
 import { showToastOnce } from "@/utils/toast";
+import { ORG_OWNER_LIMIT_REACHED } from "@/lib/org-state";
 import type { OrganizationType } from "@/types";
 
 const DEFAULT_TYPE: OrganizationType = "SCHOOL";
 
 export const CreateOrganizationOnboardingScreen = (): React.JSX.Element => {
   const router = useRouter();
-  const { syncProfile } = useAuth();
+  const { syncProfile, hasOrganization, switchToOrganizationByOrgId } = useAuth();
   const [name, setName] = useState("");
   const [type, setType] = useState<OrganizationType>(DEFAULT_TYPE);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -39,21 +40,39 @@ export const CreateOrganizationOnboardingScreen = (): React.JSX.Element => {
       setError("Název organizace musí mít alespoň 3 znaky.");
       return;
     }
+    if (hasOrganization) {
+      setError("Již máš organizaci. Dokonči nastavení.");
+      router.replace("/onboarding/academic-year");
+      return;
+    }
     setIsSubmitting(true);
     setError(null);
     try {
-      const org = await httpClient.post<{ id: string; name: string }>("/organizations", {
+      const data = await httpClient.post<{ id: string; name: string }>("/organizations", {
         name: trimmedName,
         type,
       });
-      // Switch to new org and refresh tokens
-      await httpClient.post("/auth/use-org", { orgId: org.id });
-      await syncProfile({ force: true });
-      showToastOnce("Organizace byla vytvořena. Pokračuj nastavením školního roku.", {
+      const orgId = data?.id;
+      if (!orgId) {
+        setError("Organizace byla vytvořena, ale nepodařilo se přepnout kontext. Obnov stránku.");
+        return;
+      }
+      await switchToOrganizationByOrgId(orgId);
+      showToastOnce("Organizace byla vytvořena. Dokonči nastavení.", {
         type: "success",
       });
       router.replace("/onboarding/academic-year");
     } catch (err) {
+      const code =
+        err instanceof HttpError && err.data && typeof err.data === "object" && "code" in err.data
+          ? (err.data as { code?: string }).code
+          : null;
+      if (code === ORG_OWNER_LIMIT_REACHED) {
+        await syncProfile({ force: true });
+        showToastOnce("Organizace již existuje. Dokonči nastavení.", { type: "info" });
+        router.replace("/onboarding/academic-year");
+        return;
+      }
       const msg =
         err instanceof HttpError
           ? (err.data as { message?: string })?.message ?? err.message

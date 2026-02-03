@@ -14,6 +14,7 @@ import { PermissionKey } from '@prisma/client';
 import { RequestWithUser } from '@/types/request-with-user';
 import { ApiStandardResponses } from '@/common/http/api-standard-responses.decorator';
 import { ok } from '@/common/http/envelope';
+import { AllowPendingOrg } from '@/common/decorators/allow-pending-org.decorator';
 import { AcademicYearsService } from './academic-years.service';
 import { CreateAcademicYearDto } from './dto/create-academic-year.dto';
 
@@ -32,12 +33,14 @@ export class AcademicYearsController {
   }
 
   @Get('active')
+  @AllowPendingOrg()
   @ApiOperation({ summary: 'Get active academic year for organization' })
   getActive(@Req() req: RequestWithUser) {
     return ok(this.service.getActiveForOrgOrFail(req.user.organizationId ?? null));
   }
 
   @Post()
+  @AllowPendingOrg()
   @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'Create academic year' })
   create(@Body() dto: CreateAcademicYearDto, @Req() req: RequestWithUser) {

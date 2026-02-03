@@ -1,9 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { fetchWithAuth } from "@/lib/http/client";
 import { useAuthStore, type OrganizationContext } from "@/store/use-auth-store";
+import { useAcademicYearStore } from "@/store/use-academic-year-store";
+import { deriveOrgState, hasAnyOrganization, type OrgState } from "@/lib/org-state";
 import type { OrganizationRole, PermissionKey, User } from "@/types";
 import { showToastOnce } from "@/utils/toast";
 import { AUTH_DEBUG } from "@/utils/env";
@@ -16,6 +18,17 @@ type AuthEnvelope = {
   permissions: PermissionKey[];
 };
 
+type SwitchOrganizationResponse = AuthEnvelope & {
+  sessionToken?: string;
+  organization?: OrganizationContext | null;
+  membership?: { id: string; role: OrganizationRole; organizationId: string } | null;
+};
+
+type UseOrgResponse = AuthEnvelope & {
+  sessionToken?: string;
+  organization?: OrganizationContext | null;
+};
+
 export type UseAuthResult = {
   user: User | null;
   org: OrganizationContext | null;
@@ -23,7 +36,10 @@ export type UseAuthResult = {
   permissions: PermissionKey[];
   isLoading: boolean;
   isAuthenticated: boolean;
+  /** True pokud má uživatel alespoň jednu organizaci (membership). Zdroj: /auth/me. */
   hasOrganization: boolean;
+  /** Stav organizace odvozený výhradně z /auth/me. */
+  orgState: OrgState;
   authStatus:
     | "anonymous"
     | "authenticating"
@@ -34,7 +50,10 @@ export type UseAuthResult = {
   login: (payload: LoginPayload) => Promise<void>;
   logout: () => Promise<void>;
   syncProfile: (options?: { force?: boolean }) => Promise<AuthEnvelope>;
-  switchOrganization: (orgId: string) => Promise<void>;
+  /** Switch active organization by membershipId. New JWT, no reload, clear org caches, navigate to dashboard. */
+  switchOrganization: (membershipId: string) => Promise<void>;
+  /** Switch active organization by orgId (e.g. after creating org). Calls POST /auth/use-org, updates token + profile. No redirect. */
+  switchToOrganizationByOrgId: (orgId: string) => Promise<void>;
 };
 
 
@@ -51,6 +70,7 @@ const PUBLIC_ROUTES = ["/login", "/register", "/forgot-password"];
 
 export const useAuth = (): UseAuthResult => {
   const pathname = usePathname();
+  const router = useRouter();
   const syncRef = useRef<Promise<AuthEnvelope> | null>(null);
   const refreshAttemptedRef = useRef(false);
   const {
@@ -255,11 +275,36 @@ export const useAuth = (): UseAuthResult => {
   }, [clearStore, org?.id, setSessionToken, setHadSession, setAuthStatus]);
 
   const switchOrganization = useCallback(
-    async (orgId: string) => {
+    async (membershipId: string) => {
+      const previousOrgId = org?.id ?? null;
       setLoading(true);
       try {
-        await fetchWithAuth("POST", "/auth/use-org", { body: { orgId } });
-        await syncProfile({ force: true });
+        const res = await fetchWithAuth<SwitchOrganizationResponse>(
+          "POST",
+          "/auth/switch-organization",
+          { body: { membershipId }, skipAuthRetry: true },
+        );
+        if (typeof res?.sessionToken === "string") {
+          setSessionToken(res.sessionToken);
+        }
+        const nextOrg = res?.organization ?? res?.org ?? null;
+        const nextUser = res?.user ?? null;
+        const nextRoles = res?.roles ?? [];
+        const nextPermissions = res?.permissions ?? [];
+        setProfile({
+          user: nextUser ?? null,
+          org: nextOrg,
+          roles: nextRoles,
+          permissions: nextPermissions,
+        });
+        if (previousOrgId) {
+          useAcademicYearStore.getState().clearOrg(previousOrgId);
+        }
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem("skillstorm_activeMembershipId", membershipId);
+          window.localStorage.setItem("skillstorm_activeMembershipSwitchedAt", String(Date.now()));
+        }
+        router.replace("/dashboard");
         showToastOnce("Přepnuli jsme aktivní organizaci.", {
           type: "info",
         });
@@ -270,10 +315,51 @@ export const useAuth = (): UseAuthResult => {
         setLoading(false);
       }
     },
-    [setLoading, syncProfile],
+    [org?.id, setLoading, setSessionToken, setProfile, router],
   );
 
-  const hasOrganization = Boolean(org?.id);
+  const switchToOrganizationByOrgId = useCallback(
+    async (orgId: string) => {
+      const previousOrgId = org?.id ?? null;
+      setLoading(true);
+      try {
+        const res = await fetchWithAuth<UseOrgResponse>("POST", "/auth/use-org", {
+          body: { orgId },
+          skipAuthRetry: true,
+        });
+        if (typeof res?.sessionToken === "string") {
+          setSessionToken(res.sessionToken);
+        }
+        const nextOrg = res?.organization ?? res?.org ?? null;
+        setProfile({
+          user: res?.user ?? user,
+          org: nextOrg,
+          roles: res?.roles ?? [],
+          permissions: res?.permissions ?? [],
+        });
+        if (previousOrgId) {
+          useAcademicYearStore.getState().clearOrg(previousOrgId);
+        }
+      } finally {
+        setLoading(false);
+      }
+    },
+    [org?.id, user, setLoading, setSessionToken, setProfile],
+  );
+
+  const hasOrganization = hasAnyOrganization({
+    memberships: user?.memberships,
+    organization: org,
+  });
+
+  const orgState = useMemo(
+    () =>
+      deriveOrgState({
+        memberships: user?.memberships,
+        organization: org,
+      }),
+    [user?.memberships, org],
+  );
 
   const value = useMemo(
     () => ({
@@ -288,12 +374,14 @@ export const useAuth = (): UseAuthResult => {
         authStatus === "refreshing",
       isAuthenticated: authStatus === "authenticated",
       hasOrganization,
+      orgState,
       authStatus,
       isOffline: offline,
       login,
       logout,
       syncProfile,
       switchOrganization,
+      switchToOrganizationByOrgId,
     }),
     [
       user,
@@ -305,10 +393,12 @@ export const useAuth = (): UseAuthResult => {
       hydrated,
       offline,
       hasOrganization,
+      orgState,
       login,
       logout,
       syncProfile,
       switchOrganization,
+      switchToOrganizationByOrgId,
     ],
   );
 

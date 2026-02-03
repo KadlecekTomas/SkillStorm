@@ -16,6 +16,7 @@ import {
 import { BaseModal } from "@/components/modals/base-modal";
 import { fetchWithAuth, httpClient, HttpError } from "@/lib/http/client";
 import { useAuth } from "@/hooks/use-auth";
+import { ORG_OWNER_LIMIT_REACHED } from "@/lib/org-state";
 import { useAuthStore } from "@/store/use-auth-store";
 import { useAcademicYearStore } from "@/store/use-academic-year-store";
 import { showToastOnce } from "@/utils/toast";
@@ -37,7 +38,7 @@ type InvitePreview = {
 
 export const NoOrganizationScreen = (): React.JSX.Element => {
   const router = useRouter();
-  const { syncProfile } = useAuth();
+  const { syncProfile, hasOrganization, switchToOrganizationByOrgId } = useAuth();
   const clearOrg = useAcademicYearStore((s) => s.clearOrg);
   const [modalOpen, setModalOpen] = useState(false);
   const [joinModalOpen, setJoinModalOpen] = useState(false);
@@ -74,21 +75,43 @@ export const NoOrganizationScreen = (): React.JSX.Element => {
       setErrorMessage("Zadej prosím název organizace.");
       return;
     }
+    if (hasOrganization) {
+      setErrorMessage("Již máš organizaci. Dokonči nastavení.");
+      await syncProfile({ force: true });
+      setModalOpen(false);
+      router.replace("/onboarding/academic-year");
+      return;
+    }
     setIsSubmitting(true);
     setErrorMessage(null);
     try {
-      const org = await httpClient.post<{ id: string }, CreateOrganizationPayload>("/organizations", {
+      const data = await httpClient.post<{ id: string }, CreateOrganizationPayload>("/organizations", {
         name: trimmed,
       });
-      await httpClient.post("/auth/use-org", { orgId: org.id });
-      await syncProfile({ force: true });
-      showToastOnce("Organizace je připravena. Pokračuj nastavením školního roku.", {
+      const orgId = data?.id;
+      if (!orgId) {
+        setErrorMessage("Organizace byla vytvořena, ale nepodařilo se přepnout kontext. Obnov stránku.");
+        return;
+      }
+      await switchToOrganizationByOrgId(orgId);
+      showToastOnce("Organizace byla vytvořena. Dokonči nastavení.", {
         type: "success",
       });
       setModalOpen(false);
       setOrgName("");
       router.replace("/onboarding/academic-year");
     } catch (error) {
+      const code =
+        error instanceof HttpError && error.data && typeof error.data === "object" && "code" in error.data
+          ? (error.data as { code?: string }).code
+          : null;
+      if (code === ORG_OWNER_LIMIT_REACHED) {
+        await syncProfile({ force: true });
+        showToastOnce("Organizace již existuje. Dokonči nastavení.", { type: "info" });
+        setModalOpen(false);
+        router.replace("/onboarding/academic-year");
+        return;
+      }
       setErrorMessage("Nepodařilo se vytvořit organizaci. Zkus to prosím znovu.");
       showToastOnce("Organizaci se nepodařilo vytvořit.", { type: "error" });
     } finally {

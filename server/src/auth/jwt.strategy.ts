@@ -61,50 +61,72 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
     if (revoked) throw new UnauthorizedException('Token has been revoked');
 
+    const userId = payload.userId ?? payload.sub;
+    if (!userId) throw new UnauthorizedException('User not found');
+
     const user = await this.prisma.user.findUnique({
-      where: { id: payload.userId ?? payload.sub },
+      where: { id: userId },
       select: {
         id: true,
         email: true,
         username: true,
         name: true,
         systemRole: true,
-        memberships: {
-          where: { deletedAt: null },
-          select: { organizationId: true, role: true },
-        },
+        isPlatformAdmin: true,
       },
     });
     if (!user) throw new UnauthorizedException('User not found');
 
-    // Preferuj org z query/body (list/create), jinak nech payload, jinak první členství
-    const requestedOrgId =
-      (req.query?.organizationId as string) ??
-      (req.body as any)?.organizationId ??
-      null;
+    let organizationRole: string | null = null;
+    let organizationId: string | null = null;
+    let membershipId: string | null = null;
 
-    let organizationRole = payload.organizationRole ?? payload.role ?? null;
-    let organizationId = payload.organizationId ?? null;
-
-    if (requestedOrgId) {
-      const m = user.memberships?.find(
-        (x) => x.organizationId === requestedOrgId,
-      );
-      if (m) {
-        organizationRole = m.role;
-        organizationId = m.organizationId;
-      } else {
-        throw new ForbiddenException({
-          statusCode: 403,
-          message: 'Forbidden: organization scope not allowed for user',
-        });
+    if (payload.membershipId) {
+      const membership = await this.prisma.membership.findFirst({
+        where: {
+          id: payload.membershipId,
+          userId: user.id,
+          deletedAt: null,
+        },
+        select: { id: true, organizationId: true, role: true },
+      });
+      if (!membership) {
+        throw new UnauthorizedException('Invalid token: membership not found or revoked');
       }
-    }
-    if (!organizationRole && user.memberships?.length) {
-      const firstMembership = user.memberships[0];
-      if (firstMembership) {
-        organizationRole = firstMembership.role;
-        organizationId = firstMembership.organizationId;
+      organizationId = membership.organizationId;
+      organizationRole = membership.role;
+      membershipId = membership.id;
+    } else {
+      const memberships = await this.prisma.membership.findMany({
+        where: { userId: user.id, deletedAt: null },
+        orderBy: { createdAt: 'asc' },
+        select: { id: true, organizationId: true, role: true },
+      });
+
+      const requestedOrgId =
+        (req.query?.organizationId as string) ??
+        (req.body as any)?.organizationId ??
+        null;
+
+      if (requestedOrgId) {
+        const m = memberships.find((x) => x.organizationId === requestedOrgId);
+        if (m) {
+          organizationRole = m.role;
+          organizationId = m.organizationId;
+          membershipId = m.id;
+        } else {
+          throw new ForbiddenException({
+            statusCode: 403,
+            message: 'Forbidden: organization scope not allowed for user',
+          });
+        }
+      } else {
+        const first = memberships[0];
+        if (first) {
+          organizationRole = first.role;
+          organizationId = first.organizationId;
+          membershipId = null;
+        }
       }
     }
 
@@ -117,6 +139,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       systemRole: user.systemRole,
       organizationRole: organizationRole ?? null,
       organizationId: organizationId ?? null,
+      membershipId: membershipId ?? null,
+      isPlatformAdmin: user.isPlatformAdmin ?? false,
     };
   }
 }
