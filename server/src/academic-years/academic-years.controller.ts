@@ -39,6 +39,14 @@ export class AcademicYearsController {
     return ok(this.service.getActiveForOrgOrFail(req.user.organizationId ?? null));
   }
 
+  @Get('current')
+  @AllowPendingOrg()
+  @ApiOperation({ summary: 'Get current academic year (id + name only, single source of truth)' })
+  async getCurrent(@Req() req: RequestWithUser) {
+    const year = await this.service.getActiveForOrgOrFail(req.user.organizationId ?? null);
+    return ok({ id: year.id, name: year.name });
+  }
+
   @Post()
   @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'Create academic year' })

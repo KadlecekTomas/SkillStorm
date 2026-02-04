@@ -32,13 +32,9 @@ export const DashboardLayout = ({ children }: DashboardLayoutProps): React.JSX.E
   const activeMembershipId =
     memberships.find((m) => m.organizationId === org?.id)?.id ?? "";
   const {
-    years,
     selectedYear,
-    isReadOnly,
-    setSelectedYearId,
     yearConfigError,
     bootstrapState,
-    loading: yearsLoading,
   } = useAcademicYears();
 
   useEffect(() => {
@@ -98,11 +94,23 @@ export const DashboardLayout = ({ children }: DashboardLayoutProps): React.JSX.E
     <MainLayout>
       <div className="space-y-3 rounded-3xl border border-dashed border-slate-200 bg-white/70 px-6 py-4">
         <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <p className="text-sm text-slate-500">You are viewing the</p>
-            <p className="text-lg font-semibold text-slate-900 capitalize">
-              {role} experience
-            </p>
+          <div className="flex flex-wrap items-baseline gap-4">
+            {hasOrganization && (
+              <p className="text-base font-medium text-slate-700" aria-label="Aktuální školní rok">
+                Školní rok{" "}
+                {bootstrapState === "READY" && selectedYear
+                  ? selectedYear.name
+                  : bootstrapState === "LOADING" || bootstrapState === "INIT"
+                    ? "…"
+                    : "—"}
+              </p>
+            )}
+            <div>
+              <p className="text-sm text-slate-500">You are viewing the</p>
+              <p className="text-lg font-semibold text-slate-900 capitalize">
+                {role} experience
+              </p>
+            </div>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             {memberships.length > 1 && (
@@ -127,28 +135,6 @@ export const DashboardLayout = ({ children }: DashboardLayoutProps): React.JSX.E
                   ))}
                 </SelectContent>
               </Select>
-            )}
-            {hasOrganization && years.length > 0 && (
-              <Select
-                value={selectedYear?.id ?? ""}
-                onValueChange={(value) => setSelectedYearId(value)}
-                disabled={yearsLoading || !!yearConfigError || bootstrapState !== "READY"}
-              >
-                <SelectTrigger className="w-48 rounded-2xl" aria-label="Academic year">
-                  <SelectValue placeholder="Školní rok" />
-                </SelectTrigger>
-                <SelectContent>
-                  {years.map((year) => (
-                    <SelectItem key={year.id} value={year.id}>
-                      {year.name}
-                      {!year.isActive ? " · read-only" : ""}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-            {hasOrganization && selectedYear && isReadOnly && (
-              <Badge variant="warning">Read-only rok</Badge>
             )}
             <Badge variant="success" className="capitalize">
               {role}

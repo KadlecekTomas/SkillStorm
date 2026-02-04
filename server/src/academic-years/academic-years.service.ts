@@ -3,7 +3,6 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
-  InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
@@ -159,21 +158,25 @@ export class AcademicYearsService {
       orderBy: { startsAt: 'desc' },
     });
 
-    if (years.length === 0 || years.length > 1) {
-      throw new InternalServerErrorException({
-        code: 'ACADEMIC_YEAR_INVARIANT_BROKEN',
-        message:
-          years.length === 0
-            ? 'Active academic year is not configured for this organization.'
-            : 'Multiple academic years are marked as active.',
+    if (years.length === 0) {
+      throw new ConflictException({
+        message: 'Active academic year is not configured for this organization.',
+        meta: { code: 'NO_ACTIVE_ACADEMIC_YEAR' },
+      });
+    }
+
+    if (years.length > 1) {
+      throw new ConflictException({
+        message: 'Multiple academic years are marked as active.',
+        meta: { code: 'MULTIPLE_ACTIVE_ACADEMIC_YEARS' },
       });
     }
 
     const year = years[0];
     if (!year) {
-      throw new InternalServerErrorException({
-        code: 'ACADEMIC_YEAR_INVARIANT_BROKEN',
+      throw new ConflictException({
         message: 'Active academic year is not configured for this organization.',
+        meta: { code: 'ACADEMIC_YEAR_INVARIANT_BROKEN' },
       });
     }
 

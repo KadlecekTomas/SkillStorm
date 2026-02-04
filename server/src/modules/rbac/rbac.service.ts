@@ -1,7 +1,7 @@
 import type { OnModuleDestroy } from '@nestjs/common';
 import { Injectable, Logger } from '@nestjs/common';
-import type { OrganizationRole, PermissionKey } from '@prisma/client';
-import { SystemRole } from '@prisma/client';
+import type { PermissionKey } from '@prisma/client';
+import { OrganizationRole, SystemRole } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
 import type { CacheEntry } from './rbac.types';
 import type { RbacInvalidatePayload } from './rbac.events';
@@ -87,6 +87,12 @@ export class RbacService implements OnModuleDestroy {
       return false;
     }
 
+    // Invariant: OWNER has full access; bypass all permission checks.
+    if (membership.role === OrganizationRole.OWNER) {
+      this.setCache(cacheKey, userId, organizationId, true);
+      return true;
+    }
+
     const rolePermission = await this.prisma.rolePermission.findFirst({
       where: {
         role: membership.role,
@@ -96,6 +102,7 @@ export class RbacService implements OnModuleDestroy {
           { organizationId: null },
         ],
       },
+      orderBy: { organizationId: 'desc' }, // prefer org-specific over global
       select: { allowed: true },
     });
 

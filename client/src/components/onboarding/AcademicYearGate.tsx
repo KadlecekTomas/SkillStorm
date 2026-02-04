@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { fetchActiveAcademicYear } from "@/lib/api/academic-years";
+import { fetchCurrentAcademicYear } from "@/lib/api/academic-years";
 import { HttpError } from "@/lib/http/client";
 import { useAuth } from "@/hooks/use-auth";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
@@ -53,7 +53,7 @@ export const AcademicYearGate = ({ children }: AcademicYearGateProps): ReactNode
     }
 
     let cancelled = false;
-    fetchActiveAcademicYear()
+    fetchCurrentAcademicYear()
       .then(() => {
         if (cancelled) return;
         setStatus("allowed");

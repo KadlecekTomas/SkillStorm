@@ -5,7 +5,7 @@ import { fetchWithAuth, HttpError } from "@/lib/http/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useAcademicYearStore } from "@/store/use-academic-year-store";
 import type { AcademicYear } from "@/types";
-import { fetchActiveAcademicYear } from "@/lib/api/academic-years";
+import { fetchCurrentAcademicYear } from "@/lib/api/academic-years";
 
 type UseAcademicYearsResult = {
   years: AcademicYear[];
@@ -33,6 +33,7 @@ export const useAcademicYears = (): UseAcademicYearsResult => {
   const [error, setError] = useState<string | null>(null);
   const [yearConfigError, setYearConfigError] = useState<string | null>(null);
 
+  const [currentYear, setCurrentYear] = useState<{ id: string; name: string } | null>(null);
   const selectedByOrg = useAcademicYearStore((state) => state.selectedByOrg);
   const setSelected = useAcademicYearStore((state) => state.setSelected);
   const clearOrg = useAcademicYearStore((state) => state.clearOrg);
@@ -80,6 +81,7 @@ export const useAcademicYears = (): UseAcademicYearsResult => {
   useEffect(() => {
     if (!orgId) {
       setYears([]);
+      setCurrentYear(null);
       setError(null);
       setYearConfigError(null);
       setBootstrapState("INIT");
@@ -90,20 +92,23 @@ export const useAcademicYears = (): UseAcademicYearsResult => {
 
   useEffect(() => {
     if (!orgId) return;
-    if (selectedYearId && !years.some((year) => year.id === selectedYearId)) {
+    if (currentYear && selectedYearId === currentYear.id) return;
+    if (selectedYearId && years.length > 0 && !years.some((year) => year.id === selectedYearId)) {
       clearOrg(orgId);
     }
-  }, [orgId, selectedYearId, years, clearOrg]);
+  }, [orgId, selectedYearId, years, currentYear, clearOrg]);
 
   useEffect(() => {
     if (!orgId) return;
     setBootstrapState("LOADING");
+    setCurrentYear(null);
     let cancelled = false;
     const activeOrgId = orgId;
-    fetchActiveAcademicYear()
-      .then((active) => {
+    fetchCurrentAcademicYear()
+      .then((current) => {
         if (cancelled) return;
-        setSelected(activeOrgId, active.id);
+        setCurrentYear(current);
+        setSelected(activeOrgId, current.id);
         setYearConfigError(null);
         setBootstrapState("READY");
       })
@@ -111,9 +116,10 @@ export const useAcademicYears = (): UseAcademicYearsResult => {
         if (cancelled) return;
         const data = err instanceof HttpError ? (err.data as { code?: string; meta?: { code?: string } } | undefined) : undefined;
         const code =
-          err instanceof HttpError && (err.status === 409 || err.status === 500)
-            ? data?.code ?? data?.meta?.code ?? null
+          err instanceof HttpError && (err.status === 409 || err.status === 403 || err.status === 500)
+            ? data?.meta?.code ?? data?.code ?? null
             : "ACTIVE_YEAR_FETCH_FAILED";
+        setCurrentYear(null);
         clearOrg(activeOrgId);
         setYearConfigError(code ?? "UNKNOWN");
         setBootstrapState("ERROR");
@@ -125,12 +131,18 @@ export const useAcademicYears = (): UseAcademicYearsResult => {
     };
   }, [orgId, setSelected, clearOrg]);
 
-  const selectedYear = useMemo(
-    () => years.find((year) => year.id === selectedYearId) ?? null,
-    [years, selectedYearId],
-  );
-
-  const effectiveSelectedYear = bootstrapState === "READY" ? selectedYear : null;
+  const effectiveSelectedYear = useMemo((): AcademicYear | null => {
+    if (bootstrapState !== "READY" || !currentYear || !orgId) return null;
+    return {
+      id: currentYear.id,
+      name: currentYear.name,
+      organizationId: orgId,
+      startDate: "",
+      endDate: "",
+      isActive: true,
+      createdAt: "",
+    };
+  }, [bootstrapState, currentYear, orgId]);
   const activeYear = effectiveSelectedYear;
   const isReadOnly = effectiveSelectedYear ? !effectiveSelectedYear.isActive : false;
 

@@ -33,6 +33,11 @@ export class RbacGuard implements CanActivate {
       });
     }
 
+    // Invariant: OWNER has full access to all org resources; never apply permission checks.
+    if (user.organizationRole === OrganizationRole.OWNER) {
+      return true;
+    }
+
     const organizationId =
       req.params?.organizationId ??
       req.query?.organizationId ??

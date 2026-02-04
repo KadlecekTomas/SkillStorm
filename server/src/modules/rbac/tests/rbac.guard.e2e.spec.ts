@@ -4,7 +4,7 @@ import { Controller, Get } from '@nestjs/common';
 import type { Request, Response, NextFunction } from 'express';
 import * as request from 'supertest';
 import { Permission } from '@/modules/rbac/permission.decorator';
-import { PermissionKey } from '@prisma/client';
+import { OrganizationRole, PermissionKey } from '@prisma/client';
 import { RbacGuard } from '@/modules/rbac/rbac.guard';
 import { APP_GUARD } from '@nestjs/core';
 import { RbacService } from '@/modules/rbac/rbac.service';
@@ -68,5 +68,17 @@ describe('RbacGuard (e2e-like)', () => {
     canUser.mockResolvedValue(false);
 
     await request(app.getHttpServer()).get('/secure').expect(403);
+  });
+
+  it('OWNER bypass: allows access without calling canUser', async () => {
+    currentUser = {
+      userId: 'owner-1',
+      organizationId: 'org-1',
+      organizationRole: OrganizationRole.OWNER,
+    };
+    canUser.mockClear();
+
+    await request(app.getHttpServer()).get('/secure').expect(200);
+    expect(canUser).not.toHaveBeenCalled();
   });
 });

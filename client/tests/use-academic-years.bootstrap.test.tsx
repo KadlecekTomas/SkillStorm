@@ -10,7 +10,7 @@ import { useAcademicYearStore } from "@/store/use-academic-year-store";
 const activeDeferred: { resolve?: (value: any) => void } = {};
 
 vi.mock("@/lib/api/academic-years", () => ({
-  fetchActiveAcademicYear: vi.fn(
+  fetchCurrentAcademicYear: vi.fn(
     () => new Promise((resolve) => {
       activeDeferred.resolve = resolve;
     }),
@@ -59,7 +59,7 @@ describe("useAcademicYears bootstrap gating", () => {
     });
   });
 
-  it("does not fetch classrooms until /academic-years/active resolves", async () => {
+  it("does not fetch classrooms until current academic year resolves", async () => {
     render(<ClassroomsPageContent />);
 
     await waitFor(() => {
@@ -70,7 +70,7 @@ describe("useAcademicYears bootstrap gating", () => {
       vi.mocked(fetchWithAuth).mock.calls.some((call) => call[1] === "/classrooms"),
     ).toBe(false);
 
-    activeDeferred.resolve?.({ id: "year-1", name: "2024/25", isActive: true });
+    activeDeferred.resolve?.({ id: "year-1", name: "2024/25" });
 
     await waitFor(() => {
       expect(fetchWithAuth).toHaveBeenCalledWith("GET", "/classrooms", {
