@@ -312,14 +312,9 @@ export function ClassroomsPageContent(): React.JSX.Element {
     try {
       const now = new Date();
       const startYear = now.getMonth() >= 8 ? now.getFullYear() : now.getFullYear() - 1;
-      const endYear = startYear + 1;
-      const startDate = new Date(`${startYear}-09-01T00:00:00.000Z`);
-      const endDate = new Date(`${endYear}-06-30T00:00:00.000Z`);
       const created = await fetchWithAuth<{ id: string }>("POST", "/academic-years", {
         body: {
-          name: `${startYear}/${endYear}`,
-          startDate: startDate.toISOString(),
-          endDate: endDate.toISOString(),
+          startYear,
           isActive: true,
         },
       });

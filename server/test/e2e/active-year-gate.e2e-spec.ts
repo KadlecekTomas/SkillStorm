@@ -63,7 +63,7 @@ describe('Active academic year gate (e2e)', () => {
         orgId: director.orgId,
         label: 'Gate 2026/27',
         startsAt: new Date('2026-09-01'),
-        endsAt: new Date('2027-06-30'),
+        endsAt: new Date('2027-08-31'),
         isCurrent: false,
       },
       select: { id: true },

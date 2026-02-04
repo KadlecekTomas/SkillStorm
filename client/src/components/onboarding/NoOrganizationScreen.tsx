@@ -19,7 +19,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { ORG_OWNER_LIMIT_REACHED } from "@/lib/org-state";
 import { useAuthStore } from "@/store/use-auth-store";
 import { useAcademicYearStore } from "@/store/use-academic-year-store";
-import { showToastOnce } from "@/utils/toast";
+import { showToastOnce, resolveToastFromHttpError } from "@/utils/toast";
 
 type CreateOrganizationPayload = {
   name: string;
@@ -85,9 +85,12 @@ export const NoOrganizationScreen = (): React.JSX.Element => {
     setIsSubmitting(true);
     setErrorMessage(null);
     try {
-      const data = await httpClient.post<{ id: string }, CreateOrganizationPayload>("/organizations", {
-        name: trimmed,
-      });
+      const data = await httpClient.post<{ id: string; type?: "SCHOOL" | "COMMUNITY" | "PRIVATE" }, CreateOrganizationPayload>(
+        "/organizations",
+        {
+          name: trimmed,
+        },
+      );
       const orgId = data?.id;
       if (!orgId) {
         setErrorMessage("Organizace byla vytvořena, ale nepodařilo se přepnout kontext. Obnov stránku.");
@@ -99,7 +102,12 @@ export const NoOrganizationScreen = (): React.JSX.Element => {
       });
       setModalOpen(false);
       setOrgName("");
-      router.replace("/onboarding/academic-year");
+      const effectiveType = data?.type ?? "SCHOOL";
+      if (effectiveType === "SCHOOL") {
+        router.replace("/onboarding/pending");
+      } else {
+        router.replace("/onboarding/academic-year");
+      }
     } catch (error) {
       const code =
         error instanceof HttpError && error.data && typeof error.data === "object" && "code" in error.data
@@ -113,7 +121,7 @@ export const NoOrganizationScreen = (): React.JSX.Element => {
         return;
       }
       setErrorMessage("Nepodařilo se vytvořit organizaci. Zkus to prosím znovu.");
-      showToastOnce("Organizaci se nepodařilo vytvořit.", { type: "error" });
+      // Onboarding chybu zobrazíme inline, bez error toastu.
     } finally {
       setIsSubmitting(false);
     }
@@ -133,8 +141,16 @@ export const NoOrganizationScreen = (): React.JSX.Element => {
       setPreview(data);
       setJoinStep("preview");
     } catch (err) {
-      const msg = err instanceof HttpError ? (err.data as { message?: string })?.message ?? err.message : "Pozvánku se nepodařilo načíst.";
-      setJoinErrorMessage(msg);
+      if (err instanceof HttpError) {
+        const resolved = resolveToastFromHttpError(err);
+        setJoinErrorMessage(
+          resolved.message ?? "Pozvánku se nepodařilo načíst. Zkontroluj prosím kód a zkus to znovu.",
+        );
+      } else if (err instanceof Error && err.message.trim().length > 0) {
+        setJoinErrorMessage(err.message);
+      } else {
+        setJoinErrorMessage("Pozvánku se nepodařilo načíst. Zkus to prosím znovu.");
+      }
     } finally {
       setPreviewLoading(false);
     }
@@ -166,9 +182,17 @@ export const NoOrganizationScreen = (): React.JSX.Element => {
       setJoinStep("code");
       router.replace("/dashboard");
     } catch (err) {
-      const msg = err instanceof HttpError ? (err.data as { message?: string })?.message ?? err.message : "Připojení se nezdařilo.";
-      setJoinErrorMessage(msg);
-      showToastOnce(msg, { type: "error" });
+      if (err instanceof HttpError) {
+        const resolved = resolveToastFromHttpError(err);
+        setJoinErrorMessage(
+          resolved.message ?? "Připojení se nezdařilo. Zkus to prosím znovu nebo požádej ředitele o nový kód.",
+        );
+      } else if (err instanceof Error && err.message.trim().length > 0) {
+        setJoinErrorMessage(err.message);
+      } else {
+        setJoinErrorMessage("Připojení se nezdařilo. Zkus to prosím znovu.");
+      }
+      // Onboarding join chyby zobrazujeme inline, bez error toastu.
     } finally {
       setJoinSubmitting(false);
     }

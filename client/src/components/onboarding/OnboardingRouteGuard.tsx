@@ -8,11 +8,15 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 const CREATE_ORG_PATH = "/onboarding/create-organization";
 const ACADEMIC_YEAR_PATH = "/onboarding/academic-year";
+const PENDING_ORG_PATH = "/onboarding/pending";
 
 /**
- * Route guard for onboarding flow:
- * - create-organization: only for users WITHOUT org. If has org → academic-year
- * - academic-year: only for OWNER WITH org. If no org → create-organization. If not OWNER → dashboard
+ * Route guard pro onboarding flow:
+ * - create-organization: pouze pro uživatele BEZ organizace. Pokud má org → stavové routování podle orgState.
+ * - pending: pouze pro SCHOOL organizace ve stavu PENDING.
+ * - academic-year: pouze pro OWNER s ACTIVE/HAS_ORG organizací. PENDING SCHOOL je přesměrována na /onboarding/pending.
+ *
+ * Klient nikdy nenutí PENDING SCHOOL organizaci k vytvoření školního roku.
  */
 export function OnboardingRouteGuard({
   children,
@@ -21,37 +25,63 @@ export function OnboardingRouteGuard({
 }): ReactNode {
   const router = useRouter();
   const pathname = usePathname();
-  const { user, org, isLoading } = useAuth();
+  const { user, org, orgState, isLoading } = useAuth();
   const [ready, setReady] = useState(false);
 
   const hasOrganization = Boolean(org?.id);
   const isOwner = user?.organizationRole === "OWNER";
+  const orgType = org?.type;
+  const isSchool = orgType === "SCHOOL";
 
   useEffect(() => {
     if (isLoading) return;
 
     const path = pathname ?? "";
 
-    if (path === CREATE_ORG_PATH) {
-      if (hasOrganization) {
-        router.replace(ACADEMIC_YEAR_PATH);
-        return;
-      }
-    }
-
-    if (path === ACADEMIC_YEAR_PATH) {
-      if (!hasOrganization) {
+    // Uživatel bez organizace – smí pouze na create-organization
+    if (!hasOrganization) {
+      if (path !== CREATE_ORG_PATH) {
         router.replace(CREATE_ORG_PATH);
         return;
       }
+      setReady(true);
+      return;
+    }
+
+    // SCHOOL organizace ve stavu PENDING – vždy na /onboarding/pending
+    if (isSchool && orgState === "PENDING") {
+      if (path !== PENDING_ORG_PATH) {
+        router.replace(PENDING_ORG_PATH);
+        return;
+      }
+      setReady(true);
+      return;
+    }
+
+    // create-organization: pokud už má organizaci, přepni na další krok
+    if (path === CREATE_ORG_PATH) {
+      router.replace(ACADEMIC_YEAR_PATH);
+      return;
+    }
+
+    // academic-year: pouze pro OWNER s organizací, ne pro členy
+    if (path === ACADEMIC_YEAR_PATH) {
       if (!isOwner) {
         router.replace("/dashboard");
         return;
       }
+      setReady(true);
+      return;
+    }
+
+    // pending stránka pro jiné než PENDING SCHOOL nedává smysl → na dashboard
+    if (path === PENDING_ORG_PATH && !(isSchool && orgState === "PENDING")) {
+      router.replace("/dashboard");
+      return;
     }
 
     setReady(true);
-  }, [pathname, hasOrganization, isOwner, isLoading, router]);
+  }, [pathname, hasOrganization, isOwner, isLoading, orgState, isSchool, router]);
 
   if (isLoading || !ready) {
     return (

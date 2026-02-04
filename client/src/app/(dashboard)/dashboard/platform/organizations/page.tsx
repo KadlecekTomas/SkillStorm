@@ -2,15 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { fetchWithAuth } from "@/lib/http/client";
+import { fetchWithAuth, HttpError } from "@/lib/http/client";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
-import { showToastOnce } from "@/utils/toast";
-import { HttpError } from "@/lib/http/client";
+import { showHttpErrorToastOnce, showToastOnce } from "@/utils/toast";
 
 type OrgItem = {
   id: string;
@@ -76,10 +75,7 @@ export default function PlatformOrganizationsPage() {
           : null
       );
     } catch (err) {
-      showToastOnce(
-        err instanceof HttpError ? String(err.message) : "Akce se nezdařila.",
-        { type: "error" }
-      );
+      showHttpErrorToastOnce(err);
     } finally {
       setActioning(null);
     }
@@ -101,10 +97,7 @@ export default function PlatformOrganizationsPage() {
           : null
       );
     } catch (err) {
-      showToastOnce(
-        err instanceof HttpError ? String(err.message) : "Akce se nezdařila.",
-        { type: "error" }
-      );
+      showHttpErrorToastOnce(err);
     } finally {
       setActioning(null);
     }

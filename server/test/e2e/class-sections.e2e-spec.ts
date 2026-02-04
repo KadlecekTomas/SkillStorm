@@ -216,7 +216,7 @@ describe('ClassSections – homeroom (e2e)', () => {
         orgId: orgA.id,
         label: '2025/26',
         startsAt: new Date('2025-09-01'),
-        endsAt: new Date('2026-06-30'),
+        endsAt: new Date('2026-08-31'),
         isCurrent: true,
       },
       select: { id: true, label: true },

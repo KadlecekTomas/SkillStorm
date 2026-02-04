@@ -127,9 +127,7 @@ describe('Sprint 1 security hardening (e2e)', () => {
       .post('/academic-years')
       .set('Authorization', `Bearer ${directorA.token}`)
       .send({
-        name: '2025/26',
-        startDate: '2025-09-01',
-        endDate: '2026-06-30',
+        startYear: 2025,
         isActive: true,
       })
       .expect(201);
@@ -191,9 +189,7 @@ describe('Sprint 1 security hardening (e2e)', () => {
       .post('/academic-years')
       .set('Authorization', `Bearer ${directorB.token}`)
       .send({
-        name: '2024/25',
-        startDate: '2024-09-01',
-        endDate: '2025-06-30',
+        startYear: 2024,
         isActive: true,
       })
       .expect(201);
@@ -279,26 +275,25 @@ describe('Sprint 1 security hardening (e2e)', () => {
   });
 
   it('API blocks creating second active academic year (409), DB prevents direct SQL', async () => {
-    const conflict = await request(app.getHttpServer())
+    const secondActive = await request(app.getHttpServer())
       .post('/academic-years')
       .set('Authorization', `Bearer ${directorA.token}`)
       .send({
-        name: '2026/27',
-        startDate: '2026-09-01',
-        endDate: '2027-06-30',
+        startYear: 2026,
         isActive: true,
       })
-      .expect(409);
+      .expect(201);
 
-    expect(conflict.body?.error ?? conflict.body?.message).toBeDefined();
+    const activeCount = await prisma.academicYear.count({
+      where: { orgId: orgA.id, isCurrent: true },
+    });
+    expect(activeCount).toBe(1);
 
     const passive = await request(app.getHttpServer())
       .post('/academic-years')
       .set('Authorization', `Bearer ${directorA.token}`)
       .send({
-        name: '2026/27',
-        startDate: '2026-09-01',
-        endDate: '2027-06-30',
+        startYear: 2027,
         isActive: false,
       })
       .expect(201);

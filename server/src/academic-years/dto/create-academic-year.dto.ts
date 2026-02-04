@@ -1,21 +1,19 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsOptional, IsString, MaxLength } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsInt, IsOptional, Max, Min } from 'class-validator';
 
 export class CreateAcademicYearDto {
-  @ApiProperty({ example: '2024/25', description: 'Název školního roku' })
-  @IsString()
-  @MaxLength(32)
-  name!: string;
+  @ApiProperty({
+    example: 2025,
+    description: 'Start year of school year (2025 = 2025/2026, starts 1.9., ends 31.8.)',
+  })
+  @Type(() => Number)
+  @IsInt()
+  @Min(2000)
+  @Max(2100)
+  startYear!: number;
 
-  @ApiProperty({ example: '2024-09-01', description: 'Datum začátku' })
-  @IsDateString()
-  startDate!: string;
-
-  @ApiProperty({ example: '2025-06-30', description: 'Datum konce' })
-  @IsDateString()
-  endDate!: string;
-
-  @ApiPropertyOptional({ description: 'Aktivní školní rok' })
+  @ApiPropertyOptional({ description: 'Set as active school year' })
   @IsOptional()
   isActive?: boolean;
 }

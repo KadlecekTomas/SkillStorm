@@ -174,14 +174,20 @@ export class OrganizationsService {
       }
     }
 
+    const type = dto.type ?? OrganizationType.SCHOOL;
+    const status =
+      type === OrganizationType.SCHOOL
+        ? OrganizationStatus.PENDING
+        : OrganizationStatus.ACTIVE;
+
     const org = await this.prisma.organization.create({
       data: {
         name: dto.name,
         address: dto.address ?? null,
         city: dto.city ?? null,
         country: dto.country ?? null,
-        type: dto.type ?? OrganizationType.SCHOOL,
-        status: OrganizationStatus.PENDING,
+        type,
+        status,
         ownerUserId: creatorUserId ?? null,
       },
     });

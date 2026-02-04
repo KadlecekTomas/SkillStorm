@@ -48,7 +48,7 @@ export const CreateOrganizationOnboardingScreen = (): React.JSX.Element => {
     setIsSubmitting(true);
     setError(null);
     try {
-      const data = await httpClient.post<{ id: string; name: string }>("/organizations", {
+      const data = await httpClient.post<{ id: string; name: string; type?: OrganizationType }>("/organizations", {
         name: trimmedName,
         type,
       });
@@ -61,7 +61,14 @@ export const CreateOrganizationOnboardingScreen = (): React.JSX.Element => {
       showToastOnce("Organizace byla vytvořena. Dokonči nastavení.", {
         type: "success",
       });
-      router.replace("/onboarding/academic-year");
+
+      // SCHOOL organizace po vytvoření začíná ve stavu PENDING → první krok je informační obrazovka.
+      const effectiveType = data?.type ?? type;
+      if (effectiveType === "SCHOOL") {
+        router.replace("/onboarding/pending");
+      } else {
+        router.replace("/onboarding/academic-year");
+      }
     } catch (err) {
       const code =
         err instanceof HttpError && err.data && typeof err.data === "object" && "code" in err.data
@@ -80,7 +87,7 @@ export const CreateOrganizationOnboardingScreen = (): React.JSX.Element => {
             ? err.message
             : "Nepodařilo se vytvořit organizaci.";
       setError(msg);
-      showToastOnce(msg, { type: "error" });
+      // Onboarding chyby zobrazujeme inline, bez error toastu.
     } finally {
       setIsSubmitting(false);
     }

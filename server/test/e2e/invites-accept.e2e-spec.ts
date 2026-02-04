@@ -55,7 +55,7 @@ describe('Invites Accept (e2e)', () => {
         orgId: org.id,
         label: `E2E ${Date.now()}`,
         startsAt: new Date('2025-09-01'),
-        endsAt: new Date('2026-06-30'),
+        endsAt: new Date('2026-08-31'),
         isCurrent: true,
       },
       select: { id: true },

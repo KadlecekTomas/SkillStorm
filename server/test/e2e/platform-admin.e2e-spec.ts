@@ -217,7 +217,7 @@ describe('Platform Admin (e2e)', () => {
           orgId: pendingOrgId,
           label: `E2E ${Date.now()}`,
           startsAt: new Date('2025-09-01'),
-          endsAt: new Date('2026-06-30'),
+          endsAt: new Date('2026-08-31'),
           isCurrent: true,
         },
         select: { id: true },

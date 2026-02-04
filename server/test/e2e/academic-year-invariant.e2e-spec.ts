@@ -124,9 +124,7 @@ describe('Academic year invariant (e2e)', () => {
       .post('/academic-years')
       .set('Authorization', `Bearer ${newToken}`)
       .send({
-        name: '2026/2027',
-        startDate: '2026-09-01',
-        endDate: '2027-08-31',
+        startYear: 2026,
         isActive: true,
       })
       .expect(201);
@@ -145,6 +143,66 @@ describe('Academic year invariant (e2e)', () => {
     });
     expect(activeRow?.id).toBe(created?.id);
     expect(activeRow?.label).toBe('2026/2027');
+
+    await prisma.academicYear.deleteMany({ where: { orgId } }).catch(() => {});
+    await prisma.membership.deleteMany({ where: { organizationId: orgId } }).catch(() => {});
+    await prisma.organization.deleteMany({ where: { id: orgId } }).catch(() => {});
+  });
+
+  it('POST /academic-years rejects startYear < 2000', async () => {
+    const auth = await authAs(app, OrganizationRole.DIRECTOR, {
+      seed: `inv_rej_${Date.now()}`,
+      mode: RegisterMode.CREATE_ORG,
+    });
+    const token = auth.accessToken;
+    const createOrgRes = await request(app.getHttpServer())
+      .post('/organizations')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: `Inv Rej Org ${Date.now()}`, type: OrganizationType.SCHOOL })
+      .expect(201);
+    const orgId = unwrap(createOrgRes)?.id ?? createOrgRes.body?.id;
+    const useOrgRes = await request(app.getHttpServer())
+      .post('/auth/use-org')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ orgId })
+      .expect(201);
+    const newToken = (unwrap(useOrgRes) ?? useOrgRes.body)?.sessionToken ?? useOrgRes.body?.sessionToken;
+
+    await request(app.getHttpServer())
+      .post('/academic-years')
+      .set('Authorization', `Bearer ${newToken}`)
+      .send({ startYear: 1999, isActive: true })
+      .expect(400);
+
+    await prisma.academicYear.deleteMany({ where: { orgId } }).catch(() => {});
+    await prisma.membership.deleteMany({ where: { organizationId: orgId } }).catch(() => {});
+    await prisma.organization.deleteMany({ where: { id: orgId } }).catch(() => {});
+  });
+
+  it('POST /academic-years rejects startYear > 2100', async () => {
+    const auth = await authAs(app, OrganizationRole.DIRECTOR, {
+      seed: `inv_rej2_${Date.now()}`,
+      mode: RegisterMode.CREATE_ORG,
+    });
+    const token = auth.accessToken;
+    const createOrgRes = await request(app.getHttpServer())
+      .post('/organizations')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: `Inv Rej2 Org ${Date.now()}`, type: OrganizationType.SCHOOL })
+      .expect(201);
+    const orgId = unwrap(createOrgRes)?.id ?? createOrgRes.body?.id;
+    const useOrgRes = await request(app.getHttpServer())
+      .post('/auth/use-org')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ orgId })
+      .expect(201);
+    const newToken = (unwrap(useOrgRes) ?? useOrgRes.body)?.sessionToken ?? useOrgRes.body?.sessionToken;
+
+    await request(app.getHttpServer())
+      .post('/academic-years')
+      .set('Authorization', `Bearer ${newToken}`)
+      .send({ startYear: 2101, isActive: true })
+      .expect(400);
 
     await prisma.academicYear.deleteMany({ where: { orgId } }).catch(() => {});
     await prisma.membership.deleteMany({ where: { organizationId: orgId } }).catch(() => {});

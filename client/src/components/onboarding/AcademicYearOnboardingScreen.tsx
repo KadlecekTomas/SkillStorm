@@ -5,38 +5,43 @@ import { useRouter } from "next/navigation";
 import { Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { httpClient, HttpError } from "@/lib/http/client";
 import { useAuth } from "@/hooks/use-auth";
 import { showToastOnce } from "@/utils/toast";
 
-const DEFAULT_LABEL = "2025/2026";
-const DEFAULT_START = "2025-09-01";
-const DEFAULT_END = "2026-06-30";
+const now = new Date();
+const currentYear = now.getFullYear();
+const defaultStartYear = now.getMonth() >= 8 ? currentYear : currentYear - 1;
+const YEARS = Array.from({ length: 15 }, (_, i) => currentYear - 2 + i);
 
 export const AcademicYearOnboardingScreen = (): React.JSX.Element => {
   const router = useRouter();
-  const { syncProfile } = useAuth();
-  const [name, setName] = useState(DEFAULT_LABEL);
-  const [startDate, setStartDate] = useState(DEFAULT_START);
-  const [endDate, setEndDate] = useState(DEFAULT_END);
+  const { org, orgState, syncProfile } = useAuth();
+  const [startYear, setStartYear] = useState(defaultStartYear);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const trimmedName = name.trim();
-    if (!trimmedName) {
-      setError("Zadej prosím název školního roku.");
+
+    // Obrana proti deadlocku: PENDING SCHOOL nikdy neposílá POST /academic-years.
+    if (org?.type === "SCHOOL" && orgState === "PENDING") {
+      router.replace("/onboarding/pending");
       return;
     }
+
     setIsSubmitting(true);
     setError(null);
     try {
       await httpClient.post("/academic-years", {
-        name: trimmedName,
-        startDate,
-        endDate,
+        startYear,
         isActive: true,
       });
       await syncProfile({ force: true });
@@ -45,14 +50,32 @@ export const AcademicYearOnboardingScreen = (): React.JSX.Element => {
       });
       router.replace("/dashboard");
     } catch (err) {
-      const msg =
-        err instanceof HttpError
-          ? (err.data as { message?: string })?.message ?? err.message
-          : err instanceof Error
-            ? err.message
-            : "Nepodařilo se vytvořit školní rok.";
-      setError(msg);
-      showToastOnce(msg, { type: "error" });
+      if (err instanceof HttpError) {
+        const data = err.data as { code?: string; meta?: { code?: string }; message?: string } | undefined;
+        const code = data?.code ?? data?.meta?.code ?? null;
+
+        // Stavové kódy – nejsou to chyby, ale přechody ve stavovém automatu.
+        if (code === "ORG_PENDING") {
+          router.replace("/onboarding/pending");
+          return;
+        }
+        if (code === "ORG_NOT_READY") {
+          setError(
+            "Organizace ještě není připravena. Dokonči prosím nastavení školy podle instrukcí na úvodní stránce.",
+          );
+          // Žádný toast – stavová informace.
+          return;
+        }
+
+        const msg =
+          (data?.message && data.message.trim().length > 0
+            ? data.message
+            : undefined) ?? "Nepodařilo se vytvořit školní rok. Zkus to prosím znovu.";
+        setError(msg);
+        // Onboarding řeší chyby inline – žádný error toast.
+      } else {
+        setError("Nepodařilo se vytvořit školní rok. Zkus to prosím znovu.");
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -77,47 +100,29 @@ export const AcademicYearOnboardingScreen = (): React.JSX.Element => {
           </div>
           <p className="text-sm text-slate-600">
             Organizace vyžaduje přesně jeden aktivní školní rok. Všechny třídy,
-            přiřazení a odevzdání jsou k němu vázané. Zadej název a datumy.
+            přiřazení a odevzdání jsou k němu vázané. Vyber rok začátku (1. 9.).
           </p>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-700" htmlFor="year-name">
-                Název školního roku
+              <label className="text-sm font-medium text-slate-700" htmlFor="start-year">
+                Školní rok
               </label>
-              <Input
-                id="year-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder={DEFAULT_LABEL}
+              <Select
+                value={String(startYear)}
+                onValueChange={(v) => setStartYear(Number(v))}
                 disabled={isSubmitting}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-700" htmlFor="start-date">
-                Začátek
-              </label>
-              <Input
-                id="start-date"
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                disabled={isSubmitting}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-700" htmlFor="end-date">
-                Konec
-              </label>
-              <Input
-                id="end-date"
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                disabled={isSubmitting}
-                required
-              />
+              >
+                <SelectTrigger id="start-year">
+                  <SelectValue placeholder="Vyber rok" />
+                </SelectTrigger>
+                <SelectContent>
+                  {YEARS.map((y) => (
+                    <SelectItem key={y} value={String(y)}>
+                      {y}/{y + 1}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             {error && (
               <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-700">

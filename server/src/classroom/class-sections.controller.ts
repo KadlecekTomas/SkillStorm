@@ -38,7 +38,6 @@ export class ClassSectionsController {
   constructor(private readonly service: ClassSectionsService) {}
 
   @Post()
-  @AllowPendingOrg()
   @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'Create class section' })
   @InvalidateScopes(({ result, req }) =>

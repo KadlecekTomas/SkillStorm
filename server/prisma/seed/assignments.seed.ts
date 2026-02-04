@@ -63,7 +63,7 @@ export async function seed(prisma: PrismaClient) {
           orgId: ORG_IDS.chodovicka,
           label: ACADEMIC_YEAR_LABEL,
           startsAt: new Date('2024-09-01'),
-          endsAt: new Date('2025-06-30'),
+          endsAt: new Date('2025-08-31'),
           isCurrent: true,
         },
       });

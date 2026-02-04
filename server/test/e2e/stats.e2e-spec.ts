@@ -205,7 +205,7 @@ describe('Stats (e2e)', () => {
         orgId: orgA.id,
         label: `Stats ${Date.now()}`,
         startsAt: new Date('2024-09-01'),
-        endsAt: new Date('2025-06-30'),
+        endsAt: new Date('2025-08-31'),
         isCurrent: true,
       },
       select: { id: true },

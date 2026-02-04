@@ -210,8 +210,12 @@ export async function seedPolicyData(
   });
 
   const now = new Date();
-  const nextYear = new Date(now);
-  nextYear.setFullYear(now.getFullYear() + 1);
+  const y = now.getFullYear();
+  const m = now.getMonth();
+  const startYear = m >= 8 ? y : y - 1;
+  const startsAt = new Date(Date.UTC(startYear, 8, 1));
+  const endsAt = new Date(Date.UTC(startYear + 1, 7, 31));
+  const nextYear = endsAt;
 
   const subscription = await prisma.subscription.create({
     data: {
@@ -287,8 +291,8 @@ export async function seedPolicyData(
   const currentYear = await prisma.academicYear.create({
     data: {
       orgId: orgA.id,
-      label: `${now.getFullYear()}/${now.getFullYear() + 1}`,
-      startsAt: now,
+      label: `${startYear}/${startYear + 1}`,
+      startsAt,
       endsAt: nextYear,
       isCurrent: true,
     },

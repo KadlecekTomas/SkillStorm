@@ -60,7 +60,7 @@ async function ensureAcademicYear(orgId: string, label = 'DEFAULT') {
   });
   if (existing) return existing;
   const startsAt = new Date('2025-09-01T00:00:00.000Z');
-  const endsAt = new Date('2026-06-30T23:59:59.000Z');
+  const endsAt = new Date('2026-08-31T23:59:59.000Z');
   return prisma.academicYear.create({
     data: {
       orgId,

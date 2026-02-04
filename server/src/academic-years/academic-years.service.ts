@@ -9,6 +9,7 @@ import {
 import { PrismaService } from '@/prisma/prisma.service';
 import type { JwtPayload } from '@/auth/types/jwt-payload';
 import type { CreateAcademicYearDto } from './dto/create-academic-year.dto';
+import { deriveCzechSchoolYearFromStartYear } from '@/shared/czech-school-year';
 import { Prisma, SystemRole } from '@prisma/client';
 
 type AcademicYearResponse = {
@@ -66,14 +67,8 @@ export class AcademicYearsService {
 
   async create(dto: CreateAcademicYearDto, user: JwtPayload) {
     const orgId = this.resolveOrgId(user);
-    const startsAt = new Date(dto.startDate);
-    const endsAt = new Date(dto.endDate);
-    if (Number.isNaN(startsAt.valueOf()) || Number.isNaN(endsAt.valueOf())) {
-      throw new BadRequestException('Neplatné datum.');
-    }
-    if (startsAt >= endsAt) {
-      throw new BadRequestException('Datum začátku musí být před koncem.');
-    }
+    const { startDate: startsAt, endDate: endsAt, label } =
+      deriveCzechSchoolYearFromStartYear(dto.startYear);
 
     let created;
     try {
@@ -94,7 +89,7 @@ export class AcademicYearsService {
         return tx.academicYear.create({
           data: {
             orgId,
-            label: dto.name.trim(),
+            label,
             startsAt,
             endsAt,
             isCurrent: shouldActivate,

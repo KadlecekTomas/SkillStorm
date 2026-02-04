@@ -48,7 +48,6 @@ export class ClassroomsController {
   }
 
   @Post()
-  @AllowPendingOrg()
   @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'Create classroom for academic year' })
   create(@Body() dto: CreateClassSectionDto, @Req() req: RequestWithUser) {

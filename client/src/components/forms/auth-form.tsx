@@ -12,7 +12,7 @@ import { type JSX, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useAuthStore } from "@/store/use-auth-store";
 import { Loader2 } from "lucide-react";
-import { showToastOnce } from "@/utils/toast";
+import { showToastOnce, resolveToastFromHttpError } from "@/utils/toast";
 
 const registerModeOptions = ["INDIVIDUAL", "CREATE_ORG", "JOIN_ORG"] as const;
 type RegisterMode = (typeof registerModeOptions)[number];
@@ -163,19 +163,26 @@ export const AuthForm = ({
         { type: "success" },
       );
     } catch (err) {
-      const message =
-        err instanceof HttpError
-          ? (err.data as { message?: string })?.message ?? err.message
-          : err instanceof Error
-            ? err.message
-            : "Neznámá chyba";
+      let message: string;
 
-      showToastOnce(
-        mode === "login"
-          ? message ?? "Neplatné přihlašovací údaje ❌"
-          : message ?? "Registrace se nezdařila.",
-        { type: "error" }
-      );
+      if (err instanceof HttpError) {
+        const resolved = resolveToastFromHttpError(err);
+        // Pro auth chybové toasty nikdy nepoužíváme stavové kódy jako chybu – helper je už odfiltruje.
+        message =
+          resolved.message ??
+          (mode === "login"
+            ? "Neplatné přihlašovací údaje ❌"
+            : "Registrace se nezdařila. Zkus to prosím znovu.");
+      } else if (err instanceof Error && err.message.trim().length > 0) {
+        message = err.message;
+      } else {
+        message =
+          mode === "login"
+            ? "Neplatné přihlašovací údaje ❌"
+            : "Registrace se nezdařila. Zkus to prosím znovu.";
+      }
+
+      showToastOnce(message, { type: "error" });
     } finally {
       if (mode === "register") setRegistering(false);
     }

@@ -40,7 +40,6 @@ export class AcademicYearsController {
   }
 
   @Post()
-  @AllowPendingOrg()
   @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'Create academic year' })
   create(@Body() dto: CreateAcademicYearDto, @Req() req: RequestWithUser) {

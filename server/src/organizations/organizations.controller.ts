@@ -44,7 +44,7 @@ export class OrganizationsController {
   @AllowAnyOrgStatus()
   @ApiOperation({
     summary:
-      'Create organization (SCHOOL: any authenticated user, COMMUNITY: superadmin)',
+      'Create organization (SCHOOL/PRIVATE/COMMUNITY: any authenticated user, status derived from type)',
   })
   @InvalidateScopes(() => ['ALL']) // globální list → invaliduj ALL
   async create(
@@ -52,20 +52,6 @@ export class OrganizationsController {
     @Req() req: RequestWithUser,
   ) {
     const userId = req.user?.userId;
-    const isSuper = req.user?.systemRole === SystemRole.SUPERADMIN;
-
-    if (dto.type === OrganizationType.COMMUNITY && !isSuper) {
-      throw new ForbiddenException(
-        'Community organizaci může vytvořit pouze superadmin.',
-      );
-    }
-
-    if (dto.type === OrganizationType.PRIVATE && !isSuper) {
-      throw new ForbiddenException(
-        'Private organizaci může vytvořit pouze superadmin.',
-      );
-    }
-
     return ok(this.service.create(dto, userId));
   }
 

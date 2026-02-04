@@ -68,7 +68,7 @@ describe('Core workflow (e2e)', () => {
         orgId,
         label: `AY-${Date.now()}`,
         startsAt: new Date('2024-09-01T00:00:00.000Z'),
-        endsAt: new Date('2025-06-30T23:59:59.000Z'),
+        endsAt: new Date('2025-08-31T23:59:59.000Z'),
         isCurrent: true,
       },
       select: { id: true },
