@@ -23,11 +23,11 @@ function CreateTestPage() {
           Guarded route – dostupná pouze pro role s oprávněním CREATE_TEST.
         </p>
         <div className="mt-3">
-          <Badge variant="neutral">NOT IMPLEMENTED</Badge>
+          <Badge variant="neutral">TODO</Badge>
         </div>
       </div>
       <Alert
-        title="Not implemented"
+        title="TODO"
         description="Vytváření testů přes UI není implementované. Použij API nebo seed."
         variant="warning"
       />

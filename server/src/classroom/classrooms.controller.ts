@@ -26,6 +26,7 @@ import { AllowPendingOrg } from '@/common/decorators/allow-pending-org.decorator
 @ApiStandardResponses()
 @ApiBearerAuth()
 @Controller('classrooms')
+@AllowPendingOrg()
 @UseGuards(RequireActiveAcademicYearGuard)
 export class ClassroomsController {
   constructor(private readonly service: ClassSectionsService) {}

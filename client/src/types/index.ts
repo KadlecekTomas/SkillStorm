@@ -71,6 +71,15 @@ export type ResultInsight = {
   trend: "up" | "down";
 };
 
+export type OrganizationStatus = "PENDING" | "ACTIVE" | "SUSPENDED";
+
+export type AuthContextMode = "platform" | "organization" | "personal";
+
+export type AuthContext = {
+  mode: AuthContextMode;
+  organizationId: string | null;
+};
+
 export type MembershipSummary = {
   id: string;
   organizationId: string;
@@ -78,6 +87,7 @@ export type MembershipSummary = {
   organization?: {
     name: string;
     type: OrganizationType;
+    status?: OrganizationStatus;
   };
 };
 

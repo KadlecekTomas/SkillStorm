@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  ConflictException,
   Get,
   HttpCode,
   HttpStatus,
@@ -81,9 +82,12 @@ export class AuthController {
           console.error(error.stack);
         }
       }
-      throw error instanceof BadRequestException
-        ? error
-        : new BadRequestException('Registration failed');
+      if (error instanceof BadRequestException || error instanceof ConflictException) {
+        throw error;
+      }
+      throw new BadRequestException(
+        error instanceof Error ? error.message : 'Registration failed',
+      );
     }
   }
 
@@ -214,12 +218,14 @@ export class AuthController {
     );
     setAuthCookies(res, result.tokens);
     setCsrfCookie(res, generateCsrfToken());
+    // Contract: auth envelope must include context (onboarding redirect depends on context.mode).
     return ok({
       user: result.user,
       organization: result.organization,
       membership: result.membership,
       roles: result.roles ?? [],
       permissions: result.permissions ?? [],
+      context: result.context,
       sessionToken: result.tokens.accessToken,
     });
   }

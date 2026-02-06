@@ -89,4 +89,11 @@ export class RegisterDto {
   @IsOptional()
   @IsString()
   joinCode?: string;
+
+  /** Ignored at register. Required in onboarding step (POST /organizations). Kept optional so clients can send it without 400. */
+  @ApiPropertyOptional({ description: 'Ignored. Use POST /organizations in onboarding step.' })
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  organizationName?: string;
 }

@@ -94,7 +94,7 @@ export function ClassroomsPageContent(): React.JSX.Element {
     setSelectedYearId,
     refresh: refreshYears,
   } = useAcademicYears();
-  const { org } = useAuth();
+  const { org, syncProfile } = useAuth();
   const { can } = usePermissions();
   const canManageClasses = can(PermissionKey.MANAGE_TEACHERS);
   const canManageEnrollments = can(PermissionKey.MANAGE_STUDENTS);
@@ -280,6 +280,7 @@ export function ClassroomsPageContent(): React.JSX.Element {
       setCreateOpen(false);
       setCreateForm({ grade: createForm.grade, section: "", label: "" });
       void loadClassrooms(true);
+      void syncProfile({ force: true });
     } catch (err) {
       if (isNoActiveAcademicYear(err)) {
         setCreateOpen(false);

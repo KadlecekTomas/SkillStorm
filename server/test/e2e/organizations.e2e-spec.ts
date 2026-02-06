@@ -5,6 +5,11 @@ import { AppModule } from '../../src/app.module';
 import { PrismaService } from '@/prisma/prisma.service';
 import { $Enums, OrganizationType, OrganizationRole } from '@prisma/client';
 import { login, register } from 'test/helpers';
+import { RegisterMode } from '@/auth/dto/register.dto';
+
+function unwrapBody(res: request.Response) {
+  return res?.body?.data ?? res?.body;
+}
 
 describe('Organizations (e2e)', () => {
   let app: INestApplication;
@@ -175,6 +180,73 @@ describe('Organizations (e2e)', () => {
     await prisma.organization.delete({ where: { id: res.body.id } });
   });
 
+  /**
+   * ONBOARDING INVARIANT – locks the create-org flow so the bug (user thrown back
+   * to create-organization, context.mode stays "personal") cannot return.
+   * Fails if: org missing, membership missing, role !== OWNER, lastActiveMembershipId not set.
+   */
+  describe('Onboarding create-org invariant (DB + auth contract)', () => {
+    it('POST /organizations creates org + OWNER membership + sets user.lastActiveMembershipId', async () => {
+      const tag = `onb_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
+      const email = `${tag}@example.com`;
+      const password = 'Password123!';
+
+      const regRes = await request(app.getHttpServer())
+        .post('/auth/register')
+        .send({
+          name: `Onboarding E2E ${tag}`,
+          email,
+          password,
+          username: tag.slice(0, 20),
+          mode: RegisterMode.INDIVIDUAL,
+        })
+        .expect(201);
+
+      const regBody = unwrapBody(regRes);
+      const userId = regBody?.user?.id as string;
+      const token = regBody?.sessionToken as string;
+      expect(userId).toBeDefined();
+      expect(token).toBeDefined();
+
+      const createRes = await request(app.getHttpServer())
+        .post('/organizations')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ name: `Onboarding E2E School ${tag}`, type: OrganizationType.SCHOOL })
+        .expect(201);
+
+      const createBody = unwrapBody(createRes);
+      const orgId = createBody?.id as string;
+      expect(orgId).toBeDefined();
+
+      const organization = await prisma.organization.findUnique({
+        where: { id: orgId },
+      });
+      expect(organization).toBeDefined();
+      expect(organization?.deletedAt).toBeNull();
+
+      const membership = await prisma.membership.findFirst({
+        where: { organizationId: orgId },
+      });
+      expect(membership).toBeDefined();
+      expect(membership?.role).toBe(OrganizationRole.OWNER);
+      expect(membership?.userId).toBe(userId);
+
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { lastActiveMembershipId: true },
+      });
+      expect(user?.lastActiveMembershipId).toBe(membership?.id);
+
+      await prisma.auditLog.deleteMany({
+        where: { OR: [{ userId }, { organizationId: orgId }] },
+      });
+      await prisma.membership.deleteMany({ where: { organizationId: orgId } });
+      await prisma.organization.delete({ where: { id: orgId } });
+      await prisma.refreshToken.deleteMany({ where: { userId } });
+      await prisma.user.delete({ where: { id: userId } });
+    });
+  });
+
   // --- FIND ALL (only SUPERADMIN) ---
   it('GET /organizations → jen SUPERADMIN (ostatní 403)', async () => {
     await request(app.getHttpServer())
@@ -281,7 +353,15 @@ describe('Organizations (e2e)', () => {
       .expect(403);
   });
 
-  // --- Validation edge cases ---
+  // --- Validation edge cases (onboarding contract: name is required) ---
+  it('POST /organizations → validation: chybí name (400)', async () => {
+    await request(app.getHttpServer())
+      .post('/organizations')
+      .set('Authorization', `Bearer ${superUser.token}`)
+      .send({ type: OrganizationType.SCHOOL })
+      .expect(400);
+  });
+
   it('POST /organizations → validation: neplatný type (400)', async () => {
     await request(app.getHttpServer())
       .post('/organizations')

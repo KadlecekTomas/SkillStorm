@@ -5,6 +5,30 @@ export const ORG_NOT_READY = 'ORG_NOT_READY';
 export const ORG_SUSPENDED = 'ORG_SUSPENDED';
 export const ORG_PENDING = 'ORG_PENDING';
 
+export type OrgReadiness = 'READY' | 'NOT_READY';
+
+/**
+ * Compute organization readiness (for /auth/me). READY only when there is
+ * an active academic year and at least one class section in that year.
+ */
+export async function getOrgReadiness(
+  prisma: PrismaService,
+  orgId: string | null,
+): Promise<OrgReadiness> {
+  if (!orgId) return 'NOT_READY';
+
+  const activeYear = await prisma.academicYear.findFirst({
+    where: { orgId, isCurrent: true },
+    select: { id: true },
+  });
+  if (!activeYear) return 'NOT_READY';
+
+  const classCount = await prisma.classSection.count({
+    where: { yearId: activeYear.id },
+  });
+  return classCount > 0 ? 'READY' : 'NOT_READY';
+}
+
 /**
  * Readiness: active AcademicYear + at least one ClassSection in that year.
  */

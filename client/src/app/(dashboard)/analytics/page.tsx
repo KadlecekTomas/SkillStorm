@@ -1,79 +1,32 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { PermissionKey } from "@/types";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { httpClient } from "@/lib/http/client";
 import { withGuard } from "@/lib/guard/withGuard";
+import { useRoleView } from "@/hooks/use-role-view";
 
-type AnalyticsItem = {
-  category: string;
-  action: string;
-  count: number;
-};
-
-function AnalyticsPage() {
-  const [items, setItems] = useState<AnalyticsItem[]>([]);
+function AnalyticsRedirectPage() {
+  const router = useRouter();
+  const roleView = useRoleView();
 
   useEffect(() => {
-    httpClient
-      .get<{ items: AnalyticsItem[] }>("/analytics/summary")
-      .then((data) => setItems(data.items ?? []))
-      .catch(() => setItems([]));
-  }, []);
+    if (!roleView) return;
+    if (roleView === "student") {
+      router.replace("/student/analytics");
+      return;
+    }
+    if (roleView === "teacher" || roleView === "director" || roleView === "owner") {
+      router.replace("/teacher/analytics");
+      return;
+    }
+    router.replace("/dashboard");
+  }, [roleView, router]);
 
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center gap-3">
-        <Button variant="outline" asChild>
-          <Link href="/analytics/student-timeline">Student timeline</Link>
-        </Button>
-        <Button variant="outline" asChild>
-          <Link href="/analytics/class-heatmap">Class heatmap</Link>
-        </Button>
-      </div>
-    <Card className="space-y-4 rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">
-      <div>
-        <p className="text-sm text-slate-500">Analytics</p>
-        <h2 className="text-xl font-semibold text-slate-900">Top interactions</h2>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-slate-100 text-sm">
-          <thead className="bg-slate-50">
-            <tr>
-              <th className="px-4 py-2 text-left font-medium text-slate-500">Category</th>
-              <th className="px-4 py-2 text-left font-medium text-slate-500">Action</th>
-              <th className="px-4 py-2 text-right font-medium text-slate-500">Count</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {items.map((item) => (
-              <tr key={`${item.category}-${item.action}`}>
-                <td className="px-4 py-2 text-slate-700">{item.category}</td>
-                <td className="px-4 py-2 text-slate-700">{item.action}</td>
-                <td className="px-4 py-2 text-right font-semibold text-slate-900">
-                  {item.count}
-                </td>
-              </tr>
-            ))}
-            {!items.length && (
-              <tr>
-                <td colSpan={3} className="px-4 py-4 text-center text-slate-500">
-                  Zatím žádné události.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </Card>
-    </div>
-  );
+  return null;
 }
 
 export default withGuard({
-  requirePerms: [PermissionKey.VIEW_ANALYTICS],
+  requirePerms: [PermissionKey.VIEW_RESULTS],
   requireSchoolWorkspace: true,
-})(AnalyticsPage);
+})(AnalyticsRedirectPage);

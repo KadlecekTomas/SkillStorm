@@ -13,7 +13,7 @@ import * as request from 'supertest';
 import * as bcrypt from 'bcryptjs';
 import { AppModule } from '../../src/app.module';
 import { PrismaService } from '@/prisma/prisma.service';
-import { OrganizationRole, OrganizationStatus } from '@prisma/client';
+import { OrganizationRole, OrganizationStatus, SystemRole } from '@prisma/client';
 
 function unwrap(res: request.Response) {
   return res?.body?.data ?? res?.body;
@@ -110,6 +110,156 @@ describe('Platform Admin (e2e)', () => {
   afterAll(async () => {
     await prisma.$disconnect();
     await app.close();
+  });
+
+  /**
+   * AUTH CONTEXT CONTRACT – SUPERADMIN / DEVOPS
+   *
+   * These tests lock the /auth/me contract for platform admins:
+   * - SUPERADMIN / DEVOPS must always receive context.mode === 'platform'
+   * - organizationId in context must be null for platform mode
+   * - user.isPlatformAdmin must be true
+   * - frontend MUST NOT need to infer platform mode from memberships.length
+   *
+   * Any regression (e.g. removing context, or falling back to personal mode)
+   * must fail here.
+   */
+  describe('Auth context for platform admins (SUPERADMIN/DEVOPS)', () => {
+    it('SUPERADMIN without memberships → context.mode === platform and no org', async () => {
+      const passwordHash = await bcrypt.hash(TEST_PASSWORD, 10);
+      const superadmin = await prisma.user.create({
+        data: {
+          email: `ctx_superadmin_${Date.now()}@example.com`,
+          name: 'Ctx Superadmin',
+          passwordHash,
+          systemRole: SystemRole.SUPERADMIN,
+          isPlatformAdmin: false,
+        },
+        select: { id: true, email: true },
+      });
+
+      const loginRes = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email: superadmin.email, password: TEST_PASSWORD })
+        .expect(201);
+
+      const token = (unwrap(loginRes) ?? loginRes.body)?.sessionToken as string | undefined;
+      expect(token).toBeDefined();
+
+      const meRes = await request(app.getHttpServer())
+        .get('/auth/me')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+
+      const payload = unwrap(meRes);
+      expect(payload).toBeDefined();
+
+      // Shape safety: context MUST exist
+      expect(payload.context).toBeDefined();
+      expect(payload.context.mode).toBe('platform');
+      expect(payload.context.organizationId).toBeNull();
+
+      const user = payload.user ?? payload;
+      expect(user.systemRole).toBe(SystemRole.SUPERADMIN);
+      expect(user.isPlatformAdmin).toBe(true);
+
+      const memberships = payload.user?.memberships ?? payload.memberships ?? [];
+      expect(Array.isArray(memberships)).toBe(true);
+      expect(memberships.length).toBe(0);
+
+      // Explicit regression guard – SUPERADMIN must never fall back to personal mode.
+      if (payload.context.mode === 'personal') {
+        throw new Error('SUPERADMIN MUST NOT have context.mode === "personal"');
+      }
+    });
+
+    it('non-privileged user without memberships → context.mode === personal', async () => {
+      const passwordHash = await bcrypt.hash(TEST_PASSWORD, 10);
+      const user = await prisma.user.create({
+        data: {
+          email: `ctx_regular_${Date.now()}@example.com`,
+          name: 'Ctx Regular',
+          passwordHash,
+          systemRole: null,
+        },
+        select: { id: true, email: true },
+      });
+
+      const loginRes = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email: user.email, password: TEST_PASSWORD })
+        .expect(201);
+
+      const token = (unwrap(loginRes) ?? loginRes.body)?.sessionToken as string | undefined;
+      expect(token).toBeDefined();
+
+      const meRes = await request(app.getHttpServer())
+        .get('/auth/me')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+
+      const payload = unwrap(meRes);
+      expect(payload).toBeDefined();
+      expect(payload.context).toBeDefined();
+      expect(payload.context.mode).toBe('personal');
+      expect(payload.context.organizationId).toBeNull();
+
+      const memberships = payload.user?.memberships ?? payload.memberships ?? [];
+      expect(Array.isArray(memberships)).toBe(true);
+      expect(memberships.length).toBe(0);
+    });
+  });
+
+  /**
+   * CONTRACT: Effective platform admin.
+   * SUPERADMIN must always be treated as platform admin (governance), regardless of DB flag.
+   * Effective = (user.isPlatformAdmin ?? false) || user.systemRole === SUPERADMIN.
+   * If this is removed or guard is changed to only check DB, these tests fail.
+   */
+  describe('Effective platform admin contract (SUPERADMIN without DB flag)', () => {
+    let superadminToken: string;
+
+    beforeAll(async () => {
+      const passwordHash = await bcrypt.hash(TEST_PASSWORD, 10);
+      const superadmin = await prisma.user.create({
+        data: {
+          email: `superadmin_contract_${Date.now()}@example.com`,
+          name: 'Superadmin Contract',
+          passwordHash,
+          systemRole: SystemRole.SUPERADMIN,
+          isPlatformAdmin: false,
+        },
+        select: { id: true, email: true },
+      });
+
+      const loginRes = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email: superadmin.email, password: TEST_PASSWORD })
+        .expect(201);
+      const token = (unwrap(loginRes) ?? loginRes.body)?.sessionToken;
+      if (!token) throw new Error('Missing superadmin token');
+      superadminToken = token;
+    });
+
+    it('GET /auth/me returns isPlatformAdmin === true for SUPERADMIN without DB flag', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/auth/me')
+        .set('Authorization', `Bearer ${superadminToken}`)
+        .expect(200);
+
+      const payload = unwrap(res);
+      expect(payload).toBeDefined();
+      const user = payload?.user ?? payload;
+      expect(user.isPlatformAdmin).toBe(true);
+      expect(user.systemRole).toBe(SystemRole.SUPERADMIN);
+    });
+
+    it('GET /platform/organizations returns 200 for SUPERADMIN without DB flag', async () => {
+      await request(app.getHttpServer())
+        .get('/platform/organizations')
+        .set('Authorization', `Bearer ${superadminToken}`)
+        .expect(200);
+    });
   });
 
   describe('GET /platform/organizations', () => {

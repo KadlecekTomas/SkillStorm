@@ -32,7 +32,7 @@ const columns: Column<TestSummary>[] = [
 function TestsPage(): React.JSX.Element {
   const [tests, setTests] = useState<TestSummary[]>([]);
   const [loading, setLoading] = useState(true);
-  const { hasOrganization, org } = useAuth();
+  const { hasOrganization, org, context } = useAuth();
 
   useEffect(() => {
     let cancelled = false;
@@ -66,7 +66,7 @@ function TestsPage(): React.JSX.Element {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Badge variant="neutral">NOT IMPLEMENTED</Badge>
+          <Badge variant="neutral">TODO</Badge>
           <Button
             disabled
             title="Vytváření testů přes UI není implementované."
@@ -76,11 +76,11 @@ function TestsPage(): React.JSX.Element {
         </div>
       </div>
       <Alert
-        title="Not implemented"
+        title="TODO"
         description="Vytváření testů přes UI není implementované. Použij API nebo seed."
         variant="warning"
       />
-      {!hasOrganization && (
+      {context?.mode === "personal" && (
         <Alert
           title="Osobní režim"
           description={

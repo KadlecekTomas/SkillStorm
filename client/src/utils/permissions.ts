@@ -6,6 +6,12 @@ import {
   roleHome,
 } from "@/types/permissions";
 
+/** Single source of truth: user may access /dashboard/platform* (SUPERADMIN or platform admin flag). */
+export function isPlatformAdmin(user: User | null | undefined): boolean {
+  if (!user) return false;
+  return user.systemRole === "SUPERADMIN" || user.isPlatformAdmin === true;
+}
+
 export const derivePermissions = (user: User | null): PermissionKey[] => {
   if (!user) return [];
 
@@ -24,8 +30,14 @@ export const derivePermissions = (user: User | null): PermissionKey[] => {
   return Array.from(unique);
 };
 
+/** Fallback when role home is unknown or route missing. Must exist (app/(dashboard)/dashboard/page.tsx). */
+export const DASHBOARD_ENTRY = "/dashboard";
+
+const PLATFORM_HOME = "/dashboard/platform";
+
 export const getRoleHomePath = (user: User | null): string => {
   if (!user) return roleHome.DEFAULT;
+  if (user.systemRole === "SUPERADMIN") return PLATFORM_HOME;
   const activeMembership =
     user.memberships?.find(
       (membership) => membership.organizationId === user.organizationId,

@@ -9,5 +9,8 @@ done
 echo "📦 Running Prisma migrations..."
 npx prisma migrate deploy
 
+echo "🌱 Running Prisma seed (SUPERADMIN bootstrap if needed)..."
+npx prisma db seed
+
 echo "🚀 Starting backend..."
 node dist/main.js

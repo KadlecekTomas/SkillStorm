@@ -4,12 +4,13 @@ import { type JSX, useEffect, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AuthForm } from "@/components/forms/auth-form";
 import { useAuth } from "@/hooks/use-auth";
-import { getRoleHomePath } from "@/utils/permissions";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 export default function RegisterPage(): JSX.Element {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user, isLoading, authStatus } = useAuth();
+  const { isLoading, isAuthenticated, context } = useAuth();
+
   const initialMode = useMemo(() => {
     const modeParam = searchParams.get("mode")?.toUpperCase();
     if (modeParam === "INDIVIDUAL" || modeParam === "CREATE_ORG" || modeParam === "JOIN_ORG") {
@@ -27,29 +28,38 @@ export default function RegisterPage(): JSX.Element {
     return undefined;
   }, [searchParams]);
 
+  // Auth invariant:
+  // Authenticated users must never access the register page.
+  // Register is reachable only after explicit logout.
   useEffect(() => {
-    // ⛔ Neredirectuj během načítání nebo bootstrapu
-    if (isLoading) return;
-    if (authStatus !== "authenticated") return;
-    // ⛔ Neredirectuj, pokud není uživatel
-    if (!user) return;
+    if (!isAuthenticated) return;
 
-    if (typeof window !== "undefined") {
-      const createOrgIntent = window.sessionStorage.getItem("create_org_intent");
-      if (createOrgIntent) {
-        window.sessionStorage.removeItem("create_org_intent");
-        router.replace("/onboarding/create-organization");
-        return;
-      }
-      const joinIntent = window.sessionStorage.getItem("join_intent");
-      if (joinIntent) {
-        router.replace("/dashboard/onboarding");
-        return;
-      }
+    if (context?.mode === "organization") {
+      router.replace("/dashboard");
+    } else if (context?.mode === "platform") {
+      router.replace("/dashboard/platform");
+    } else if (context?.mode === "personal") {
+      router.replace("/onboarding/create-organization");
+    } else {
+      router.replace("/dashboard");
     }
+  }, [isAuthenticated, context?.mode, router]);
 
-    router.replace(getRoleHomePath(user));
-  }, [user, router, isLoading, authStatus]);
+  if (isLoading) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center">
+        <LoadingSpinner label="Načítám…" />
+      </div>
+    );
+  }
+
+  if (isAuthenticated) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center">
+        <LoadingSpinner label="Přesměrovávám…" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

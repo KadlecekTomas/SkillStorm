@@ -13,6 +13,43 @@ import { subDays } from 'date-fns';
 type AnalyticsSummaryItem = { category: string; action: string; count: number };
 type AnalyticsSummary = { since: Date; items: AnalyticsSummaryItem[] };
 
+export enum TrendLabel {
+  BETTER = 'BETTER',
+  SAME = 'SAME',
+  WORSE = 'WORSE',
+}
+
+export type StudentErrorAnalyticsItem = {
+  errorCategoryId: string;
+  errorCategoryLabel: string;
+  count: number;
+  share: number;
+  trend: TrendLabel;
+};
+
+export type StudentTopicAnalyticsItem = {
+  topicId: string;
+  topicName: string;
+  successRate: number;
+  trend: TrendLabel;
+};
+
+export type TeacherErrorAnalyticsItem = {
+  errorCategoryId: string;
+  errorCategoryLabel: string;
+  count: number;
+  distributionLabel: string;
+  trend: TrendLabel;
+};
+
+export type TeacherTopicAnalyticsItem = {
+  topicId: string;
+  topicName: string;
+  avgSuccess: number;
+  dispersionLabel: string;
+  trend: TrendLabel;
+};
+
 export type StudentTimelineItem = {
   submissionId: string;
   assignmentId: string;
@@ -241,6 +278,525 @@ export class AnalyticsService {
       submissionCount: Number(r.submission_count),
       totalStudents: Number(r.total_students),
     }));
+
+    return { items };
+  }
+
+  async studentErrorOverview(
+    yearId: string,
+    user: JwtPayload,
+  ): Promise<{ items: StudentErrorAnalyticsItem[] }> {
+    if (!yearId || typeof yearId !== 'string') {
+      throw new BadRequestException('yearId is required');
+    }
+    const orgId = user.organizationId ?? null;
+    const membershipId = user.membershipId ?? null;
+    if (!orgId || !membershipId) {
+      throw new ForbiddenException('Missing organization or membership context');
+    }
+    if (user.organizationRole !== OrganizationRole.STUDENT) {
+      throw new ForbiddenException('Only students can access student analytics');
+    }
+
+    const now = new Date();
+    const currentSince = subDays(now, 30);
+    const previousSince = subDays(currentSince, 30);
+
+    const responses = await this.prisma.response.findMany({
+      where: {
+        submission: {
+          studentId: membershipId,
+          deletedAt: null,
+          assignment: {
+            yearId,
+            organizationId: orgId,
+          },
+          createdAt: {
+            gte: previousSince,
+          },
+        },
+      },
+      select: {
+        isCorrect: true,
+        submission: {
+          select: {
+            createdAt: true,
+          },
+        },
+        question: {
+          select: {
+            id: true,
+            text: true,
+          },
+        },
+      },
+    });
+
+    type Bucket = {
+      label: string;
+      currentCount: number;
+      previousCount: number;
+    };
+    const buckets = new Map<string, Bucket>();
+
+    for (const r of responses) {
+      if (r.isCorrect === true) continue;
+      const createdAt = r.submission.createdAt;
+      const key = r.question.id;
+      const bucket =
+        buckets.get(key) ??
+        {
+          label: r.question.text,
+          currentCount: 0,
+          previousCount: 0,
+        };
+      if (createdAt >= currentSince) {
+        bucket.currentCount += 1;
+      } else {
+        bucket.previousCount += 1;
+      }
+      buckets.set(key, bucket);
+    }
+
+    const totalCurrentErrors = Array.from(buckets.values()).reduce(
+      (acc, b) => acc + b.currentCount,
+      0,
+    );
+
+    const items: StudentErrorAnalyticsItem[] = Array.from(
+      buckets.entries(),
+    ).map(([questionId, b]) => {
+      const share =
+        totalCurrentErrors > 0 ? b.currentCount / totalCurrentErrors : 0;
+      let trend = TrendLabel.SAME;
+      if (b.currentCount > b.previousCount) {
+        trend = TrendLabel.WORSE;
+      } else if (b.currentCount < b.previousCount) {
+        trend = TrendLabel.BETTER;
+      }
+      return {
+        errorCategoryId: questionId,
+        errorCategoryLabel: b.label,
+        count: b.currentCount,
+        share,
+        trend,
+      };
+    });
+
+    items.sort((a, b) => b.count - a.count);
+
+    return { items };
+  }
+
+  async studentTopicOverview(
+    yearId: string,
+    user: JwtPayload,
+  ): Promise<{ items: StudentTopicAnalyticsItem[] }> {
+    if (!yearId || typeof yearId !== 'string') {
+      throw new BadRequestException('yearId is required');
+    }
+    const orgId = user.organizationId ?? null;
+    const membershipId = user.membershipId ?? null;
+    if (!orgId || !membershipId) {
+      throw new ForbiddenException('Missing organization or membership context');
+    }
+    if (user.organizationRole !== OrganizationRole.STUDENT) {
+      throw new ForbiddenException('Only students can access student analytics');
+    }
+
+    const now = new Date();
+    const currentSince = subDays(now, 30);
+    const previousSince = subDays(currentSince, 30);
+
+    const responses = await this.prisma.response.findMany({
+      where: {
+        submission: {
+          studentId: membershipId,
+          deletedAt: null,
+          assignment: {
+            yearId,
+            organizationId: orgId,
+          },
+          createdAt: {
+            gte: previousSince,
+          },
+        },
+      },
+      select: {
+        isCorrect: true,
+        submission: {
+          select: {
+            createdAt: true,
+            assignment: {
+              select: {
+                topicLevelId: true,
+                topicLevel: {
+                  select: {
+                    id: true,
+                    name: true,
+                    catalogTopic: {
+                      select: {
+                        name: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    type TopicBucket = {
+      name: string;
+      currentCorrect: number;
+      currentTotal: number;
+      previousCorrect: number;
+      previousTotal: number;
+    };
+
+    const topicBuckets = new Map<string, TopicBucket>();
+
+    for (const r of responses) {
+      const assignment = r.submission.assignment;
+      const topicLevel = assignment.topicLevel;
+      const topicId = assignment.topicLevelId ?? topicLevel?.id;
+      if (!topicId) continue;
+      const name =
+        topicLevel?.name ??
+        topicLevel?.catalogTopic?.name ??
+        'Neznámé téma';
+      const bucket =
+        topicBuckets.get(topicId) ??
+        {
+          name,
+          currentCorrect: 0,
+          currentTotal: 0,
+          previousCorrect: 0,
+          previousTotal: 0,
+        };
+      const createdAt = r.submission.createdAt;
+      const isCorrect = r.isCorrect === true;
+      if (createdAt >= currentSince) {
+        bucket.currentTotal += 1;
+        if (isCorrect) bucket.currentCorrect += 1;
+      } else {
+        bucket.previousTotal += 1;
+        if (isCorrect) bucket.previousCorrect += 1;
+      }
+      topicBuckets.set(topicId, bucket);
+    }
+
+    const items: StudentTopicAnalyticsItem[] = Array.from(
+      topicBuckets.entries(),
+    ).map(([topicId, b]) => {
+      const currentRate =
+        b.currentTotal > 0 ? b.currentCorrect / b.currentTotal : 0;
+      const previousRate =
+        b.previousTotal > 0 ? b.previousCorrect / b.previousTotal : 0;
+      let trend = TrendLabel.SAME;
+      if (currentRate > previousRate) {
+        trend = TrendLabel.BETTER;
+      } else if (currentRate < previousRate) {
+        trend = TrendLabel.WORSE;
+      }
+      return {
+        topicId,
+        topicName: b.name,
+        successRate: currentRate,
+        trend,
+      };
+    });
+
+    items.sort((a, b) => a.successRate - b.successRate);
+
+    return { items };
+  }
+
+  async teacherClassErrorOverview(
+    yearId: string,
+    classId: string,
+    user: JwtPayload,
+  ): Promise<{ items: TeacherErrorAnalyticsItem[] }> {
+    if (!yearId || typeof yearId !== 'string') {
+      throw new BadRequestException('yearId is required');
+    }
+    if (!classId || typeof classId !== 'string') {
+      throw new BadRequestException('classId is required');
+    }
+    const orgId = user.organizationId ?? null;
+    if (!orgId) {
+      throw new ForbiddenException('Missing organization context');
+    }
+    const role = user.organizationRole ?? null;
+    if (
+      role !== OrganizationRole.TEACHER &&
+      role !== OrganizationRole.DIRECTOR &&
+      role !== OrganizationRole.OWNER
+    ) {
+      throw new ForbiddenException('Insufficient permissions');
+    }
+
+    const classSection = await this.prisma.classSection.findFirst({
+      where: {
+        id: classId,
+        orgId,
+      },
+      select: { id: true },
+    });
+    if (!classSection) {
+      throw new ForbiddenException('Class not found in your organization');
+    }
+
+    const now = new Date();
+    const currentSince = subDays(now, 30);
+    const previousSince = subDays(currentSince, 30);
+
+    const responses = await this.prisma.response.findMany({
+      where: {
+        submission: {
+          deletedAt: null,
+          assignment: {
+            yearId,
+            organizationId: orgId,
+            classSectionId: classId,
+          },
+          createdAt: {
+            gte: previousSince,
+          },
+        },
+      },
+      select: {
+        isCorrect: true,
+        submission: {
+          select: {
+            createdAt: true,
+            studentId: true,
+          },
+        },
+        question: {
+          select: {
+            id: true,
+            text: true,
+          },
+        },
+      },
+    });
+
+    type ErrorBucket = {
+      label: string;
+      studentIds: Set<string>;
+      currentCount: number;
+      previousCount: number;
+    };
+    const errorBuckets = new Map<string, ErrorBucket>();
+
+    for (const r of responses) {
+      if (r.isCorrect === true) continue;
+      const createdAt = r.submission.createdAt;
+      const questionId = r.question.id;
+      const bucket =
+        errorBuckets.get(questionId) ??
+        {
+          label: r.question.text,
+          studentIds: new Set<string>(),
+          currentCount: 0,
+          previousCount: 0,
+        };
+      bucket.studentIds.add(r.submission.studentId);
+      if (createdAt >= currentSince) {
+        bucket.currentCount += 1;
+      } else {
+        bucket.previousCount += 1;
+      }
+      errorBuckets.set(questionId, bucket);
+    }
+
+    const totalStudentsInErrors = new Set<string>();
+    for (const bucket of errorBuckets.values()) {
+      for (const sid of bucket.studentIds) {
+        totalStudentsInErrors.add(sid);
+      }
+    }
+    const totalStudentsCount = totalStudentsInErrors.size || 1;
+
+    const items: TeacherErrorAnalyticsItem[] = Array.from(
+      errorBuckets.entries(),
+    ).map(([questionId, b]) => {
+      const affectedShare = b.studentIds.size / totalStudentsCount;
+      const distributionLabel =
+        affectedShare > 0.5 ? 'většina žáků' : 'menší část třídy';
+      let trend = TrendLabel.SAME;
+      if (b.currentCount > b.previousCount) {
+        trend = TrendLabel.WORSE;
+      } else if (b.currentCount < b.previousCount) {
+        trend = TrendLabel.BETTER;
+      }
+      return {
+        errorCategoryId: questionId,
+        errorCategoryLabel: b.label,
+        count: b.currentCount,
+        distributionLabel,
+        trend,
+      };
+    });
+
+    items.sort((a, b) => b.count - a.count);
+
+    return { items };
+  }
+
+  async teacherClassTopicOverview(
+    yearId: string,
+    classId: string,
+    user: JwtPayload,
+  ): Promise<{ items: TeacherTopicAnalyticsItem[] }> {
+    if (!yearId || typeof yearId !== 'string') {
+      throw new BadRequestException('yearId is required');
+    }
+    if (!classId || typeof classId !== 'string') {
+      throw new BadRequestException('classId is required');
+    }
+    const orgId = user.organizationId ?? null;
+    if (!orgId) {
+      throw new ForbiddenException('Missing organization context');
+    }
+    const role = user.organizationRole ?? null;
+    if (
+      role !== OrganizationRole.TEACHER &&
+      role !== OrganizationRole.DIRECTOR &&
+      role !== OrganizationRole.OWNER
+    ) {
+      throw new ForbiddenException('Insufficient permissions');
+    }
+
+    const classSection = await this.prisma.classSection.findFirst({
+      where: {
+        id: classId,
+        orgId,
+      },
+      select: { id: true },
+    });
+    if (!classSection) {
+      throw new ForbiddenException('Class not found in your organization');
+    }
+
+    const now = new Date();
+    const currentSince = subDays(now, 30);
+    const previousSince = subDays(currentSince, 30);
+
+    const responses = await this.prisma.response.findMany({
+      where: {
+        submission: {
+          deletedAt: null,
+          assignment: {
+            yearId,
+            organizationId: orgId,
+            classSectionId: classId,
+          },
+          createdAt: {
+            gte: previousSince,
+          },
+        },
+      },
+      select: {
+        isCorrect: true,
+        submission: {
+          select: {
+            createdAt: true,
+            studentId: true,
+            assignment: {
+              select: {
+                topicLevelId: true,
+                topicLevel: {
+                  select: {
+                    id: true,
+                    name: true,
+                    catalogTopic: {
+                      select: {
+                        name: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    type TopicBucket = {
+      name: string;
+      studentIds: Set<string>;
+      currentCorrect: number;
+      currentTotal: number;
+      previousCorrect: number;
+      previousTotal: number;
+    };
+
+    const topicBuckets = new Map<string, TopicBucket>();
+
+    for (const r of responses) {
+      const assignment = r.submission.assignment;
+      const topicLevel = assignment.topicLevel;
+      const topicId = assignment.topicLevelId ?? topicLevel?.id;
+      if (!topicId) continue;
+      const name =
+        topicLevel?.name ??
+        topicLevel?.catalogTopic?.name ??
+        'Neznámé téma';
+      const bucket =
+        topicBuckets.get(topicId) ??
+        {
+          name,
+          studentIds: new Set<string>(),
+          currentCorrect: 0,
+          currentTotal: 0,
+          previousCorrect: 0,
+          previousTotal: 0,
+        };
+      bucket.studentIds.add(r.submission.studentId);
+      const createdAt = r.submission.createdAt;
+      const isCorrect = r.isCorrect === true;
+      if (createdAt >= currentSince) {
+        bucket.currentTotal += 1;
+        if (isCorrect) bucket.currentCorrect += 1;
+      } else {
+        bucket.previousTotal += 1;
+        if (isCorrect) bucket.previousCorrect += 1;
+      }
+      topicBuckets.set(topicId, bucket);
+    }
+
+    const items: TeacherTopicAnalyticsItem[] = Array.from(
+      topicBuckets.entries(),
+    ).map(([topicId, b]) => {
+      const currentRate =
+        b.currentTotal > 0 ? b.currentCorrect / b.currentTotal : 0;
+      const previousRate =
+        b.previousTotal > 0 ? b.previousCorrect / b.previousTotal : 0;
+      let trend = TrendLabel.SAME;
+      if (currentRate > previousRate) {
+        trend = TrendLabel.BETTER;
+      } else if (currentRate < previousRate) {
+        trend = TrendLabel.WORSE;
+      }
+      const affectedShare =
+        b.studentIds.size > 0 ? b.studentIds.size / b.studentIds.size : 1;
+      const dispersionLabel =
+        affectedShare > 0.5 ? 'většina žáků' : 'menší část třídy';
+      return {
+        topicId,
+        topicName: b.name,
+        avgSuccess: currentRate,
+        dispersionLabel,
+        trend,
+      };
+    });
+
+    items.sort((a, b) => a.avgSuccess - b.avgSuccess);
 
     return { items };
   }

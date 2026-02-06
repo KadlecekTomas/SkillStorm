@@ -137,14 +137,13 @@ describe('Auth registration modes (e2e)', () => {
     expect(meta.mode).toBe(RegisterMode.INDIVIDUAL);
   });
 
-  it('REGISTER CREATE_ORG – creates User, Organization and OWNER membership', async () => {
+  it('REGISTER CREATE_ORG – creates User only (onboarding pending, no organizationName)', async () => {
     const email = baseEmail();
     const payload = {
       name: 'Owner User',
       email,
       password: 'Password123!',
       username: 'owner_user',
-      role: OrganizationRole.TEACHER, // requestedRole (for metadata), not actual membership role
       mode: RegisterMode.CREATE_ORG,
     };
 
@@ -156,38 +155,27 @@ describe('Auth registration modes (e2e)', () => {
     const body = res.body?.data ?? res.body;
 
     expect(body.user).toBeTruthy();
-    expect(body.organization).toBeTruthy();
-    expect(body.membership).toBeTruthy();
+    expect(body.organization ?? null).toBeNull();
+    expect(body.membership ?? null).toBeNull();
     expect(body.sessionToken).toBeTruthy();
 
     const userId = body.user.id as string;
-    const orgId = body.organization.id as string;
-    const membershipId = body.membership.id as string;
-
     createdUserIds.push(userId);
-    createdOrgIds.push(orgId);
 
-    // DB: one user, one organization, one membership OWNER
-    const [user, org, membership, membershipCount] = await Promise.all([
+    // DB: user only, no organization nor membership yet (onboarding step creates them)
+    const [user, membershipCount] = await Promise.all([
       prisma.user.findUnique({ where: { id: userId } }),
-      prisma.organization.findUnique({ where: { id: orgId } }),
-      prisma.membership.findUnique({ where: { id: membershipId } }),
       prisma.membership.count({ where: { userId } }),
     ]);
-
     expect(user).toBeTruthy();
-    expect(org).toBeTruthy();
-    expect(membership).toBeTruthy();
-    expect(membershipCount).toBe(1);
-    expect(membership?.organizationId).toBe(orgId);
-    expect(membership?.role).toBe(OrganizationRole.OWNER);
+    expect(membershipCount).toBe(0);
 
-    // JWT claims: organizationId and organizationRole should be set
+    // JWT: no org context until onboarding completes
     const claims = decodeJwt(body.sessionToken);
-    expect(claims.organizationId).toBe(orgId);
-    expect(claims.organizationRole).toBe(OrganizationRole.OWNER);
+    expect(claims.organizationId ?? null).toBeNull();
+    expect(claims.organizationRole ?? null).toBeNull();
 
-    // Audit log: REGISTER with organizationId and metadata.mode = CREATE_ORG
+    // Audit: REGISTER with onboardingState = CREATE_ORG_PENDING
     const logs = await prisma.auditLog.findMany({
       where: {
         action: 'REGISTER',
@@ -199,9 +187,10 @@ describe('Auth registration modes (e2e)', () => {
     });
     expect(logs.length).toBe(1);
     const log = logs[0]!;
-    expect(log.organizationId).toBe(orgId);
+    expect(log.organizationId).toBeNull();
     const meta = (log.metadata ?? {}) as any;
     expect(meta.mode).toBe(RegisterMode.CREATE_ORG);
+    expect(meta.onboardingState).toBe('CREATE_ORG_PENDING');
   });
 
   it('REGISTER JOIN_ORG – creates User without organization (no school join yet)', async () => {

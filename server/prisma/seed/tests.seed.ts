@@ -1,20 +1,7 @@
-import {
-  PrismaClient,
-  PublishStatus,
-  QuestionType,
-} from '@prisma/client';
+import { PrismaClient, PublishStatus, QuestionType } from '@prisma/client';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
-import {
-  CATALOG_TOPIC_IDS,
-  ORG_IDS,
-  TEST_IDS,
-} from './seed-constants';
-import {
-  getMembershipId,
-  logDone,
-  logStep,
-  SEED_USERS,
-} from './seed-helpers';
+import { CATALOG_TOPIC_IDS, ORG_IDS, TEST_IDS } from './seed-constants';
+import { getMembershipId, logDone, logStep, SEED_USERS } from './seed-helpers';
 
 const TEST_DEFINITIONS = [
   {
@@ -118,7 +105,9 @@ export async function seed(prisma: PrismaClient) {
     });
 
     if (!topicLevel) {
-      console.warn(`⚠️ Tests > TopicLevel not found for ${testDef.title}, skipping.`);
+      console.warn(
+        `⚠️ Tests > TopicLevel not found for ${testDef.title}, skipping.`,
+      );
       continue;
     }
 
@@ -167,13 +156,15 @@ export async function seed(prisma: PrismaClient) {
             status: PublishStatus.PUBLISHED,
           },
         });
-        console.log(`⚠️ Tests > Duplicate test found, updated instead: ${testDef.title}`);
+        console.log(
+          `⚠️ Tests > Duplicate test found, updated instead: ${testDef.title}`,
+        );
       } else {
         throw err;
       }
     }
 
-    // 🔗 Vazba test ↔ topicLevel (bez pádu při duplicitě)
+    // Vazba test ↔ topicLevel (bez pádu při duplicitě)
     try {
       await prisma.testAssignment.upsert({
         where: {
@@ -190,13 +181,17 @@ export async function seed(prisma: PrismaClient) {
         },
       });
 
-      console.log(`✅ Tests > Linked ${testDef.title} to topic level ${topicLevel.id}`);
+      console.log(
+        `✅ Tests > Linked ${testDef.title} to topic level ${topicLevel.id}`,
+      );
     } catch (err: unknown) {
       if (
         err instanceof PrismaClientKnownRequestError &&
         err.code === 'P2002'
       ) {
-        console.warn(`⚠️ Duplicate link detected for ${testDef.title}, skipping.`);
+        console.warn(
+          `⚠️ Duplicate link detected for ${testDef.title}, skipping.`,
+        );
       } else {
         throw err;
       }

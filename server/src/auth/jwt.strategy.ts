@@ -12,6 +12,7 @@ import type { Request } from 'express';
 import { PrismaService } from '@/prisma/prisma.service';
 import type { JwtPayload } from './types/jwt-payload';
 import { ACCESS_TOKEN_COOKIE } from './token-cookies';
+import { SystemRole } from '@prisma/client';
 
 const bearerExtractor = ExtractJwt.fromAuthHeaderAsBearerToken();
 const cookieExtractor = (req: Request): string | null =>
@@ -130,6 +131,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       }
     }
 
+    // CONTRACT (effective platform admin): SUPERADMIN is always platform admin (governance).
+    // DB flag user.isPlatformAdmin is ONLY for delegated platform admins (non-SUPERADMIN).
+    // Effective value must be (user.isPlatformAdmin ?? false) || user.systemRole === SUPERADMIN.
+    // PlatformAdminGuard must NOT be changed: it only checks req.user.isPlatformAdmin; this payload supplies it.
+    const isPlatformAdmin =
+      (user.isPlatformAdmin ?? false) || user.systemRole === SystemRole.SUPERADMIN;
+
     return {
       userId: user.id,
       email: user.email,
@@ -140,7 +148,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       organizationRole: organizationRole ?? null,
       organizationId: organizationId ?? null,
       membershipId: membershipId ?? null,
-      isPlatformAdmin: user.isPlatformAdmin ?? false,
+      isPlatformAdmin,
     };
   }
 }

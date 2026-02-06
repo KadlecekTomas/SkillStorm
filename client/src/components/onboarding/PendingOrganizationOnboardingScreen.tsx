@@ -1,14 +1,38 @@
- "use client";
+"use client";
 
-import { Building2, Hourglass } from "lucide-react";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Building2, Hourglass, RefreshCw } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Alert } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
+import { showToastOnce } from "@/utils/toast";
 
 export const PendingOrganizationOnboardingScreen = (): React.JSX.Element => {
-  const { org } = useAuth();
+  const router = useRouter();
+  const { org, syncProfile } = useAuth();
+  const [isChecking, setIsChecking] = useState(false);
 
   const orgName = org?.name ?? "Škola";
+
+  const handleCheckApproval = async () => {
+    setIsChecking(true);
+    try {
+      const profile = await syncProfile({ force: true });
+      // Contract: use ONLY backend data (profile.context, profile.org). No synthesis, no memberships.
+      const canEnterDashboard =
+        profile.context?.mode === "organization" &&
+        profile.org?.status === "ACTIVE";
+      if (canEnterDashboard) {
+        router.replace("/dashboard");
+        return;
+      }
+      showToastOnce("Stále čeká na schválení.", { type: "info" });
+    } finally {
+      setIsChecking(false);
+    }
+  };
 
   return (
     <div className="flex min-h-[70vh] items-center justify-center px-4 py-12">
@@ -23,33 +47,51 @@ export const PendingOrganizationOnboardingScreen = (): React.JSX.Element => {
                 Onboarding školy
               </p>
               <h1 className="text-xl font-semibold text-slate-900">
-                {orgName} čeká na aktivaci
+                {orgName} čeká na schválení
               </h1>
             </div>
           </div>
 
           <Alert
-            title="Škola byla vytvořena"
+            title="Škola čeká na schválení administrátorem"
             description={
               <>
                 <p>
                   Organizace je založená, ale zatím není aktivní. Než bude možné
-                  nastavit školní rok a třídy, musí být škola nejprve aktivována
-                  správcem nebo v rámci licenčního procesu.
+                  nastavit školní rok a třídy, musí být škola schválena
+                  administrátorem.
                 </p>
                 <p className="mt-2">
-                  Jakmile bude škola aktivní, automaticky tě přesměrujeme na
-                  další krok nastavení.
+                  Po schválení administrátorem klikni na tlačítko „Zkontrolovat
+                  stav schválení“ a přesměrujeme tě do aplikace.
                 </p>
               </>
             }
           />
 
+          <p className="text-sm font-medium text-slate-700">
+            Po schválení školy klikni na tlačítko:
+          </p>
+          <Button
+            onClick={handleCheckApproval}
+            disabled={isChecking}
+            className="w-full"
+          >
+            {isChecking ? (
+              "Kontroluji…"
+            ) : (
+              <>
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Zkontrolovat stav schválení
+              </>
+            )}
+          </Button>
+
           <div className="flex items-center gap-3 rounded-2xl border border-dashed border-amber-200 bg-white/60 px-4 py-3 text-sm text-slate-700">
-            <Hourglass className="h-4 w-4 text-amber-500" />
+            <Hourglass className="h-4 w-4 shrink-0 text-amber-500" />
             <p>
               Mezitím můžeš aplikaci procházet v omezeném režimu. Některé akce
-              (např. vytvoření školního roku) budou zpřístupněny až po aktivaci
+              (např. vytvoření školního roku) budou zpřístupněny až po schválení
               školy.
             </p>
           </div>

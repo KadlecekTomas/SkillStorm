@@ -98,7 +98,7 @@ export const Sidebar = (): React.JSX.Element => {
                 {hasOrganization ? user.organizationRole.toLowerCase() : "bez školy"}
               </Badge>
             )}
-            {!permissions.length && (
+            {!permissions.length && user?.systemRole !== "SUPERADMIN" && user?.isPlatformAdmin !== true && (
               <Badge variant="warning" className="w-fit border-amber-300 text-amber-600">
                 Omezený přístup
               </Badge>

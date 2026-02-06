@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Post, Query, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { AnalyticsService } from './analytics.service';
 import { LogAnalyticsEventDto } from './dto/log-analytics-event.dto';
 import { Permission } from '@/modules/rbac/permission.decorator';
@@ -56,5 +65,47 @@ export class AnalyticsController {
       yearId,
       req.user.organizationId ?? null,
     );
+  }
+
+  @Get('student/errors')
+  @UseGuards(JwtAuthGuard, RequireActiveAcademicYearGuard)
+  @Permission(PermissionKey.VIEW_RESULTS)
+  studentErrors(
+    @Query('yearId') yearId: string,
+    @Req() req: RequestWithUser,
+  ) {
+    return this.analytics.studentErrorOverview(yearId, req.user);
+  }
+
+  @Get('student/topics')
+  @UseGuards(JwtAuthGuard, RequireActiveAcademicYearGuard)
+  @Permission(PermissionKey.VIEW_RESULTS)
+  studentTopics(
+    @Query('yearId') yearId: string,
+    @Req() req: RequestWithUser,
+  ) {
+    return this.analytics.studentTopicOverview(yearId, req.user);
+  }
+
+  @Get('teacher/:classId/errors')
+  @UseGuards(JwtAuthGuard, RequireActiveAcademicYearGuard)
+  @Permission(PermissionKey.VIEW_RESULTS)
+  teacherErrors(
+    @Param('classId') classId: string,
+    @Query('yearId') yearId: string,
+    @Req() req: RequestWithUser,
+  ) {
+    return this.analytics.teacherClassErrorOverview(yearId, classId, req.user);
+  }
+
+  @Get('teacher/:classId/topics')
+  @UseGuards(JwtAuthGuard, RequireActiveAcademicYearGuard)
+  @Permission(PermissionKey.VIEW_RESULTS)
+  teacherTopics(
+    @Param('classId') classId: string,
+    @Query('yearId') yearId: string,
+    @Req() req: RequestWithUser,
+  ) {
+    return this.analytics.teacherClassTopicOverview(yearId, classId, req.user);
   }
 }

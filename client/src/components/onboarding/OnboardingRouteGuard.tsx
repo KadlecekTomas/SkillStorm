@@ -25,10 +25,9 @@ export function OnboardingRouteGuard({
 }): ReactNode {
   const router = useRouter();
   const pathname = usePathname();
-  const { user, org, orgState, isLoading } = useAuth();
+  const { user, org, orgState, isLoading, hasOrganization } = useAuth();
   const [ready, setReady] = useState(false);
 
-  const hasOrganization = Boolean(org?.id);
   const isOwner = user?.organizationRole === "OWNER";
   const orgType = org?.type;
   const isSchool = orgType === "SCHOOL";

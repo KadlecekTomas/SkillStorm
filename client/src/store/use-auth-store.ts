@@ -7,21 +7,33 @@ import type {
   PermissionKey,
   OrganizationRole,
   OrganizationType,
+  OrganizationStatus,
+  AuthContext,
 } from "@/types";
 import { derivePermissions } from "@/utils/permissions";
+
+export type OrgReadiness = "READY" | "NOT_READY";
+
+/** Auth invariant: logout is a hard boundary. No protected component may render after logout. */
+export type AuthPhase = "BOOTSTRAP" | "AUTHENTICATED" | "UNAUTHENTICATED" | "LOGGING_OUT";
 
 export type OrganizationContext = {
   id: string;
   name: string;
   type: OrganizationType;
+  status?: OrganizationStatus | null;
+  /** From backend: READY only when org has active academic year + at least one class. */
+  readiness?: OrgReadiness | null;
   slug?: string | null;
 };
 
 export type AuthState = {
+  authPhase: AuthPhase;
   user: User | null;
   org: OrganizationContext | null;
   roles: OrganizationRole[];
   permissions: PermissionKey[];
+  context: AuthContext | null;
   loading: boolean;
   authStatus:
     | "anonymous"
@@ -36,8 +48,11 @@ export type AuthState = {
   setProfile: (payload: {
     user: User | null;
     org?: OrganizationContext | null;
+    /** API /auth/me returns "organization"; mapped to org when org not provided. */
+    organization?: OrganizationContext | null;
     roles?: OrganizationRole[];
     permissions?: PermissionKey[];
+    context?: AuthContext | null;
   }) => void;
   setOrg: (org: OrganizationContext | null) => void;
   setLoading: (loading: boolean) => void;
@@ -46,7 +61,7 @@ export type AuthState = {
   setSessionToken: (token: string | null) => void;
   setHadSession: (hadSession: boolean) => void;
   setHydrated: (hydrated: boolean) => void;
-  logout: () => void;
+  logout: () => Promise<void>;
 };
 
 const deriveRoles = (user: User | null): OrganizationRole[] => {
@@ -64,6 +79,7 @@ const deriveRoles = (user: User | null): OrganizationRole[] => {
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
+      authPhase: "BOOTSTRAP" as AuthPhase,
       user: null,
       org: null,
       roles: [],
@@ -74,63 +90,80 @@ export const useAuthStore = create<AuthState>()(
       sessionToken: null,
       hadSession: false,
       hydrated: false,
-      setProfile: ({ user, org, roles, permissions }) =>
-        set(() => ({
+      context: null,
+      setProfile: ({ user, org, organization, roles, permissions, context }) => {
+        const resolvedOrg = org ?? organization ?? null;
+        return set(() => ({
           user,
           org:
-            org ??
+            resolvedOrg ??
             (user?.organizationId
-              ? {
-                  id: user.organizationId,
-                  name: user.memberships?.find(
+              ? (() => {
+                  const m = user.memberships?.find(
                     (membership) => membership.organizationId === user.organizationId,
-                  )?.organization?.name ?? "Aktivní organizace",
-                  type:
-                    (user.memberships?.find(
-                      (membership) => membership.organizationId === user.organizationId,
-                    )?.organization?.type as OrganizationType | undefined) ??
-                    "SCHOOL",
-                }
+                  )?.organization;
+                  return {
+                    id: user.organizationId,
+                    name: m?.name ?? "Aktivní organizace",
+                    type: (m?.type as OrganizationType | undefined) ?? "SCHOOL",
+                    status: m?.status ?? null,
+                  };
+                })()
               : null),
           roles: roles ?? deriveRoles(user),
           permissions: permissions ?? derivePermissions(user),
-        })),
+          context: context ?? null,
+        }));
+      },
       setOrg: (org) => set(() => ({ org })),
       setLoading: (loading) => set(() => ({ loading })),
-      setAuthStatus: (authStatus) => set(() => ({ authStatus })),
+      setAuthStatus: (authStatus) =>
+        set((s) => ({
+          authStatus,
+          authPhase:
+            authStatus === "authenticated"
+              ? ("AUTHENTICATED" as AuthPhase)
+              : authStatus === "unauthenticated"
+                ? ("UNAUTHENTICATED" as AuthPhase)
+                : s.authPhase,
+        })),
       setOffline: (offline) => set(() => ({ offline })),
       setSessionToken: (sessionToken) => set(() => ({ sessionToken })),
       setHadSession: (hadSession) => set(() => ({ hadSession })),
       setHydrated: (hydrated) => set(() => ({ hydrated })),
-      logout: () =>
-        set(() => ({
-          user: null,
-          org: null,
-          permissions: [],
-          roles: [],
-          loading: false,
-          authStatus: "unauthenticated",
-          sessionToken: null,
-          hadSession: false,
-        })),
+      logout: () => {
+        set(() => ({ authPhase: "LOGGING_OUT" as AuthPhase }));
+        queueMicrotask(() =>
+          set(() => ({
+            authPhase: "UNAUTHENTICATED" as AuthPhase,
+            user: null,
+            org: null,
+            context: null,
+            permissions: [],
+            roles: [],
+            loading: false,
+            authStatus: "unauthenticated",
+            sessionToken: null,
+            hadSession: false,
+          })),
+        );
+        return Promise.resolve();
+      },
     }),
     {
       name: "skillstorm_auth",
-      partialize: ({ user, permissions, roles, org, sessionToken, hadSession }) => ({
+      partialize: ({ user, permissions, roles, org, sessionToken, hadSession, context }) => ({
         user,
         permissions,
         roles,
         org,
         sessionToken,
         hadSession,
+        context,
       }),
-      onRehydrateStorage: () => (state, error) => {
-        if (error) {
-          return;
-        }
-        state?.setHydrated(true);
-        state?.setAuthStatus("authenticating");
-      },
+      // Do NOT set hydrated or authStatus here. Hydrated is set only after
+      // auth bootstrap completes (syncProfile or !hadSession) in useAuth.
+      onRehydrateStorage: () => () => {},
     },
   ),
 );

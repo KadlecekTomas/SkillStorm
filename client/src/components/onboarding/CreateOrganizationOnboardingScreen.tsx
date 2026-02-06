@@ -21,6 +21,28 @@ import type { OrganizationType } from "@/types";
 
 const DEFAULT_TYPE: OrganizationType = "SCHOOL";
 
+/** Parse orgId from POST /organizations response (envelope unwrapped or raw). */
+function parseOrgId(res: unknown): string | null {
+  if (!res || typeof res !== "object") return null;
+  const o = res as Record<string, unknown>;
+  const data = o.data as Record<string, unknown> | undefined;
+  const org = o.organization as Record<string, unknown> | undefined;
+  const dataOrg = data?.organization as Record<string, unknown> | undefined;
+  const id = o.id ?? data?.id ?? (org && typeof org.id === "string" ? org.id : null) ?? (dataOrg && typeof dataOrg.id === "string" ? dataOrg.id : null);
+  return typeof id === "string" ? id : null;
+}
+
+function formatCreateOrgError(err: unknown): string {
+  if (err instanceof Error && err.message === "USE_ORG_FAILED_OR_BAD_CONTEXT") {
+    return "Přepnutí na novou organizaci selhalo. Zkus obnovit stránku nebo se odhlásit a přihlásit.";
+  }
+  if (err instanceof HttpError && err.data && typeof err.data === "object") {
+    const d = err.data as { message?: string; code?: string };
+    if (d.message) return d.message;
+  }
+  return err instanceof Error ? err.message : "Nepodařilo se vytvořit organizaci.";
+}
+
 export const CreateOrganizationOnboardingScreen = (): React.JSX.Element => {
   const router = useRouter();
   const { syncProfile, hasOrganization, switchToOrganizationByOrgId } = useAuth();
@@ -48,27 +70,31 @@ export const CreateOrganizationOnboardingScreen = (): React.JSX.Element => {
     setIsSubmitting(true);
     setError(null);
     try {
-      const data = await httpClient.post<{ id: string; name: string; type?: OrganizationType }>("/organizations", {
+      const res = await httpClient.post<unknown>("/organizations", {
         name: trimmedName,
         type,
       });
-      const orgId = data?.id;
+      const orgId = parseOrgId(res);
       if (!orgId) {
-        setError("Organizace byla vytvořena, ale nepodařilo se přepnout kontext. Obnov stránku.");
+        if (process.env.NODE_ENV === "development") {
+          console.warn("[onboarding] POST /organizations response shape:", res);
+        }
+        setError("Organizace byla vytvořena, ale server nevrátil ID. Zkus obnovit stránku.");
         return;
       }
-      await switchToOrganizationByOrgId(orgId);
+
+      const newContext = await switchToOrganizationByOrgId(orgId);
+      // Contract: redirect and success toast ONLY when context.mode === "organization".
+      if (!newContext || newContext.mode !== "organization") {
+        setError("Přepnutí na novou organizaci selhalo. Zkus obnovit stránku nebo se odhlásit a přihlásit.");
+        return;
+      }
+
       showToastOnce("Organizace byla vytvořena. Dokonči nastavení.", {
         type: "success",
       });
-
-      // SCHOOL organizace po vytvoření začíná ve stavu PENDING → první krok je informační obrazovka.
-      const effectiveType = data?.type ?? type;
-      if (effectiveType === "SCHOOL") {
-        router.replace("/onboarding/pending");
-      } else {
-        router.replace("/onboarding/academic-year");
-      }
+      const effectiveType = (res as { type?: OrganizationType } & Record<string, unknown>)?.type ?? (res as { data?: { type?: OrganizationType } })?.data?.type ?? type;
+      router.replace(effectiveType === "SCHOOL" ? "/onboarding/pending" : "/onboarding/academic-year");
     } catch (err) {
       const code =
         err instanceof HttpError && err.data && typeof err.data === "object" && "code" in err.data
@@ -80,14 +106,10 @@ export const CreateOrganizationOnboardingScreen = (): React.JSX.Element => {
         router.replace("/onboarding/academic-year");
         return;
       }
-      const msg =
-        err instanceof HttpError
-          ? (err.data as { message?: string })?.message ?? err.message
-          : err instanceof Error
-            ? err.message
-            : "Nepodařilo se vytvořit organizaci.";
-      setError(msg);
-      // Onboarding chyby zobrazujeme inline, bez error toastu.
+      if (process.env.NODE_ENV === "development") {
+        console.warn("[onboarding] create-org or switch failed:", err);
+      }
+      setError(formatCreateOrgError(err));
     } finally {
       setIsSubmitting(false);
     }

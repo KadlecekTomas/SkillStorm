@@ -229,6 +229,8 @@ npm run test:e2e
 
 Poznámka: některé auth e2e testy záměrně vyvolávají chyby (duplicitní registrace, invalid login) a generují očekávané error logy.
 
+**Onboarding create-organization invariant** je chráněn backend E2E testem (DB + auth kontrakt) a frontend Playwright testem (routing + context + refresh). Tyto testy musí v CI procházet. Více: [docs/testing.md](docs/testing.md).
+
 ## License / Contributing
 Repo je určen pro interní/akademické použití.  
 Příspěvky posílej přes PR s krátkým popisem změn.

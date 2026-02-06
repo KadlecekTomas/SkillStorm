@@ -23,9 +23,10 @@ export const GuardBoundary = ({
   loadingFallback,
   ...options
 }: GuardBoundaryProps): ReactNode => {
+  const { user, authStatus, isLoggingOut } = useAuth();
   const guard = useGuard(options);
   const router = useRouter();
-  const { user, authStatus } = useAuth();
+  if (isLoggingOut) return null;
 
   const readyMarker = (
     <div

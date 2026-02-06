@@ -3,22 +3,48 @@
 import { type JSX, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
-import { getRoleHomePath } from "@/utils/permissions";
 import { AuthForm } from "@/components/forms/auth-form";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 export default function LoginPage(): JSX.Element {
   const router = useRouter();
-  const { user, isLoading, authStatus } = useAuth();
+  const { context, isLoading, isAuthenticated } = useAuth();
 
+  // Auth invariant:
+  // Authenticated users must never access the login page.
+  // Login is only reachable after explicit logout.
   useEffect(() => {
-    // ⛔ Neredirectuj během načítání nebo bootstrapu
-    if (isLoading) return;
-    if (authStatus !== "authenticated") return;
-    // ⛔ Neredirectuj, pokud není uživatel
-    if (!user) return;
+    if (!isAuthenticated) return;
+    if (context?.mode === "organization") {
+      router.replace("/dashboard");
+      return;
+    }
+    if (context?.mode === "platform") {
+      router.replace("/dashboard/platform");
+      return;
+    }
+    if (context?.mode === "personal") {
+      router.replace("/onboarding/create-organization");
+      return;
+    }
+    router.replace("/dashboard");
+  }, [isAuthenticated, context?.mode, router]);
 
-    router.replace(getRoleHomePath(user));
-  }, [user, router, isLoading, authStatus]);
+  if (isLoading) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center">
+        <LoadingSpinner label="Načítám…" />
+      </div>
+    );
+  }
+
+  if (isAuthenticated) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center">
+        <LoadingSpinner label="Přesměrovávám…" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

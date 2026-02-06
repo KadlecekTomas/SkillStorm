@@ -28,6 +28,7 @@ import { SubmissionsModule } from './submissions/submissions.module';
 import { RbacModule } from './modules/rbac/rbac.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { RbacGuard } from './modules/rbac/rbac.guard';
+import { ApplicationReadinessGuard } from './platform/application-readiness.guard';
 import { RequireActiveOrganizationGuard } from './platform/require-active-organization.guard';
 import { RequireOrgReadyGuard } from './platform/require-org-ready.guard';
 import { RolesGuard } from './auth/guards/roles.guard';
@@ -104,6 +105,7 @@ import { PlatformModule } from './platform/platform.module';
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RbacGuard },
+    { provide: APP_GUARD, useClass: ApplicationReadinessGuard },
     { provide: APP_GUARD, useClass: RequireActiveOrganizationGuard },
     { provide: APP_GUARD, useClass: RequireOrgReadyGuard },
     { provide: APP_GUARD, useClass: RolesGuard },

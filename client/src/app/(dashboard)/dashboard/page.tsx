@@ -31,12 +31,16 @@ import {
   type StatsOverviewResponse,
 } from "@/lib/api/dashboard";
 
+/**
+ * Dashboard entrypoint (/dashboard). Renders overview only.
+ * Must NOT redirect to /dashboard/platform (would create redirect loop with platform page).
+ */
 function DashboardPage() {
   const router = useRouter();
   const [tests, setTests] = useState<TestSummary[]>([]);
   const [testsLoading, setTestsLoading] = useState(false);
   const { can, hasRole } = usePermissions();
-  const { hasOrganization } = useAuth();
+  const { context } = useAuth();
   const { summary: gamification } = useGamification();
   const [levelModalOpen, setLevelModalOpen] = useState(false);
   const previousLevelRef = useRef<number | null>(null);
@@ -140,7 +144,7 @@ function DashboardPage() {
   return (
     <>
     <div className="space-y-8">
-      {!hasOrganization && (
+      {context?.mode === "personal" && (
         <Card className="space-y-4 rounded-3xl border border-emerald-200 bg-emerald-50/70 p-6">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
@@ -434,7 +438,7 @@ function DashboardPage() {
       >
         <Card className="space-y-2 p-6">
           <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-500">
-            <Badge variant="neutral">NOT IMPLEMENTED</Badge>
+            <Badge variant="neutral">TODO</Badge>
             <span>Classrooms UI</span>
           </div>
           <p className="text-sm text-slate-600">

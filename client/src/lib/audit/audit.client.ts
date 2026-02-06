@@ -2,6 +2,7 @@
 
 import { API_BASE_PATH } from "@/utils/env";
 import { createCorrelationId } from "@/lib/http/client";
+import { useAuthStore } from "@/store/use-auth-store";
 
 export type AuditAction =
   | "LOGIN"
@@ -58,6 +59,8 @@ const sendViaBeacon = (payload: AuditEvent[]) => {
 };
 
 export const audit = (event: AuditInput): void => {
+  const state = useAuthStore.getState();
+  if (!state.user || state.authPhase === "LOGGING_OUT") return;
   const enriched: AuditEvent = {
     action: event.action,
     ts: Date.now(),
@@ -74,6 +77,7 @@ export const flushAuditQueue = async (options?: {
   useBeacon?: boolean;
 }): Promise<boolean> => {
   if (!queue.length || flushing) return true;
+  if (useAuthStore.getState().authPhase === "LOGGING_OUT") return false;
   if (!options?.force && !canFlush()) return false;
 
   const payload = queue.splice(0, queue.length);
@@ -81,6 +85,10 @@ export const flushAuditQueue = async (options?: {
   const useBeacon = options?.useBeacon ?? false;
 
   try {
+    if (useAuthStore.getState().authPhase === "LOGGING_OUT") {
+      queue.unshift(...payload);
+      return false;
+    }
     if (useBeacon && sendViaBeacon(payload)) {
       retryAttempt = 0;
       return true;

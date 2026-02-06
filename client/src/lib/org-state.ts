@@ -15,9 +15,9 @@ export type OrgState =
 export type OrgStateInput = {
   memberships?: Array<{
     organizationId: string;
-    organization?: { name?: string; type?: string; status?: string };
+    organization?: { name?: string; type?: string; status?: string | null };
   }> | undefined;
-  organization?: { id: string; status?: string } | null | undefined;
+  organization?: { id: string; status?: string | null } | null | undefined;
 };
 
 /**

@@ -16,7 +16,7 @@ function TestsPage() {
           <h2 className="text-xl font-semibold text-slate-900">Automated assessments</h2>
         </div>
         <div className="flex items-center gap-2">
-          <Badge variant="neutral">NOT IMPLEMENTED</Badge>
+          <Badge variant="neutral">TODO</Badge>
           <Button
             variant="outline"
             disabled

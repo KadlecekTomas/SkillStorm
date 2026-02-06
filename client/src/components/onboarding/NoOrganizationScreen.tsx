@@ -96,7 +96,12 @@ export const NoOrganizationScreen = (): React.JSX.Element => {
         setErrorMessage("Organizace byla vytvořena, ale nepodařilo se přepnout kontext. Obnov stránku.");
         return;
       }
-      await switchToOrganizationByOrgId(orgId);
+      const newContext = await switchToOrganizationByOrgId(orgId);
+      // Contract: redirect and success toast ONLY when context.mode === "organization".
+      if (!newContext || newContext.mode !== "organization") {
+        setErrorMessage("Přepnutí na novou organizaci selhalo. Obnov stránku nebo se odhlás a přihlas znovu.");
+        return;
+      }
       showToastOnce("Organizace byla vytvořena. Dokonči nastavení.", {
         type: "success",
       });

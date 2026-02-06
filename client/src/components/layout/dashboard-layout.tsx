@@ -8,7 +8,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Alert } from "@/components/ui/alert";
 import { useAuth } from "@/hooks/use-auth";
 import { useAcademicYears } from "@/hooks/use-academic-years";
 import {
@@ -23,19 +22,19 @@ type DashboardLayoutProps = {
   children: React.ReactNode;
 };
 
+/**
+ * Renders only when AppReadinessGate has already determined AppState === READY.
+ * No duplicate gating here; domain modules (children) are always safe to render.
+ */
 export const DashboardLayout = ({ children }: DashboardLayoutProps): React.JSX.Element => {
   const role = useRoleView();
   const { logEvent } = useAnalytics();
   const pathname = usePathname();
-  const { user, org, logout, switchOrganization, isOffline, isLoading, hasOrganization } = useAuth();
+  const { user, org, logout, switchOrganization, isOffline, isLoading, hasOrganization, context } = useAuth();
   const memberships = user?.memberships ?? [];
   const activeMembershipId =
     memberships.find((m) => m.organizationId === org?.id)?.id ?? "";
-  const {
-    selectedYear,
-    yearConfigError,
-    bootstrapState,
-  } = useAcademicYears();
+  const { selectedYear, bootstrapState } = useAcademicYears();
 
   useEffect(() => {
     if (!pathname) return;
@@ -55,54 +54,19 @@ export const DashboardLayout = ({ children }: DashboardLayoutProps): React.JSX.E
     return () => window.removeEventListener("storage", handleStorage);
   }, [org?.id, memberships, switchOrganization]);
 
-  const shouldBlockChildren = hasOrganization && bootstrapState !== "READY";
-  let blockedContent: React.ReactNode | null = null;
-  if (hasOrganization && (bootstrapState === "LOADING" || bootstrapState === "INIT")) {
-    blockedContent = (
-      <div className="space-y-4">
-        <div className="rounded-3xl border border-slate-200 bg-white px-5 py-4">
-          <p className="text-sm text-slate-600">Načítám aktivní školní rok…</p>
-        </div>
-      </div>
-    );
-  }
-  if (hasOrganization && bootstrapState === "ERROR") {
-    let title = "Konfigurační chyba";
-    let description = "Aktivní školní rok není dostupný.";
-    if (
-      yearConfigError === "ACADEMIC_YEAR_INVARIANT_BROKEN" ||
-      yearConfigError === "NO_ACTIVE_ACADEMIC_YEAR" ||
-      yearConfigError === "MULTIPLE_ACTIVE_ACADEMIC_YEARS"
-    ) {
-      title = "Chybí aktivní školní rok";
-      description =
-        yearConfigError === "ACADEMIC_YEAR_INVARIANT_BROKEN"
-          ? "Organizace nemá správně nastavený aktivní školní rok. Kontaktujte správce."
-          : "V organizaci není nastaven aktivní školní rok. Kontaktujte ředitele nebo vlastníka školy. Pokud jste vlastník, měli byste být přesměrováni na stránku pro vytvoření školního roku.";
-    } else if (yearConfigError === "ACTIVE_YEAR_FETCH_FAILED") {
-      title = "Nelze načíst aktivní školní rok";
-      description = "Zkontroluj připojení nebo to zkus znovu.";
-    }
-    blockedContent = (
-      <div className="space-y-4">
-        <Alert title={title} description={description} variant="warning" />
-      </div>
-    );
-  }
-
   return (
     <MainLayout>
       <div className="space-y-3 rounded-3xl border border-dashed border-slate-200 bg-white/70 px-6 py-4">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex flex-wrap items-baseline gap-4">
-            {hasOrganization && (
+            {context?.mode === "organization" && (
               <p className="text-base font-medium text-slate-700" aria-label="Aktuální školní rok">
                 Školní rok{" "}
                 {bootstrapState === "READY" && selectedYear
                   ? selectedYear.name
                   : bootstrapState === "LOADING" || bootstrapState === "INIT"
                     ? "…"
-                    : "—"}
+                    : selectedYear?.name ?? "—"}
               </p>
             )}
             <div>
@@ -149,7 +113,7 @@ export const DashboardLayout = ({ children }: DashboardLayoutProps): React.JSX.E
             Pracujete offline. Akce odešleme, jakmile se znovu připojíte.
           </div>
         )}
-        {!hasOrganization && (
+        {context?.mode === "personal" && (
           <div className="rounded-3xl border border-emerald-200 bg-emerald-50/70 px-5 py-4">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
@@ -168,7 +132,7 @@ export const DashboardLayout = ({ children }: DashboardLayoutProps): React.JSX.E
           </div>
         )}
       </div>
-      {shouldBlockChildren ? blockedContent : children}
+      {children}
     </MainLayout>
   );
 };

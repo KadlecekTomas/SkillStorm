@@ -16,12 +16,13 @@ import type { LoginDto } from './dto/login.dto';
 import { RegisterMode, type RegisterDto } from './dto/register.dto';
 import type { JoinOrganizationDto } from './dto/join-organization.dto';
 import { ConfigService } from '@nestjs/config';
-import type { Membership, SystemRole, User } from '@prisma/client';
+import type { Membership, User } from '@prisma/client';
 import {
   AuditEntityType,
   OrganizationRole,
   OrganizationType,
   Prisma,
+  SystemRole,
   XpEventType,
 } from '@prisma/client';
 import { randomBytes, randomUUID } from 'crypto';
@@ -37,6 +38,7 @@ import { isUUID } from 'class-validator';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 import { bumpOrgVersion } from '@/shared/cache/org-cache.utils';
+import { getOrgReadiness, type OrgReadiness } from '@/shared/org-readiness.utils';
 
 type JwtClaims = {
   sub: string;
@@ -48,12 +50,24 @@ type JwtClaims = {
   membershipId: string | null;
 };
 
+export type AuthContextMode = 'platform' | 'organization' | 'personal';
+
 export type MeContext = {
-  user: Awaited<ReturnType<AuthService["getUserProfile"]>>;
-  organization: { id: string; name: string; type: any } | null;
+  user: Awaited<ReturnType<AuthService['getUserProfile']>>;
+  organization: {
+    id: string;
+    name: string;
+    type: any;
+    status?: any | null;
+    readiness?: OrgReadiness;
+  } | null;
   membership: { id: string; role: any; organizationId: string } | null;
   roles: string[];
   permissions: string[];
+  context: {
+    mode: AuthContextMode;
+    organizationId: string | null;
+  };
 };
 
 @Injectable()
@@ -270,95 +284,77 @@ export class AuthService {
   // Public API
   // -------------------------
 
+  /**
+   * Map Prisma known errors to HTTP exceptions. Never leak raw 500.
+   */
+  private mapPrismaError(e: unknown): never {
+    if (e instanceof PrismaClientKnownRequestError) {
+      if (e.code === 'P2002') {
+        const target = (e.meta as { target?: string[] })?.target;
+        if (target?.includes('email')) {
+          throw new ConflictException('Email already exists');
+        }
+        if (target?.includes('username')) {
+          throw new ConflictException('Username already taken');
+        }
+        throw new ConflictException('A record with this value already exists');
+      }
+      if (e.code === 'P2003') {
+        throw new BadRequestException('Invalid reference (foreign key constraint)');
+      }
+      this.logger.warn(`Prisma error ${e.code} in register`, e.meta);
+      throw new BadRequestException('Registration failed due to data constraint');
+    }
+    if (e instanceof BadRequestException || e instanceof ConflictException) {
+      throw e;
+    }
+    this.logger.error('Register failed', e instanceof Error ? e.stack : e);
+    throw new BadRequestException(
+      e instanceof Error ? e.message : 'Registration failed',
+    );
+  }
+
   async register(dto: RegisterDto) {
+    // --- Explicit payload validation ---
     if (!dto.mode) {
       throw new BadRequestException('Registration mode is required');
     }
     const mode = dto.mode;
 
-    const existing = await this.prisma.user.findUnique({
-      where: { email: dto.email },
-    });
-    if (existing) {
-      throw new ConflictException('Email already exists');
+    const email = typeof dto.email === 'string' ? dto.email.trim() : '';
+    const password = typeof dto.password === 'string' ? dto.password : '';
+    const name = typeof dto.name === 'string' ? dto.name.trim() : '';
+    if (!email) {
+      throw new BadRequestException('Email is required');
+    }
+    if (!password || password.length < 6) {
+      throw new BadRequestException('Password is required and must be at least 6 characters');
+    }
+    if (!name || name.length < 2) {
+      throw new BadRequestException('Name is required and must be at least 2 characters');
     }
 
-    const passwordHash = await bcrypt.hash(dto.password, 10);
-    const baseUname =
-      dto.username ?? dto.email.split('@')[0] ?? dto.name ?? 'user';
-    const now = new Date();
+    if (mode === RegisterMode.CREATE_ORG) {
+      // Contract: register only creates user. Organization is created in onboarding step (POST /organizations).
+      const existing = await this.prisma.user.findUnique({
+        where: { email },
+      });
+      if (existing) {
+        throw new ConflictException('Email already exists');
+      }
 
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const username = await this.ensureUniqueUsername(
-        attempt === 0
-          ? baseUname
-          : `${baseUname}${Math.floor(Math.random() * 1000)}`,
-      );
+      const passwordHash = await bcrypt.hash(password, 10);
+      const baseUname = dto.username ?? email.split('@')[0] ?? name ?? 'user';
+      const username = await this.ensureUniqueUsername(baseUname);
+      const now = new Date();
 
       try {
-        if (mode === RegisterMode.CREATE_ORG) {
-          // CREATE_ORG: create User only. Organization is created in onboarding step.
-          const result = await this.prisma.$transaction(async (tx) => {
-            const createdUser = await tx.user.create({
-              data: {
-                email: dto.email,
-                username,
-                name: dto.name,
-                passwordHash,
-                systemRole: null,
-                lastLoginAt: now,
-              },
-              select: {
-                id: true,
-                email: true,
-                username: true,
-                name: true,
-                systemRole: true,
-                lastLoginAt: true,
-              },
-            });
-            return { user: createdUser };
-          });
-
-          const persistedUser = await this.prisma.user.findUnique({
-            where: { id: result.user.id },
-          });
-          if (!persistedUser) {
-            throw new NotFoundException('User not found after registration');
-          }
-
-          const tokens = await this.generateTokens(persistedUser, null);
-
-          await this.auditService.log({
-            action: 'REGISTER',
-            entityType: AuditEntityType.USER,
-            userId: result.user.id,
-            organizationId: null,
-            entityId: result.user.id,
-            metadata: {
-              mode,
-              onboardingState: 'CREATE_ORG_PENDING',
-            },
-          });
-
-          this.logger.log(
-            `Registration complete for ${result.user.email} (mode=${mode}, org pending)`,
-          );
-
-          return {
-            tokens,
-            user: result.user,
-            organization: null,
-            membership: null,
-          };
-        }
-
         const result = await this.prisma.$transaction(async (tx) => {
           const createdUser = await tx.user.create({
             data: {
-              email: dto.email,
+              email,
               username,
-              name: dto.name,
+              name,
               passwordHash,
               systemRole: null,
               lastLoginAt: now,
@@ -372,7 +368,81 @@ export class AuthService {
               lastLoginAt: true,
             },
           });
+          return { user: createdUser };
+        });
 
+        const persistedUser = await this.prisma.user.findUnique({
+          where: { id: result.user.id },
+        });
+        if (!persistedUser) {
+          throw new NotFoundException('User not found after registration');
+        }
+
+        const tokens = await this.generateTokens(persistedUser, null);
+
+        await this.auditService.log({
+          action: 'REGISTER',
+          entityType: AuditEntityType.USER,
+          userId: result.user.id,
+          organizationId: null,
+          entityId: result.user.id,
+          metadata: { mode, onboardingState: 'CREATE_ORG_PENDING' },
+        });
+
+        this.logger.log(
+          `Registration complete for ${result.user.email} (mode=${mode}, onboardingState=CREATE_ORG_PENDING)`,
+        );
+
+        return {
+          tokens,
+          user: result.user,
+          organization: null,
+          membership: null,
+        };
+      } catch (e) {
+        this.mapPrismaError(e);
+      }
+    }
+
+    // --- INDIVIDUAL / JOIN_ORG: create User only ---
+    const existing = await this.prisma.user.findUnique({
+      where: { email },
+    });
+    if (existing) {
+      throw new ConflictException('Email already exists');
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    const baseUname = dto.username ?? email.split('@')[0] ?? name ?? 'user';
+    const now = new Date();
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const username = await this.ensureUniqueUsername(
+        attempt === 0
+          ? baseUname
+          : `${baseUname}${Math.floor(Math.random() * 1000)}`,
+      );
+
+      try {
+        const result = await this.prisma.$transaction(async (tx) => {
+          const createdUser = await tx.user.create({
+            data: {
+              email,
+              username,
+              name,
+              passwordHash,
+              systemRole: null,
+              lastLoginAt: now,
+            },
+            select: {
+              id: true,
+              email: true,
+              username: true,
+              name: true,
+              systemRole: true,
+              lastLoginAt: true,
+            },
+          });
           return { user: createdUser };
         });
 
@@ -410,17 +480,16 @@ export class AuthService {
         };
       } catch (e) {
         if (
-          e instanceof Prisma.PrismaClientKnownRequestError &&
+          e instanceof PrismaClientKnownRequestError &&
           e.code === 'P2002'
         ) {
-          const target = (e.meta as any)?.target as string[] | undefined;
+          const target = (e.meta as { target?: string[] })?.target;
           if (target?.includes('email')) {
             throw new ConflictException('Email already exists');
           }
-          // collision na username → zkus další pokus
           continue;
         }
-        throw e;
+        this.mapPrismaError(e);
       }
     }
 
@@ -633,13 +702,17 @@ export class AuthService {
 
     const mappedMemberships = user.memberships ?? [];
 
+    // CONTRACT: same effective platform admin as JWT payload (see jwt.strategy.ts). Guard unchanged.
+    const isPlatformAdmin =
+      (user.isPlatformAdmin ?? false) || user.systemRole === SystemRole.SUPERADMIN;
+
     return {
       id: user.id,
       email: user.email,
       username: user.username,
       name: user.name,
       systemRole: user.systemRole,
-      isPlatformAdmin: user.isPlatformAdmin ?? false,
+      isPlatformAdmin,
       createdAt: user.createdAt,
       lastLoginAt: user.lastLoginAt,
       memberships: mappedMemberships,
@@ -656,7 +729,10 @@ export class AuthService {
    * (3) first membership (orderBy createdAt)
    * Invalid lastActiveMembershipId is cleaned up (set to null).
    */
-  async getMeContext(userId: string, claims?: { membershipId?: string | null; organizationId?: string | null }) {
+  async getMeContext(
+    userId: string,
+    claims?: { membershipId?: string | null; organizationId?: string | null },
+  ): Promise<MeContext> {
     const userRow = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -676,7 +752,7 @@ export class AuthService {
             id: true,
             role: true,
             organizationId: true,
-            organization: { select: { name: true, type: true } },
+            organization: { select: { name: true, type: true, status: true } },
           },
         },
       },
@@ -702,7 +778,7 @@ export class AuthService {
           id: true,
           role: true,
           organizationId: true,
-          organization: { select: { name: true, type: true } },
+          organization: { select: { name: true, type: true, status: true } },
         },
       });
       if (m) {
@@ -717,7 +793,7 @@ export class AuthService {
           userId,
           deletedAt: null,
         },
-        select: { id: true, role: true, organizationId: true, organization: { select: { name: true, type: true } } },
+        select: { id: true, role: true, organizationId: true, organization: { select: { name: true, type: true, status: true } } },
       });
       if (m) {
         activeMembership = m;
@@ -743,12 +819,23 @@ export class AuthService {
       }
     }
 
+    const readiness =
+      activeMembership
+        ? await getOrgReadiness(this.prisma, activeMembership.organizationId)
+        : undefined;
     const organization = activeMembership
-      ? {
-          id: activeMembership.organizationId,
-          name: activeMembership.organization?.name,
-          type: activeMembership.organization?.type ?? null,
-        }
+      ? (() => {
+          const org = {
+            id: activeMembership.organizationId,
+            name: activeMembership.organization?.name,
+            type: activeMembership.organization?.type ?? null,
+            status: activeMembership.organization?.status ?? null,
+          } as NonNullable<MeContext['organization']>;
+          if (readiness !== undefined) {
+            org.readiness = readiness;
+          }
+          return org;
+        })()
       : null;
 
     const membership = activeMembership
@@ -765,7 +852,9 @@ export class AuthService {
       username: userRow.username,
       name: userRow.name,
       systemRole: userRow.systemRole,
-      isPlatformAdmin: userRow.isPlatformAdmin ?? false,
+      // CONTRACT: effective platform admin (SUPERADMIN or DB flag). Must match jwt.strategy and getMe.
+      isPlatformAdmin:
+        (userRow.isPlatformAdmin ?? false) || userRow.systemRole === SystemRole.SUPERADMIN,
       createdAt: userRow.createdAt,
       lastLoginAt: userRow.lastLoginAt,
       memberships,
@@ -773,6 +862,29 @@ export class AuthService {
       organizationId: activeMembership?.organizationId ?? null,
       needsOnboarding,
     };
+
+    // -------------------------
+    // Explicit auth context contract
+    // -------------------------
+    // Invariant (governance): platform context is determined solely by systemRole.
+    // SUPERADMIN and DEVOPS are always in 'platform' mode, regardless of memberships.
+    const isPlatformAdminContext =
+      userRow.systemRole === SystemRole.SUPERADMIN ||
+      userRow.systemRole === SystemRole.DEVOPS;
+
+    let contextMode: AuthContextMode;
+    let contextOrganizationId: string | null;
+
+    if (isPlatformAdminContext) {
+      contextMode = 'platform';
+      contextOrganizationId = null;
+    } else if (activeMembership) {
+      contextMode = 'organization';
+      contextOrganizationId = activeMembership.organizationId;
+    } else {
+      contextMode = 'personal';
+      contextOrganizationId = null;
+    }
 
     const roles = activeMembership ? [activeMembership.role] : [];
     const permissionKeys = Object.values(PermissionKey);
@@ -783,11 +895,19 @@ export class AuthService {
           permissionKeys,
         )
       : {};
-    const permissions = permissionKeys.filter(
-      (key) => permissionMap[key],
-    );
+    const permissions = permissionKeys.filter((key) => permissionMap[key]);
 
-    return { user: userContext, organization, membership, roles, permissions };
+    return {
+      user: userContext,
+      organization,
+      membership,
+      roles,
+      permissions,
+      context: {
+        mode: contextMode,
+        organizationId: contextOrganizationId,
+      },
+    };
   }
 
   async joinOrganization(userId: string, dto: JoinOrganizationDto) {
@@ -872,6 +992,7 @@ export class AuthService {
       membership: ctx.membership,
       roles: ctx.roles,
       permissions: ctx.permissions,
+      context: ctx.context,
     };
   }
 
@@ -883,7 +1004,7 @@ export class AuthService {
         id: true,
         role: true,
         organizationId: true,
-        organization: { select: { id: true, name: true, type: true } },
+        organization: { select: { id: true, name: true, type: true, status: true } },
       },
     });
 
@@ -925,6 +1046,7 @@ export class AuthService {
       membership: ctx.membership,
       roles: ctx.roles,
       permissions: ctx.permissions,
+      context: ctx.context,
     };
   }
 
@@ -939,7 +1061,7 @@ export class AuthService {
         id: true,
         role: true,
         organizationId: true,
-        organization: { select: { id: true, name: true, type: true } },
+        organization: { select: { id: true, name: true, type: true, status: true } },
       },
     });
 
@@ -983,6 +1105,7 @@ export class AuthService {
       membership: ctx.membership,
       roles: ctx.roles,
       permissions: ctx.permissions,
+      context: ctx.context,
     };
   }
 }

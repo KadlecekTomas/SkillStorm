@@ -3,12 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { fetchWithAuth } from "@/lib/http/client";
-import { useAuthStore, type OrganizationContext } from "@/store/use-auth-store";
+import { useAuthStore, type OrganizationContext, type AuthPhase } from "@/store/use-auth-store";
 import { useAcademicYearStore } from "@/store/use-academic-year-store";
-import { deriveOrgState, hasAnyOrganization, type OrgState } from "@/lib/org-state";
-import type { OrganizationRole, PermissionKey, User } from "@/types";
+import { deriveOrgState, type OrgState } from "@/lib/org-state";
+import type { OrganizationRole, PermissionKey, User, AuthContext } from "@/types";
 import { showToastOnce } from "@/utils/toast";
-import { AUTH_DEBUG } from "@/utils/env";
+import { AUTH_DEBUG, API_BASE_PATH } from "@/utils/env";
 import { audit } from "@/lib/audit/audit.client";
 
 type AuthEnvelope = {
@@ -16,6 +16,7 @@ type AuthEnvelope = {
   org: OrganizationContext | null;
   roles: OrganizationRole[];
   permissions: PermissionKey[];
+  context: AuthContext;
 };
 
 type SwitchOrganizationResponse = AuthEnvelope & {
@@ -34,8 +35,14 @@ export type UseAuthResult = {
   org: OrganizationContext | null;
   roles: OrganizationRole[];
   permissions: PermissionKey[];
+  context: AuthContext | null;
+  /** True after auth bootstrap has completed (getMe, restore session, or decided unauthenticated). */
+  isHydrated: boolean;
   isLoading: boolean;
   isAuthenticated: boolean;
+  /** Auth invariant: logout is a hard boundary. No protected component may render after logout. */
+  authPhase: AuthPhase;
+  isLoggingOut: boolean;
   /** True pokud má uživatel alespoň jednu organizaci (membership). Zdroj: /auth/me. */
   hasOrganization: boolean;
   /** Stav organizace odvozený výhradně z /auth/me. */
@@ -52,8 +59,8 @@ export type UseAuthResult = {
   syncProfile: (options?: { force?: boolean }) => Promise<AuthEnvelope>;
   /** Switch active organization by membershipId. New JWT, no reload, clear org caches, navigate to dashboard. */
   switchOrganization: (membershipId: string) => Promise<void>;
-  /** Switch active organization by orgId (e.g. after creating org). Calls POST /auth/use-org, updates token + profile. No redirect. */
-  switchToOrganizationByOrgId: (orgId: string) => Promise<void>;
+  /** Switch active organization by orgId (e.g. after creating org). Calls POST /auth/use-org, updates token + profile. No redirect. Returns new context on success. */
+  switchToOrganizationByOrgId: (orgId: string) => Promise<AuthContext | null>;
 };
 
 
@@ -74,10 +81,12 @@ export const useAuth = (): UseAuthResult => {
   const syncRef = useRef<Promise<AuthEnvelope> | null>(null);
   const refreshAttemptedRef = useRef(false);
   const {
+    authPhase,
     user,
     org,
     roles,
     permissions,
+    context,
     loading,
     authStatus,
     offline,
@@ -89,12 +98,15 @@ export const useAuth = (): UseAuthResult => {
     setOffline,
     setSessionToken,
     setHadSession,
+    setHydrated,
     logout: clearStore,
   } = useAuthStore((state) => ({
+    authPhase: state.authPhase,
     user: state.user,
     org: state.org,
     roles: state.roles,
     permissions: state.permissions,
+    context: state.context,
     loading: state.loading,
     authStatus: state.authStatus,
     offline: state.offline,
@@ -106,8 +118,11 @@ export const useAuth = (): UseAuthResult => {
     setOffline: state.setOffline,
     setSessionToken: state.setSessionToken,
     setHadSession: state.setHadSession,
+    setHydrated: state.setHydrated,
     logout: state.logout,
   }));
+
+  const isLoggingOut = authPhase === "LOGGING_OUT";
 
   const isPublicRoute = useMemo(
     () => (pathname ? PUBLIC_ROUTES.includes(pathname) : false),
@@ -164,12 +179,13 @@ export const useAuth = (): UseAuthResult => {
           }
         } finally {
           setLoading(false);
+          setHydrated(true);
           syncRef.current = null;
           if (AUTH_DEBUG) {
             console.log(
               "%c[AUTH][READY]",
               "color:#0f766e;font-weight:600",
-              { pathname, hydrated, authStatus: "authenticated", userId: user?.id ?? null },
+              { pathname, hydrated: true, authStatus: "authenticated", userId: user?.id ?? null },
             );
           }
         }
@@ -180,6 +196,7 @@ export const useAuth = (): UseAuthResult => {
       setLoading,
       setProfile,
       setAuthStatus,
+      setHydrated,
       clearStore,
       pathname,
       hydrated,
@@ -211,22 +228,26 @@ export const useAuth = (): UseAuthResult => {
   }, [pathname, hydrated, authStatus, loading, user?.id]);
 
   useEffect(() => {
-    if (!hydrated) return;
+    if (typeof window === "undefined") return;
+    if (isLoggingOut) return;
     if (loading) return;
     if (isPublicRoute) {
       setAuthStatus("anonymous");
+      setHydrated(true);
       return;
     }
     if (!hadSession) {
       setAuthStatus("unauthenticated");
+      setHydrated(true);
       return;
     }
     if (authStatus === "authenticated") return;
     if (authStatus === "authenticating" || authStatus === "refreshing") return;
+    setHydrated(false);
     syncProfile().catch(() => {
       // Guard handles unauthenticated redirect after bootstrap.
     });
-  }, [hydrated, loading, authStatus, syncProfile, isPublicRoute, hadSession, setAuthStatus]);
+  }, [loading, authStatus, syncProfile, isPublicRoute, hadSession, setAuthStatus, setHydrated, isLoggingOut]);
 
   const login = useCallback(
     async (payload: LoginPayload) => {
@@ -257,22 +278,14 @@ export const useAuth = (): UseAuthResult => {
     [setLoading, setSessionToken, setProfile, setHadSession, setAuthStatus],
   );
 
+  // Auth invariant: logout is a hard boundary. No protected component may render after logout.
   const logout = useCallback(async () => {
-    try {
-      await fetchWithAuth("POST", "/auth/logout");
-    } catch {
-      // ignore request errors during logout
-    } finally {
-      audit({
-        action: "LOGOUT",
-        ...(org?.id ? { entityId: org.id } : {}),
-      });
-      clearStore();
-      setSessionToken(null);
-      setHadSession(false);
-      setAuthStatus("unauthenticated");
+    clearStore();
+    if (typeof window !== "undefined") {
+      fetch(`${API_BASE_PATH}/auth/logout`, { method: "POST", credentials: "include" }).catch(() => {});
     }
-  }, [clearStore, org?.id, setSessionToken, setHadSession, setAuthStatus]);
+    router.replace("/login");
+  }, [clearStore, router]);
 
   const switchOrganization = useCallback(
     async (membershipId: string) => {
@@ -296,6 +309,7 @@ export const useAuth = (): UseAuthResult => {
           org: nextOrg,
           roles: nextRoles,
           permissions: nextPermissions,
+          context: res?.context ?? null,
         });
         if (previousOrgId) {
           useAcademicYearStore.getState().clearOrg(previousOrgId);
@@ -318,8 +332,15 @@ export const useAuth = (): UseAuthResult => {
     [org?.id, setLoading, setSessionToken, setProfile, router],
   );
 
+  /**
+   * Switch active organization by orgId (e.g. after create-org).
+   * CONTRACT: POST /auth/use-org must return user (with memberships), organization, context.
+   * - If res.user exists: setProfile uses ONLY res.user (no fallback to store).
+   * - If res.user missing: GET /auth/me then setProfile from response.
+   * - Returns context only when context.mode === "organization"; otherwise throws.
+   */
   const switchToOrganizationByOrgId = useCallback(
-    async (orgId: string) => {
+    async (orgId: string): Promise<AuthContext | null> => {
       const previousOrgId = org?.id ?? null;
       setLoading(true);
       try {
@@ -327,38 +348,64 @@ export const useAuth = (): UseAuthResult => {
           body: { orgId },
           skipAuthRetry: true,
         });
+        if (AUTH_DEBUG || process.env.NODE_ENV === "development") {
+          console.log("[useAuth] use-org response", {
+            hasContext: !!res?.context,
+            mode: res?.context?.mode,
+            hasOrg: !!(res?.organization ?? res?.org),
+            hasUser: !!res?.user,
+            membershipsCount: res?.user?.memberships?.length ?? 0,
+          });
+        }
+        if (!res?.context || res.context.mode !== "organization") {
+          throw new Error("USE_ORG_FAILED_OR_BAD_CONTEXT");
+        }
+        const effectiveContext = res.context;
         if (typeof res?.sessionToken === "string") {
           setSessionToken(res.sessionToken);
         }
         const nextOrg = res?.organization ?? res?.org ?? null;
-        setProfile({
-          user: res?.user ?? user,
-          org: nextOrg,
-          roles: res?.roles ?? [],
-          permissions: res?.permissions ?? [],
-        });
+        if (res.user != null) {
+          setProfile({
+            user: res.user,
+            org: nextOrg,
+            roles: res?.roles ?? [],
+            permissions: res?.permissions ?? [],
+            context: effectiveContext,
+          });
+        } else {
+          const profile = await fetchWithAuth<AuthEnvelope>("GET", "/auth/me", {
+            retries: 0,
+            skipAuthRetry: true,
+          });
+          setProfile(profile);
+        }
         if (previousOrgId) {
           useAcademicYearStore.getState().clearOrg(previousOrgId);
         }
+        return effectiveContext;
       } finally {
         setLoading(false);
       }
     },
-    [org?.id, user, setLoading, setSessionToken, setProfile],
+    [org?.id, setLoading, setSessionToken, setProfile],
   );
 
-  const hasOrganization = hasAnyOrganization({
-    memberships: user?.memberships,
-    organization: org,
-  });
+  const hasOrganization = context?.mode === "organization";
 
   const orgState = useMemo(
-    () =>
-      deriveOrgState({
+    () => {
+      if (context?.mode === "platform") {
+        // Platform admins nejsou vázaní na konkrétní školu – z pohledu
+        // readiness je platforma vždy „připravená“.
+        return "HAS_ORG" as OrgState;
+      }
+      return deriveOrgState({
         memberships: user?.memberships,
         organization: org,
-      }),
-    [user?.memberships, org],
+      });
+    },
+    [context?.mode, user?.memberships, org],
   );
 
   const value = useMemo(
@@ -367,6 +414,10 @@ export const useAuth = (): UseAuthResult => {
       org,
       roles,
       permissions,
+      context,
+      authPhase,
+      isLoggingOut,
+      isHydrated: hydrated,
       isLoading:
         loading ||
         !hydrated ||
@@ -388,9 +439,12 @@ export const useAuth = (): UseAuthResult => {
       org,
       roles,
       permissions,
+      context,
+      authPhase,
+      isLoggingOut,
+      hydrated,
       loading,
       authStatus,
-      hydrated,
       offline,
       hasOrganization,
       orgState,

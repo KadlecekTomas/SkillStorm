@@ -1,18 +1,27 @@
 import type { NextConfig } from "next";
 import path from "node:path";
 
+// ENV-based proxy target (evaluated when Next server starts):
+// - Docker: set API_PROXY_TARGET=http://backend:4200 (hostname "backend" resolves on same network).
+// - Local dev: set API_PROXY_TARGET=http://localhost:4200 in .env, or we fallback to it in development.
+function getApiProxyTarget(): string {
+  const env = process.env.API_PROXY_TARGET?.trim();
+  if (env) return env;
+  if (process.env.NODE_ENV !== "production") {
+    return "http://localhost:4200";
+  }
+  throw new Error(
+    "API_PROXY_TARGET is required in production. " +
+      "Docker: http://backend:4200 | Local: http://localhost:4200",
+  );
+}
+
 const nextConfig: NextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
   async rewrites() {
-    const target = process.env.API_PROXY_TARGET;
-    if (!target) {
-      throw new Error(
-        "API_PROXY_TARGET is required. Set it in .env (local) or docker-compose (Docker). " +
-          "Local: http://localhost:4200 | Docker: http://backend:4200",
-      );
-    }
+    const target = getApiProxyTarget();
     return [
       {
         source: "/api/:path*",

@@ -17,6 +17,9 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
+# Override at runtime (e.g. docker-compose sets API_PROXY_TARGET=http://backend:4200).
+ARG API_PROXY_TARGET
+ENV API_PROXY_TARGET=${API_PROXY_TARGET}
 
 COPY package*.json package-lock.json* ./
 COPY --from=deps /app/node_modules ./node_modules

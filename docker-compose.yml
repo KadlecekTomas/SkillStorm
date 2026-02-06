@@ -1,3 +1,9 @@
+# All services use the same network so they resolve by service name (e.g. backend, postgres).
+# Frontend proxy target: inside Docker use http://backend:4200; locally use http://localhost:4200.
+networks:
+  app:
+    driver: bridge
+
 services:
   postgres:
     image: postgres:15-alpine
@@ -18,6 +24,8 @@ services:
       - pgdata:/var/lib/postgresql/data
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
+    networks:
+      - app
 
   redis:
     image: redis:7-alpine
@@ -28,6 +36,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - app
 
   backend:
     build:
@@ -50,6 +60,8 @@ services:
         condition: service_healthy
     ports:
       - "${BACKEND_PORT:-4201}:4200"
+    networks:
+      - app
 
   frontend:
     build:
@@ -57,12 +69,14 @@ services:
       dockerfile: Dockerfile
       target: runner
       args:
+        # Build-time fallback; runtime env from environment: below overrides for next start.
         API_PROXY_TARGET: http://backend:4200
     profiles: ["dev", "staging", "prod"]
     env_file:
       - .env
     environment:
       PORT: 3000
+      # Proxy /api/* to backend. Must resolve host "backend" → same Docker network required.
       API_PROXY_TARGET: http://backend:4200
       NODE_ENV: ${NODE_ENV:-production}
     depends_on:
@@ -70,6 +84,8 @@ services:
         condition: service_started
     ports:
       - "3000:3000"
+    networks:
+      - app
 
 volumes:
   pgdata:

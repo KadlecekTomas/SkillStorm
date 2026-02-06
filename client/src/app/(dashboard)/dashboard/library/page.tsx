@@ -19,7 +19,7 @@ function LibraryPage(): React.JSX.Element {
   const [search, setSearch] = useState("");
   const [items, setItems] = useState<ContentItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const { org, hasOrganization } = useAuth();
+  const { org, hasOrganization, context } = useAuth();
 
   useEffect(() => {
     let active = true;
@@ -83,7 +83,7 @@ function LibraryPage(): React.JSX.Element {
           </Select>
         </div>
       </div>
-      {!hasOrganization && (
+      {context?.mode === "personal" && (
         <Alert
           title="Osobní režim"
           description={

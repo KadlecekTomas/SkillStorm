@@ -4,6 +4,7 @@ import {
   Param,
   Post,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -13,6 +14,7 @@ import { JwtAuthGuard } from '@/auth/guards/jwt-auth.guard';
 import { AllowAnyOrgStatus } from '@/common/decorators/allow-any-org-status.decorator';
 import { ok } from '@/common/http/envelope';
 import { ApiStandardResponses } from '@/common/http/api-standard-responses.decorator';
+import type { RequestWithUser } from '@/types/request-with-user';
 
 @ApiTags('Platform')
 @ApiStandardResponses()
@@ -41,6 +43,14 @@ export class PlatformController {
   @ApiOperation({ summary: 'Organization detail (metadata + last activity)' })
   getOrganizationDetail(@Param('id') id: string) {
     return ok(this.service.getOrganizationDetail(id));
+  }
+
+  @Post('organizations/:id/activate')
+  @ApiOperation({
+    summary: 'Approve organization (PENDING → ACTIVE). SUPERADMIN only.',
+  })
+  activate(@Param('id') id: string, @Req() req: RequestWithUser) {
+    return ok(this.service.activate(id, req.user.userId));
   }
 
   @Post('organizations/:id/suspend')

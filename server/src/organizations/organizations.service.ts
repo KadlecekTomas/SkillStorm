@@ -180,31 +180,36 @@ export class OrganizationsService {
         ? OrganizationStatus.PENDING
         : OrganizationStatus.ACTIVE;
 
-    const org = await this.prisma.organization.create({
-      data: {
-        name: dto.name,
-        address: dto.address ?? null,
-        city: dto.city ?? null,
-        country: dto.country ?? null,
-        type,
-        status,
-        ownerUserId: creatorUserId ?? null,
-      },
-    });
-
-    if (creatorUserId) {
-      const membership = await this.prisma.membership.create({
+    // Atomic: org + OWNER membership + lastActiveMembershipId. Rollback all if any step fails.
+    const org = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.organization.create({
         data: {
-          userId: creatorUserId,
-          organizationId: org.id,
-          role: OrganizationRole.OWNER,
+          name: dto.name,
+          address: dto.address ?? null,
+          city: dto.city ?? null,
+          country: dto.country ?? null,
+          type,
+          status,
+          ownerUserId: creatorUserId ?? null,
         },
       });
-      await this.prisma.user.update({
-        where: { id: creatorUserId },
-        data: { lastActiveMembershipId: membership.id },
-      });
-    }
+
+      if (creatorUserId) {
+        const membership = await tx.membership.create({
+          data: {
+            userId: creatorUserId,
+            organizationId: created.id,
+            role: OrganizationRole.OWNER,
+          },
+        });
+        await tx.user.update({
+          where: { id: creatorUserId },
+          data: { lastActiveMembershipId: membership.id },
+        });
+      }
+
+      return created;
+    });
 
     await this.audit({
       userId: creatorUserId ?? null,

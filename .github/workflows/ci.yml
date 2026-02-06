@@ -80,3 +80,102 @@ jobs:
 
       - name: ✅ Done
         run: echo "✅ Build + Seed passed successfully"
+
+  # Onboarding invariant: DB + auth contract. Must pass in CI; no .env.test needed (DATABASE_URL from job).
+  onboarding-invariant-check:
+    name: Onboarding invariant (backend E2E)
+    runs-on: ubuntu-latest
+    needs: []
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: skillstormdb
+        ports:
+          - 5432:5432
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/skillstormdb
+      JWT_SECRET: ci-secret
+      NODE_ENV: test
+      PORT: 0
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: ⚙️ Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: 🧩 Backend deps & Prisma
+        working-directory: ./server
+        run: |
+          npm ci
+          npm run prisma:generate
+
+      - name: 🧪 Onboarding create-org E2E (DB + auth contract)
+        working-directory: ./server
+        run: |
+          npx jest --config ./test/jest-e2e.config.js --testPathPattern="organizations.e2e-spec" --testNamePattern="Onboarding create-org" --runInBand
+
+  # Frontend onboarding E2E: runs only when E2E_ONBOARDING_* are set; in CI we set them and start backend.
+  onboarding-invariant-e2e:
+    name: Onboarding invariant (frontend E2E)
+    runs-on: ubuntu-latest
+    needs: []
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: skillstormdb
+        ports:
+          - 5432:5432
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/skillstormdb
+      JWT_SECRET: ci-secret
+      NODE_ENV: production
+      SUPERADMIN_EMAIL: admin@skillstorm.local
+      SUPERADMIN_PASSWORD: CiAdminPassword1!
+      E2E_SEED_ONBOARDING_USER: "1"
+      E2E_ONBOARDING_EMAIL: onboarding@skillstorm.local
+      E2E_ONBOARDING_PASSWORD: Password123!
+      BASE_URL: http://127.0.0.1:3000
+      API_PROXY_TARGET: http://localhost:4200
+      CI: "true"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: ⚙️ Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: 🧩 Backend setup & seed (with E2E onboarding user)
+        working-directory: ./server
+        run: |
+          npm ci
+          npm run prisma:generate
+          npx prisma migrate deploy
+          npm run build
+          npm run prisma:seed
+
+      - name: 📦 Frontend deps & Playwright
+        working-directory: ./client
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: 🎬 Onboarding E2E (backend + frontend, routing + context.mode)
+        run: |
+          (cd server && npm run start) &
+          for i in $(seq 1 45); do curl -s -o /dev/null http://localhost:4200 && break; sleep 1; done
+          cd client && npx playwright test tests/e2e/onboarding-create-org.spec.ts

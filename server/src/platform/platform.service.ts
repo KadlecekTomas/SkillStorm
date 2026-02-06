@@ -1,8 +1,13 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
-import { OrganizationStatus } from '@prisma/client';
+import { AuditEntityType, OrganizationStatus } from '@prisma/client';
 import type { Prisma } from '@prisma/client';
 import { assertOrgReady } from '@/shared/org-readiness.utils';
+import { AuditService } from '@/audit/audit.service';
 
 export type PlatformOrgListDto = {
   id: string;
@@ -23,7 +28,10 @@ export type PlatformOrgDetailDto = PlatformOrgListDto & {
 
 @Injectable()
 export class PlatformService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditService: AuditService,
+  ) {}
 
   async listOrganizations(q: {
     page?: number;
@@ -33,25 +41,66 @@ export class PlatformService {
     const page = q.page ?? 1;
     const limit = Math.min(100, q.limit ?? 20);
     const skip = (page - 1) * limit;
+    const search = q.search?.trim() ?? '';
 
     const where: Prisma.OrganizationWhereInput = {
       deletedAt: null,
     };
-    if (q.search?.trim()) {
-      const s = q.search.trim();
+    if (search) {
       where.OR = [
-        { name: { contains: s, mode: 'insensitive' } },
-        { owner: { email: { contains: s, mode: 'insensitive' } } },
+        { name: { contains: search, mode: 'insensitive' } },
+        { owner: { email: { contains: search, mode: 'insensitive' } } },
       ];
+    }
+
+    // Domain-driven ordering:
+    // – PENDING organizations are a processing queue (oldest first)
+    // – ACTIVE/SUSPENDED are informational only (newest first)
+    // – Sorting is fixed intentionally to avoid admin decision fatigue
+    const orderedIds = search
+      ? await this.prisma.$queryRaw<[{ organization_id: string }]>`
+          SELECT o.organization_id
+          FROM organizations o
+          LEFT JOIN users u ON u.user_id = o.owner_user_id
+          WHERE o.deleted_at IS NULL
+            AND (o.name ILIKE ${'%' + search + '%'} OR u.email ILIKE ${'%' + search + '%'})
+          ORDER BY
+            CASE o.status WHEN 'PENDING' THEN 1 WHEN 'ACTIVE' THEN 2 WHEN 'SUSPENDED' THEN 3 END,
+            CASE WHEN o.status = 'PENDING' THEN o.created_at END ASC NULLS LAST,
+            CASE WHEN o.status != 'PENDING' THEN o.created_at END DESC NULLS LAST
+          LIMIT ${limit}
+          OFFSET ${skip}
+        `
+      : await this.prisma.$queryRaw<[{ organization_id: string }]>`
+          SELECT organization_id
+          FROM organizations
+          WHERE deleted_at IS NULL
+          ORDER BY
+            CASE status WHEN 'PENDING' THEN 1 WHEN 'ACTIVE' THEN 2 WHEN 'SUSPENDED' THEN 3 END,
+            CASE WHEN status = 'PENDING' THEN created_at END ASC NULLS LAST,
+            CASE WHEN status != 'PENDING' THEN created_at END DESC NULLS LAST
+          LIMIT ${limit}
+          OFFSET ${skip}
+        `;
+
+    const idList = orderedIds.map((r) => r.organization_id);
+    if (idList.length === 0) {
+      const total = await this.prisma.organization.count({ where });
+      return {
+        items: [],
+        meta: {
+          page,
+          limit,
+          total,
+          pages: Math.max(1, Math.ceil(total / limit)),
+        },
+      };
     }
 
     const [total, orgs] = await Promise.all([
       this.prisma.organization.count({ where }),
       this.prisma.organization.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { createdAt: 'desc' },
+        where: { id: { in: idList }, deletedAt: null },
         select: {
           id: true,
           name: true,
@@ -69,8 +118,11 @@ export class PlatformService {
       }),
     ]);
 
+    const byId = new Map(orgs.map((o) => [o.id, o]));
     const items: PlatformOrgListDto[] = [];
-    for (const o of orgs) {
+    for (const id of idList) {
+      const o = byId.get(id);
+      if (!o) continue;
       const activeYearId = o.academicYears[0]?.id ?? null;
       let hasAnyClassSectionInActiveYear = false;
       if (activeYearId) {
@@ -152,6 +204,32 @@ export class PlatformService {
       hasAnyClassSectionInActiveYear,
       lastActivityAt: lastSub?.submittedAt ?? null,
     };
+  }
+
+  async activate(id: string, userId: string): Promise<{ status: string }> {
+    const org = await this.prisma.organization.findUnique({
+      where: { id, deletedAt: null },
+      select: { id: true, status: true },
+    });
+    if (!org) throw new NotFoundException('Organization not found');
+    if (org.status !== OrganizationStatus.PENDING) {
+      throw new BadRequestException(
+        'Only organizations with status PENDING can be activated',
+      );
+    }
+
+    await this.prisma.organization.update({
+      where: { id },
+      data: { status: OrganizationStatus.ACTIVE },
+    });
+    await this.auditService.log({
+      action: 'ORG_APPROVED',
+      entityType: AuditEntityType.ORGANIZATION,
+      entityId: id,
+      userId,
+      organizationId: id,
+    });
+    return { status: OrganizationStatus.ACTIVE };
   }
 
   async suspend(id: string): Promise<{ status: string }> {
