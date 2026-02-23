@@ -122,6 +122,16 @@ describe('Assignments (e2e)', () => {
     });
     academicYearId = year.id;
 
+    // one class section in active year so org is READY (RequireOrgReadyGuard allows execution)
+    await prisma.classSection.create({
+      data: {
+        orgId: org.id,
+        yearId: academicYearId,
+        grade: $Enums.SchoolGrade.GRADE_7,
+        section: 'A',
+      },
+    });
+
     // test entity v rámci org
     testA = await prisma.test.create({
       data: {
@@ -142,7 +152,7 @@ describe('Assignments (e2e)', () => {
       },
     });
 
-    // seed: jeden assignment přímo přes prisma pro GET/PATCH/DELETE
+    // seed: jeden assignment přímo přes prisma pro GET/PATCH/DELETE (student has VIEW_OWN via assignment_students)
     const seeded = await prisma.assignment.create({
       data: {
         organizationId: org.id,
@@ -158,6 +168,7 @@ describe('Assignments (e2e)', () => {
         shuffle: true,
         showExplain: 'ALWAYS',
         createdById: mTeacher.id,
+        students: { create: [{ studentId: mStudent.id }] },
       },
       select: { id: true },
     });
@@ -165,7 +176,10 @@ describe('Assignments (e2e)', () => {
   });
 
   afterAll(async () => {
-    // cleanup – assignments, academic year
+    // cleanup – class sections, assignments, academic year
+    await prisma.classSection
+      .deleteMany({ where: { yearId: academicYearId } })
+      .catch(() => {});
     await prisma.academicYear.deleteMany({ where: { id: academicYearId } }).catch(() => {});
     await prisma.assignment
       .deleteMany({
@@ -440,11 +454,111 @@ describe('Assignments (e2e)', () => {
     await prisma.user.delete({ where: { id: otherCtx.owner.user.id } });
   });
 
-  it('GET /assignments/:id (SUPERADMIN) → 403 (není whitelisted v @Roles)', async () => {
+  it('GET /assignments/:id (SUPERADMIN) → 200 (has all permissions)', async () => {
     await request(app.getHttpServer())
       .get(`/assignments/${assignmentIdForGetPatchDelete}`)
       .set('Authorization', `Bearer ${superUser.token}`)
       .expect(200);
+  });
+
+  // ---------- Permission-scope integration (no role checks) ----------
+
+  it('Case 1: Student tries to access another student’s assignment → 403', async () => {
+    const secondStudent = await ctx.addMember(OrganizationRole.STUDENT, 'student2');
+    const assignmentForSecond = await prisma.assignment.create({
+      data: {
+        organizationId: org.id,
+        yearId: academicYearId,
+        testId: testA.id,
+        targetType: 'STUDENTS',
+        openAt: new Date(Date.now() - 60_000).toISOString() as unknown as Date,
+        closeAt: new Date(Date.now() + 3_600_000).toISOString() as unknown as Date,
+        maxAttempts: 1,
+        shuffle: false,
+        showExplain: 'NEVER',
+        createdById: mTeacher.id,
+        students: { create: [{ studentId: secondStudent.membership.id }] },
+      },
+      select: { id: true },
+    });
+
+    await request(app.getHttpServer())
+      .get(`/assignments/${assignmentForSecond.id}`)
+      .set('Authorization', `Bearer ${student.token}`)
+      .expect(403);
+
+    await prisma.assignmentStudent.deleteMany({
+      where: { assignmentId: assignmentForSecond.id },
+    });
+    await prisma.assignment.delete({ where: { id: assignmentForSecond.id } });
+  });
+
+  it('Case 2: Teacher tries to access assignment outside their class → 403', async () => {
+    const teacher2 = await ctx.addMember(OrganizationRole.TEACHER, 'teacher2');
+    const teacher2Record = await prisma.teacher.create({
+      data: {
+        membershipId: teacher2.membership.id,
+        organizationId: org.id,
+      },
+      select: { id: true },
+    });
+    const classSection2 = await prisma.classSection.create({
+      data: {
+        orgId: org.id,
+        yearId: academicYearId,
+        grade: $Enums.SchoolGrade.GRADE_7,
+        section: 'B',
+        teacherId: teacher2Record.id,
+      },
+      select: { id: true },
+    });
+    const assignmentOtherClass = await prisma.assignment.create({
+      data: {
+        organizationId: org.id,
+        yearId: academicYearId,
+        testId: testA.id,
+        targetType: 'CLASS',
+        classSectionId: classSection2.id,
+        openAt: new Date(Date.now() - 60_000).toISOString() as unknown as Date,
+        closeAt: new Date(Date.now() + 3_600_000).toISOString() as unknown as Date,
+        maxAttempts: 1,
+        shuffle: false,
+        showExplain: 'NEVER',
+        createdById: mTeacher.id,
+      },
+      select: { id: true },
+    });
+
+    await request(app.getHttpServer())
+      .get(`/assignments/${assignmentOtherClass.id}`)
+      .set('Authorization', `Bearer ${teacher.token}`)
+      .expect(403);
+
+    await prisma.assignment.delete({ where: { id: assignmentOtherClass.id } });
+    await prisma.classSection.delete({ where: { id: classSection2.id } });
+    await prisma.teacher.delete({ where: { id: teacher2Record.id } });
+  });
+
+  it('Case 3: Director accesses any assignment in org → 200', async () => {
+    const res = await request(app.getHttpServer())
+      .get(`/assignments/${assignmentIdForGetPatchDelete}`)
+      .set('Authorization', `Bearer ${director.token}`)
+      .expect(200);
+    expect(res.body.organizationId).toBe(org.id);
+    expect(res.body.id).toBe(assignmentIdForGetPatchDelete);
+  });
+
+  it('Case 4: User without any assignment permission → 403', async () => {
+    const parent = await ctx.addMember(OrganizationRole.PARENT, 'parent');
+    await request(app.getHttpServer())
+      .get(`/assignments/${assignmentIdForGetPatchDelete}`)
+      .set('Authorization', `Bearer ${parent.accessToken}`)
+      .expect(403);
+
+    await request(app.getHttpServer())
+      .get('/assignments/my')
+      .set('Authorization', `Bearer ${parent.accessToken}`)
+      .expect(403);
   });
 
   it('GET /assignments/:id → 404 pro non-existing UUID', async () => {

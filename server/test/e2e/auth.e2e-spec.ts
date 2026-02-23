@@ -4,9 +4,10 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import * as request from 'supertest';
 import { AppModule } from '../../src/app.module';
 import { PrismaService } from '@/prisma/prisma.service';
-import { OrganizationRole } from '@prisma/client';
+import { OrganizationRole, OrganizationType } from '@prisma/client';
 import { RegisterMode } from '@/auth/dto/register.dto';
 import * as cookieParser from 'cookie-parser';
+import { HttpExceptionFilter } from '@/infra/http-exception.filter';
 
 function getCookie(res: request.Response, name: string): string | null {
   const setCookie = res.headers?.['set-cookie'];
@@ -56,6 +57,7 @@ describe('Auth (e2e) – robust', () => {
     app.useGlobalPipes(
       new ValidationPipe({ whitelist: true, transform: true }),
     );
+    app.useGlobalFilters(new HttpExceptionFilter());
     await app.init();
     agent = request.agent(app.getHttpServer());
 
@@ -116,6 +118,48 @@ describe('Auth (e2e) – robust', () => {
       .set('X-Forwarded-For', uniqueIp())
       .send({ name: '', email: 'not-email', password: 'x' })
       .expect(400);
+  });
+
+  it('POST /auth/register → 400 when password too short (< 8)', async () => {
+    await request(app.getHttpServer())
+      .post('/auth/register')
+      .set('X-Forwarded-For', uniqueIp())
+      .send({
+        name: 'Test User',
+        email: `short-pw-${unique}@example.com`,
+        password: 'abc12',
+        mode: RegisterMode.INDIVIDUAL,
+      })
+      .expect(400);
+  });
+
+  it('POST /auth/register → 400 when password has no number', async () => {
+    await request(app.getHttpServer())
+      .post('/auth/register')
+      .set('X-Forwarded-For', uniqueIp())
+      .send({
+        name: 'Test User',
+        email: `no-num-${unique}@example.com`,
+        password: 'abcdefgh',
+        mode: RegisterMode.INDIVIDUAL,
+      })
+      .expect(400);
+  });
+
+  it('POST /auth/register → 201 when password meets policy (8+ chars, letter, number)', async () => {
+    const email = `valid-pw-${unique}@example.com`;
+    const res = await request(app.getHttpServer())
+      .post('/auth/register')
+      .set('X-Forwarded-For', uniqueIp())
+      .send({
+        name: 'Valid Password User',
+        email,
+        password: 'abcd1234',
+        mode: RegisterMode.INDIVIDUAL,
+      })
+      .expect(201);
+    expect(res.body.user?.email).toBe(email);
+    expect(res.body.sessionToken ?? res.body.data?.sessionToken).toBeTruthy();
   });
 
   // --------------------------
@@ -200,6 +244,53 @@ describe('Auth (e2e) – robust', () => {
       .set('X-Forwarded-For', uniqueIp())
       .send({ email: 'nobody@example.com', password: 'Password123!' })
       .expect(401);
+  });
+
+  it('POST /auth/login → without organizationId with 2 memberships uses deterministic org (oldest by createdAt)', async () => {
+    const bcrypt = await import('bcryptjs');
+    const pw = 'TwoOrgUser123!';
+    const email = `twoorg_${Date.now()}@example.com`;
+    const u = await prisma.user.create({
+      data: {
+        email,
+        username: `twoorg_${Date.now()}`,
+        name: 'Two Org User',
+        passwordHash: await bcrypt.hash(pw, 10),
+      },
+      select: { id: true },
+    });
+    const org1 = await prisma.organization.create({
+      data: { name: `TwoOrg A ${Date.now()}`, type: OrganizationType.SCHOOL },
+      select: { id: true },
+    });
+    const org2 = await prisma.organization.create({
+      data: { name: `TwoOrg B ${Date.now()}`, type: OrganizationType.SCHOOL },
+      select: { id: true },
+    });
+    const m1 = await prisma.membership.create({
+      data: { userId: u.id, organizationId: org1.id, role: OrganizationRole.DIRECTOR },
+      select: { id: true, organizationId: true },
+    });
+    await prisma.membership.create({
+      data: { userId: u.id, organizationId: org2.id, role: OrganizationRole.DIRECTOR },
+    });
+    const loginRes = await request(app.getHttpServer())
+      .post('/auth/login')
+      .set('X-Forwarded-For', uniqueIp())
+      .send({ email, password: pw })
+      .expect(201);
+    const token = loginRes.body.sessionToken ?? loginRes.body.data?.sessionToken;
+    expect(token).toBeTruthy();
+    const meRes = await request(app.getHttpServer())
+      .get('/auth/me')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    const me = meRes.body?.data ?? meRes.body;
+    expect(me?.organization?.id).toBe(m1.organizationId);
+    await prisma.membership.deleteMany({ where: { userId: u.id } });
+    await prisma.organization.deleteMany({ where: { id: { in: [org1.id, org2.id] } } });
+    await prisma.refreshToken.deleteMany({ where: { userId: u.id } });
+    await prisma.user.delete({ where: { id: u.id } });
   });
 
   // --------------------------
@@ -301,5 +392,84 @@ describe('Auth (e2e) – robust', () => {
       .get('/auth/me')
       .set('Authorization', `Bearer totally-not-a-jwt`)
       .expect(401);
+  });
+
+  // --------------------------
+  // AUTH HARDENING: session invalidation after password change
+  // --------------------------
+  it('after change-password, old JWT cannot access protected route (401)', async () => {
+    const oldAccess = accessToken;
+    await request(app.getHttpServer())
+      .post('/auth/change-password')
+      .set('Authorization', `Bearer ${oldAccess}`)
+      .set('X-Forwarded-For', uniqueIp())
+      .send({
+        currentPassword: regPayload.password,
+        newPassword: 'NewPassword123!',
+      })
+      .expect(201);
+
+    // Old token must be rejected (invalidated by password change)
+    await request(app.getHttpServer())
+      .get('/auth/me')
+      .set('Authorization', `Bearer ${oldAccess}`)
+      .expect(401);
+
+    // Restore login with new password for subsequent tests
+    const relog = await agent
+      .post('/auth/login')
+      .set('X-Forwarded-For', uniqueIp())
+      .send({ email: regPayload.email, password: 'NewPassword123!' })
+      .expect(201);
+    accessToken = relog.body.sessionToken ?? '';
+    refreshToken = getCookie(relog, 'ss_rt') ?? '';
+  });
+
+  // --------------------------
+  // AUTH HARDENING: reset token single-use, second use returns generic failure
+  // --------------------------
+  it('reset-password token works once, second use returns generic failure (no leak)', async () => {
+    const crypto = await import('crypto');
+    const dateFns = await import('date-fns');
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+    const expiresAt = dateFns.addHours(new Date(), 1);
+    await prisma.passwordResetToken.create({
+      data: { tokenHash, userId, expiresAt },
+    });
+
+    await request(app.getHttpServer())
+      .post('/auth/reset-password')
+      .set('X-Forwarded-For', uniqueIp())
+      .send({ token: rawToken, newPassword: 'AnotherPass123!' })
+      .expect(201);
+
+    const res = await request(app.getHttpServer())
+      .post('/auth/reset-password')
+      .set('X-Forwarded-For', uniqueIp())
+      .send({ token: rawToken, newPassword: 'YetAnother123!' })
+      .expect(400);
+
+    expect(res.body.message).toBe('Operace se nezdařila.');
+  });
+
+  // --------------------------
+  // AUTH HARDENING: rate limiting returns 429 with generic message
+  // --------------------------
+  it('exceeding login rate limit returns 429 with generic message', async () => {
+    const rateLimitIp = '192.168.100.99';
+    const body = { email: 'nonexistent@example.com', password: 'wrong' };
+    // Exhaust login throttle (10 per 15 min per IP) until we get 429
+    let res: request.Response | null = null;
+    for (let i = 0; i < 15; i++) {
+      res = await request(app.getHttpServer())
+        .post('/auth/login')
+        .set('X-Forwarded-For', rateLimitIp)
+        .send(body);
+      if (res.status === 429) break;
+    }
+    expect(res).not.toBeNull();
+    expect(res!.status).toBe(429);
+    expect(res!.body.message).toBe('Operace se nezdařila.');
   });
 });

@@ -11,7 +11,12 @@ describe('DB invariants for Sprint 1 (raw SQL)', () => {
   let orgId: string;
   let otherOrgId: string;
   let yearId: string;
+  let otherYearId: string;
   let classSectionId: string;
+  let otherClassSectionId: string;
+  let studentId: string;
+  let membershipId: string;
+  let userId: string;
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -31,11 +36,18 @@ describe('DB invariants for Sprint 1 (raw SQL)', () => {
     prisma = app.get(PrismaService);
     await prisma.$connect();
 
-    // E2E uses db push (no migrations), so enforce one-active-per-org index manually
-    await prisma.$executeRawUnsafe(`
-      CREATE UNIQUE INDEX IF NOT EXISTS academic_years_one_active_per_org_idx
-      ON academic_years(organization_id) WHERE "isCurrent" = true
-    `);
+    const fk = await prisma.$queryRawUnsafe(
+      "SELECT n.nspname AS schema_name, c.relname AS table_name FROM pg_constraint pc JOIN pg_class c ON c.oid = pc.conrelid JOIN pg_namespace n ON n.oid = c.relnamespace WHERE pc.conname = 'enrollments_student_id_organization_id_fkey' AND c.relname = 'enrollments'",
+    );
+    const fkRows = fk as Array<{ schema_name?: string; table_name?: string }>;
+    if (!Array.isArray(fkRows) || fkRows.length === 0) {
+      throw new Error('Missing FK: enrollments_student_id_organization_id_fkey');
+    }
+    if (fkRows[0]?.schema_name !== 'public') {
+      throw new Error(
+        `FK enrollments_student_id_organization_id_fkey attached to ${fkRows[0]?.schema_name}.${fkRows[0]?.table_name}`,
+      );
+    }
 
     const orgA = await prisma.organization.create({
       data: { name: `DB Inv Org A ${Date.now()}` },
@@ -59,6 +71,17 @@ describe('DB invariants for Sprint 1 (raw SQL)', () => {
       select: { id: true },
     });
     yearId = year.id;
+    const otherYear = await prisma.academicYear.create({
+      data: {
+        orgId: otherOrgId,
+        label: `DB Inv Year B ${Date.now()}`,
+        startsAt: new Date('2026-09-01'),
+        endsAt: new Date('2027-08-31'),
+        isCurrent: true,
+      },
+      select: { id: true },
+    });
+    otherYearId = otherYear.id;
 
     const cls = await prisma.classSection.create({
       data: {
@@ -71,27 +94,76 @@ describe('DB invariants for Sprint 1 (raw SQL)', () => {
       select: { id: true },
     });
     classSectionId = cls.id;
+    const otherCls = await prisma.classSection.create({
+      data: {
+        orgId: otherOrgId,
+        yearId: otherYearId,
+        grade: 'GRADE_1',
+        section: 'C',
+        label: '1.C',
+      },
+      select: { id: true },
+    });
+    otherClassSectionId = otherCls.id;
+
+    const membership = await prisma.membership.create({
+      data: {
+        user: {
+          create: {
+            email: `db_inv_student_${Date.now()}@example.com`,
+            name: 'DB Inv Student',
+            passwordHash: 'x',
+          },
+        },
+        organization: { connect: { id: orgId } },
+        role: OrganizationRole.STUDENT,
+      },
+      select: { id: true, userId: true },
+    });
+    membershipId = membership.id;
+    userId = membership.userId;
+    const student = await prisma.student.create({
+      data: {
+        orgId,
+        membershipId: membership.id,
+      },
+      select: { id: true },
+    });
+    studentId = student.id;
+    if (!studentId) {
+      throw new Error('studentId not set');
+    }
   });
 
   afterAll(async () => {
     await prisma.enrollment.deleteMany({ where: { classSectionId } }).catch(() => {});
     await prisma.classSection.deleteMany({ where: { id: classSectionId } }).catch(() => {});
-    await prisma.academicYear.deleteMany({ where: { id: yearId } }).catch(() => {});
+    await prisma.classSection
+      .deleteMany({ where: { id: otherClassSectionId } })
+      .catch(() => {});
+    await prisma.student.deleteMany({ where: { id: studentId } }).catch(() => {});
+    await prisma.membership.deleteMany({ where: { id: membershipId } }).catch(() => {});
+    await prisma.user.deleteMany({ where: { id: userId } }).catch(() => {});
+    await prisma.academicYear
+      .deleteMany({ where: { id: { in: [yearId, otherYearId] } } })
+      .catch(() => {});
     await prisma.organization.deleteMany({ where: { id: { in: [orgId, otherOrgId] } } }).catch(() => {});
     await prisma.$disconnect();
     await app.close();
   });
 
-  it('rejects raw INSERT of class_section with mismatched organization_id vs academic_year.organization_id', async () => {
+  it('rejects raw INSERT of enrollment with student/org mismatch (cross-org)', async () => {
     await expect(
       prisma.$executeRawUnsafe(
         `
-        INSERT INTO public.class_sections (class_section_id, organization_id, academic_year_id, grade, section)
-        VALUES ($1, $2, $3, 'GRADE_2', 'C')
+        INSERT INTO public.enrollments (enrollment_id, student_id, class_section_id, academic_year_id, organization_id)
+        VALUES ($1, $2, $3, $4, $5)
         `,
-        `db-inv-class-${Date.now()}`,
+        `db-inv-enr-${Date.now()}`,
+        studentId,
+        otherClassSectionId,
+        otherYearId,
         otherOrgId,
-        yearId,
       ),
     ).rejects.toThrow();
   });
@@ -108,28 +180,6 @@ describe('DB invariants for Sprint 1 (raw SQL)', () => {
       select: { id: true },
     });
 
-    const membership = await prisma.membership.create({
-      data: {
-        user: {
-          create: {
-            email: `db_inv_student_${Date.now()}@example.com`,
-            name: 'DB Inv Student',
-            passwordHash: 'x',
-          },
-        },
-        organization: { connect: { id: orgId } },
-        role: OrganizationRole.STUDENT,
-      },
-      select: { id: true },
-    });
-    const student = await prisma.student.create({
-      data: {
-        orgId,
-        membershipId: membership.id,
-      },
-      select: { id: true },
-    });
-
     await expect(
       prisma.$executeRawUnsafe(
         `
@@ -137,7 +187,7 @@ describe('DB invariants for Sprint 1 (raw SQL)', () => {
         VALUES ($1, $2, $3, $4, $5)
         `,
         `db-inv-enr-${Date.now()}`,
-        student.id,
+        studentId,
         classSectionId,
         wrongYear.id,
         orgId,
@@ -186,4 +236,3 @@ describe('DB invariants for Sprint 1 (raw SQL)', () => {
     ).rejects.toThrow();
   });
 });
-

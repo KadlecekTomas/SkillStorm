@@ -7,7 +7,9 @@ export type PolicyCategory =
   | "Multitenancy"
   | "Content"
   | "Submissions"
-  | "Audit";
+  | "Audit"
+  | "UX"
+  | "Onboarding";
 
 type PolicyCase = {
   id: string;
@@ -26,6 +28,8 @@ const CATEGORIES: PolicyCategory[] = [
   "Content",
   "Submissions",
   "Audit",
+  "UX",
+  "Onboarding",
 ];
 
 const ensureDirectory = () => {

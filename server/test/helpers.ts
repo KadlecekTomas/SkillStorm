@@ -80,7 +80,6 @@ export async function authAs(
     email,
     username: options.username ?? shortTag,
     password,
-    role,
     mode: options.mode ?? RegisterMode.CREATE_ORG,
   };
 
@@ -98,6 +97,23 @@ export async function authAs(
   }
   const regData = unwrapBody(reg);
   const prisma = app.get(PrismaService);
+  if (payload.mode === RegisterMode.CREATE_ORG && !regData?.organization) {
+    const orgRes = await agent
+      .post('/organizations')
+      .set('Authorization', `Bearer ${regData.sessionToken}`)
+      .send({ name: `Org ${tag}` });
+    if (orgRes.status !== 201) {
+      throw new Error(
+        `authAs org create failed: ${orgRes.status} ${JSON.stringify(orgRes.body)}`,
+      );
+    }
+    const orgData = unwrapBody(orgRes);
+    regData.organization = orgData;
+    regData.membership = await prisma.membership.findFirst({
+      where: { userId: regData.user.id, organizationId: orgData.id },
+      select: { id: true, role: true, organizationId: true },
+    });
+  }
   if (
     payload.mode === RegisterMode.CREATE_ORG &&
     regData?.membership?.id &&
@@ -176,23 +192,64 @@ export async function register(
 
 /**
  * Login helper – vrací access token.
+ * Pass organizationId to scope JWT to that org (user must be a member).
  */
 export async function login(
   app: INestApplication,
-  creds: { email?: string; login?: string; password: string },
+  creds: {
+    email?: string;
+    login?: string;
+    password: string;
+    organizationId?: string;
+  },
 ) {
   const email = creds.email ?? creds.login;
   if (!email) throw new Error('login() missing email');
+  const body: { email: string; password: string; organizationId?: string } = {
+    email,
+    password: creds.password,
+  };
+  if (creds.organizationId) body.organizationId = creds.organizationId;
   const res = await request(app.getHttpServer())
     .post('/auth/login')
     .set('X-Forwarded-For', uniqueIp())
-    .send({ email, password: creds.password });
+    .send(body);
 
   if (res.status !== 201) {
     throw new Error(`login failed: ${res.status}`);
   }
   const data = unwrapBody(res);
   return data?.sessionToken as string;
+}
+
+/**
+ * Deterministic unique email for E2E to avoid 409 from duplicate email.
+ */
+export function uniqueEmail(prefix: string): string {
+  const rnd = Math.floor(Math.random() * 1e9);
+  const safe = `${prefix}_${Date.now()}_${rnd}`.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+  const short = safe.length > 32 ? `${safe.slice(0, 16)}${safe.slice(-16)}` : safe;
+  return `${short}@example.com`;
+}
+
+/**
+ * Switch JWT context to the given org. Returns new access token for that org.
+ */
+export async function useOrg(
+  app: INestApplication,
+  accessToken: string,
+  orgId: string,
+): Promise<string> {
+  const res = await request(app.getHttpServer())
+    .post('/auth/use-org')
+    .set('Authorization', `Bearer ${accessToken}`)
+    .set('X-Forwarded-For', uniqueIp())
+    .send({ orgId })
+    .expect(201);
+  const data = unwrapBody(res);
+  const token = data?.sessionToken;
+  if (!token) throw new Error('useOrg: missing sessionToken in response');
+  return token;
 }
 
 type OrgContextRole = 'OWNER' | 'DIRECTOR' | 'TEACHER' | 'STUDENT';
@@ -259,27 +316,25 @@ export async function setupOrgContext(
     userId: string,
     role: OrganizationRole,
   ) => {
-    const existing = await prisma.membership.findUnique({
+    const membership = await prisma.membership.upsert({
       where: {
         userId_organizationId: {
           userId,
           organizationId: organization.id,
         },
       },
+      update: {
+        role,
+        deletedAt: null,
+      },
+      create: {
+        userId,
+        organizationId: organization.id,
+        role,
+      },
       select: { id: true, role: true, organizationId: true, userId: true },
     });
-    if (existing) return existing;
-
-    const res = await request(app.getHttpServer())
-      .post('/memberships')
-      .set('Authorization', `Bearer ${owner.accessToken}`)
-      .send({
-        organizationId: organization.id,
-        userId,
-        role,
-      })
-      .expect(201);
-    return res.body;
+    return membership;
   };
 
   const createUserForContext = async (
@@ -296,7 +351,10 @@ export async function setupOrgContext(
   ): Promise<ActorContext> => {
     const user = await createUserForContext(memberSeed, name);
     const membership = await addMembershipForUser(user.user.id, role);
-    const token = await login(app, user.login);
+    const token = await login(app, {
+      ...user.login,
+      organizationId: organization.id,
+    });
     return { ...user, accessToken: token, membership };
   };
 

@@ -4,7 +4,7 @@ import * as request from 'supertest';
 import * as cookieParser from 'cookie-parser';
 import { AppModule } from '../../src/app.module';
 import { authAs } from '../helpers';
-import { OrganizationRole } from '@prisma/client';
+import { InvitationType, OrganizationRole } from '@prisma/client';
 import { RegisterMode } from '@/auth/dto/register.dto';
 
 function uniqueEmail(prefix: string) {
@@ -54,12 +54,23 @@ describe('Invite/join teacher flow (e2e)', () => {
       teacherRegister.body?.sessionToken ??
       teacherRegister.body?.data?.sessionToken;
 
+    const inviteRes = await request(app.getHttpServer())
+      .post('/invites')
+      .set('Authorization', `Bearer ${owner.accessToken}`)
+      .send({
+        type: InvitationType.ORG_ONLY,
+        role: OrganizationRole.TEACHER,
+        expiresInDays: 7,
+      })
+      .expect(201);
+    const inviteBody = inviteRes.body?.data ?? inviteRes.body;
+    const inviteCode = inviteBody.code as string;
+
     await request(app.getHttpServer())
-      .post('/auth/join')
+      .post('/invites/accept')
       .set('Authorization', `Bearer ${teacherToken}`)
       .send({
-        joinCode: owner.organization.id,
-        role: OrganizationRole.TEACHER,
+        code: inviteCode,
       })
       .expect(201);
 

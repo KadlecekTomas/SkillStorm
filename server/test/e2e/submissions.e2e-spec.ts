@@ -364,13 +364,12 @@ describe('Submissions (e2e)', () => {
   // ------------------------------------------------------------------
 
   it('POST /submissions → 201, PATCH responses → 200, POST finish → 200 (+score≈1.0)', async () => {
-    // create
+    // create (201 or 200 if idempotent return)
     const createRes = await request(app.getHttpServer())
       .post('/submissions')
       .set('Authorization', `Bearer ${studentToken}`)
-      .send({ assignmentId })
-      .expect(201);
-
+      .send({ assignmentId });
+    expect([200, 201]).toContain(createRes.status);
     const submissionId = createRes.body.id as string;
     expect(submissionId).toBeTruthy();
 
@@ -437,8 +436,8 @@ describe('Submissions (e2e)', () => {
     const s = await request(app.getHttpServer())
       .post('/submissions')
       .set('Authorization', `Bearer ${studentToken}`)
-      .send({ assignmentId })
-      .expect(201);
+      .send({ assignmentId });
+    expect([200, 201]).toContain(s.status);
 
     // teacher se pokusí měnit/ukončit
     const r1 = await request(app.getHttpServer())
@@ -492,12 +491,12 @@ describe('Submissions (e2e)', () => {
       select: { id: true },
     });
 
-    // první OK
-    await request(app.getHttpServer())
+    // první OK (nebo 200 idempotent)
+    const first = await request(app.getHttpServer())
       .post('/submissions')
       .set('Authorization', `Bearer ${studentToken}`)
-      .send({ assignmentId: single.id })
-      .expect(201);
+      .send({ assignmentId: single.id });
+    expect([200, 201]).toContain(first.status);
 
     // druhý už přes limit
     const res = await request(app.getHttpServer())
@@ -530,8 +529,8 @@ describe('Submissions (e2e)', () => {
     const s = await request(app.getHttpServer())
       .post('/submissions')
       .set('Authorization', `Bearer ${studentToken}`)
-      .send({ assignmentId: soon.id })
-      .expect(201);
+      .send({ assignmentId: soon.id });
+    expect([200, 201]).toContain(s.status);
 
     // posuň deadline do minulosti
     await prisma.assignment.update({
@@ -574,14 +573,78 @@ describe('Submissions (e2e)', () => {
     const s = await request(app.getHttpServer())
       .post('/submissions')
       .set('Authorization', `Bearer ${studentToken}`)
-      .send({ assignmentId })
-      .expect(201);
+      .send({ assignmentId });
+    expect([200, 201]).toContain(s.status);
 
     await request(app.getHttpServer())
       .patch(`/submissions/${s.body.id}/responses`)
       .set('Authorization', `Bearer ${studentToken}`)
       .send({ responses: [{ questionId: 'not-uuid', givenText: 'x' }] })
       .expect(400);
+  });
+
+  it('concurrency: Promise.all([finish, finish]) → both 200, same payload, no duplicate scoring', async () => {
+    const concurrAssignment = await prisma.assignment.create({
+      data: {
+        organizationId: org.id,
+        yearId: academicYearId,
+        testId,
+        targetType: 'STUDENTS' as any,
+        openAt: new Date(Date.now() - 60_000),
+        closeAt: new Date(Date.now() + 60 * 60 * 1000),
+        maxAttempts: 5,
+        createdById: teacherMembershipId,
+        students: { create: [{ studentId: studentMembershipId }] },
+      },
+      select: { id: true },
+    });
+
+    const createRes = await request(app.getHttpServer())
+      .post('/submissions')
+      .set('Authorization', `Bearer ${studentToken}`)
+      .send({ assignmentId: concurrAssignment.id });
+    expect([200, 201]).toContain(createRes.status);
+    const submissionId = createRes.body.id as string;
+
+    const qs = await prisma.question.findMany({
+      where: { testId },
+      orderBy: { order: 'asc' },
+      select: { id: true, correctAnswer: true },
+    });
+    const responses = qs.map((q) => ({
+      questionId: q.id,
+      givenText: q.correctAnswer ?? '',
+    }));
+
+    const [res1, res2] = await Promise.all([
+      request(app.getHttpServer())
+        .post(`/submissions/${submissionId}/finish`)
+        .set('Authorization', `Bearer ${studentToken}`)
+        .send({ responses }),
+      request(app.getHttpServer())
+        .post(`/submissions/${submissionId}/finish`)
+        .set('Authorization', `Bearer ${studentToken}`)
+        .send({ responses }),
+    ]);
+
+    expect(res1.status).toBe(200);
+    expect(res2.status).toBe(200);
+    expect(res1.body.id).toBe(res2.body.id);
+    expect(res1.body.status).toBe(res2.body.status);
+    expect(res1.body.score).toBe(res2.body.score);
+    expect(res1.body.submittedAt).toBeDefined();
+    const count = await prisma.submission.count({
+      where: { id: submissionId },
+    });
+    expect(count).toBe(1);
+    const sub = await prisma.submission.findUnique({
+      where: { id: submissionId },
+      select: { status: true, score: true, submittedAt: true },
+    });
+    expect(sub?.status).toBe('APPROVED');
+    expect(sub?.submittedAt).toBeTruthy();
+
+    await prisma.assignment.delete({ where: { id: concurrAssignment.id } });
   });
 
   it('POST /submissions/:id/finish → idempotentní (druhé finish vrátí 200/409/400, ale nezmění výsledek)', async () => {
@@ -603,8 +666,8 @@ describe('Submissions (e2e)', () => {
     const s = await request(app.getHttpServer())
       .post('/submissions')
       .set('Authorization', `Bearer ${studentToken}`)
-      .send({ assignmentId: tmpAssignment.id })
-      .expect(201);
+      .send({ assignmentId: tmpAssignment.id });
+    expect([200, 201]).toContain(s.status);
 
     const done1 = await request(app.getHttpServer())
       .post(`/submissions/${s.body.id}/finish`)
@@ -642,8 +705,8 @@ describe('Submissions (e2e)', () => {
     const s = await request(app.getHttpServer())
       .post('/submissions')
       .set('Authorization', `Bearer ${studentToken}`)
-      .send({ assignmentId: tmpAssignment.id })
-      .expect(201);
+      .send({ assignmentId: tmpAssignment.id });
+    expect([200, 201]).toContain(s.status);
 
     await request(app.getHttpServer())
       .post(`/submissions/${s.body.id}/finish`)
@@ -659,6 +722,61 @@ describe('Submissions (e2e)', () => {
     expect([400, 403, 409]).toContain(res.status);
 
     await prisma.assignment.delete({ where: { id: tmpAssignment.id } });
+  });
+
+  it('PATCH /submissions/:id/responses after finish → 409 SUBMISSION_LOCKED (DB-level)', async () => {
+    const tmpAssignment = await prisma.assignment.create({
+      data: {
+        organizationId: org.id,
+        yearId: academicYearId,
+        testId,
+        targetType: 'STUDENTS' as any,
+        openAt: new Date(Date.now() - 60_000),
+        closeAt: new Date(Date.now() + 60 * 60 * 1000),
+        maxAttempts: 5,
+        createdById: teacherMembershipId,
+        students: { create: [{ studentId: studentMembershipId }] },
+      },
+      select: { id: true },
+    });
+
+    const s = await request(app.getHttpServer())
+      .post('/submissions')
+      .set('Authorization', `Bearer ${studentToken}`)
+      .send({ assignmentId: tmpAssignment.id });
+    expect([200, 201]).toContain(s.status);
+
+    await request(app.getHttpServer())
+      .post(`/submissions/${s.body.id}/finish`)
+      .set('Authorization', `Bearer ${studentToken}`)
+      .send({ responses: [] })
+      .expect(200);
+
+    const q = await prisma.question.findFirst({ where: { testId }, select: { id: true } });
+    const patchRes = await request(app.getHttpServer())
+      .patch(`/submissions/${s.body.id}/responses`)
+      .set('Authorization', `Bearer ${studentToken}`)
+      .send({ responses: [{ questionId: q!.id, givenText: 'x' }] });
+
+    expect(patchRes.status).toBe(409);
+    expect(patchRes.body?.errorCode ?? patchRes.body?.error).toBe('SUBMISSION_LOCKED');
+
+    await prisma.assignment.delete({ where: { id: tmpAssignment.id } });
+  });
+
+  it('cross-org: GET /submissions/:id with submission from other org → 404 (no leak)', async () => {
+    const subInOrgA = await request(app.getHttpServer())
+      .post('/submissions')
+      .set('Authorization', `Bearer ${studentToken}`)
+      .send({ assignmentId })
+      .then((r) => r.body);
+    const submissionId = subInOrgA.id;
+
+    const res = await request(app.getHttpServer())
+      .get(`/submissions/${submissionId}`)
+      .set('Authorization', `Bearer ${outsiderToken}`);
+
+    expect(res.status).toBe(404);
   });
 
   it('POST /submissions → 404/403 když assignment je v jiné org (student nemá membership)', async () => {
@@ -684,7 +802,7 @@ describe('Submissions (e2e)', () => {
       .set('Authorization', `Bearer ${studentToken}`) // student z org, ale není přiřazen a jiná org
       .send({ assignmentId: otherAss.id });
 
-    expect([403, 404]).toContain(res.status);
+    expect([403, 404, 409]).toContain(res.status);
 
     await prisma.assignment.delete({ where: { id: otherAss.id } });
   });

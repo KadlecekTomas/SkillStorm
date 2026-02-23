@@ -25,7 +25,6 @@ if (!process.env.DATABASE_URL) {
 
 // Bezpečné test flagem
 process.env.NODE_ENV = 'test';
-process.env.DISABLE_BOOTSTRAP_SEARCH = '1';
 process.env.DISABLE_STATS_CACHE = process.env.DISABLE_STATS_CACHE || '1';
 process.env.DISABLE_CSRF = process.env.DISABLE_CSRF || '1';
 process.env.DISABLE_THROTTLE = process.env.DISABLE_THROTTLE || '1';

@@ -13,7 +13,7 @@ vi.mock("@/hooks/use-auth", () => ({
   }),
 }));
 
-const permissionsState = {
+const permissionsState: { can: (key: PermissionKey) => boolean } = {
   can: (key: PermissionKey) => key === PermissionKey.INVITE_STUDENTS,
 };
 
@@ -39,7 +39,7 @@ describe("SettingsPage invite permissions", () => {
   });
 
   it("hides invite section when user lacks invite permission", () => {
-    permissionsState.can = () => false;
+    permissionsState.can = (_key: PermissionKey) => false;
     render(<SettingsPage />);
     expect(screen.queryByText(/invite members/i)).not.toBeInTheDocument();
   });

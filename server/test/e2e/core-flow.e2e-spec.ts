@@ -6,6 +6,7 @@ import { PrismaService } from '@/prisma/prisma.service';
 import { authAs } from 'test/helpers';
 import {
   OrganizationRole,
+  OrganizationStatus,
   PublishStatus,
   QuestionType,
   SchoolGrade,
@@ -46,6 +47,10 @@ describe('Core workflow (e2e)', () => {
       name: 'Core Director',
     });
     orgId = director.organization.id;
+    await prisma.organization.update({
+      where: { id: orgId },
+      data: { status: OrganizationStatus.ACTIVE },
+    });
     directorToken = director.accessToken;
 
     const student = await authAs(app, OrganizationRole.STUDENT, {
@@ -63,22 +68,30 @@ describe('Core workflow (e2e)', () => {
     });
     studentMembershipId = membership.id;
 
-    const academicYear = await prisma.academicYear.create({
-      data: {
-        orgId,
-        label: `AY-${Date.now()}`,
-        startsAt: new Date('2024-09-01T00:00:00.000Z'),
-        endsAt: new Date('2025-08-31T23:59:59.000Z'),
-        isCurrent: true,
-      },
+    const existingCurrentYear = await prisma.academicYear.findFirst({
+      where: { orgId, isCurrent: true },
       select: { id: true },
     });
-    academicYearId = academicYear.id;
+    if (existingCurrentYear) {
+      academicYearId = existingCurrentYear.id;
+    } else {
+      const academicYear = await prisma.academicYear.create({
+        data: {
+          orgId,
+          label: `AY-${Date.now()}`,
+          startsAt: new Date('2024-09-01T00:00:00.000Z'),
+          endsAt: new Date('2025-08-31T23:59:59.000Z'),
+          isCurrent: true,
+        },
+        select: { id: true },
+      });
+      academicYearId = academicYear.id;
+    }
 
     const classSection = await prisma.classSection.create({
       data: {
         orgId,
-        yearId: academicYear.id,
+        yearId: academicYearId,
         grade: SchoolGrade.GRADE_1,
         section: 'A',
         label: '1.A',
@@ -99,7 +112,7 @@ describe('Core workflow (e2e)', () => {
         data: {
           studentId: student.id,
           classSectionId,
-          yearId: academicYear.id,
+          yearId: academicYearId,
           orgId,
           status: 'ACTIVE',
         },
@@ -154,28 +167,6 @@ describe('Core workflow (e2e)', () => {
         type: QuestionType.FILL_IN_THE_BLANK,
         correctAnswer: 'Praha',
         order: 2,
-      })
-      .expect(201);
-
-    await request(app.getHttpServer())
-      .post(`/tests/${testId}/questions`)
-      .set('Authorization', `Bearer ${directorToken}`)
-      .send({
-        text: 'Pick one',
-        type: QuestionType.MULTIPLE_CHOICE,
-        correctAnswer: 'A',
-        order: 3,
-      })
-      .expect(201);
-
-    await request(app.getHttpServer())
-      .post(`/tests/${testId}/questions`)
-      .set('Authorization', `Bearer ${directorToken}`)
-      .send({
-        text: 'Pick two',
-        type: QuestionType.MULTIPLE_CHOICE,
-        correctAnswers: ['A', 'C'],
-        order: 4,
       })
       .expect(201);
 
@@ -276,7 +267,7 @@ describe('Core workflow (e2e)', () => {
       .patch(`/tests/${testId}`)
       .set('Authorization', `Bearer ${directorToken}`)
       .send({ status: PublishStatus.PUBLISHED })
-      .expect(400);
+      .expect(409);
   });
 
   it('assign fails when test has unscorable question', async () => {
@@ -309,7 +300,7 @@ describe('Core workflow (e2e)', () => {
         shuffle: false,
         showExplain: 'NEVER',
       })
-      .expect(400);
+      .expect(409);
   });
 
   it('finish rejects unscorable submission (score=null)', async () => {

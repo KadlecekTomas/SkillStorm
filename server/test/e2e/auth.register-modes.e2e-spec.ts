@@ -20,6 +20,20 @@ describe('Auth registration modes (e2e)', () => {
   const createdOrgIds: string[] = [];
 
   const baseEmail = () => `reg-modes-${Date.now()}-${Math.random().toString(16).slice(2)}@example.com`;
+  const createInviteForOrg = async (orgId: string, role: OrganizationRole) => {
+    const token = `invite_${Date.now()}_${Math.random().toString(16).slice(2, 10)}`;
+    const invite = await prisma.invite.create({
+      data: {
+        organizationId: orgId,
+        token,
+        code: `code_${Date.now()}_${Math.random().toString(16).slice(2, 6)}`,
+        role,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      },
+      select: { token: true },
+    });
+    return invite.token;
+  };
 
   beforeAll(async () => {
     const mod = await Test.createTestingModule({
@@ -193,7 +207,14 @@ describe('Auth registration modes (e2e)', () => {
     expect(meta.onboardingState).toBe('CREATE_ORG_PENDING');
   });
 
-  it('REGISTER JOIN_ORG – creates User without organization (no school join yet)', async () => {
+  it('REGISTER JOIN_ORG – creates User with membership from invite', async () => {
+    const org = await prisma.organization.create({
+      data: { name: `Join Org ${Date.now()}`, type: OrganizationType.SCHOOL },
+      select: { id: true },
+    });
+    createdOrgIds.push(org.id);
+    const inviteToken = await createInviteForOrg(org.id, OrganizationRole.TEACHER);
+
     const email = baseEmail();
     const payload = {
       name: 'Join User',
@@ -201,6 +222,7 @@ describe('Auth registration modes (e2e)', () => {
       password: 'Password123!',
       username: 'join_user',
       mode: RegisterMode.JOIN_ORG,
+      inviteToken,
     };
 
     const res = await request(app.getHttpServer())
@@ -211,8 +233,9 @@ describe('Auth registration modes (e2e)', () => {
     const body = res.body?.data ?? res.body;
 
     expect(body.user).toBeTruthy();
-    expect(body.organization ?? null).toBeNull();
-    expect(body.membership ?? null).toBeNull();
+    expect(body.organization?.id).toBe(org.id);
+    expect(body.membership?.organizationId).toBe(org.id);
+    expect(body.membership?.role).toBe(OrganizationRole.TEACHER);
     expect(body.sessionToken).toBeTruthy();
 
     const userId = body.user.id as string;
@@ -226,13 +249,13 @@ describe('Auth registration modes (e2e)', () => {
       }),
     ]);
     expect(userCount).toBe(1);
-    expect(membershipCount).toBe(0);
-    expect(orgViaMembership).toBeNull();
+    expect(membershipCount).toBe(1);
+    expect(orgViaMembership?.id).toBe(org.id);
 
-    // JWT claims should have no org context
+    // JWT claims should have org context from invite
     const claims = decodeJwt(body.sessionToken);
-    expect(claims.organizationId ?? null).toBeNull();
-    expect(claims.organizationRole ?? null).toBeNull();
+    expect(claims.organizationId).toBe(org.id);
+    expect(claims.organizationRole).toBe(OrganizationRole.TEACHER);
 
     const logs = await prisma.auditLog.findMany({
       where: {
@@ -245,12 +268,13 @@ describe('Auth registration modes (e2e)', () => {
     });
     expect(logs.length).toBe(1);
     const log = logs[0]!;
-    expect(log.organizationId).toBeNull();
+    expect(log.organizationId).toBe(org.id);
     const meta = (log.metadata ?? {}) as any;
     expect(meta.mode).toBe(RegisterMode.JOIN_ORG);
+    expect(meta.inviteId).toBeTruthy();
   });
 
-  it('POST /auth/join – joins SCHOOL workspace and switches active context', async () => {
+  it('POST /auth/join – legacy join disabled', async () => {
     const school = await prisma.organization.create({
       data: { name: `Join School ${Date.now()}`, type: OrganizationType.SCHOOL },
       select: { id: true },
@@ -265,7 +289,7 @@ describe('Auth registration modes (e2e)', () => {
         email,
         password: 'Password123!',
         username: `joiner_${Date.now()}`,
-        mode: RegisterMode.JOIN_ORG,
+        mode: RegisterMode.INDIVIDUAL,
       })
       .expect(201);
 
@@ -273,35 +297,11 @@ describe('Auth registration modes (e2e)', () => {
     const userId = registerBody.user.id as string;
     createdUserIds.push(userId);
 
-    const joinRes = await request(app.getHttpServer())
+    await request(app.getHttpServer())
       .post('/auth/join')
       .set('Authorization', `Bearer ${registerBody.sessionToken}`)
       .send({ joinCode: school.id, role: OrganizationRole.STUDENT })
-      .expect(201);
-
-    const joinBody = joinRes.body?.data ?? joinRes.body;
-    expect(joinBody.organization?.id).toBe(school.id);
-    expect(joinBody.organization?.type).toBe('SCHOOL');
-    expect(joinBody.membership?.role).toBe(OrganizationRole.STUDENT);
-
-    const claims = decodeJwt(joinBody.sessionToken);
-    expect(claims.organizationId).toBe(school.id);
-
-    const membershipCount = await prisma.membership.count({
-      where: { userId },
-    });
-    expect(membershipCount).toBe(1); // joined school only
-
-    const joinLogs = await prisma.auditLog.findMany({
-      where: {
-        action: 'INVITE_ACCEPTED',
-        entityType: AuditEntityType.ORGANIZATION,
-        organizationId: school.id,
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 1,
-    });
-    expect(joinLogs.length).toBe(1);
+      .expect(410);
   });
 
   it('LOGIN does not create organization for legacy user without memberships', async () => {

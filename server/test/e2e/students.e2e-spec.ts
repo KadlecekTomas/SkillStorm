@@ -1,11 +1,24 @@
 // test/e2e/students.e2e-spec.ts
+/**
+ * INVARIANT (why POST /students can return 409):
+ * StudentsController is under @UseGuards(RequireActiveAcademicYearGuard).
+ * Before that, APP_GUARD ApplicationReadinessGuard runs: it throws 409 when the
+ * org has no active academic year (code NO_ACTIVE_ACADEMIC_YEAR) or multiple
+ * (MULTIPLE_ACTIVE_ACADEMIC_YEARS). See application-readiness.guard.ts lines 69–74.
+ * RequireOrgReadyGuard then calls assertOrgReady (org-readiness.utils.ts): READY
+ * requires exactly one active academic year AND at least one ClassSection in that year.
+ * So E2E must: (1) create org with one active year + at least one class section,
+ * (2) use a JWT scoped to that org (e.g. POST /auth/use-org) so the guard sees the ready org.
+ */
 import { Test } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import * as request from 'supertest';
 import { AppModule } from '../../src/app.module';
 import { PrismaService } from '@/prisma/prisma.service';
 import { $Enums, OrganizationRole, OrganizationType } from '@prisma/client';
-import { login, register } from 'test/helpers';
+import * as bcrypt from 'bcryptjs';
+import { login, register, useOrg, uniqueEmail } from 'test/helpers';
+import { bootstrapOrg, assertOrgReady, assertTokenOrg } from './helpers/bootstrap-org';
 
 describe('Students (e2e)', () => {
   let app: INestApplication;
@@ -93,13 +106,6 @@ describe('Students (e2e)', () => {
         login: rSuper.login,
       };
 
-      const rDirA = await register(app, 'students_dirA');
-      directorA = {
-        id: rDirA.user.id,
-        token: rDirA.accessToken,
-        login: rDirA.login,
-      };
-
       const rTeachA1 = await register(app, 'students_teacherA1');
       teacherA1 = {
         id: rTeachA1.user.id,
@@ -129,18 +135,53 @@ describe('Students (e2e)', () => {
       };
     }
 
-    // orgs + memberships
+    // orgA: create empty org, bootstrap (year + class), then add director so their only membership is orgA
     orgA = await prisma.organization.create({
       data: {
         name: 'Students Org A',
         type: OrganizationType.SCHOOL,
-        memberships: {
-          create: { userId: directorA.id, role: OrganizationRole.DIRECTOR },
-        },
       },
       select: { id: true },
     });
-    directorA.token = await login(app, directorA.login);
+
+    const boot = await bootstrapOrg(prisma, {
+      orgId: orgA.id,
+      grade: $Enums.SchoolGrade.GRADE_5,
+      section: 'A',
+      classLabel: '5.A',
+    });
+    yearA_current = { id: boot.academicYearId, label: boot.academicYearLabel };
+    classA1 = { id: boot.classSectionId };
+
+    const directorEmail = uniqueEmail('students_dirA');
+    const directorPassword = 'Password123!';
+    const directorUser = await prisma.user.create({
+      data: {
+        email: directorEmail,
+        username: `dir_${Date.now()}_${Math.floor(Math.random() * 1e6)}`,
+        name: 'E2E Director A',
+        passwordHash: await bcrypt.hash(directorPassword, 10),
+      },
+      select: { id: true },
+    });
+    await prisma.membership.create({
+      data: {
+        userId: directorUser.id,
+        organizationId: orgA.id,
+        role: OrganizationRole.DIRECTOR,
+      },
+    });
+    directorA = {
+      id: directorUser.id,
+      token: await login(app, {
+        email: directorEmail,
+        password: directorPassword,
+        organizationId: orgA.id,
+      }),
+      login: { login: directorEmail, password: directorPassword },
+    };
+    await assertTokenOrg(app, directorA.token, orgA.id);
+    await assertOrgReady(app, directorA.token);
 
     orgB = await prisma.organization.create({
       data: {
@@ -155,7 +196,6 @@ describe('Students (e2e)', () => {
     teacherB1.token = await login(app, teacherB1.login);
 
     // teacher entities
-    // teacherA1 in orgA
     const mbTeachA1 = await prisma.membership.create({
       data: {
         organizationId: orgA.id,
@@ -170,7 +210,6 @@ describe('Students (e2e)', () => {
     });
     teacherA1.token = await login(app, teacherA1.login);
 
-    // teacherB1 is already member of orgB (above). Create Teacher entity:
     const mbTeachB1 = await prisma.membership.findFirstOrThrow({
       where: {
         organizationId: orgB.id,
@@ -184,17 +223,11 @@ describe('Students (e2e)', () => {
       select: { id: true },
     });
 
-    // academic years
-    yearA_current = await prisma.academicYear.create({
-      data: {
-        orgId: orgA.id,
-        label: `AY_${Date.now()}_current`,
-        startsAt: new Date('2025-09-01'),
-        endsAt: new Date('2026-08-31'),
-        isCurrent: true,
-      },
-      select: { id: true, label: true },
+    await prisma.classSection.update({
+      where: { id: classA1.id },
+      data: { teacherId: teacherEntA1.id },
     });
+
     yearA_past = await prisma.academicYear.create({
       data: {
         orgId: orgA.id,
@@ -206,18 +239,6 @@ describe('Students (e2e)', () => {
       select: { id: true, label: true },
     });
 
-    // classes in orgA, current year
-    classA1 = await prisma.classSection.create({
-      data: {
-        orgId: orgA.id,
-        yearId: yearA_current.id,
-        grade: $Enums.SchoolGrade.GRADE_5,
-        section: 'A',
-        label: '5.A',
-        teacherId: teacherEntA1.id, // homeroom of teacherA1
-      },
-      select: { id: true },
-    });
     classA2 = await prisma.classSection.create({
       data: {
         orgId: orgA.id,
@@ -230,7 +251,6 @@ describe('Students (e2e)', () => {
       select: { id: true },
     });
 
-    // create student memberships in orgA for studentUser1 + studentUser2
     const mbA1 = await prisma.membership.create({
       data: {
         organizationId: orgA.id,
@@ -240,7 +260,6 @@ describe('Students (e2e)', () => {
       select: { id: true },
     });
     memberA_student1 = { id: mbA1.id };
-
     studentUser1.token = await login(app, studentUser1.login);
 
     const mbA2 = await prisma.membership.create({
@@ -252,10 +271,8 @@ describe('Students (e2e)', () => {
       select: { id: true },
     });
     memberA_student2 = { id: mbA2.id };
-
     studentUser2.token = await login(app, studentUser2.login);
 
-    // create student entities via service endpoint (we test create too, but here we need baseline)
     const s1 = await request(app.getHttpServer())
       .post('/students')
       .set('Authorization', `Bearer ${directorA.token}`)
@@ -296,72 +313,43 @@ describe('Students (e2e)', () => {
   });
 
   afterAll(async () => {
-    // Best-effort cleanup
+    const studentIds = [studentA1?.id, studentA2?.id].filter(Boolean) as string[];
     await prisma.enrollment
-      .deleteMany({
-        where: { studentId: { in: [studentA1.id, studentA2.id] } },
-      })
+      .deleteMany({ where: { studentId: { in: studentIds } } })
       .catch(() => {});
     await prisma.student
-      .deleteMany({ where: { id: { in: [studentA1.id, studentA2.id] } } })
+      .deleteMany({ where: { id: { in: studentIds } } })
       .catch(() => {});
+    const memberIds = [memberA_student1?.id, memberA_student2?.id].filter(Boolean) as string[];
     await prisma.membership
-      .deleteMany({
-        where: { id: { in: [memberA_student1.id, memberA_student2.id] } },
-      })
+      .deleteMany({ where: { id: { in: memberIds } } })
       .catch(() => {});
-    await prisma.teacherSubject
-      .deleteMany({
-        where: { teacherId: { in: [teacherEntA1.id, teacherEntB1.id] } },
-      })
-      .catch(() => {});
-    await prisma.teacher
-      .deleteMany({ where: { id: { in: [teacherEntA1.id, teacherEntB1.id] } } })
-      .catch(() => {});
-    await prisma.classSection
-      .deleteMany({ where: { id: { in: [classA1.id, classA2.id] } } })
-      .catch(() => {});
-    await prisma.academicYear
-      .deleteMany({ where: { id: { in: [yearA_current.id, yearA_past.id] } } })
-      .catch(() => {});
-    await prisma.membership
-      .deleteMany({ where: { organizationId: { in: [orgA.id, orgB.id] } } })
-      .catch(() => {});
-    await prisma.organization
-      .deleteMany({ where: { id: { in: [orgA.id, orgB.id] } } })
-      .catch(() => {});
-    await prisma.refreshToken
-      .deleteMany({
-        where: {
-          userId: {
-            in: [
-              superUser.id,
-              directorA.id,
-              teacherA1.id,
-              teacherB1.id,
-              studentUser1.id,
-              studentUser2.id,
-            ],
-          },
-        },
-      })
-      .catch(() => {});
-    await prisma.user
-      .deleteMany({
-        where: {
-          id: {
-            in: [
-              superUser.id,
-              directorA.id,
-              teacherA1.id,
-              teacherB1.id,
-              studentUser1.id,
-              studentUser2.id,
-            ],
-          },
-        },
-      })
-      .catch(() => {});
+    const teacherIds = [teacherEntA1?.id, teacherEntB1?.id].filter(Boolean) as string[];
+    if (teacherIds.length) {
+      await prisma.teacherSubject.deleteMany({ where: { teacherId: { in: teacherIds } } }).catch(() => {});
+      await prisma.teacher.deleteMany({ where: { id: { in: teacherIds } } }).catch(() => {});
+    }
+    const classIds = [classA1?.id, classA2?.id].filter(Boolean) as string[];
+    if (classIds.length) await prisma.classSection.deleteMany({ where: { id: { in: classIds } } }).catch(() => {});
+    const yearIds = [yearA_current?.id, yearA_past?.id].filter(Boolean) as string[];
+    if (yearIds.length) await prisma.academicYear.deleteMany({ where: { id: { in: yearIds } } }).catch(() => {});
+    const orgIds = [orgA?.id, orgB?.id].filter(Boolean) as string[];
+    if (orgIds.length) {
+      await prisma.membership.deleteMany({ where: { organizationId: { in: orgIds } } }).catch(() => {});
+      await prisma.organization.deleteMany({ where: { id: { in: orgIds } } }).catch(() => {});
+    }
+    const userIds = [
+      superUser?.id,
+      directorA?.id,
+      teacherA1?.id,
+      teacherB1?.id,
+      studentUser1?.id,
+      studentUser2?.id,
+    ].filter(Boolean) as string[];
+    if (userIds.length) {
+      await prisma.refreshToken.deleteMany({ where: { userId: { in: userIds } } }).catch(() => {});
+      await prisma.user.deleteMany({ where: { id: { in: userIds } } }).catch(() => {});
+    }
     await prisma.$disconnect();
     await app.close();
   });
@@ -369,6 +357,49 @@ describe('Students (e2e)', () => {
   // ---------------------------
   // CREATE
   // ---------------------------
+  it('POST /students → 409 when org has no active year (invariant: requires bootstrap first)', async () => {
+    const orgNoBootstrap = await prisma.organization.create({
+      data: {
+        name: `E2E No Bootstrap ${Date.now()}`,
+        type: OrganizationType.SCHOOL,
+        memberships: {
+          create: { userId: directorA.id, role: OrganizationRole.DIRECTOR },
+        },
+      },
+      select: { id: true },
+    });
+    const dirToken = await useOrg(app, directorA.token, orgNoBootstrap.id);
+    const tmpUser = await register(app, 'stud_inv_no_ay');
+    const mb = await prisma.membership.create({
+      data: {
+        organizationId: orgNoBootstrap.id,
+        userId: tmpUser.user.id,
+        role: OrganizationRole.STUDENT,
+      },
+      select: { id: true },
+    });
+
+    const res = await request(app.getHttpServer())
+      .post('/students')
+      .set('Authorization', `Bearer ${dirToken}`)
+      .send({
+        membershipId: mb.id,
+        orgId: orgNoBootstrap.id,
+        academicYearId: yearA_current.id,
+        classSectionId: classA1.id,
+        studentNumber: '2025-inv',
+      })
+      .expect(409);
+
+    expect(res.body?.meta?.code ?? res.body?.code).toBe('NO_CURRENT_ACADEMIC_YEAR');
+
+    await prisma.membership.delete({ where: { id: mb.id } });
+    await prisma.refreshToken.deleteMany({ where: { userId: tmpUser.user.id } });
+    await prisma.user.delete({ where: { id: tmpUser.user.id } });
+    await prisma.membership.deleteMany({ where: { organizationId: orgNoBootstrap.id } });
+    await prisma.organization.delete({ where: { id: orgNoBootstrap.id } });
+  });
+
   it('POST /students → DIRECTOR vytvoří studenta [201]', async () => {
     const tmpUser = await register(app, 'stud_create_ok');
     const mb = await prisma.membership.create({
@@ -886,5 +917,62 @@ describe('Students (e2e)', () => {
       .query({ template: 'kontakty' })
       .set('Authorization', `Bearer ${teacherB1.token}`)
       .expect(403);
+  });
+
+  // ---------------------------
+  // GDPR STUDENT DETAIL (GET /students/:id/detail)
+  // ---------------------------
+  it('GET /students/:id/detail → teacher (homeroom) opens own student [200]', async () => {
+    const res = await request(app.getHttpServer())
+      .get(`/students/${studentA1.id}/detail`)
+      .set('Authorization', `Bearer ${teacherA1.token}`)
+      .expect(200);
+
+    expect(res.body.id).toBe(studentA1.id);
+    expect(res.body.displayName).toBeTruthy();
+    expect(res.body.classroomLabel).toBeTruthy();
+    expect(res.body.performanceSummary).toBeDefined();
+    expect(res.body.progressByTopic).toBeDefined();
+    expect(res.body.recentTests).toBeDefined();
+    expect(res.body.email).toBeUndefined();
+  });
+
+  it('GET /students/:id/detail → teacher opens student from different org [403]', async () => {
+    await request(app.getHttpServer())
+      .get(`/students/${studentA1.id}/detail`)
+      .set('Authorization', `Bearer ${teacherB1.token}`)
+      .expect(403);
+  });
+
+  it('GET /students/:id/detail → student tries to open own detail [403]', async () => {
+    await request(app.getHttpServer())
+      .get(`/students/${studentA1.id}/detail`)
+      .set('Authorization', `Bearer ${studentUser1.token}`)
+      .expect(403);
+  });
+
+  it('GET /students/:id/detail → director opens student [200]', async () => {
+    const res = await request(app.getHttpServer())
+      .get(`/students/${studentA1.id}/detail`)
+      .set('Authorization', `Bearer ${directorA.token}`)
+      .expect(200);
+
+    expect(res.body.id).toBe(studentA1.id);
+    expect(res.body.displayName).toBeTruthy();
+    expect(res.body.email).toBeUndefined();
+  });
+
+  it('GET /students/:id/detail → response does NOT contain email', async () => {
+    const res = await request(app.getHttpServer())
+      .get(`/students/${studentA1.id}/detail`)
+      .set('Authorization', `Bearer ${directorA.token}`)
+      .expect(200);
+
+    expect(res.body).not.toHaveProperty('email');
+    expect(res.body).not.toHaveProperty('username');
+    expect(res.body).not.toHaveProperty('password');
+    expect(res.body).not.toHaveProperty('tokenVersion');
+    expect(res.body).not.toHaveProperty('preferredLang');
+    expect(res.body).not.toHaveProperty('systemRole');
   });
 });

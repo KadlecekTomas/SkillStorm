@@ -49,7 +49,7 @@ describe("AuthForm (register)", () => {
     sessionStorage.clear();
   });
 
-  it("submits JOIN_ORG mode and stores join intent", async () => {
+  it("submits JOIN_ORG mode with invite token", async () => {
     vi.mocked(httpClient.post).mockResolvedValue({ sessionToken: "token-1" });
 
     render(
@@ -81,19 +81,17 @@ describe("AuthForm (register)", () => {
       expect.objectContaining({
         mode: "JOIN_ORG",
         email: "test@example.com",
+        inviteToken: "JOIN-123",
       }),
     );
 
-    const stored = JSON.parse(
-      sessionStorage.getItem("join_intent") ?? "{}",
-    ) as { joinCode?: string };
-    expect(stored.joinCode).toBe("JOIN-123");
+    expect(sessionStorage.getItem("join_intent")).toBeNull();
 
     recordPolicyCheck(
       "Auth",
-      "register-join-intent",
+      "register-join-invite-token",
       true,
-      "Join intent is stored for post-registration onboarding.",
+      "Invite token is sent with JOIN_ORG registration.",
     );
   });
 });

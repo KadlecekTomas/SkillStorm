@@ -59,7 +59,7 @@ describe("RegisterPage redirects", () => {
     );
   });
 
-  it("redirects to onboarding when join intent exists", async () => {
+  it("does not redirect based on deprecated join intent", async () => {
     sessionStorage.setItem(
       "join_intent",
       JSON.stringify({ joinCode: "JOIN-123" }),
@@ -73,14 +73,14 @@ describe("RegisterPage redirects", () => {
     render(<RegisterPage />);
 
     await waitFor(() => {
-      expect(replaceMock).toHaveBeenCalledWith("/dashboard/onboarding");
+      expect(replaceMock).not.toHaveBeenCalled();
     });
 
     recordPolicyCheck(
       "Auth",
-      "register-join-redirect",
+      "register-join-intent-ignored",
       true,
-      "Join intent triggers onboarding redirect after registration.",
+      "Deprecated join intent does not trigger redirects.",
     );
   });
 });

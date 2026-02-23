@@ -149,7 +149,7 @@ describe('Invites Accept (e2e)', () => {
       studentClassInviteCode = inv.code;
     });
 
-    it('accept with non-existent code returns 404', async () => {
+    it('accept with non-existent code returns 400 (constant-time)', async () => {
       const studentLogin = await request(app.getHttpServer())
         .post('/auth/login')
         .send({ email: studentUser.email, password: TEST_PASSWORD })
@@ -161,7 +161,7 @@ describe('Invites Accept (e2e)', () => {
         .post('/invites/accept')
         .set('Authorization', `Bearer ${studentToken}`)
         .send({ code: 'non-existent-invite-code-xyz' })
-        .expect(404);
+        .expect(400);
     });
 
     it('student invite: valid code yields enrollment, class visible in GET /classrooms', async () => {
@@ -197,8 +197,8 @@ describe('Invites Accept (e2e)', () => {
     });
   });
 
-  describe('POST /auth/join with STUDENT returns 400', () => {
-    it('legacy join with role STUDENT returns 400', async () => {
+  describe('POST /auth/join disabled', () => {
+    it('legacy join returns 410', async () => {
       const studentLogin = await request(app.getHttpServer())
         .post('/auth/login')
         .send({ email: studentUser.email, password: TEST_PASSWORD })
@@ -210,7 +210,7 @@ describe('Invites Accept (e2e)', () => {
         .post('/auth/join')
         .set('Authorization', `Bearer ${studentToken}`)
         .send({ joinCode: director.orgId, role: OrganizationRole.STUDENT })
-        .expect(400);
+        .expect(410);
     });
   });
 });

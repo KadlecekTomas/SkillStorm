@@ -14,7 +14,7 @@ import * as request from 'supertest';
 import * as bcrypt from 'bcryptjs';
 import { AppModule } from '../../src/app.module';
 import { PrismaService } from '@/prisma/prisma.service';
-import { OrganizationRole } from '@prisma/client';
+import { OrganizationRole, OrganizationStatus } from '@prisma/client';
 
 function unwrap(res: request.Response) {
   return res?.body?.data ?? res?.body;
@@ -46,7 +46,10 @@ describe('Classrooms Release Gate (e2e)', () => {
     await prisma.$connect();
 
     const org = await prisma.organization.create({
-      data: { name: `RG Classrooms Org ${Date.now()}` },
+      data: {
+        name: `RG Classrooms Org ${Date.now()}`,
+        status: OrganizationStatus.ACTIVE,
+      },
       select: { id: true },
     });
 
@@ -134,6 +137,35 @@ describe('Classrooms Release Gate (e2e)', () => {
       expect(data).toHaveProperty('yearId', yearId);
       expect(data).toHaveProperty('grade', 'GRADE_7');
       expect(data).toHaveProperty('section', 'X');
+    });
+
+    it('create classroom then appears in GET /classrooms list (redirect/list consistency)', async () => {
+      const createRes = await request(app.getHttpServer())
+        .post('/classrooms')
+        .set('Authorization', `Bearer ${director.token}`)
+        .send({
+          yearId,
+          grade: 'GRADE_6',
+          section: 'Z',
+          label: '6.Z',
+        })
+        .expect(201);
+
+      const created = unwrap(createRes);
+      const createdId = created?.id ?? createRes.body?.id;
+      expect(createdId).toBeDefined();
+
+      const listRes = await request(app.getHttpServer())
+        .get('/classrooms')
+        .query({ yearId })
+        .set('Authorization', `Bearer ${director.token}`)
+        .expect(200);
+
+      const raw = unwrap(listRes);
+      const items = Array.isArray(raw) ? raw : (raw?.data ?? raw?.items ?? []);
+      const found = items.find((item: { id?: string }) => item.id === createdId);
+      expect(found).toBeDefined();
+      expect(found).toMatchObject({ grade: 'GRADE_6', section: 'Z' });
     });
 
     it('201 with academicYearId (alias), returns yearId', async () => {
@@ -227,12 +259,138 @@ describe('Classrooms Release Gate (e2e)', () => {
 
       await prisma.academicYear.deleteMany({ where: { id: year2.id } });
     });
+
+    it('cursor pagination: deterministic order + next page without overlap', async () => {
+      const marker = `rg-cursor-${Date.now()}`;
+      const suffix = Date.now().toString(36).slice(-3).toUpperCase();
+
+      for (let i = 0; i < 6; i++) {
+        await prisma.classSection.create({
+          data: {
+            orgId: director.orgId,
+            yearId,
+            grade: 'GRADE_9',
+            section: `${String.fromCharCode(65 + i)}${suffix}`,
+            label: `${marker}-${i}`,
+          },
+        });
+      }
+
+      const firstRes = await request(app.getHttpServer())
+        .get('/classrooms')
+        .query({ yearId, search: marker, limit: 5 })
+        .set('Authorization', `Bearer ${director.token}`)
+        .expect(200);
+      const secondRes = await request(app.getHttpServer())
+        .get('/classrooms')
+        .query({ yearId, search: marker, limit: 5 })
+        .set('Authorization', `Bearer ${director.token}`)
+        .expect(200);
+
+      const first = firstRes.body;
+      const second = secondRes.body;
+      const firstIds = (first?.data ?? []).map((i: { id: string }) => i.id);
+      const secondIds = (second?.data ?? []).map((i: { id: string }) => i.id);
+      expect(firstIds).toEqual(secondIds);
+      expect(first?.meta?.hasNextPage).toBe(true);
+      expect(typeof first?.meta?.nextCursor).toBe('string');
+
+      const nextRes = await request(app.getHttpServer())
+        .get('/classrooms')
+        .query({
+          yearId,
+          search: marker,
+          limit: 5,
+          cursor: first.meta.nextCursor,
+          direction: 'next',
+        })
+        .set('Authorization', `Bearer ${director.token}`)
+        .expect(200);
+      const next = nextRes.body;
+      const nextIds = (next?.data ?? []).map((i: { id: string }) => i.id);
+      const overlap = nextIds.some((id: string) => firstIds.includes(id));
+      expect(overlap).toBe(false);
+      expect(next?.meta?.hasPrevPage).toBe(true);
+    });
+
+    it('cursor pagination: next -> prev roundtrip returns previous window', async () => {
+      const marker = `rg-cursor-round-${Date.now()}`;
+      const suffix = Date.now().toString(36).slice(-3).toUpperCase();
+
+      for (let i = 0; i < 8; i++) {
+        await prisma.classSection.create({
+          data: {
+            orgId: director.orgId,
+            yearId,
+            grade: 'GRADE_8',
+            section: `${String.fromCharCode(65 + i)}${suffix}`,
+            label: `${marker}-${i}`,
+          },
+        });
+      }
+
+      const firstRes = await request(app.getHttpServer())
+        .get('/classrooms')
+        .query({ yearId, search: marker, limit: 5 })
+        .set('Authorization', `Bearer ${director.token}`)
+        .expect(200);
+      const first = firstRes.body;
+      const firstIds = (first?.data ?? []).map((i: { id: string }) => i.id);
+
+      const nextRes = await request(app.getHttpServer())
+        .get('/classrooms')
+        .query({
+          yearId,
+          search: marker,
+          limit: 5,
+          cursor: first.meta.nextCursor,
+          direction: 'next',
+        })
+        .set('Authorization', `Bearer ${director.token}`)
+        .expect(200);
+      const next = nextRes.body;
+      expect(next?.meta?.hasPrevPage).toBe(true);
+
+      const prevRes = await request(app.getHttpServer())
+        .get('/classrooms')
+        .query({
+          yearId,
+          search: marker,
+          limit: 5,
+          cursor: next.meta.prevCursor,
+          direction: 'prev',
+        })
+        .set('Authorization', `Bearer ${director.token}`)
+        .expect(200);
+      const prev = prevRes.body;
+      const prevIds = (prev?.data ?? []).map((i: { id: string }) => i.id);
+      expect(prevIds).toEqual(firstIds);
+    });
+
+    it('cursor pagination: clamps unsupported limit and rejects invalid cursor', async () => {
+      const clamped = await request(app.getHttpServer())
+        .get('/classrooms')
+        .query({ yearId, limit: 999 })
+        .set('Authorization', `Bearer ${director.token}`)
+        .expect(200);
+      const clampedBody = clamped.body;
+      expect(clampedBody?.meta?.limit).toBe(20);
+
+      await request(app.getHttpServer())
+        .get('/classrooms')
+        .query({ yearId, limit: 5, cursor: 'tampered-cursor', direction: 'next' })
+        .set('Authorization', `Bearer ${director.token}`)
+        .expect(400);
+    });
   });
 
   describe('409 NO_ACTIVE_ACADEMIC_YEAR', () => {
     it('org without active year returns 409 on POST /classrooms', async () => {
       const orgNoActive = await prisma.organization.create({
-        data: { name: `RG NoActive Org ${Date.now()}` },
+        data: {
+          name: `RG NoActive Org ${Date.now()}`,
+          status: OrganizationStatus.ACTIVE,
+        },
         select: { id: true },
       });
 
@@ -290,7 +448,7 @@ describe('Classrooms Release Gate (e2e)', () => {
       const body = res.body;
       const code =
         body?.meta?.code ?? body?.data?.meta?.code ?? body?.code;
-      expect(code).toBe('NO_ACTIVE_ACADEMIC_YEAR');
+      expect(code).toBe('NO_CURRENT_ACADEMIC_YEAR');
 
       await prisma.membership.deleteMany({ where: { organizationId: orgNoActive.id } });
       await prisma.user.deleteMany({ where: { id: userNoActive.id } });

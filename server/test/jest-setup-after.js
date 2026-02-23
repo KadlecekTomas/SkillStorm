@@ -1,5 +1,23 @@
 /* eslint-disable @typescript-eslint/no-var-requires */
+// E2E canonical DATABASE_URL: use URL parsing so pathname (DB name) is never corrupted; enforce connection_limit=2.
+const dbUrl = process.env.DATABASE_URL;
+if (dbUrl) {
+  const url = new URL(dbUrl);
+  const schema = url.searchParams.get('schema');
+  if (schema && schema !== 'public') {
+    url.searchParams.set('schema', 'public');
+    process.env.DATABASE_URL = url.toString();
+  }
+  url.searchParams.set('connection_limit', '2');
+  process.env.DATABASE_URL = url.toString();
+  const safeUrl = new URL(process.env.DATABASE_URL);
+  safeUrl.password = '***';
+  // eslint-disable-next-line no-console
+  console.log('E2E DB:', safeUrl.toString());
+}
+
 const { execSync } = require('child_process');
+const path = require('path');
 const { PrismaClient } = require('@prisma/client');
 const Test = require('supertest/lib/test');
 
@@ -25,23 +43,78 @@ Test.prototype.assert = function (err, res, fn) {
   return originalAssert.call(this, err, res, fn);
 };
 
+const PG_ACTIVITY_WARN_THRESHOLD = 20;
+
 async function setupDb() {
   const dbUrl = process.env.DATABASE_URL;
   if (!dbUrl) throw new Error('DATABASE_URL není nastavená');
 
   const url = new URL(dbUrl);
-  const schema = url.searchParams.get('schema');
-  if (!schema) throw new Error('DATABASE_URL nemá ?schema=');
+  const schema = url.searchParams.get('schema') ?? 'public';
 
-  const base = dbUrl.replace(/(\?|&)schema=[^&]+/, '').replace(/[?&]$/, '');
+  const baseUrl = new URL(dbUrl);
+  baseUrl.searchParams.delete('schema');
+  baseUrl.searchParams.set('connection_limit', '2');
+  const base = baseUrl.toString();
+
   const prisma = new PrismaClient({ datasources: { db: { url: base } } });
-  await prisma.$executeRawUnsafe(`CREATE SCHEMA IF NOT EXISTS "${schema}"`);
-  await prisma.$disconnect();
+  try {
+    try {
+      await prisma.$queryRawUnsafe('SELECT 1');
+    } catch (err) {
+      const msg = err?.message ?? String(err);
+      if (/database .+ does not exist/i.test(msg)) {
+        throw new Error(
+          'Test database does not exist. Run: npx prisma migrate deploy --schema=prisma/schema.prisma',
+        );
+      }
+      throw err;
+    }
 
-  execSync('npx prisma db push --skip-generate --accept-data-loss', {
+    const isCI = process.env.CI === 'true' || process.env.CI === '1';
+    if (!isCI) {
+      const schemas = await prisma.$queryRawUnsafe(`
+        SELECT nspname
+        FROM pg_namespace
+        WHERE nspname LIKE 'e2e\\_%'
+      `);
+      for (const row of schemas ?? []) {
+        const name = row?.nspname;
+        if (name) {
+          await prisma.$executeRawUnsafe(`DROP SCHEMA IF EXISTS "${name}" CASCADE`);
+        }
+      }
+      await prisma.$executeRawUnsafe('DROP SCHEMA IF EXISTS public CASCADE');
+      await prisma.$executeRawUnsafe('CREATE SCHEMA public');
+    }
+
+    await prisma.$executeRawUnsafe(`CREATE SCHEMA IF NOT EXISTS "${schema}"`);
+
+    try {
+      const countResult = await prisma.$queryRawUnsafe('SELECT count(*)::int as n FROM pg_stat_activity');
+      const n = countResult?.[0]?.n ?? 0;
+      if (n > PG_ACTIVITY_WARN_THRESHOLD) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[E2E] pg_stat_activity count = ${n} (threshold ${PG_ACTIVITY_WARN_THRESHOLD}). ` +
+            'Stop other DB clients (IDE, dev server) or increase Postgres max_connections to avoid "Too many connections".',
+        );
+      }
+    } catch (_) {
+      // Non-fatal: e.g. permission or driver may not support
+    }
+  } finally {
+    await prisma.$disconnect();
+  }
+
+  const isCI = process.env.CI === 'true' || process.env.CI === '1';
+  const cmd = isCI
+    ? 'npx prisma migrate deploy --schema=prisma/schema.prisma'
+    : 'npx prisma migrate reset --force --skip-seed --schema=prisma/schema.prisma';
+  execSync(cmd, {
     stdio: 'inherit',
     env: process.env,
-    cwd: require('path').resolve(__dirname, '..'),
+    cwd: path.resolve(__dirname, '..'),
   });
 }
 

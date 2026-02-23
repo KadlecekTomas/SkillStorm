@@ -1,7 +1,7 @@
 /**
- * E2E: Invariant "exactly one active academic year per organization".
- * - Create org via API → default academic year exists; GET /academic-years/active → 200, isActive true.
- * - Create second academic year with isActive true → transaction flips previous to false; DB has exactly one active.
+ * E2E: Invariant "exactly one current academic year per organization".
+ * - Create org via API → default academic year exists; GET /academic-years/current or /active → 200.
+ * - Create second academic year with isActive true → transaction flips previous to false; DB has exactly one current.
  */
 import { Test } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
@@ -43,7 +43,7 @@ describe('Academic year invariant (e2e)', () => {
     await app.close();
   });
 
-  it('GET /academic-years/current returns 200 with { id, name } when exactly one active year', async () => {
+  it('GET /academic-years/current returns 200 with { id, name } when exactly one current year', async () => {
     const auth = await authAs(app, OrganizationRole.OWNER, {
       seed: `cur_${Date.now()}`,
       mode: RegisterMode.CREATE_ORG,
@@ -81,7 +81,7 @@ describe('Academic year invariant (e2e)', () => {
     await prisma.organization.deleteMany({ where: { id: orgId } }).catch(() => {});
   });
 
-  it('GET /academic-years/current returns 409 NO_ACTIVE_ACADEMIC_YEAR when 0 active years', async () => {
+  it('GET /academic-years/current returns 409 NO_CURRENT_ACADEMIC_YEAR when 0 current years', async () => {
     const auth = await authAs(app, OrganizationRole.OWNER, {
       seed: `no_act_${Date.now()}`,
       mode: RegisterMode.CREATE_ORG,
@@ -110,14 +110,14 @@ describe('Academic year invariant (e2e)', () => {
       .expect(409);
 
     const body = res.body;
-    expect(body?.meta?.code).toBe('NO_ACTIVE_ACADEMIC_YEAR');
+    expect(body?.meta?.code).toBe('NO_CURRENT_ACADEMIC_YEAR');
 
     await prisma.academicYear.deleteMany({ where: { orgId } }).catch(() => {});
     await prisma.membership.deleteMany({ where: { organizationId: orgId } }).catch(() => {});
     await prisma.organization.deleteMany({ where: { id: orgId } }).catch(() => {});
   });
 
-  it('GET /academic-years/current returns 409 MULTIPLE_ACTIVE_ACADEMIC_YEARS when 2 active years', async () => {
+  it('GET /academic-years/current returns 409 MULTIPLE_CURRENT_ACADEMIC_YEARS when 2 current years', async () => {
     const auth = await authAs(app, OrganizationRole.OWNER, {
       seed: `multi_${Date.now()}`,
       mode: RegisterMode.CREATE_ORG,
@@ -154,14 +154,14 @@ describe('Academic year invariant (e2e)', () => {
       .expect(409);
 
     const body = res.body;
-    expect(body?.meta?.code).toBe('MULTIPLE_ACTIVE_ACADEMIC_YEARS');
+    expect(body?.meta?.code).toBe('MULTIPLE_CURRENT_ACADEMIC_YEARS');
 
     await prisma.academicYear.deleteMany({ where: { orgId } }).catch(() => {});
     await prisma.membership.deleteMany({ where: { organizationId: orgId } }).catch(() => {});
     await prisma.organization.deleteMany({ where: { id: orgId } }).catch(() => {});
   });
 
-  it('create org → GET /academic-years/active returns 200 and exactly one active year', async () => {
+  it('create org → GET /academic-years/active returns 200 and exactly one current year (deprecated route)', async () => {
     const auth = await authAs(app, OrganizationRole.OWNER, {
       seed: `inv_${Date.now()}`,
       mode: RegisterMode.CREATE_ORG,
@@ -206,7 +206,44 @@ describe('Academic year invariant (e2e)', () => {
     await prisma.organization.deleteMany({ where: { id: orgId } }).catch(() => {});
   });
 
-  it('creating second academic year with isActive true leaves exactly one active in DB', async () => {
+  it('GET /academic-years/active returns same id and name as GET /academic-years/current (backward compat)', async () => {
+    const auth = await authAs(app, OrganizationRole.OWNER, {
+      seed: `compat_${Date.now()}`,
+      mode: RegisterMode.CREATE_ORG,
+    });
+    const createOrgRes = await request(app.getHttpServer())
+      .post('/organizations')
+      .set('Authorization', `Bearer ${auth.accessToken}`)
+      .send({ name: `Compat Org ${Date.now()}`, type: OrganizationType.SCHOOL })
+      .expect(201);
+    const orgId = unwrap(createOrgRes)?.id ?? createOrgRes.body?.id;
+    const useOrgRes = await request(app.getHttpServer())
+      .post('/auth/use-org')
+      .set('Authorization', `Bearer ${auth.accessToken}`)
+      .send({ orgId })
+      .expect(201);
+    const token = (unwrap(useOrgRes) ?? useOrgRes.body)?.sessionToken ?? useOrgRes.body?.sessionToken;
+
+    const activeRes = await request(app.getHttpServer())
+      .get('/academic-years/active')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    const currentRes = await request(app.getHttpServer())
+      .get('/academic-years/current')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+
+    const active = unwrap(activeRes);
+    const current = unwrap(currentRes);
+    expect(active?.id).toBe(current?.id);
+    expect(active?.name).toBe(current?.name);
+
+    await prisma.academicYear.deleteMany({ where: { orgId } }).catch(() => {});
+    await prisma.membership.deleteMany({ where: { organizationId: orgId } }).catch(() => {});
+    await prisma.organization.deleteMany({ where: { id: orgId } }).catch(() => {});
+  });
+
+  it('creating second academic year with isActive true leaves exactly one current in DB', async () => {
     const auth = await authAs(app, OrganizationRole.DIRECTOR, {
       seed: `inv2_${Date.now()}`,
       mode: RegisterMode.CREATE_ORG,

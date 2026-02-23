@@ -31,7 +31,7 @@ describe("NoOrganizationScreen", () => {
     sessionStorage.clear();
   });
 
-  it("opens join modal when join intent is present", async () => {
+  it("does not auto-open join modal from deprecated join intent", async () => {
     sessionStorage.setItem(
       "join_intent",
       JSON.stringify({ joinCode: "JOIN-CODE-1", role: "TEACHER" }),
@@ -41,18 +41,15 @@ describe("NoOrganizationScreen", () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText(/připojit se k organizaci/i),
-      ).toBeInTheDocument();
+        screen.queryByText(/připojit se k organizaci/i),
+      ).not.toBeInTheDocument();
     });
-
-    const joinCodeInput = screen.getByLabelText(/kód organizace/i);
-    expect(joinCodeInput).toHaveValue("JOIN-CODE-1");
 
     recordPolicyCheck(
       "Onboarding",
-      "join-modal-prefill",
+      "join-modal-intent-ignored",
       true,
-      "Join modal opens from stored intent and pre-fills the code.",
+      "Deprecated join intent no longer auto-opens the modal.",
     );
   });
 });

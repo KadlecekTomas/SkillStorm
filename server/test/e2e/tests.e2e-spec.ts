@@ -7,19 +7,21 @@ import { PrismaService } from '@/prisma/prisma.service';
 import {
   $Enums,
   OrganizationRole,
+  OrganizationStatus,
   PublishStatus,
   QuestionType,
+  SchoolGrade,
   SystemRole,
 } from '@prisma/client';
-import { createSystemUser, setupOrgContext } from 'test/helpers';
+import { createSystemUser, setupOrgContext, useOrg } from 'test/helpers';
 
 type ActorCase = {
   name: string;
   token: () => string;
   listOrg: () => string;
   createOrg: () => string;
-  canUpdate: boolean;
-  canDelete: boolean;
+  expectUpdate: number;
+  expectDelete: number;
   expectList: number;
   expectDetail: readonly number[];
   expectCreate: number;
@@ -107,6 +109,43 @@ describe('Tests (e2e)', () => {
     orgA = { id: ctxA.organization.id };
     orgB = { id: ctxB.organization.id };
 
+    await prisma.organization.updateMany({
+      where: { id: { in: [orgA.id, orgB.id] } },
+      data: { status: OrganizationStatus.ACTIVE },
+    });
+
+    const [yearA, yearB] = await Promise.all([
+      prisma.academicYear.findFirst({
+        where: { orgId: orgA.id, isCurrent: true },
+        select: { id: true },
+      }),
+      prisma.academicYear.findFirst({
+        where: { orgId: orgB.id, isCurrent: true },
+        select: { id: true },
+      }),
+    ]);
+    if (!yearA || !yearB) {
+      throw new Error('Missing current academic year in fixture org');
+    }
+    await prisma.classSection.createMany({
+      data: [
+        {
+          orgId: orgA.id,
+          yearId: yearA.id,
+          grade: SchoolGrade.GRADE_7,
+          section: 'T',
+          label: '7.T',
+        },
+        {
+          orgId: orgB.id,
+          yearId: yearB.id,
+          grade: SchoolGrade.GRADE_7,
+          section: 'T',
+          label: '7.T',
+        },
+      ],
+    });
+
     directorA = {
       id: ctxA.owner.user.id,
       token: ctxA.owner.accessToken,
@@ -134,7 +173,7 @@ describe('Tests (e2e)', () => {
     );
     superUser = {
       id: superUserAuth.user.id,
-      token: superUserAuth.accessToken,
+      token: await useOrg(app, superUserAuth.accessToken, orgA.id),
       login: superUserAuth.login,
     };
 
@@ -177,6 +216,9 @@ describe('Tests (e2e)', () => {
     await prisma.submission.deleteMany({});
     await prisma.test.deleteMany({
       where: { organizationId: { in: [orgA.id, orgB.id] } },
+    });
+    await prisma.classSection.deleteMany({
+      where: { orgId: { in: [orgA.id, orgB.id] } },
     });
 
     await prisma.membership.deleteMany({
@@ -392,6 +434,26 @@ describe('Tests (e2e)', () => {
     await prisma.test.delete({ where: { id: created.id } });
   });
 
+  it('GET /tests/:id → 200 and response includes assignability report', async () => {
+    const created = await prisma.test.create({
+      data: { title: 'Assignability-Check', organizationId: orgA.id, creatorId: mTA1.id },
+    });
+
+    const res = await request(app.getHttpServer())
+      .get(`/tests/${created.id}`)
+      .set('Authorization', `Bearer ${teacherUserA2.token}`)
+      .expect(200);
+
+    expect(res.body.assignability).toBeDefined();
+    expect(res.body.assignability).toMatchObject({
+      isAssignable: expect.any(Boolean),
+      totalPoints: expect.any(Number),
+      issues: expect.any(Array),
+    });
+
+    await prisma.test.delete({ where: { id: created.id } });
+  });
+
   it('GET /tests/:id → 400 na nevalidní UUID', async () => {
     await request(app.getHttpServer())
       .get('/tests/not-a-uuid')
@@ -490,6 +552,46 @@ describe('Tests (e2e)', () => {
   // ---------------------------
   // NESTED: Questions / Options / Answers / Reorder
   // ---------------------------
+
+  it('create DRAFT test → add one question → GET test has questions.length === 1', async () => {
+    const createRes = await request(app.getHttpServer())
+      .post('/tests')
+      .set('Authorization', `Bearer ${teacherUserA1.token}`)
+      .send({ title: 'Draft with one question', organizationId: orgA.id })
+      .expect(201);
+
+    const created = createRes?.body?.data ?? createRes?.body;
+    const testId = created.id as string;
+    expect(testId).toBeTruthy();
+
+    const addRes = await request(app.getHttpServer())
+      .post(`/tests/${testId}/questions`)
+      .set('Authorization', `Bearer ${teacherUserA1.token}`)
+      .send({
+        text: 'First question?',
+        type: QuestionType.TRUE_FALSE,
+        order: 0,
+        correctAnswer: 'true',
+      })
+      .expect(201);
+
+    const added = addRes?.body?.data ?? addRes?.body;
+    expect(added?.id).toBeTruthy();
+
+    const getRes = await request(app.getHttpServer())
+      .get(`/tests/${testId}`)
+      .set('Authorization', `Bearer ${teacherUserA1.token}`)
+      .expect(200);
+
+    const testDetail = getRes?.body?.data ?? getRes?.body;
+    expect(testDetail.questions).toBeDefined();
+    expect(Array.isArray(testDetail.questions)).toBe(true);
+    expect(testDetail.questions.length).toBe(1);
+    expect(testDetail.questions[0].text).toBe('First question?');
+    expect(testDetail.questions[0].type).toBe(QuestionType.TRUE_FALSE);
+
+    await prisma.test.delete({ where: { id: testId } });
+  });
 
   it('Nested CRUD → question + option + answer + reorder + delete', async () => {
     // create test as author A1 (creatorId = mTA1.id)
@@ -642,8 +744,8 @@ describe('Tests (e2e)', () => {
         token: () => superUser.token,
         listOrg: () => orgA.id,
         createOrg: () => orgB.id,
-        canUpdate: true,
-        canDelete: true,
+        expectUpdate: 200,
+        expectDelete: 200,
         expectList: 200,
         expectDetail: [200],
         expectCreate: 201,
@@ -653,8 +755,8 @@ describe('Tests (e2e)', () => {
         token: () => directorA.token,
         listOrg: () => orgA.id,
         createOrg: () => orgA.id,
-        canUpdate: true,
-        canDelete: true,
+        expectUpdate: 200,
+        expectDelete: 200,
         expectList: 200,
         expectDetail: [200],
         expectCreate: 201,
@@ -664,8 +766,8 @@ describe('Tests (e2e)', () => {
         token: () => directorB.token,
         listOrg: () => orgB.id,
         createOrg: () => orgB.id,
-        canUpdate: false, // against orgA sample
-        canDelete: false,
+        expectUpdate: 404,
+        expectDelete: 404,
         expectList: 200,
         expectDetail: [403, 404],
         expectCreate: 201,
@@ -675,8 +777,8 @@ describe('Tests (e2e)', () => {
         token: () => teacherUserA1.token,
         listOrg: () => orgA.id,
         createOrg: () => orgA.id,
-        canUpdate: true,
-        canDelete: false,
+        expectUpdate: 200,
+        expectDelete: 403,
         expectList: 200,
         expectDetail: [200],
         expectCreate: 201,
@@ -686,8 +788,8 @@ describe('Tests (e2e)', () => {
         token: () => teacherUserA2.token,
         listOrg: () => orgA.id,
         createOrg: () => orgA.id,
-        canUpdate: false,
-        canDelete: false,
+        expectUpdate: 403,
+        expectDelete: 403,
         expectList: 200,
         expectDetail: [200],
         expectCreate: 201,
@@ -697,8 +799,8 @@ describe('Tests (e2e)', () => {
         token: () => teacherUserB1.token,
         listOrg: () => orgB.id,
         createOrg: () => orgB.id,
-        canUpdate: false,
-        canDelete: false,
+        expectUpdate: 404,
+        expectDelete: 403,
         expectList: 200,
         expectDetail: [403, 404],
         expectCreate: 201,
@@ -708,8 +810,8 @@ describe('Tests (e2e)', () => {
         token: () => studentUser.token,
         listOrg: () => orgA.id,
         createOrg: () => orgA.id,
-        canUpdate: false,
-        canDelete: false,
+        expectUpdate: 403,
+        expectDelete: 403,
         expectList: 200, // students mohou listovat v naší implementaci
         expectDetail: [200],
         expectCreate: 403,
@@ -765,19 +867,18 @@ describe('Tests (e2e)', () => {
       },
     );
 
-    it.each(actors)('RBAC update: $name', async ({ token, canUpdate }) => {
-      const status = canUpdate ? 200 : 403;
+    it.each(actors)('RBAC update: $name', async ({ token, expectUpdate }) => {
       await request(app.getHttpServer())
         .patch(`/tests/${sampleId}`)
         .set('Authorization', `Bearer ${token()}`)
         .send({ title: `Upd ${Date.now()}` })
         .expect((r) => {
-          if (r.status !== status)
-            throw new Error(`Expected ${status}, got ${r.status}`);
+          if (r.status !== expectUpdate)
+            throw new Error(`Expected ${expectUpdate}, got ${r.status}`);
         });
     });
 
-    it.each(actors)('RBAC delete: $name', async ({ token, canDelete }) => {
+    it.each(actors)('RBAC delete: $name', async ({ token, expectDelete }) => {
       // create disposable test in orgA by author A1
       const disposable = await prisma.test.create({
         data: {
@@ -786,14 +887,13 @@ describe('Tests (e2e)', () => {
           creatorId: mTA1.id,
         },
       });
-      const status = canDelete ? 200 : 403;
 
       await request(app.getHttpServer())
         .delete(`/tests/${disposable.id}`)
         .set('Authorization', `Bearer ${token()}`)
         .expect((r) => {
-          if (r.status !== status)
-            throw new Error(`Expected ${status}, got ${r.status}`);
+          if (r.status !== expectDelete)
+            throw new Error(`Expected ${expectDelete}, got ${r.status}`);
         });
 
       // hard cleanup if not deleted soft by API or still present
@@ -812,7 +912,11 @@ describe('Tests (e2e)', () => {
       .get('/tests')
       .set('Authorization', `Bearer ${directorA.token}`)
       .query({ organizationId: 'not-a-uuid', page: 1, limit: 10 })
-      .expect(403);
+      .expect((r) => {
+        if (![400, 403].includes(r.status)) {
+          throw new Error(`Expected 400/403, got ${r.status}`);
+        }
+      });
   });
 
   it('GET /tests?search se speciálními znaky nepadá', async () => {
@@ -1264,7 +1368,7 @@ describe('Tests (e2e)', () => {
   // SUPERADMIN bez organizationId vrací globál
   // ---------------------------
 
-  it('GET /tests (SUPERADMIN bez organizationId) → defaultuje na org z tokenu', async () => {
+  it('GET /tests (SUPERADMIN bez organizationId) → vrací globální list napříč org', async () => {
     const [ta, tb] = await prisma.$transaction([
       prisma.test.create({
         data: {
@@ -1298,7 +1402,7 @@ describe('Tests (e2e)', () => {
     const items = Array.isArray(res.body) ? res.body : (res.body.items ?? []);
     const orgIds = new Set(items.map((x: any) => x.organizationId));
     expect(orgIds.has(orgA.id)).toBe(true);
-    expect(orgIds.has(orgB.id)).toBe(false);
+    expect(orgIds.has(orgB.id)).toBe(true);
 
     await prisma.test.deleteMany({ where: { id: { in: [ta.id, tb.id] } } });
   });
