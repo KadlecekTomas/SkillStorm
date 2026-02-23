@@ -1,4 +1,4 @@
-// YEAR-SCOPED: Requires active academic year (RequireActiveAcademicYearGuard)
+// YEAR-SCOPED: Uses selected academic year from query params.
 import {
   Body,
   Controller,
@@ -10,6 +10,7 @@ import {
   Req,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { PermissionKey } from '@prisma/client';
 import { Permission } from '@/modules/rbac/permission.decorator';
 import { ApiStandardResponses } from '@/common/http/api-standard-responses.decorator';
@@ -18,16 +19,15 @@ import { RequestWithUser } from '@/types/request-with-user';
 import { ClassSectionsService } from './class-sections.service';
 import { CreateClassSectionDto } from './dto/create-classroom.dto';
 import { QueryClassSectionsDto } from './dto/query-class-sections.dto';
-import { UseGuards } from '@nestjs/common';
-import { RequireActiveAcademicYearGuard } from '@/academic-years/require-active-academic-year.guard';
 import { AllowPendingOrg } from '@/common/decorators/allow-pending-org.decorator';
+import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
 
 @ApiTags('Classrooms')
 @ApiStandardResponses()
 @ApiBearerAuth()
 @Controller('classrooms')
+@OrgOperation(OrgOperationType.AUTHORING)
 @AllowPendingOrg()
-@UseGuards(RequireActiveAcademicYearGuard)
 export class ClassroomsController {
   constructor(private readonly service: ClassSectionsService) {}
 
@@ -36,6 +36,29 @@ export class ClassroomsController {
   @ApiOperation({ summary: 'List classrooms by academic year' })
   list(@Req() req: RequestWithUser, @Query() q: QueryClassSectionsDto) {
     return ok(this.service.findAll(q, req.user));
+  }
+
+  @Get(':id/risk-overview')
+  @Permission(PermissionKey.MANAGE_STUDENTS, PermissionKey.VIEW_RESULTS)
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
+  @ApiOperation({ summary: 'Classroom risk overview (Early Warning Panel)' })
+  riskOverview(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Query('subjectId') subjectId: string | undefined,
+    @Req() req: RequestWithUser,
+  ) {
+    return ok(this.service.getRiskOverview(id, req.user, subjectId));
+  }
+
+  @Get(':id/subject-performance')
+  @Permission(PermissionKey.MANAGE_STUDENTS, PermissionKey.VIEW_RESULTS)
+  @ApiOperation({ summary: 'Subject performance summary for classroom' })
+  subjectPerformance(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Query('academicYearId') academicYearId: string | undefined,
+    @Req() req: RequestWithUser,
+  ) {
+    return ok(this.service.getSubjectPerformance(id, req.user, academicYearId));
   }
 
   @Get(':id')

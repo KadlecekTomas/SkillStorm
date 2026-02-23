@@ -22,4 +22,9 @@ export class CreateTestDto {
   @IsOptional()
   @IsEnum(PublishStatus)
   status?: PublishStatus;
+
+  @ApiPropertyOptional({ description: 'Org subject UUID (validated against organization)' })
+  @IsOptional()
+  @IsUUID()
+  subjectId?: string;
 }

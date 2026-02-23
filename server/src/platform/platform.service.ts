@@ -12,14 +12,19 @@ import { AuditService } from '@/audit/audit.service';
 export type PlatformOrgListDto = {
   id: string;
   name: string;
-  status: string;
+  /** Authoritative platform status – PENDING | ACTIVE | SUSPENDED. */
+  status: OrganizationStatus;
   createdAt: Date;
   ownerEmail: string | null;
   membershipsCount: number;
   studentsCount: number;
   classroomsCount: number;
-  hasActiveAcademicYear: boolean;
-  hasAnyClassSectionInActiveYear: boolean;
+  hasCurrentAcademicYear: boolean;
+  hasAnyClassSectionInCurrentYear: boolean;
+  /** @deprecated Use hasCurrentAcademicYear. Same value, kept for one release. */
+  hasActiveAcademicYear?: boolean;
+  /** @deprecated Use hasAnyClassSectionInCurrentYear. Same value, kept for one release. */
+  hasAnyClassSectionInActiveYear?: boolean;
 };
 
 export type PlatformOrgDetailDto = PlatformOrgListDto & {
@@ -37,7 +42,10 @@ export class PlatformService {
     page?: number;
     limit?: number;
     search?: string;
-  }): Promise<{ items: PlatformOrgListDto[]; meta: { page: number; limit: number; total: number; pages: number } }> {
+  }): Promise<{
+    items: PlatformOrgListDto[];
+    meta: { page: number; limit: number; total: number; pages: number };
+  }> {
     const page = q.page ?? 1;
     const limit = Math.min(100, q.limit ?? 20);
     const skip = (page - 1) * limit;
@@ -123,13 +131,13 @@ export class PlatformService {
     for (const id of idList) {
       const o = byId.get(id);
       if (!o) continue;
-      const activeYearId = o.academicYears[0]?.id ?? null;
-      let hasAnyClassSectionInActiveYear = false;
-      if (activeYearId) {
+      const currentYearId = o.academicYears[0]?.id ?? null;
+      let hasAnyClassSectionInCurrentYear = false;
+      if (currentYearId) {
         const count = await this.prisma.classSection.count({
-          where: { yearId: activeYearId },
+          where: { yearId: currentYearId },
         });
-        hasAnyClassSectionInActiveYear = count > 0;
+        hasAnyClassSectionInCurrentYear = count > 0;
       }
       items.push({
         id: o.id,
@@ -137,11 +145,13 @@ export class PlatformService {
         status: o.status,
         createdAt: o.createdAt,
         ownerEmail: o.owner?.email ?? null,
-        membershipsCount: o._count.memberships,
-        studentsCount: o._count.students,
-        classroomsCount: o._count.classSections,
-        hasActiveAcademicYear: activeYearId !== null,
-        hasAnyClassSectionInActiveYear,
+        membershipsCount: o._count?.memberships ?? 0,
+        studentsCount: o._count?.students ?? 0,
+        classroomsCount: o._count?.classSections ?? 0,
+        hasCurrentAcademicYear: currentYearId !== null,
+        hasAnyClassSectionInCurrentYear,
+        hasActiveAcademicYear: currentYearId !== null,
+        hasAnyClassSectionInActiveYear: hasAnyClassSectionInCurrentYear,
       });
     }
 
@@ -176,13 +186,13 @@ export class PlatformService {
     });
     if (!org) throw new NotFoundException('Organization not found');
 
-    const activeYearId = org.academicYears[0]?.id ?? null;
-    let hasAnyClassSectionInActiveYear = false;
-    if (activeYearId) {
+    const currentYearId = org.academicYears[0]?.id ?? null;
+    let hasAnyClassSectionInCurrentYear = false;
+    if (currentYearId) {
       const count = await this.prisma.classSection.count({
-        where: { yearId: activeYearId },
+        where: { yearId: currentYearId },
       });
-      hasAnyClassSectionInActiveYear = count > 0;
+      hasAnyClassSectionInCurrentYear = count > 0;
     }
 
     const lastSub = await this.prisma.submission.findFirst({
@@ -197,16 +207,22 @@ export class PlatformService {
       status: org.status,
       createdAt: org.createdAt,
       ownerEmail: org.owner?.email ?? null,
-      membershipsCount: org._count.memberships,
-      studentsCount: org._count.students,
-      classroomsCount: org._count.classSections,
-      hasActiveAcademicYear: activeYearId !== null,
-      hasAnyClassSectionInActiveYear,
+      membershipsCount: org._count?.memberships ?? 0,
+      studentsCount: org._count?.students ?? 0,
+      classroomsCount: org._count?.classSections ?? 0,
+      hasCurrentAcademicYear: currentYearId !== null,
+      hasAnyClassSectionInCurrentYear,
+      hasActiveAcademicYear: currentYearId !== null,
+      hasAnyClassSectionInActiveYear: hasAnyClassSectionInCurrentYear,
       lastActivityAt: lastSub?.submittedAt ?? null,
     };
   }
 
-  async activate(id: string, userId: string): Promise<{ status: string }> {
+  /**
+   * Approve organization (PENDING → ACTIVE).
+   * Returns full, updated organization snapshot for SUPERADMIN UI.
+   */
+  async activate(id: string, userId: string): Promise<PlatformOrgDetailDto> {
     const org = await this.prisma.organization.findUnique({
       where: { id, deletedAt: null },
       select: { id: true, status: true },
@@ -229,10 +245,16 @@ export class PlatformService {
       userId,
       organizationId: id,
     });
-    return { status: OrganizationStatus.ACTIVE };
+
+    // Return authoritative, fully-populated organization object.
+    return this.getOrganizationDetail(id);
   }
 
-  async suspend(id: string): Promise<{ status: string }> {
+  /**
+   * Suspend organization.
+   * Returns full, updated organization snapshot for SUPERADMIN UI.
+   */
+  async suspend(id: string): Promise<PlatformOrgDetailDto> {
     const org = await this.prisma.organization.findUnique({
       where: { id, deletedAt: null },
       select: { id: true },
@@ -243,10 +265,16 @@ export class PlatformService {
       where: { id },
       data: { status: OrganizationStatus.SUSPENDED },
     });
-    return { status: OrganizationStatus.SUSPENDED };
+
+    return this.getOrganizationDetail(id);
   }
 
-  async reactivate(id: string): Promise<{ status: string }> {
+  /**
+   * Reactivate organization.
+   * If organization is not ready, status becomes PENDING; otherwise ACTIVE.
+   * Always returns full, updated organization snapshot for SUPERADMIN UI.
+   */
+  async reactivate(id: string): Promise<PlatformOrgDetailDto> {
     const org = await this.prisma.organization.findUnique({
       where: { id, deletedAt: null },
       select: { id: true },
@@ -260,12 +288,12 @@ export class PlatformService {
         where: { id },
         data: { status: OrganizationStatus.PENDING },
       });
-      return { status: OrganizationStatus.PENDING };
+      return this.getOrganizationDetail(id);
     }
     await this.prisma.organization.update({
       where: { id },
       data: { status: OrganizationStatus.ACTIVE },
     });
-    return { status: OrganizationStatus.ACTIVE };
+    return this.getOrganizationDetail(id);
   }
 }

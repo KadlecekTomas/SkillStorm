@@ -24,6 +24,13 @@ import type {
   ExportStudentsDto,
   ExportTemplate,
 } from './dto/export-students.dto';
+import type {
+  StudentDetailResponse,
+  StudentDetailPerformanceSummary,
+  StudentDetailProgressByTopic,
+  StudentDetailRecentTest,
+} from './dto/student-detail.dto';
+import { AuditService } from '@/audit/audit.service';
 
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
@@ -197,6 +204,7 @@ export class StudentsService {
   constructor(
     private prisma: PrismaService,
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
+    private readonly auditService: AuditService,
   ) {}
 
   private async audit(opts: {
@@ -510,6 +518,162 @@ export class StudentsService {
       cacheScopeForUser(user.systemRole, deleted.orgId),
     );
     return deleted;
+  }
+
+  /**
+   * GDPR-minimal student detail. Called after StudentAccessGuard.
+   * Returns only: id, displayName, classroomLabel, performanceSummary, progressByTopic, recentTests.
+   */
+  async getDetail(id: string, user: JwtPayload): Promise<StudentDetailResponse> {
+    const student = await this.prisma.student.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        orgId: true,
+        deletedAt: true,
+        membershipId: true,
+        membership: {
+          select: {
+            user: { select: { name: true } },
+          },
+        },
+        enrollments: {
+          where: { status: EnrollmentStatus.ACTIVE },
+          select: {
+            academicYear: { select: { isCurrent: true } },
+            classSection: { select: { label: true, grade: true, section: true } },
+          },
+          orderBy: { academicYear: { isCurrent: 'desc' } },
+          take: 20,
+        },
+      },
+    });
+    if (!student || student.deletedAt)
+      throw new NotFoundException('Student nenalezen.');
+
+    if (
+      user.systemRole !== SystemRole.SUPERADMIN &&
+      user.organizationId != null &&
+      student.orgId !== user.organizationId
+    ) {
+      throw new ForbiddenException('Nemáš oprávnění zobrazit detail tohoto žáka.');
+    }
+
+    const displayName =
+      student.membership?.user?.name?.trim() || 'Žák';
+    const currentEnrollment = student.enrollments?.find(
+      (e) => e.academicYear?.isCurrent,
+    );
+    const classroomLabel =
+      currentEnrollment?.classSection?.label ||
+      [currentEnrollment?.classSection?.grade, currentEnrollment?.classSection?.section]
+        .filter(Boolean)
+        .join(' ') ||
+      '—';
+
+    const submissions = await this.prisma.submission.findMany({
+      where: {
+        studentId: student.membershipId,
+        deletedAt: null,
+      },
+      select: {
+        score: true,
+        submittedAt: true,
+        testId: true,
+        assignment: {
+          select: {
+            topicLevelId: true,
+            topicLevel: {
+              select: {
+                id: true,
+                catalogTopic: { select: { name: true } },
+              },
+            },
+            test: {
+              select: {
+                id: true,
+                title: true,
+                questions: { select: { score: true } },
+              },
+            },
+          },
+        },
+      },
+      orderBy: { submittedAt: 'desc' },
+      take: 100,
+    });
+
+    const withScore = submissions.filter((s) => s.score != null);
+    const completedTests = withScore.length;
+    const averageScore =
+      completedTests > 0
+        ? withScore.reduce((a, s) => a + (s.score ?? 0), 0) / completedTests
+        : 0;
+    const lastSubmission = submissions.find((s) => s.submittedAt);
+    const lastActivityAt = lastSubmission?.submittedAt?.toISOString() ?? null;
+
+    const topicScores = new Map<
+      string,
+      { name: string; sum: number; count: number }
+    >();
+    for (const s of submissions) {
+      const tl = s.assignment?.topicLevel;
+      if (!tl || s.score == null) continue;
+      const topicId = tl.id;
+      const topicName = tl.catalogTopic?.name ?? '—';
+      const prev = topicScores.get(topicId);
+      if (!prev) {
+        topicScores.set(topicId, { name: topicName, sum: s.score, count: 1 });
+      } else {
+        prev.sum += s.score;
+        prev.count += 1;
+      }
+    }
+    const progressByTopic: StudentDetailProgressByTopic[] = Array.from(
+      topicScores.entries(),
+    ).map(([topicId, v]) => ({
+      topicId,
+      topicName: v.name,
+      averageScore: v.count > 0 ? v.sum / v.count : 0,
+    }));
+
+    const recentTests: StudentDetailRecentTest[] = submissions
+      .slice(0, 10)
+      .map((s) => {
+        const test = s.assignment?.test;
+        const maxScore =
+          test?.questions?.reduce((sum, q) => sum + (q.score ?? 0), 0) ?? null;
+        return {
+          testId: test?.id ?? s.testId,
+          title: test?.title ?? '—',
+          score: s.score ?? null,
+          maxScore: maxScore ?? null,
+          submittedAt: s.submittedAt?.toISOString() ?? null,
+        };
+      });
+
+    await this.auditService.log({
+      action: 'VIEW_DETAIL',
+      entityType: AuditEntityType.STUDENT,
+      entityId: id,
+      userId: user.userId,
+      organizationId: student.orgId ?? user.organizationId ?? null,
+    });
+
+    const performanceSummary: StudentDetailPerformanceSummary = {
+      averageScore: Math.round(averageScore * 100) / 100,
+      completedTests,
+      lastActivityAt,
+    };
+
+    return {
+      id: student.id,
+      displayName,
+      classroomLabel,
+      performanceSummary,
+      progressByTopic,
+      recentTests,
+    };
   }
 
   private async getStudentWithContext(id: string) {

@@ -1,4 +1,4 @@
-// YEAR-SCOPED: Requires active academic year (RequireActiveAcademicYearGuard)
+// YEAR-SCOPED: Requires current academic year (RequireCurrentAcademicYearGuard)
 // src/assignments/assignments.controller.ts
 import {
   Controller,
@@ -10,10 +10,12 @@ import {
   Body,
   Req,
   ForbiddenException,
+  NotFoundException,
   UseGuards,
+  Logger,
 } from '@nestjs/common';
 import { RequestWithUser } from '@/types/request-with-user';
-import { PermissionKey, OrganizationRole } from '@prisma/client';
+import { PermissionKey } from '@prisma/client';
 import { CreateAssignmentDto, UpdateAssignmentDto } from './dto';
 import { AssignmentsService } from './assignments.service';
 import { Permission } from '@/modules/rbac/permission.decorator';
@@ -21,41 +23,57 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ok } from '@/common/http/envelope';
 import { ApiStandardResponses } from '@/common/http/api-standard-responses.decorator';
 import { MyAssignmentDto } from './my-assignments.dto';
-import { RequireActiveAcademicYearGuard } from '@/academic-years/require-active-academic-year.guard';
+import { RequireCurrentAcademicYearGuard } from '@/academic-years/require-current-academic-year.guard';
+import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
 
 @ApiTags('assignments')
 @ApiStandardResponses()
 @ApiBearerAuth()
 @Controller('assignments')
-@UseGuards(RequireActiveAcademicYearGuard)
+@OrgOperation(OrgOperationType.EXECUTION)
+@UseGuards(RequireCurrentAcademicYearGuard)
 export class AssignmentsController {
+  private readonly logger = new Logger(AssignmentsController.name);
   constructor(private readonly assignmentsService: AssignmentsService) {}
 
   @Post()
   @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'Create assignment' })
-  create(
+  async create(
     @Body() dto: CreateAssignmentDto,
     @Req() req: RequestWithUser,
   ) {
-    if (
-      dto.organizationId &&
-      dto.organizationId !== req?.user?.organizationId &&
-      req?.user?.systemRole !== 'SUPERADMIN'
-    ) {
-      throw new ForbiddenException('Invalid org scope');
+    if (req.user.systemRole !== 'SUPERADMIN') {
+      if (!req.user.organizationId) {
+        throw new ForbiddenException('Missing organization context.');
+      }
+      if (dto.organizationId && dto.organizationId !== req.user.organizationId) {
+        throw new NotFoundException('Assignment nenalezen');
+      }
+      dto.organizationId = req.user.organizationId;
     }
-    return ok(this.assignmentsService.create(dto));
+    const assignment = await this.assignmentsService.create(dto);
+    const requestId = (req as RequestWithUser & { requestId?: string }).requestId;
+    if (requestId) {
+      this.logger.log(
+        JSON.stringify({
+          event: 'assignment_create',
+          assignmentId: assignment.id,
+          organizationId: dto.organizationId,
+          requestId,
+        }),
+      );
+    }
+    return ok(assignment);
   }
 
   @Get('my')
   @Permission(
-    OrganizationRole.STUDENT,
-    OrganizationRole.TEACHER,
-    OrganizationRole.OWNER,
-    OrganizationRole.DIRECTOR,
+    PermissionKey.VIEW_OWN_ASSIGNMENTS,
+    PermissionKey.VIEW_CLASS_ASSIGNMENTS,
+    PermissionKey.VIEW_ORG_ASSIGNMENTS,
   )
-  @ApiOperation({ summary: 'List assignments for current user (student scope)' })
+  @ApiOperation({ summary: 'List assignments for current user (permission-scoped)' })
   async myAssignments(
     @Req() req: RequestWithUser,
   ): Promise<{ success: boolean; data?: MyAssignmentDto[]; error?: string }> {
@@ -64,22 +82,37 @@ export class AssignmentsController {
   }
 
   @Get(':id')
-  @Permission(PermissionKey.MANAGE_TEACHERS, OrganizationRole.STUDENT)
-  @ApiOperation({ summary: 'Get assignment detail' })
+  @Permission(
+    PermissionKey.VIEW_OWN_ASSIGNMENTS,
+    PermissionKey.VIEW_CLASS_ASSIGNMENTS,
+    PermissionKey.VIEW_ORG_ASSIGNMENTS,
+  )
+  @ApiOperation({ summary: 'Get assignment detail (permission-scoped)' })
   async findOne(
     @Param('id') id: string,
     @Req() req: RequestWithUser,
   ) {
     const assignment = await this.assignmentsService.findOneOrThrow(id);
-
-    // STUDENT: může jen ve své organizaci
-    if (req.user.organizationRole === 'STUDENT') {
-      if (assignment.organizationId !== req.user.organizationId) {
-        throw new ForbiddenException('Access denied');
-      }
+    if (
+      req.user.systemRole !== 'SUPERADMIN' &&
+      assignment.organizationId !== (req.user.organizationId ?? null)
+    ) {
+      throw new NotFoundException('Assignment nenalezen');
     }
-
-    // Učitel/Direktor: RbacGuard + JWT claim drží scope organizace
+    const membershipId = req.user.membershipId;
+    const orgId = req.user.organizationId ?? null;
+    if (!membershipId || !orgId) {
+      throw new ForbiddenException('Access denied');
+    }
+    const allowed = await this.assignmentsService.canAccessAssignment(
+      assignment,
+      req.user.userId,
+      orgId,
+      membershipId,
+    );
+    if (!allowed) {
+      throw new ForbiddenException('Access denied');
+    }
     return ok(assignment);
   }
 
@@ -92,8 +125,11 @@ export class AssignmentsController {
     @Req() req: RequestWithUser,
   ) {
     const assignment = await this.assignmentsService.findOneOrThrow(id);
-    if (assignment.organizationId !== req.user.organizationId) {
-      throw new ForbiddenException('Access denied');
+    if (
+      req.user.systemRole !== 'SUPERADMIN' &&
+      assignment.organizationId !== (req.user.organizationId ?? null)
+    ) {
+      throw new NotFoundException('Assignment nenalezen');
     }
     return ok(this.assignmentsService.update(id, dto));
   }
@@ -106,8 +142,11 @@ export class AssignmentsController {
     @Req() req: RequestWithUser,
   ) {
     const assignment = await this.assignmentsService.findOneOrThrow(id);
-    if (assignment.organizationId !== req.user.organizationId) {
-      throw new ForbiddenException('Access denied');
+    if (
+      req.user.systemRole !== 'SUPERADMIN' &&
+      assignment.organizationId !== (req.user.organizationId ?? null)
+    ) {
+      throw new NotFoundException('Assignment nenalezen');
     }
     return ok(this.assignmentsService.remove(id));
   }

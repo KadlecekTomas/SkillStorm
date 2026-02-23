@@ -39,13 +39,18 @@ import { UpdateAnswerDto } from './dto/update-answer.dto';
 import { ok } from '@/common/http/envelope';
 import { AssignTestDto } from './dto/assign-test.dto';
 import { ApiStandardResponses } from '@/common/http/api-standard-responses.decorator';
-import { RequireActiveAcademicYearGuard } from '@/academic-years/require-active-academic-year.guard';
+import { RequireCurrentAcademicYearGuard } from '@/academic-years/require-current-academic-year.guard';
+import {
+  OrgOperation,
+  OrgOperationType,
+} from '@/common/decorators/org-operation.decorator';
 
 @ApiTags('tests')
 @ApiStandardResponses()
 @ApiBearerAuth()
 @Controller('tests')
-@UseGuards(RequireActiveAcademicYearGuard)
+@UseGuards(RequireCurrentAcademicYearGuard)
+@OrgOperation(OrgOperationType.AUTHORING)
 export class TestsController {
   constructor(private readonly service: TestsService) {}
 
@@ -55,13 +60,14 @@ export class TestsController {
   @ApiOperation({ summary: 'Create test' })
   @InvalidateScopes(({ req }) => [req.body?.organizationId].filter(Boolean))
   create(@Body() dto: CreateTestDto, @Req() req: RequestWithUser) {
-    if (
-      dto.organizationId &&
-      req.user.systemRole !== 'SUPERADMIN' &&
-      req.user.organizationId &&
-      dto.organizationId !== req.user.organizationId
-    ) {
-      throw new ForbiddenException('Invalid org scope for test creation');
+    if (req.user.systemRole !== 'SUPERADMIN') {
+      if (!req.user.organizationId) {
+        throw new ForbiddenException('Missing organization context.');
+      }
+      if (dto.organizationId && dto.organizationId !== req.user.organizationId) {
+        throw new ForbiddenException('Invalid org scope for test creation');
+      }
+      dto.organizationId = req.user.organizationId;
     }
     return ok(this.service.create(dto, req.user));
   }
@@ -72,19 +78,21 @@ export class TestsController {
   @ApiQuery({ name: 'organizationId', required: false, type: String })
   @CacheTTL(0)
   findAll(@Req() req: RequestWithUser, @Query() q: QueryTestsDto) {
-    if (
-      q.organizationId &&
-      req.user.systemRole !== 'SUPERADMIN' &&
-      req.user.organizationId &&
-      q.organizationId !== req.user.organizationId
-    ) {
-      throw new ForbiddenException('Invalid org scope for test list');
+    if (req.user.systemRole !== 'SUPERADMIN') {
+      if (!req.user.organizationId) {
+        throw new ForbiddenException('Missing organization context.');
+      }
+      if (q.organizationId && q.organizationId !== req.user.organizationId) {
+        throw new ForbiddenException('Invalid org scope for test list');
+      }
+      return ok(
+        this.service.findAll(req.user, {
+          ...q,
+          organizationId: req.user.organizationId,
+        }),
+      );
     }
-    const enforced = {
-      ...q,
-      organizationId: q.organizationId ?? req.user.organizationId ?? '',
-    };
-    return ok(this.service.findAll(req.user, enforced));
+    return ok(this.service.findAll(req.user, q));
   }
 
   @Get(':id')
@@ -126,7 +134,8 @@ export class TestsController {
   }
 
   @Post(':id/assign')
-  @Permission(PermissionKey.MANAGE_TEACHERS)
+  @OrgOperation(OrgOperationType.EXECUTION)
+  @Permission(PermissionKey.ASSIGN_TESTS, PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'Assign test to class or students' })
   assignTest(
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -137,6 +146,7 @@ export class TestsController {
   }
 
   @Get(':id/results')
+  @OrgOperation(OrgOperationType.EXECUTION)
   @Permission(PermissionKey.VIEW_RESULTS)
   @ApiOperation({ summary: 'Get test results (submissions + scores)' })
   results(@Param('id', new ParseUUIDPipe()) id: string, @Req() req: RequestWithUser) {
@@ -146,7 +156,6 @@ export class TestsController {
   // QUESTIONS -------------------------------------------
 
   // Reorder MUSÍ být nad ':id/questions/:questionId'
-  @Patch(':id/questions/reorder')
   @Patch(':id/questions/reorder')
   @Permission(PermissionKey.EDIT_TEST)
   @ApiOperation({ summary: 'Reorder questions' })

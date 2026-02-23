@@ -22,12 +22,14 @@ import {
   StatsOverviewQueryDto,
 } from './dto/stats-overview-query.dto';
 import { NoHttpCacheInterceptor } from '@/common/interceptors/no-http-cache.interceptor';
+import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
 
 export const DEFAULT_STATS_OVERVIEW_SCOPE = 'evaluated' as const;
 
 @ApiTags('Stats')
 @ApiBearerAuth()
 @Controller()
+@OrgOperation(OrgOperationType.EXECUTION)
 export class StatsController {
   constructor(private readonly service: StatsService) {}
 

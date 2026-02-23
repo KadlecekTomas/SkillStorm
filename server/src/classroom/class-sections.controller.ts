@@ -1,4 +1,4 @@
-// YEAR-SCOPED: Requires active academic year (RequireActiveAcademicYearGuard)
+// YEAR-SCOPED: Requires current academic year (RequireCurrentAcademicYearGuard)
 // src/modules/classroom/class-sections.controller.ts
 import {
   Body,
@@ -21,19 +21,23 @@ import { CreateClassSectionDto } from './dto/create-classroom.dto';
 import { UpdateClassroomDto } from './dto/update-classroom.dto';
 import { SetHomeroomDto } from './dto/set-homeroom.dto';
 import { QueryClassSectionsDto } from './dto/query-class-sections.dto';
+import { AttachOrgSubjectsDto } from './dto/attach-org-subjects.dto';
 import { ClassSectionsService } from './class-sections.service';
 import { InvalidateScopes } from '@/common/cache/invalidate.decorator';
 import { Permission } from '@/modules/rbac/permission.decorator';
 import { ok } from '@/common/http/envelope';
 import { ApiStandardResponses } from '@/common/http/api-standard-responses.decorator';
-import { RequireActiveAcademicYearGuard } from '@/academic-years/require-active-academic-year.guard';
+import { RequireCurrentAcademicYearGuard } from '@/academic-years/require-current-academic-year.guard';
 import { AllowPendingOrg } from '@/common/decorators/allow-pending-org.decorator';
+import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
 
 @ApiTags('ClassSections')
 @ApiStandardResponses()
 @ApiBearerAuth()
 @Controller('class-sections')
-@UseGuards(RequireActiveAcademicYearGuard)
+@OrgOperation(OrgOperationType.AUTHORING)
+@AllowPendingOrg()
+@UseGuards(RequireCurrentAcademicYearGuard)
 export class ClassSectionsController {
   constructor(private readonly service: ClassSectionsService) {}
 
@@ -63,6 +67,30 @@ export class ClassSectionsController {
     @Req() req: RequestWithUser,
   ) {
     return ok(this.service.findOne(id, req.user));
+  }
+
+  @Get(':id/org-subjects')
+  @ApiOperation({ summary: 'List subjects assigned to class section' })
+  @Permission(PermissionKey.MANAGE_TEACHERS, PermissionKey.VIEW_RESULTS)
+  listOrgSubjects(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() req: RequestWithUser,
+  ) {
+    return ok(this.service.listOrgSubjects(id, req.user));
+  }
+
+  @Post(':id/org-subjects')
+  @ApiOperation({ summary: 'Attach subjects to class section' })
+  @Permission(PermissionKey.MANAGE_TEACHERS)
+  @InvalidateScopes(({ req }) =>
+    [req?.user?.organizationId].filter(Boolean),
+  )
+  attachOrgSubjects(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: AttachOrgSubjectsDto,
+    @Req() req: RequestWithUser,
+  ) {
+    return ok(this.service.attachOrgSubjects(id, dto, req.user));
   }
 
   @Patch(':id')

@@ -129,6 +129,34 @@ describe('EnrollmentsService', () => {
     ).resolves.toEqual(expect.objectContaining({ id: 'enroll-1' }));
   });
 
+  it('rejects enrollment when student and class section are in different organizations', async () => {
+    prisma.student.findUnique.mockResolvedValue({
+      id: 'student-1',
+      orgId: 'org-1',
+      deletedAt: null,
+      membershipId: 'membership-1',
+    });
+    prisma.classSection.findUnique.mockResolvedValue({
+      id: 'class-1',
+      orgId: 'org-2',
+      yearId: 'year-1',
+      academicYear: { isCurrent: true },
+    });
+    prisma.membership.findUnique.mockResolvedValue({ deletedAt: null });
+
+    await expect(
+      service.create(
+        { studentId: 'student-1', classSectionId: 'class-1', academicYearId: 'year-1' },
+        {
+          userId: 'user-1',
+          organizationId: 'org-1',
+          organizationRole: OrganizationRole.DIRECTOR,
+          systemRole: SystemRole.SUPPORT,
+        } as any,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
   it('rejects enrollment when academicYearId does not match class section', async () => {
     prisma.student.findUnique.mockResolvedValue({
       id: 'student-1',

@@ -14,9 +14,11 @@ import { Permission } from '@/modules/rbac/permission.decorator';
 import { PermissionKey } from '@prisma/client';
 import { RequestWithUser } from '@/types/request-with-user';
 import { JwtAuthGuard } from '@/auth/guards/jwt-auth.guard';
-import { RequireActiveAcademicYearGuard } from '@/academic-years/require-active-academic-year.guard';
+import { RequireCurrentAcademicYearGuard } from '@/academic-years/require-current-academic-year.guard';
+import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
 
 @Controller('analytics')
+@OrgOperation(OrgOperationType.EXECUTION)
 export class AnalyticsController {
   constructor(private readonly analytics: AnalyticsService) {}
 
@@ -38,7 +40,7 @@ export class AnalyticsController {
   }
 
   @Get('student-timeline')
-  @UseGuards(JwtAuthGuard, RequireActiveAcademicYearGuard)
+  @UseGuards(JwtAuthGuard, RequireCurrentAcademicYearGuard)
   @Permission(PermissionKey.VIEW_RESULTS, PermissionKey.VIEW_ANALYTICS)
   studentTimeline(
     @Query('yearId') yearId: string,
@@ -55,7 +57,7 @@ export class AnalyticsController {
   }
 
   @Get('class-heatmap')
-  @UseGuards(JwtAuthGuard, RequireActiveAcademicYearGuard)
+  @UseGuards(JwtAuthGuard, RequireCurrentAcademicYearGuard)
   @Permission(PermissionKey.VIEW_ANALYTICS)
   classHeatmap(
     @Query('yearId') yearId: string,
@@ -68,7 +70,7 @@ export class AnalyticsController {
   }
 
   @Get('student/errors')
-  @UseGuards(JwtAuthGuard, RequireActiveAcademicYearGuard)
+  @UseGuards(JwtAuthGuard, RequireCurrentAcademicYearGuard)
   @Permission(PermissionKey.VIEW_RESULTS)
   studentErrors(
     @Query('yearId') yearId: string,
@@ -78,7 +80,7 @@ export class AnalyticsController {
   }
 
   @Get('student/topics')
-  @UseGuards(JwtAuthGuard, RequireActiveAcademicYearGuard)
+  @UseGuards(JwtAuthGuard, RequireCurrentAcademicYearGuard)
   @Permission(PermissionKey.VIEW_RESULTS)
   studentTopics(
     @Query('yearId') yearId: string,
@@ -88,7 +90,7 @@ export class AnalyticsController {
   }
 
   @Get('teacher/:classId/errors')
-  @UseGuards(JwtAuthGuard, RequireActiveAcademicYearGuard)
+  @UseGuards(JwtAuthGuard, RequireCurrentAcademicYearGuard)
   @Permission(PermissionKey.VIEW_RESULTS)
   teacherErrors(
     @Param('classId') classId: string,
@@ -99,7 +101,7 @@ export class AnalyticsController {
   }
 
   @Get('teacher/:classId/topics')
-  @UseGuards(JwtAuthGuard, RequireActiveAcademicYearGuard)
+  @UseGuards(JwtAuthGuard, RequireCurrentAcademicYearGuard)
   @Permission(PermissionKey.VIEW_RESULTS)
   teacherTopics(
     @Param('classId') classId: string,

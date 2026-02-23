@@ -1,10 +1,10 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
   IsUUID,
-  Min,
   IsEnum,
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
@@ -38,17 +38,41 @@ export class QueryClassSectionsDto {
   @IsString()
   search?: string;
 
-  @ApiPropertyOptional({ example: 1 })
+  @ApiPropertyOptional({ description: 'Filter by teacher', example: 'teacher-uuid' })
   @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  page?: number = 1;
+  @IsUUID()
+  teacherId?: string;
 
-  @ApiPropertyOptional({ example: 50 })
+  @ApiPropertyOptional({
+    description: 'Legacy offset page (deprecated, ignored when cursor is used)',
+    example: 1,
+    deprecated: true,
+  })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
-  @Min(1)
-  limit?: number = 50;
+  page?: number;
+
+  @ApiPropertyOptional({
+    description: 'Opaque cursor token (base64url)',
+    example: 'eyJncmFkZSI6IkdSQURFXzEiLCJzZWN0aW9uIjoiQSIsImlkIjoidXVpZC0uLi4ifQ',
+  })
+  @IsOptional()
+  @IsString()
+  cursor?: string;
+
+  @ApiPropertyOptional({
+    description: 'Cursor direction',
+    enum: ['next', 'prev'],
+    default: 'next',
+  })
+  @IsOptional()
+  @IsIn(['next', 'prev'])
+  direction?: 'next' | 'prev';
+
+  @ApiPropertyOptional({ example: 20 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  limit?: number = 20;
 }

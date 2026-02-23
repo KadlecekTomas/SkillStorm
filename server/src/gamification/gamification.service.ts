@@ -124,7 +124,7 @@ export class GamificationService {
     const membership =
       membershipId === 'me'
         ? await this.prisma.membership.findFirst({
-            where: { userId: actor.userId ?? undefined },
+            where: { ...(actor.userId ? { userId: actor.userId } : {}) },
             select: membershipSelect,
           })
         : await this.prisma.membership.findUnique({
@@ -202,7 +202,7 @@ export class GamificationService {
     };
     if (membershipId === 'me') {
       const record = await this.prisma.membership.findFirst({
-        where: { userId: actor.userId ?? undefined },
+        where: { ...(actor.userId ? { userId: actor.userId } : {}) },
         select: defaultSelect,
       });
       if (!record) throw new NotFoundException('Membership not found');

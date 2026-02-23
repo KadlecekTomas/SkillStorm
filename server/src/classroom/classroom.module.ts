@@ -1,12 +1,13 @@
 import { Module } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
 import { AcademicYearsModule } from '@/academic-years/academic-years.module';
+import { AuditModule } from '@/audit/audit.module';
 import { ClassSectionsController } from './class-sections.controller';
 import { ClassroomsController } from './classrooms.controller';
 import { ClassSectionsService } from './class-sections.service';
 
 @Module({
-  imports: [AcademicYearsModule],
+  imports: [AcademicYearsModule, AuditModule],
   controllers: [ClassSectionsController, ClassroomsController],
   providers: [ClassSectionsService, PrismaService],
 })

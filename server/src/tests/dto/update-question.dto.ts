@@ -15,6 +15,12 @@ export class UpdateQuestionDto {
   @Min(0)
   order?: number;
 
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  score?: number;
+
   @ApiPropertyOptional({
     example: 'false',
     description: 'Single correct answer (TRUE_FALSE, FILL_IN_THE_BLANK, or single-choice MCQ)',

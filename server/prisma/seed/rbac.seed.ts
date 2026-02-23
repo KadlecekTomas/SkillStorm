@@ -6,18 +6,27 @@ import {
 } from '@prisma/client';
 import { logDone, logStep } from './seed-helpers';
 import { USER_EMAILS } from './seed-constants';
+import { RBAC_DEFAULT_PERMISSIONS } from '../../src/modules/rbac/rbac.defaults';
+
+// Seed uses same role→permission mapping as runtime defaults. DIRECTOR is a superset of TEACHER (business rule).
+const TEACHER_KEYS = (RBAC_DEFAULT_PERMISSIONS[OrganizationRole.TEACHER] as PermissionKey[]) ?? [];
+const TEACHER_KEYS_HARDENED = TEACHER_KEYS.includes(PermissionKey.ASSIGN_TESTS)
+  ? TEACHER_KEYS
+  : [...TEACHER_KEYS, PermissionKey.ASSIGN_TESTS];
+const DIRECTOR_KEYS =
+  (RBAC_DEFAULT_PERMISSIONS[OrganizationRole.DIRECTOR] as PermissionKey[]) ??
+  Object.values(PermissionKey);
 
 const ROLE_MATRIX: Partial<Record<OrganizationRole, PermissionKey[]>> = {
-  [OrganizationRole.DIRECTOR]: Object.values(PermissionKey),
-  [OrganizationRole.TEACHER]: [
-    PermissionKey.CREATE_TEST,
-    PermissionKey.EDIT_TEST,
+  [OrganizationRole.DIRECTOR]: DIRECTOR_KEYS,
+  [OrganizationRole.TEACHER]: TEACHER_KEYS_HARDENED,
+  [OrganizationRole.STUDENT]: [
     PermissionKey.VIEW_RESULTS,
-    PermissionKey.MANAGE_STUDENTS,
-    PermissionKey.INVITE_STUDENTS,
+    PermissionKey.VIEW_TEST_OVERVIEW,
+    PermissionKey.VIEW_SUBMISSIONS,
+    PermissionKey.VIEW_OWN_ASSIGNMENTS,
   ],
-  [OrganizationRole.STUDENT]: [PermissionKey.VIEW_RESULTS],
-  [OrganizationRole.PARENT]: [PermissionKey.VIEW_RESULTS],
+  [OrganizationRole.PARENT]: [PermissionKey.VIEW_RESULTS, PermissionKey.VIEW_SUBMISSIONS],
 };
 
 export async function seed(prisma: PrismaClient) {

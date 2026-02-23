@@ -132,7 +132,25 @@ export class UsersController {
     @Param('id', new ParseUUIDPipe()) id: string,
     @Req() req: RequestWithUser,
   ) {
-    // doporučení: usersService.remove vracej { ok: true, affectedOrgIds: [...] }
     return ok(this.usersService.remove(id, req.user));
+  }
+
+  @Post(':id/reset-password')
+  @Permission(SystemRole.SUPERADMIN, OrganizationRole.OWNER, OrganizationRole.DIRECTOR)
+  @ApiOperation({ summary: 'Create password reset token for user (admin)' })
+  async resetPassword(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() req: RequestWithUser,
+  ) {
+    const ctx = {
+      ipAddress: req.ip ?? null,
+      userAgent: req.get('user-agent') ?? null,
+    };
+    const requester = {
+      userId: req.user.userId,
+      systemRole: req.user.systemRole ?? null,
+      organizationId: req.user.organizationId ?? null,
+    };
+    return ok(this.usersService.createPasswordResetToken(id, requester, ctx));
   }
 }

@@ -44,6 +44,7 @@ import { EnrollmentsModule } from './enrollments/enrollments.module';
 import { AcademicYearsModule } from './academic-years/academic-years.module';
 import { InvitesModule } from './invites/invites.module';
 import { PlatformModule } from './platform/platform.module';
+import { OrgSubjectModule } from './org-subject/org-subject.module';
 
 @Module({
   imports: [
@@ -99,6 +100,7 @@ import { PlatformModule } from './platform/platform.module';
     AcademicYearsModule,
     InvitesModule,
     PlatformModule,
+    OrgSubjectModule,
   ],
   providers: [
     { provide: APP_INTERCEPTOR, useClass: ResponseEnvelopeInterceptor },

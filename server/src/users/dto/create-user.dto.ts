@@ -5,9 +5,14 @@ import {
   IsOptional,
   IsString,
   MinLength,
+  Matches,
   MaxLength,
 } from 'class-validator';
 import { SystemRole } from '@prisma/client';
+
+const PASSWORD_POLICY = {
+  message: 'Heslo musí mít alespoň 8 znaků, obsahovat alespoň jedno písmeno a jednu číslici.',
+};
 
 export class CreateUserDto {
   @ApiProperty({ example: 'john.doe@example.com' })
@@ -25,9 +30,11 @@ export class CreateUserDto {
   @MaxLength(150)
   name!: string;
 
-  @ApiProperty({ example: 'password123', minLength: 6 })
+  @ApiProperty({ example: 'password123', minLength: 8 })
   @IsString()
-  @MinLength(6)
+  @MinLength(8, { message: PASSWORD_POLICY.message })
+  @Matches(/\d/, { message: PASSWORD_POLICY.message })
+  @Matches(/[a-zA-Z]/, { message: PASSWORD_POLICY.message })
   password!: string;
 
   @ApiPropertyOptional({

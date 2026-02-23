@@ -96,6 +96,9 @@ export class AnalyticsService {
     return this.prisma.analyticsEvent.create({ data });
   }
 
+  /** Cap for analytics summary when no org filter (e.g. superadmin) to avoid unbounded load. */
+  private static readonly SUMMARY_EVENTS_CAP = 500;
+
   async summary(
     days = 7,
     organizationId?: string | null,
@@ -110,6 +113,7 @@ export class AnalyticsService {
         category: true,
         action: true,
       },
+      ...(organizationId ? {} : { take: AnalyticsService.SUMMARY_EVENTS_CAP }),
     });
 
     const aggregated = new Map<string, AnalyticsSummaryItem>();

@@ -1,4 +1,4 @@
-// YEAR-SCOPED: Requires active academic year (RequireActiveAcademicYearGuard)
+// YEAR-SCOPED: Requires current academic year (RequireCurrentAcademicYearGuard)
 import {
   Body,
   Controller,
@@ -23,13 +23,15 @@ import { CreateEnrollmentDto } from './dto/create-enrollment.dto';
 import { BulkEnrollmentDto } from './dto/bulk-enrollment.dto';
 import { TransferEnrollmentDto } from './dto/transfer-enrollment.dto';
 import { QueryEnrollmentsDto } from './dto/query-enrollments.dto';
-import { RequireActiveAcademicYearGuard } from '@/academic-years/require-active-academic-year.guard';
+import { RequireCurrentAcademicYearGuard } from '@/academic-years/require-current-academic-year.guard';
+import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
 
 @ApiTags('Enrollments')
 @ApiStandardResponses()
 @ApiBearerAuth()
 @Controller('enrollments')
-@UseGuards(RequireActiveAcademicYearGuard)
+@OrgOperation(OrgOperationType.EXECUTION)
+@UseGuards(RequireCurrentAcademicYearGuard)
 export class EnrollmentsController {
   constructor(private readonly service: EnrollmentsService) {}
 

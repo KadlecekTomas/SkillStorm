@@ -13,6 +13,8 @@ import { SystemRole, AuditEntityType, OrganizationRole } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import * as bcrypt from 'bcryptjs';
+import { createHash, randomBytes } from 'crypto';
+import { addHours } from 'date-fns';
 import { v4 as uuidv4 } from 'uuid';
 import { hasAtLeastRole } from '@/shared/access.utils';
 
@@ -53,8 +55,10 @@ export class UsersService {
     orgId?: string | null;
     action: string;
     entityId?: string | null;
-    metadata?: any;
-    changedFields?: any;
+    metadata?: Prisma.InputJsonValue;
+    changedFields?: Prisma.InputJsonValue;
+    ipAddress?: string | null;
+    userAgent?: string | null;
   }) {
     const data: Prisma.AuditLogUncheckedCreateInput = {
       userId: opts.userId ?? null,
@@ -62,12 +66,14 @@ export class UsersService {
       entityType: AuditEntityType.USER,
       entityId: opts.entityId ?? null,
       action: opts.action,
+      ipAddress: opts.ipAddress ?? null,
+      userAgent: opts.userAgent ?? null,
     };
     if (opts.metadata !== undefined) {
       data.metadata = opts.metadata as Prisma.InputJsonValue;
     }
     if (opts.changedFields !== undefined) {
-      data.changedFields = opts.changedFields as Prisma.InputJsonValue;
+      data.changedFields = opts.changedFields;
     }
     await this.prisma.auditLog.create({ data });
   }
@@ -473,5 +479,53 @@ export class UsersService {
         },
       };
     });
+  }
+
+  async createPasswordResetToken(
+    userId: string,
+    requester: { userId: string; systemRole: string | null; organizationId: string | null },
+    ctx?: { ipAddress?: string | null; userAgent?: string | null },
+  ): Promise<{ token: string; expiresAt: Date }> {
+    const isSuperadmin = requester.systemRole === 'SUPERADMIN';
+    const isSelf = requester.userId === userId;
+    if (!isSuperadmin && !isSelf) {
+      const target = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true },
+      });
+      if (!target) throw new NotFoundException('User not found');
+      const sameOrg = await this.prisma.membership.findFirst({
+        where: {
+          userId: target.id,
+          ...(requester.organizationId != null
+            ? { organizationId: requester.organizationId }
+            : {}),
+          deletedAt: null,
+        },
+      });
+      if (!sameOrg) {
+        throw new ForbiddenException('Můžeš resetovat heslo jen uživatelům ve své organizaci.');
+      }
+    }
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true },
+    });
+    if (!user) throw new NotFoundException('User not found');
+    const token = randomBytes(32).toString('hex');
+    const tokenHash = createHash('sha256').update(token).digest('hex');
+    const expiresAt = addHours(new Date(), 1);
+    await this.prisma.passwordResetToken.create({
+      data: { tokenHash, userId: user.id, expiresAt },
+    });
+    await this.audit({
+      userId: requester.userId,
+      action: 'ADMIN_PASSWORD_RESET_TOKEN_CREATED',
+      entityId: userId,
+      metadata: { performedBy: requester.userId, targetUser: userId },
+      ipAddress: ctx?.ipAddress ?? null,
+      userAgent: ctx?.userAgent ?? null,
+    });
+    return { token, expiresAt };
   }
 }

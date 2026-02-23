@@ -14,6 +14,21 @@ const prisma = new PrismaClient();
 
 const DEMO_PASSWORD = 'Password123!';
 
+function printDemoBanner(
+  users: Array<{ email: string; org: string; role: string }>,
+  password: string,
+) {
+  const env = process.env.NODE_ENV ?? 'development';
+  console.log('\n--- DEMO SEED BANNER (copy-paste) ---');
+  console.log('NODE_ENV=' + env);
+  console.log('Shared password (all demo users): ' + password);
+  console.log('Demo users (email | org | role):');
+  for (const u of users) {
+    console.log(`  ${u.email} | ${u.org} | ${u.role}`);
+  }
+  console.log('--- END DEMO BANNER ---\n');
+}
+
 function invariant<T>(value: T | null | undefined, message: string): T {
   if (value == null) {
     throw new Error(message);
@@ -423,6 +438,7 @@ async function ensureAssignment(params: {
 }
 
 async function ensureSubmission(params: {
+  organizationId: string;
   assignmentId: string;
   testId: string;
   studentMembershipId: string;
@@ -433,8 +449,8 @@ async function ensureSubmission(params: {
 }) {
   const existing = await prisma.submission.findFirst({
     where: {
+      organizationId: params.organizationId,
       assignmentId: params.assignmentId,
-      testId: params.testId,
       studentId: params.studentMembershipId,
       attemptNo: 1,
     },
@@ -442,6 +458,7 @@ async function ensureSubmission(params: {
 
   const submittedAt = params.submittedAt ?? new Date('2025-01-15T09:00:00.000Z');
   const data = {
+    organizationId: params.organizationId,
     assignmentId: params.assignmentId,
     testId: params.testId,
     studentId: params.studentMembershipId,
@@ -739,6 +756,7 @@ async function main() {
 
   // 9) Submissions
   await ensureSubmission({
+    organizationId: assignmentA.organizationId,
     assignmentId: assignmentA.id,
     testId: testA.id,
     studentMembershipId: studentMembership0.id,
@@ -753,6 +771,7 @@ async function main() {
   });
 
   await ensureSubmission({
+    organizationId: assignmentA.organizationId,
     assignmentId: assignmentA.id,
     testId: testA.id,
     studentMembershipId: studentMembership1.id,
@@ -780,13 +799,22 @@ async function main() {
 
   console.log('✅ Demo seed complete');
   console.table(summary);
-  console.log('Login credentials (all):');
-  console.log('Password:', DEMO_PASSWORD);
-  console.log('director@skillstorm.local');
-  console.log('teacher.a@skillstorm.local');
-  console.log('teacher.b@skillstorm.local');
-  console.log('student1@skillstorm.local ... student6@skillstorm.local');
-  console.log('superadmin@skillstorm.local');
+
+  printDemoBanner(
+    [
+      { email: 'director@skillstorm.local', org: 'Primary School', role: 'DIRECTOR' },
+      { email: 'teacher.a@skillstorm.local', org: 'Primary School', role: 'TEACHER' },
+      { email: 'teacher.b@skillstorm.local', org: 'Primary School', role: 'TEACHER' },
+      { email: 'student1@skillstorm.local', org: 'Primary School', role: 'STUDENT' },
+      { email: 'student2@skillstorm.local', org: 'Primary School', role: 'STUDENT' },
+      { email: 'student3@skillstorm.local', org: 'Primary School', role: 'STUDENT' },
+      { email: 'student4@skillstorm.local', org: 'Primary School', role: 'STUDENT' },
+      { email: 'student5@skillstorm.local', org: 'Primary School', role: 'STUDENT' },
+      { email: 'student6@skillstorm.local', org: 'Primary School', role: 'STUDENT' },
+      { email: 'superadmin@skillstorm.local', org: '(system)', role: 'SUPERADMIN' },
+    ],
+    DEMO_PASSWORD,
+  );
 }
 
 main()

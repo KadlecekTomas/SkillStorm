@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
 import {
@@ -14,12 +15,28 @@ import {
 } from '@prisma/client';
 import type { JwtPayload } from '@/auth/types/jwt-payload';
 import { hasAtLeastRole } from '@/shared/access.utils';
-import * as bcrypt from 'bcryptjs';
-import { randomBytes } from 'crypto';
 
 @Injectable()
 export class EnrollmentsService {
+  private readonly logger = new Logger(EnrollmentsService.name);
+
   constructor(private readonly prisma: PrismaService) {}
+
+  private async assertValidAcademicYear(orgId: string, yearId: string) {
+    const year = await this.prisma.academicYear.findFirst({
+      where: { id: yearId, orgId },
+      select: { id: true, orgId: true },
+    });
+    if (!year) {
+      this.logger.warn({
+        message: 'Academic year mismatch',
+        orgId,
+        yearId,
+      });
+      throw new ForbiddenException('Invalid academic year for organization');
+    }
+    return year;
+  }
 
   private async getMembership(user: JwtPayload) {
     if (!user.organizationId) {
@@ -56,8 +73,9 @@ export class EnrollmentsService {
     if (!classSection) {
       throw new NotFoundException('Class section not found.');
     }
+    await this.assertValidAcademicYear(classSection.orgId, dto.academicYearId);
     if (classSection.yearId !== dto.academicYearId) {
-      throw new BadRequestException('Školní rok neodpovídá třídě.');
+      throw new BadRequestException('Enrollment year mismatch');
     }
 
     if (
@@ -129,7 +147,7 @@ export class EnrollmentsService {
         );
       }
       if (err instanceof Error && err.message.includes('academic_year_id')) {
-        throw new BadRequestException('Školní rok neodpovídá třídě.');
+        throw new BadRequestException('Enrollment year mismatch');
       }
       throw err;
     }
@@ -155,8 +173,9 @@ export class EnrollmentsService {
     if (!classSection) {
       throw new NotFoundException('Class section not found.');
     }
+    await this.assertValidAcademicYear(classSection.orgId, dto.academicYearId);
     if (classSection.yearId !== dto.academicYearId) {
-      throw new BadRequestException('Školní rok neodpovídá třídě.');
+      throw new BadRequestException('Enrollment year mismatch');
     }
 
     if (
@@ -204,34 +223,23 @@ export class EnrollmentsService {
 
       try {
         const outcome = await this.prisma.$transaction(async (tx) => {
-          let userRecord = email
-            ? await tx.user.findUnique({
-                where: { email },
-                select: { id: true, name: true, deletedAt: true, anonymized: true },
-              })
-            : null;
+          if (!email) {
+            throw new BadRequestException('Email is required for invite-based enrollment.');
+          }
+
+          const userRecord = await tx.user.findUnique({
+            where: { email },
+            select: { id: true, name: true, deletedAt: true, anonymized: true },
+          });
 
           if (userRecord && (userRecord.deletedAt || userRecord.anonymized)) {
             throw new ConflictException('Uživatel je neaktivní.');
           }
 
-          let createdUser = false;
           if (!userRecord) {
-            const password = randomBytes(12).toString('hex');
-            const passwordHash = await bcrypt.hash(password, 10);
-            userRecord = await tx.user.create({
-              data: {
-                name: rawName,
-                email: email ?? null,
-                passwordHash,
-              },
-              select: { id: true, name: true, deletedAt: true, anonymized: true },
-            });
-            createdUser = true;
+            throw new ForbiddenException('Student must join via invite before enrollment.');
           }
-          if (!userRecord) {
-            throw new Error('User record missing after creation.');
-          }
+          const createdUser = false;
 
           let membership = await tx.membership.findUnique({
             where: {
@@ -244,14 +252,7 @@ export class EnrollmentsService {
           });
 
           if (!membership) {
-            membership = await tx.membership.create({
-              data: {
-                userId: userRecord.id,
-                organizationId: classSection.orgId,
-                role: OrganizationRole.STUDENT,
-              },
-              select: { id: true, role: true },
-            });
+            throw new ForbiddenException('Student must join via invite before enrollment.');
           }
 
           if (membership.role !== OrganizationRole.STUDENT) {

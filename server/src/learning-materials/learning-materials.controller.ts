@@ -34,10 +34,12 @@ import { Permission } from '@/modules/rbac/permission.decorator';
 import { PermissionKey } from '@prisma/client';
 
 import { InvalidateScopes } from '@/common/cache/invalidate.decorator';
+import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
 
 @ApiTags('LearningMaterials')
 @ApiBearerAuth()
 @Controller('learning-materials')
+@OrgOperation(OrgOperationType.AUTHORING)
 export class LearningMaterialsController {
   constructor(private readonly service: LearningMaterialsService) {}
 

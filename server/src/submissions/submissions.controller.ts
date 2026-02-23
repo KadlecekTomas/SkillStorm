@@ -1,4 +1,4 @@
-// YEAR-SCOPED: Requires active academic year (RequireActiveAcademicYearGuard)
+// YEAR-SCOPED: Requires current academic year (RequireCurrentAcademicYearGuard)
 import {
   Controller,
   Post,
@@ -26,13 +26,15 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ok } from '@/common/http/envelope';
 import { ForbiddenException } from '@nestjs/common';
 import { ApiStandardResponses } from '@/common/http/api-standard-responses.decorator';
-import { RequireActiveAcademicYearGuard } from '@/academic-years/require-active-academic-year.guard';
+import { RequireCurrentAcademicYearGuard } from '@/academic-years/require-current-academic-year.guard';
+import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
 
 @ApiTags('submissions')
 @ApiStandardResponses()
 @ApiBearerAuth()
 @Controller('submissions')
-@UseGuards(JwtAuthGuard, RequireActiveAcademicYearGuard)
+@OrgOperation(OrgOperationType.EXECUTION)
+@UseGuards(JwtAuthGuard, RequireCurrentAcademicYearGuard)
 export class SubmissionsController {
   constructor(private readonly submissionsService: SubmissionsService) {}
 
@@ -66,14 +68,20 @@ export class SubmissionsController {
   @Get()
   @Permission(PermissionKey.VIEW_RESULTS, PermissionKey.MANAGE_STUDENTS)
   findAll(
+    @Req() req: RequestWithUser,
     @Query('assignmentId') assignmentId: string,
     @Query('studentId') studentId: string,
-    @Req() req: RequestWithUser,
+    @Query('page') pageStr?: string,
+    @Query('limit') limitStr?: string,
   ) {
+    const page = Math.max(1, parseInt(String(pageStr ?? '1'), 10) || 1);
+    const rawLimit = parseInt(String(limitStr ?? '200'), 10) || 200;
+    const limit = Math.min(500, Math.max(1, rawLimit));
     return ok(
       this.submissionsService.findAll(
         { assignmentId, studentId },
         req.user,
+        { page, limit },
       ),
     );
   }

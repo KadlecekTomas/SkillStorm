@@ -1,4 +1,4 @@
-// YEAR-SCOPED: Requires active academic year (RequireActiveAcademicYearGuard)
+// YEAR-SCOPED: Requires current academic year (RequireCurrentAcademicYearGuard)
 // src/modules/students/student.controller.ts
 import {
   Controller,
@@ -28,12 +28,16 @@ import { RequestWithUser } from '@/types/request-with-user';
 
 import { InvalidateScopes } from '@/common/cache/invalidate.decorator';
 import { Permission } from '@/modules/rbac/permission.decorator';
-import { RequireActiveAcademicYearGuard } from '@/academic-years/require-active-academic-year.guard';
+import { RequireCurrentAcademicYearGuard } from '@/academic-years/require-current-academic-year.guard';
+import { StudentAccessGuard } from './guards/student-access.guard';
+import { Throttle } from '@nestjs/throttler';
+import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
 
 @ApiTags('Students')
 @ApiBearerAuth()
 @Controller('students')
-@UseGuards(RequireActiveAcademicYearGuard)
+@OrgOperation(OrgOperationType.EXECUTION)
+@UseGuards(RequireCurrentAcademicYearGuard)
 export class StudentsController {
   constructor(private readonly service: StudentsService) {}
 
@@ -84,6 +88,19 @@ export class StudentsController {
   @CacheTTL(0)
   findAll(@Req() req: RequestWithUser, @Query() q: QueryStudentsDto) {
     return this.service.findAll(req.user, q);
+  }
+
+  // ---------- GDPR DETAIL (minimal data, access-controlled) ----------
+  @Get(':id/detail')
+  @UseGuards(StudentAccessGuard)
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
+  @ApiOperation({ summary: 'GDPR-minimal student detail' })
+  @CacheTTL(0)
+  getDetail(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() req: RequestWithUser,
+  ) {
+    return this.service.getDetail(id, req.user);
   }
 
   // ---------- DETAIL ----------

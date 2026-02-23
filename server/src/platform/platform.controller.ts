@@ -5,9 +5,12 @@ import {
   Post,
   Query,
   Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Response } from 'express';
+import { SystemRole } from '@prisma/client';
 import { PlatformService } from './platform.service';
 import { PlatformAdminGuard } from './platform-admin.guard';
 import { JwtAuthGuard } from '@/auth/guards/jwt-auth.guard';
@@ -28,10 +31,18 @@ export class PlatformController {
   @Get('organizations')
   @ApiOperation({ summary: 'List organizations (metadata only, no PII)' })
   listOrganizations(
+    @Req() req: RequestWithUser,
+    @Res({ passthrough: true }) res: Response,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('q') search?: string,
   ) {
+    if (req.user?.systemRole === SystemRole.SUPERADMIN) {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+      res.setHeader('Surrogate-Control', 'no-store');
+    }
     const opts: { page?: number; limit?: number; search?: string } = {};
     if (page) opts.page = parseInt(page, 10);
     if (limit) opts.limit = parseInt(limit, 10);

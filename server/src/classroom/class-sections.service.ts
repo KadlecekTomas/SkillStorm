@@ -6,6 +6,8 @@ import {
   ForbiddenException,
   ConflictException,
   BadRequestException,
+  UnprocessableEntityException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
 import type { CreateClassSectionDto } from './dto/create-classroom.dto';
@@ -14,8 +16,25 @@ import { assertSameOrganization } from '@/shared/access.utils';
 import type { UpdateClassroomDto } from './dto/update-classroom.dto';
 import type { QueryClassSectionsDto } from './dto/query-class-sections.dto';
 import type { SetHomeroomDto } from './dto/set-homeroom.dto';
-import { Prisma, OrganizationRole, OrganizationStatus, SystemRole, EnrollmentStatus } from '@prisma/client';
+import type { AttachOrgSubjectsDto } from './dto/attach-org-subjects.dto';
+import {
+  Prisma,
+  OrganizationRole,
+  OrganizationStatus,
+  SystemRole,
+  EnrollmentStatus,
+  AuditEntityType,
+  SchoolGrade,
+} from '@prisma/client';
 import { hasAtLeastRole } from '@/shared/access.utils';
+import { AuditService } from '@/audit/audit.service';
+import { computeStudentRisk } from './risk-overview.util';
+import type { ClassroomRiskOverviewResponseDto, ClassroomRiskOverviewStudentDto } from './dto/risk-overview.dto';
+import type {
+  SubjectPerformanceResponseDto,
+  SubjectPerformanceItemDto,
+  SubjectPerformanceTrend,
+} from './dto/subject-performance.dto';
 
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
@@ -27,25 +46,43 @@ import {
   getOrgVersion,
   bumpOrgVersion,
 } from '@/shared/cache/org-cache.utils';
-import { AcademicYearsService } from '@/academic-years/academic-years.service';
 
 @Injectable()
 export class ClassSectionsService {
+  private readonly logger = new Logger(ClassSectionsService.name);
+  private hasLoggedPageDeprecation = false;
+
+  private static readonly SCHOOL_GRADE_TO_NUM: Record<SchoolGrade, number> = {
+    [SchoolGrade.GRADE_1]: 1,
+    [SchoolGrade.GRADE_2]: 2,
+    [SchoolGrade.GRADE_3]: 3,
+    [SchoolGrade.GRADE_4]: 4,
+    [SchoolGrade.GRADE_5]: 5,
+    [SchoolGrade.GRADE_6]: 6,
+    [SchoolGrade.GRADE_7]: 7,
+    [SchoolGrade.GRADE_8]: 8,
+    [SchoolGrade.GRADE_9]: 9,
+    [SchoolGrade.HIGH_SCHOOL_YEAR_1]: 10,
+    [SchoolGrade.HIGH_SCHOOL_YEAR_2]: 11,
+    [SchoolGrade.HIGH_SCHOOL_YEAR_3]: 12,
+    [SchoolGrade.HIGH_SCHOOL_YEAR_4]: 13,
+  };
+
   constructor(
     private prisma: PrismaService,
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
-    private readonly academicYears: AcademicYearsService,
+    private readonly auditService: AuditService,
   ) {}
 
-  private async getActiveAcademicYear(orgId: string) {
-    const active = await this.prisma.academicYear.findFirst({
+  private async getCurrentAcademicYear(orgId: string) {
+    const current = await this.prisma.academicYear.findFirst({
       where: { orgId, isCurrent: true },
       select: { id: true, orgId: true, isCurrent: true },
     });
-    if (!active) {
-      throw new NotFoundException('Aktivní školní rok nebyl nalezen.');
+    if (!current) {
+      throw new NotFoundException('Current academic year was not found.');
     }
-    return active;
+    return current;
   }
 
   private getGradeLabel(grade: string): string {
@@ -58,6 +95,103 @@ export class ClassSectionsService {
     return grade;
   }
 
+  private async assertValidAcademicYear(orgId: string, yearId: string) {
+    const year = await this.prisma.academicYear.findFirst({
+      where: { id: yearId, orgId },
+      select: { id: true, orgId: true, isCurrent: true },
+    });
+    if (!year) {
+      this.logger.warn({
+        message: 'Academic year mismatch',
+        orgId,
+        yearId,
+      });
+      throw new ForbiddenException('Invalid academic year for organization');
+    }
+    return year;
+  }
+
+  private async resolveClassSectionScope(
+    classSectionId: string,
+    user: JwtPayload,
+  ): Promise<{ id: string; orgId: string; grade: SchoolGrade }> {
+    const classSection = await this.prisma.classSection.findUnique({
+      where: { id: classSectionId },
+      select: { id: true, orgId: true, grade: true },
+    });
+    if (!classSection) {
+      throw new NotFoundException('Třída nebyla nalezena');
+    }
+
+    if (user.systemRole === SystemRole.SUPERADMIN) {
+      return classSection;
+    }
+    if (!user.organizationId) {
+      throw new ForbiddenException('Missing organization context.');
+    }
+    if (classSection.orgId !== user.organizationId) {
+      throw new ForbiddenException('Třída nepatří do aktivní organizace.');
+    }
+
+    return classSection;
+  }
+
+  private async listOrgSubjectsByClassSectionId(classSectionId: string) {
+    return this.prisma.orgSubject.findMany({
+      where: {
+        classSections: {
+          some: { classSectionId },
+        },
+      },
+      select: {
+        id: true,
+        name: true,
+        gradeFrom: true,
+        gradeTo: true,
+        organizationId: true,
+      },
+      orderBy: [{ name: 'asc' }, { id: 'asc' }],
+    });
+  }
+
+  private encodeClassroomCursor(cursor: {
+    grade: SchoolGrade;
+    section: string;
+    id: string;
+  }): string {
+    return Buffer.from(JSON.stringify(cursor), 'utf8').toString('base64url');
+  }
+
+  private decodeClassroomCursor(raw: string): {
+    grade: SchoolGrade;
+    section: string;
+    id: string;
+  } {
+    try {
+      const parsed = JSON.parse(
+        Buffer.from(raw, 'base64url').toString('utf8'),
+      ) as { grade?: unknown; section?: unknown; id?: unknown };
+      const grades = Object.values(SchoolGrade);
+      if (
+        !parsed ||
+        typeof parsed !== 'object' ||
+        typeof parsed.section !== 'string' ||
+        typeof parsed.id !== 'string' ||
+        typeof parsed.grade !== 'string' ||
+        !grades.includes(parsed.grade as SchoolGrade)
+      ) {
+        throw new Error('Invalid cursor payload');
+      }
+      return {
+        grade: parsed.grade as SchoolGrade,
+        section: parsed.section,
+        id: parsed.id,
+      };
+    } catch {
+      throw new BadRequestException('Invalid cursor');
+    }
+  }
+
   // -------------------------
   // CREATE
   // -------------------------
@@ -65,22 +199,30 @@ export class ClassSectionsService {
     if (!user?.organizationId && user.systemRole !== SystemRole.SUPERADMIN) {
       throw new ForbiddenException('Missing organization context.');
     }
+    if (dto.yearId && dto.academicYearId && dto.yearId !== dto.academicYearId) {
+      throw new BadRequestException('academicYearId a yearId se musí shodovat.');
+    }
     const yearId = dto.yearId ?? dto.academicYearId ?? null;
     if (!yearId) {
       throw new BadRequestException('Chybí školní rok (academicYearId).');
     }
-    const year = yearId
-      ? await this.prisma.academicYear.findUnique({
-          where: { id: yearId },
-          select: { id: true, orgId: true, isCurrent: true },
-        })
-      : null;
-    if (yearId && !year)
-      throw new NotFoundException('Školní rok nebyl nalezen');
-    const resolvedYear = year;
-    if (!resolvedYear) {
-      throw new NotFoundException('Školní rok nebyl nalezen');
+    let orgId = user.organizationId ?? null;
+    if (!orgId && user.systemRole === SystemRole.SUPERADMIN) {
+      const yearOrg = await this.prisma.academicYear.findUnique({
+        where: { id: yearId },
+        select: { orgId: true },
+      });
+      orgId = yearOrg?.orgId ?? null;
     }
+    if (!orgId) {
+      this.logger.warn({
+        message: 'Academic year mismatch',
+        orgId,
+        yearId,
+      });
+      throw new ForbiddenException('Invalid academic year for organization');
+    }
+    const resolvedYear = await this.assertValidAcademicYear(orgId, yearId);
     if (!resolvedYear.isCurrent) {
       throw new ForbiddenException('Nelze upravovat uzavřený školní rok.');
     }
@@ -111,6 +253,15 @@ export class ClassSectionsService {
             label: dto.label ?? `${this.getGradeLabel(dto.grade)}.${dto.section}`,
             teacherId,
           },
+          select: {
+            id: true,
+            orgId: true,
+            yearId: true,
+            grade: true,
+            section: true,
+            label: true,
+            createdAt: true,
+          },
         });
         const org = await tx.organization.findUnique({
           where: { id: resolvedYear.orgId },
@@ -129,13 +280,20 @@ export class ClassSectionsService {
         this.cache,
         cacheScopeForUser(user.systemRole, resolvedYear.orgId),
       );
-      return created; // controller z resultu vytáhne orgId pro invalidaci
+      return {
+        id: created.id,
+        academicYearId: created.yearId,
+        yearId: created.yearId,
+        label: created.label,
+        grade: created.grade,
+        section: created.section,
+        createdAt: created.createdAt,
+      };
     } catch (e) {
       if (
         e instanceof Prisma.PrismaClientKnownRequestError &&
         e.code === 'P2002'
       ) {
-        // unikát: @@unique([orgId, yearId, grade, section])
         throw new ConflictException(
           'Třída s tímto ročníkem/sekcí už existuje.',
         );
@@ -156,18 +314,24 @@ export class ClassSectionsService {
     if (!yearId) {
       throw new BadRequestException('Chybí školní rok (academicYearId).');
     }
-    const year = yearId
-      ? await this.prisma.academicYear.findUnique({
-          where: { id: yearId },
-          select: { id: true, orgId: true },
-        })
-      : null;
-    if (yearId && !year)
-      throw new NotFoundException('Školní rok nebyl nalezen');
-    const resolvedYear = year;
-    if (!resolvedYear) throw new NotFoundException('Školní rok nebyl nalezen');
+    let orgId = user.organizationId ?? null;
+    if (!orgId && user.systemRole === SystemRole.SUPERADMIN) {
+      const yearOrg = await this.prisma.academicYear.findUnique({
+        where: { id: yearId },
+        select: { orgId: true },
+      });
+      orgId = yearOrg?.orgId ?? null;
+    }
+    if (!orgId) {
+      this.logger.warn({
+        message: 'Academic year mismatch',
+        orgId,
+        yearId,
+      });
+      throw new ForbiddenException('Invalid academic year for organization');
+    }
+    const resolvedYear = await this.assertValidAcademicYear(orgId, yearId);
     assertSameOrganization(resolvedYear.orgId, user, 'třídy');
-    await this.academicYears.assertOrgHasExactlyOneActiveYear(resolvedYear.orgId);
 
     const membership = user.organizationId
       ? await this.prisma.membership.findFirst({
@@ -181,19 +345,32 @@ export class ClassSectionsService {
       : null;
     const role = membership?.role ?? user.organizationRole ?? null;
 
-    const page = q.page ?? 1;
-    const limit = q.limit ?? 50;
-    const skip = (page - 1) * limit;
+    const allowedLimits = [5, 10, 20, 50] as const;
+    const requestedLimit = q.limit ?? 20;
+    const safeLimit = allowedLimits.includes(
+      requestedLimit as (typeof allowedLimits)[number],
+    )
+      ? requestedLimit
+      : 20;
+    const rawCursor = q.cursor?.trim();
+    const direction = q.direction === 'prev' ? 'prev' : 'next';
+    const cursorToken = rawCursor && rawCursor.length > 0 ? rawCursor : null;
+    const isCursorMode = !!cursorToken;
+    const effectiveDirection = isCursorMode ? direction : 'next';
+    if (!isCursorMode && typeof q.page === 'number' && !this.hasLoggedPageDeprecation) {
+      this.hasLoggedPageDeprecation = true;
+      this.logger.warn({
+        message: 'Deprecated page parameter ignored for classrooms cursor pagination',
+      });
+    }
 
     const where: Prisma.ClassSectionWhereInput = {
+      orgId: resolvedYear.orgId,
       yearId: resolvedYear.id,
       ...(q.grade ? { grade: q.grade } : {}),
       ...(q.search?.trim()
         ? {
-            OR: [
-              { label: { contains: q.search.trim(), mode: 'insensitive' } },
-              { section: { contains: q.search.trim(), mode: 'insensitive' } },
-            ],
+            label: { contains: q.search.trim(), mode: 'insensitive' },
           }
         : {}),
     };
@@ -206,7 +383,16 @@ export class ClassSectionsService {
           })
         : null;
       if (!teacher) {
-        return { data: [], meta: { page, limit, total: 0, pages: 1 } };
+        return {
+          data: [],
+          meta: {
+            limit: safeLimit,
+            hasNextPage: false,
+            hasPrevPage: false,
+            nextCursor: null,
+            prevCursor: null,
+          },
+        };
       }
       where.teacherId = teacher.id;
     } else if (role === OrganizationRole.STUDENT) {
@@ -217,7 +403,16 @@ export class ClassSectionsService {
           })
         : null;
       if (!student) {
-        return { data: [], meta: { page, limit, total: 0, pages: 1 } };
+        return {
+          data: [],
+          meta: {
+            limit: safeLimit,
+            hasNextPage: false,
+            hasPrevPage: false,
+            nextCursor: null,
+            prevCursor: null,
+          },
+        };
       }
       where.enrollments = {
         some: {
@@ -226,6 +421,8 @@ export class ClassSectionsService {
           status: { not: EnrollmentStatus.LEFT },
         },
       };
+    } else if (q.teacherId) {
+      where.teacherId = q.teacherId;
     } else if (
       role &&
       !hasAtLeastRole(role, OrganizationRole.DIRECTOR) &&
@@ -239,6 +436,34 @@ export class ClassSectionsService {
       { section: 'asc' },
       { id: 'asc' },
     ];
+    const reverseOrderBy: Prisma.ClassSectionOrderByWithRelationInput[] = [
+      { grade: 'desc' },
+      { section: 'desc' },
+      { id: 'desc' },
+    ];
+
+    let decodedCursor:
+      | {
+          grade: SchoolGrade;
+          section: string;
+          id: string;
+        }
+      | null = null;
+    if (cursorToken) {
+      decodedCursor = this.decodeClassroomCursor(cursorToken);
+      const cursorExists = await this.prisma.classSection.findFirst({
+        where: {
+          ...where,
+          id: decodedCursor.id,
+          grade: decodedCursor.grade,
+          section: decodedCursor.section,
+        },
+        select: { id: true },
+      });
+      if (!cursorExists) {
+        throw new BadRequestException('Invalid cursor');
+      }
+    }
 
     // Per-user cache is mandatory: teacher/student visibility is user-scoped.
     const authzKey = buildAuthzScopeKey({
@@ -255,49 +480,109 @@ export class ClassSectionsService {
       scopeId: scope,
       version: ver,
       authz: authzKey,
-      page,
-      limit,
+      limit: safeLimit,
       search: q.search ?? '',
-      order: orderBy,
-      filters: { yearId: resolvedYear.id, grade: q.grade ?? null },
+      order: effectiveDirection === 'prev' ? reverseOrderBy : orderBy,
+      filters: {
+        yearId: resolvedYear.id,
+        grade: q.grade ?? null,
+        teacherId: q.teacherId ?? null,
+        cursor: cursorToken ?? null,
+        direction: effectiveDirection,
+      },
     });
 
     return cacheGetOrSet(this.cache, cacheKey, 600_000, async () => {
-      const total = await this.prisma.classSection.count({ where });
-      const pages = Math.max(1, Math.ceil(total / limit));
-
-      // Guard: over‑page → prázdná data
-      if (skip >= total) {
-        return {
-          data: [],
-          meta: { page, limit, total, pages },
-        };
-      }
-
-      const data = await this.prisma.classSection.findMany({
+      const take = safeLimit + 1;
+      const rows = await this.prisma.classSection.findMany({
         where,
-        orderBy,
-        skip,
-        take: limit,
+        orderBy: effectiveDirection === 'prev' ? reverseOrderBy : orderBy,
+        take,
+        ...(decodedCursor
+          ? {
+              cursor: {
+                orgId_yearId_grade_section: {
+                  orgId: resolvedYear.orgId,
+                  yearId: resolvedYear.id,
+                  grade: decodedCursor.grade,
+                  section: decodedCursor.section,
+                },
+              },
+              skip: 1,
+            }
+          : {}),
         include: {
           teacher: {
-            include: {
+            select: {
+              id: true,
               membership: {
                 select: { user: { select: { name: true, email: true } } },
               },
             },
           },
-          enrollments: {
-            where: { status: { not: EnrollmentStatus.LEFT } },
-            select: { id: true },
+          _count: {
+            select: {
+              enrollments: {
+                where: { status: { not: EnrollmentStatus.LEFT } },
+              },
+            },
           },
           academicYear: { select: { id: true, label: true, isCurrent: true } },
         },
       });
 
+      const hasMoreInRequestedDirection = rows.length > safeLimit;
+      const sliced = hasMoreInRequestedDirection ? rows.slice(0, safeLimit) : rows;
+      const data =
+        effectiveDirection === 'prev' ? [...sliced].reverse() : sliced;
+
+      if (data.length === 0) {
+        return {
+          data,
+          meta: {
+            limit: safeLimit,
+            hasNextPage: !!decodedCursor && effectiveDirection === 'prev',
+            hasPrevPage: !!decodedCursor && effectiveDirection === 'next',
+            nextCursor: null,
+            prevCursor: null,
+          },
+        };
+      }
+
+      const first = data[0]!;
+      const last = data[data.length - 1]!;
+      const hasPrevPage =
+        effectiveDirection === 'prev'
+          ? hasMoreInRequestedDirection
+          : !!decodedCursor;
+      const hasNextPage =
+        effectiveDirection === 'next'
+          ? hasMoreInRequestedDirection
+          : !!decodedCursor;
+      const nextCursor = hasNextPage
+        ? this.encodeClassroomCursor({
+            grade: last.grade,
+            section: last.section,
+            id: last.id,
+          })
+        : null;
+      const prevCursor = hasPrevPage
+        ? this.encodeClassroomCursor({
+            grade: first.grade,
+            section: first.section,
+            id: first.id,
+          })
+        : null;
+
       return {
         data,
-        meta: { page, limit, total, pages },
+        meta: {
+          limit: safeLimit,
+          hasNextPage,
+          hasPrevPage,
+          nextCursor,
+          prevCursor,
+        },
       };
     });
   }
@@ -326,6 +611,12 @@ export class ClassSectionsService {
       },
     });
     if (!classSection) throw new NotFoundException('Třída nebyla nalezena');
+
+    if (user.systemRole !== SystemRole.SUPERADMIN) {
+      if (!user.organizationId || user.organizationId !== classSection.orgId) {
+        throw new NotFoundException('Třída nebyla nalezena');
+      }
+    }
 
     assertSameOrganization(classSection.orgId, user, 'třída');
     if (user.systemRole !== SystemRole.SUPERADMIN) {
@@ -372,6 +663,424 @@ export class ClassSectionsService {
       }
     }
     return classSection;
+  }
+
+  async listOrgSubjects(classSectionId: string, user: JwtPayload) {
+    const classSection = await this.resolveClassSectionScope(classSectionId, user);
+    return this.listOrgSubjectsByClassSectionId(classSection.id);
+  }
+
+  async attachOrgSubjects(
+    classSectionId: string,
+    dto: AttachOrgSubjectsDto,
+    user: JwtPayload,
+  ) {
+    const classSection = await this.resolveClassSectionScope(classSectionId, user);
+    const uniqueOrgSubjectIds = Array.from(new Set(dto.orgSubjectIds ?? []));
+
+    const subjects = await this.prisma.orgSubject.findMany({
+      where: { id: { in: uniqueOrgSubjectIds } },
+      select: {
+        id: true,
+        organizationId: true,
+        gradeFrom: true,
+        gradeTo: true,
+      },
+    });
+    if (subjects.length !== uniqueOrgSubjectIds.length) {
+      throw new BadRequestException('Některé orgSubjectIds neexistují.');
+    }
+
+    const foreignOrgSubjectIds = subjects
+      .filter((subject) => subject.organizationId !== classSection.orgId)
+      .map((subject) => subject.id);
+    if (foreignOrgSubjectIds.length > 0) {
+      this.logger.debug(
+        JSON.stringify({
+          message: 'Rejected cross-org class-section subject attach',
+          classSectionId,
+          classSectionOrgId: classSection.orgId,
+          userOrganizationId: user.organizationId ?? null,
+          foreignOrgSubjectIds,
+        }),
+      );
+      throw new ForbiddenException(
+        'Org subjects must belong to the same organization as class section.',
+      );
+    }
+
+    const classGradeNumeric = ClassSectionsService.SCHOOL_GRADE_TO_NUM[classSection.grade];
+    if (classGradeNumeric === undefined) {
+      throw new BadRequestException('Unsupported class grade value.');
+    }
+    const invalidByGrade = subjects
+      .filter((subject) => {
+        const min = subject.gradeFrom ?? Number.NEGATIVE_INFINITY;
+        const max = subject.gradeTo ?? Number.POSITIVE_INFINITY;
+        return classGradeNumeric < min || classGradeNumeric > max;
+      })
+      .map((subject) => ({
+        orgSubjectId: subject.id,
+        gradeFrom: subject.gradeFrom,
+        gradeTo: subject.gradeTo,
+      }));
+
+    if (invalidByGrade.length > 0) {
+      throw new UnprocessableEntityException({
+        errorCode: 'SUBJECT_OUT_OF_GRADE_RANGE',
+        message: 'One or more subjects are outside class grade range.',
+        details: {
+          grade: classGradeNumeric,
+          invalid: invalidByGrade,
+          expectedRange: {
+            min: classGradeNumeric,
+            max: classGradeNumeric,
+          },
+        },
+      });
+    }
+
+    if (dto.replaceAll === true) {
+      await this.prisma.$transaction(async (tx) => {
+        await tx.classSectionOrgSubject.deleteMany({
+          where: { classSectionId },
+        });
+        await tx.classSectionOrgSubject.createMany({
+          data: uniqueOrgSubjectIds.map((orgSubjectId) => ({
+            classSectionId,
+            orgSubjectId,
+          })),
+          skipDuplicates: true,
+        });
+      });
+    } else {
+      await this.prisma.classSectionOrgSubject.createMany({
+        data: uniqueOrgSubjectIds.map((orgSubjectId) => ({
+          classSectionId,
+          orgSubjectId,
+        })),
+        skipDuplicates: true,
+      });
+    }
+
+    await bumpOrgVersion(
+      this.cache,
+      cacheScopeForUser(user.systemRole, classSection.orgId),
+    );
+    return this.listOrgSubjectsByClassSectionId(classSectionId);
+  }
+
+  // -------------------------
+  // RISK OVERVIEW (Early Warning Panel)
+  // -------------------------
+  async getRiskOverview(
+    classroomId: string,
+    user: JwtPayload,
+    subjectId?: string,
+  ): Promise<ClassroomRiskOverviewResponseDto> {
+    const classSection = await this.prisma.classSection.findUnique({
+      where: { id: classroomId },
+      include: {
+        enrollments: {
+          where: { status: { not: EnrollmentStatus.LEFT } },
+          include: {
+            student: {
+              include: {
+                membership: { include: { user: { select: { name: true } } } },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!classSection) throw new NotFoundException('Třída nebyla nalezena');
+
+    assertSameOrganization(classSection.orgId, user, 'třída');
+
+    if (user.systemRole !== SystemRole.SUPERADMIN) {
+      const membership = await this.prisma.membership.findFirst({
+        where: {
+          userId: user.userId,
+          organizationId: classSection.orgId,
+          deletedAt: null,
+        },
+        select: { id: true, role: true },
+      });
+      const role = membership?.role ?? user.organizationRole ?? null;
+
+      if (role === OrganizationRole.STUDENT) {
+        await this.auditService.log({
+          action: 'CLASSROOM_RISK_ACCESS_DENIED',
+          entityType: AuditEntityType.CLASSROOM,
+          entityId: classroomId,
+          userId: user.userId,
+          organizationId: classSection.orgId,
+        });
+        throw new ForbiddenException('Přístup k rizikovému přehledu mají pouze učitelé a ředitelé.');
+      }
+
+      if (role === OrganizationRole.TEACHER) {
+        const teacher = membership
+          ? await this.prisma.teacher.findFirst({
+              where: { membershipId: membership.id, deletedAt: null },
+              select: { id: true },
+            })
+          : null;
+        if (!teacher || classSection.teacherId !== teacher.id) {
+          throw new ForbiddenException('Učitel nemá přístup k této třídě.');
+        }
+      } else if (
+        role &&
+        !hasAtLeastRole(role, OrganizationRole.DIRECTOR)
+      ) {
+        throw new ForbiddenException('Access denied.');
+      }
+    }
+
+    const enrollments = classSection.enrollments ?? [];
+    const membershipIds = enrollments
+      .map((e) => e.student?.membership?.id)
+      .filter((id): id is string => !!id);
+    if (membershipIds.length === 0) {
+      await this.auditService.log({
+        action: 'VIEW_RISK_OVERVIEW',
+        entityType: AuditEntityType.CLASSROOM,
+        entityId: classroomId,
+        userId: user.userId,
+        organizationId: classSection.orgId,
+      });
+      return { classroomId, students: [] };
+    }
+
+    const submissions = await this.prisma.submission.findMany({
+      where: {
+        studentId: { in: membershipIds },
+        deletedAt: null,
+        submittedAt: { not: null },
+        ...(subjectId && { test: { orgSubjectId: subjectId } }),
+      },
+      select: { studentId: true, score: true, submittedAt: true },
+    });
+
+    const byMembershipId = new Map<string, { score: number | null; submittedAt: Date | null }[]>();
+    for (const s of submissions) {
+      const list = byMembershipId.get(s.studentId) ?? [];
+      list.push({ score: s.score, submittedAt: s.submittedAt });
+      byMembershipId.set(s.studentId, list);
+    }
+
+    const students: ClassroomRiskOverviewStudentDto[] = [];
+    for (const enr of enrollments) {
+      const student = enr.student;
+      if (!student) continue;
+      const membershipId = student.membership?.id;
+      if (!membershipId) continue;
+      const displayName =
+        student.membership?.user?.name?.trim() || 'Žák';
+      const rawSubs = byMembershipId.get(membershipId) ?? [];
+      const risk = computeStudentRisk({
+        displayName,
+        submissions: rawSubs,
+      });
+      students.push({
+        studentId: student.id,
+        displayName,
+        averageScorePercent: risk.averageScorePercent,
+        lastActivityAt: risk.lastActivityAt,
+        trend: risk.trend,
+        riskLevel: risk.riskLevel,
+        riskFlags: risk.riskFlags,
+      });
+    }
+
+    await this.auditService.log({
+      action: 'VIEW_RISK_OVERVIEW',
+      entityType: AuditEntityType.CLASSROOM,
+      entityId: classroomId,
+      userId: user.userId,
+      organizationId: classSection.orgId,
+    });
+
+    return { classroomId, students };
+  }
+
+  // -------------------------
+  // SUBJECT PERFORMANCE
+  // -------------------------
+  async getSubjectPerformance(
+    classroomId: string,
+    user: JwtPayload,
+    academicYearId?: string,
+  ): Promise<SubjectPerformanceResponseDto> {
+    const classSection = await this.prisma.classSection.findUnique({
+      where: { id: classroomId },
+      select: { id: true, orgId: true, yearId: true, teacherId: true },
+    });
+    if (!classSection) throw new NotFoundException('Třída nebyla nalezena');
+    assertSameOrganization(classSection.orgId, user, 'třída');
+
+    if (user.systemRole !== SystemRole.SUPERADMIN) {
+      const membership = await this.prisma.membership.findFirst({
+        where: {
+          userId: user.userId,
+          organizationId: classSection.orgId,
+          deletedAt: null,
+        },
+        select: { id: true, role: true },
+      });
+      const role = membership?.role ?? user.organizationRole ?? null;
+      if (role === OrganizationRole.STUDENT) {
+        await this.auditService.log({
+          action: 'CLASSROOM_RISK_ACCESS_DENIED',
+          entityType: AuditEntityType.CLASSROOM,
+          entityId: classroomId,
+          userId: user.userId,
+          organizationId: classSection.orgId,
+        });
+        throw new ForbiddenException(
+          'Přístup k výkonu podle předmětu mají pouze učitelé a ředitelé.',
+        );
+      }
+      if (role === OrganizationRole.TEACHER) {
+        const teacher = membership
+          ? await this.prisma.teacher.findFirst({
+              where: { membershipId: membership.id, deletedAt: null },
+              select: { id: true },
+            })
+          : null;
+        if (!teacher || classSection.teacherId !== teacher.id) {
+          throw new ForbiddenException('Učitel nemá přístup k této třídě.');
+        }
+      } else if (
+        role &&
+        !hasAtLeastRole(role, OrganizationRole.DIRECTOR)
+      ) {
+        throw new ForbiddenException('Access denied.');
+      }
+    }
+
+    const assignments = await this.prisma.assignment.findMany({
+      where: {
+        classSectionId: classroomId,
+        yearId: academicYearId ?? classSection.yearId,
+      },
+      include: {
+        test: {
+          include: {
+            subject: true,
+            questions: { select: { score: true } },
+          },
+        },
+        submissions: {
+          where: { deletedAt: null },
+          select: { score: true, submittedAt: true },
+        },
+      },
+    });
+
+    type SubjectKey = string;
+    const bySubject = new Map<
+      SubjectKey,
+      {
+        subject: { id: string; name: string; gradeFrom: number; gradeTo: number };
+        testIds: Set<string>;
+        submissions: { score: number; submittedAt: Date | null; maxScore: number }[];
+      }
+    >();
+
+    for (const a of assignments) {
+      const test = a.test;
+      if (!test.subject) continue;
+      const maxScore = (test.questions ?? []).reduce(
+        (sum, q) => sum + (q.score ?? 0),
+        0,
+      );
+      if (maxScore <= 0) continue;
+      const subjectKey = test.subject.id;
+      let entry = bySubject.get(subjectKey);
+      if (!entry) {
+        entry = {
+          subject: {
+            id: test.subject.id,
+            name: test.subject.name,
+            gradeFrom: test.subject.gradeFrom,
+            gradeTo: test.subject.gradeTo,
+          },
+          testIds: new Set<string>(),
+          submissions: [],
+        };
+        bySubject.set(subjectKey, entry);
+      }
+      entry.testIds.add(test.id);
+      for (const s of a.submissions) {
+        if (s.score != null) {
+          entry.submissions.push({
+            score: s.score,
+            submittedAt: s.submittedAt,
+            maxScore,
+          });
+        }
+      }
+    }
+
+    const subjects: SubjectPerformanceItemDto[] = [];
+    for (const entry of bySubject.values()) {
+      const subs = entry.submissions;
+      const submissionCount = subs.length;
+      if (submissionCount === 0) continue;
+
+      const averageScorePercent =
+        subs.reduce((acc, s) => acc + (s.score / s.maxScore) * 100, 0) /
+        submissionCount;
+      const testCount = entry.testIds.size;
+
+      const withDate = subs.filter(
+        (s): s is typeof s & { submittedAt: Date } => s.submittedAt != null,
+      );
+      withDate.sort(
+        (a, b) =>
+          a.submittedAt.getTime() - b.submittedAt.getTime(),
+      );
+      const n = withDate.length;
+      let trend: SubjectPerformanceTrend = 'STABLE';
+      if (n >= 2) {
+        const split70 = Math.max(1, Math.floor(n * 0.7));
+        const older = withDate.slice(0, split70);
+        const recent = withDate.slice(split70);
+        const avgOlder =
+          older.reduce((a, s) => a + (s.score / s.maxScore) * 100, 0) /
+          older.length;
+        const avgRecent =
+          recent.reduce((a, s) => a + (s.score / s.maxScore) * 100, 0) /
+          recent.length;
+        const diff = avgRecent - avgOlder;
+        if (diff > 5) trend = 'UP';
+        else if (diff < -5) trend = 'DOWN';
+      }
+
+      subjects.push({
+        subjectId: entry.subject.id,
+        name: entry.subject.name,
+        gradeFrom: entry.subject.gradeFrom,
+        gradeTo: entry.subject.gradeTo,
+        averageScorePercent: Math.round(averageScorePercent * 10) / 10,
+        testCount,
+        submissionCount,
+        trend,
+      });
+    }
+
+    subjects.sort((a, b) => a.averageScorePercent - b.averageScorePercent);
+
+    await this.auditService.log({
+      action: 'VIEW_SUBJECT_PERFORMANCE',
+      entityType: AuditEntityType.CLASSROOM,
+      entityId: classroomId,
+      userId: user.userId,
+      organizationId: classSection.orgId,
+    });
+
+    return { classroomId, subjects };
   }
 
   // -------------------------

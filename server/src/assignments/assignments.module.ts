@@ -3,9 +3,10 @@ import { AssignmentsController } from './assignments.controller';
 import { AssignmentsService } from './assignments.service';
 import { PrismaService } from '@/prisma/prisma.service';
 import { AcademicYearsModule } from '@/academic-years/academic-years.module';
+import { RbacModule } from '@/modules/rbac/rbac.module';
 
 @Module({
-  imports: [AcademicYearsModule],
+  imports: [AcademicYearsModule, RbacModule],
   controllers: [AssignmentsController],
   providers: [AssignmentsService, PrismaService],
   exports: [AssignmentsService],

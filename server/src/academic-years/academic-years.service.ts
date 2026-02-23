@@ -11,6 +11,17 @@ import type { CreateAcademicYearDto } from './dto/create-academic-year.dto';
 import { deriveCzechSchoolYearFromStartYear } from '@/shared/czech-school-year';
 import { Prisma, SystemRole } from '@prisma/client';
 
+/** Thrown when DB unique constraint prevents multiple current years (race or concurrent activate). */
+export const MULTIPLE_CURRENT_YEARS_FOR_ORG = 'MULTIPLE_CURRENT_YEARS_FOR_ORG';
+
+/** Canonical: no academic year with isCurrent=true for the org. */
+export const NO_CURRENT_ACADEMIC_YEAR = 'NO_CURRENT_ACADEMIC_YEAR';
+/** Canonical: more than one academic year with isCurrent=true (guard/service check). */
+export const MULTIPLE_CURRENT_ACADEMIC_YEARS = 'MULTIPLE_CURRENT_ACADEMIC_YEARS';
+/** Deprecated alias; emit alongside new code for one release. */
+export const NO_ACTIVE_ACADEMIC_YEAR_DEPRECATED = 'NO_ACTIVE_ACADEMIC_YEAR';
+export const MULTIPLE_ACTIVE_ACADEMIC_YEARS_DEPRECATED = 'MULTIPLE_ACTIVE_ACADEMIC_YEARS';
+
 type AcademicYearResponse = {
   id: string;
   organizationId: string;
@@ -71,14 +82,15 @@ export class AcademicYearsService {
 
     let created;
     try {
+      // Invariant: at most one current year per org. Set others to isCurrent=false before setting one to true.
       created = await this.prisma.$transaction(async (tx) => {
-        const existingActive = await tx.academicYear.findFirst({
+        const existingCurrent = await tx.academicYear.findFirst({
           where: { orgId, isCurrent: true },
           select: { id: true },
         });
 
-        const shouldActivate = dto.isActive === true || !existingActive;
-        if (shouldActivate) {
+        const shouldSetCurrent = dto.isActive === true || !existingCurrent;
+        if (shouldSetCurrent) {
           await tx.academicYear.updateMany({
             where: { orgId, isCurrent: true },
             data: { isCurrent: false },
@@ -91,13 +103,17 @@ export class AcademicYearsService {
             label,
             startsAt,
             endsAt,
-            isCurrent: shouldActivate,
+            isCurrent: shouldSetCurrent,
           },
         });
       });
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-        throw new ConflictException('Aktivní školní rok už existuje.');
+        throw new ConflictException({
+          statusCode: 409,
+          code: MULTIPLE_CURRENT_YEARS_FOR_ORG,
+          message: 'Another academic year was set as current concurrently.',
+        });
       }
       throw err;
     }
@@ -118,6 +134,7 @@ export class AcademicYearsService {
 
     let updated;
     try {
+      // This transaction is safe due to DB partial unique index (academic_years_one_current_per_org).
       updated = await this.prisma.$transaction(async (tx) => {
         await tx.academicYear.updateMany({
           where: { orgId, isCurrent: true },
@@ -130,7 +147,11 @@ export class AcademicYearsService {
       });
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-        throw new ConflictException('Aktivní školní rok už existuje.');
+        throw new ConflictException({
+          statusCode: 409,
+          code: MULTIPLE_CURRENT_YEARS_FOR_ORG,
+          message: 'Another academic year was set as current concurrently.',
+        });
       }
       throw err;
     }
@@ -138,18 +159,18 @@ export class AcademicYearsService {
     return this.mapYear(updated);
   }
 
-  async getActiveForOrg(orgId: string) {
+  async getCurrentForOrg(orgId: string) {
     const year = await this.prisma.academicYear.findFirst({
       where: { orgId, isCurrent: true },
       select: { id: true, orgId: true, isCurrent: true },
     });
     if (!year) {
-      throw new NotFoundException('Aktivní školní rok nebyl nalezen.');
+      throw new NotFoundException('Current academic year was not found.');
     }
     return year;
   }
 
-  async getActiveForOrgOrFail(orgId: string | null) {
+  async getCurrentForOrgOrFail(orgId: string | null) {
     if (!orgId) {
       throw new ForbiddenException('Missing organization context.');
     }
@@ -160,22 +181,28 @@ export class AcademicYearsService {
 
     if (years.length === 0) {
       throw new ConflictException({
-        message: 'Active academic year is not configured for this organization.',
-        meta: { code: 'NO_ACTIVE_ACADEMIC_YEAR' },
+        message: 'Current academic year is not configured for this organization.',
+        meta: {
+          code: NO_CURRENT_ACADEMIC_YEAR,
+          deprecatedCode: NO_ACTIVE_ACADEMIC_YEAR_DEPRECATED,
+        },
       });
     }
 
     if (years.length > 1) {
       throw new ConflictException({
-        message: 'Multiple academic years are marked as active.',
-        meta: { code: 'MULTIPLE_ACTIVE_ACADEMIC_YEARS' },
+        message: 'Multiple academic years are marked as current.',
+        meta: {
+          code: MULTIPLE_CURRENT_ACADEMIC_YEARS,
+          deprecatedCode: MULTIPLE_ACTIVE_ACADEMIC_YEARS_DEPRECATED,
+        },
       });
     }
 
     const year = years[0];
     if (!year) {
       throw new ConflictException({
-        message: 'Active academic year is not configured for this organization.',
+        message: 'Current academic year is not configured for this organization.',
         meta: { code: 'ACADEMIC_YEAR_INVARIANT_BROKEN' },
       });
     }
@@ -183,7 +210,7 @@ export class AcademicYearsService {
     return this.mapYear(year);
   }
 
-  async assertOrgHasExactlyOneActiveYear(orgId: string | null) {
+  async assertOrgHasExactlyOneCurrentYear(orgId: string | null) {
     if (!orgId) {
       throw new ForbiddenException('Missing organization context.');
     }
@@ -193,15 +220,21 @@ export class AcademicYearsService {
 
     if (count === 0) {
       throw new ConflictException({
-        message: 'Active academic year is not configured for this organization.',
-        meta: { code: 'NO_ACTIVE_ACADEMIC_YEAR' },
+        message: 'Current academic year is not configured for this organization.',
+        meta: {
+          code: NO_CURRENT_ACADEMIC_YEAR,
+          deprecatedCode: NO_ACTIVE_ACADEMIC_YEAR_DEPRECATED,
+        },
       });
     }
 
     if (count > 1) {
       throw new ConflictException({
-        message: 'Multiple academic years are marked as active.',
-        meta: { code: 'MULTIPLE_ACTIVE_ACADEMIC_YEARS' },
+        message: 'Multiple academic years are marked as current.',
+        meta: {
+          code: MULTIPLE_CURRENT_ACADEMIC_YEARS,
+          deprecatedCode: MULTIPLE_ACTIVE_ACADEMIC_YEARS_DEPRECATED,
+        },
       });
     }
   }

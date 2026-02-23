@@ -228,9 +228,10 @@ export async function seed(prisma: PrismaClient) {
   if (mathAssignment && mathTest) {
     const submission = await prisma.submission.upsert({
       where: {
-        assignmentId_studentId_attemptNo: {
-          assignmentId: mathAssignment.id,
+        organizationId_studentId_assignmentId_attemptNo: {
+          organizationId: mathAssignment.organizationId,
           studentId: studentAId,
+          assignmentId: mathAssignment.id,
           attemptNo: 1,
         },
       },
@@ -240,13 +241,14 @@ export async function seed(prisma: PrismaClient) {
         submittedAt: new Date(),
       },
       create: {
+        organizationId: mathAssignment.organizationId,
         assignmentId: mathAssignment.id,
+        testId: mathAssignment.testId,
         studentId: studentAId,
         attemptNo: 1,
         status: SubmissionStatus.APPROVED,
         score: 4,
         submittedAt: new Date(),
-        testId: mathAssignment.testId,
       },
     });
 
