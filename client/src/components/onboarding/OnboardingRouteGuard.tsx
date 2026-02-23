@@ -9,14 +9,22 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 const CREATE_ORG_PATH = "/onboarding/create-organization";
 const ACADEMIC_YEAR_PATH = "/onboarding/academic-year";
 const PENDING_ORG_PATH = "/onboarding/pending";
+const SETUP_PATH = "/onboarding/setup";
+const ORGANIZATION_SUSPENDED_PATH = "/organization-suspended";
 
 /**
- * Route guard pro onboarding flow:
- * - create-organization: pouze pro uživatele BEZ organizace. Pokud má org → stavové routování podle orgState.
- * - pending: pouze pro SCHOOL organizace ve stavu PENDING.
- * - academic-year: pouze pro OWNER s ACTIVE/HAS_ORG organizací. PENDING SCHOOL je přesměrována na /onboarding/pending.
+ * Onboarding route guard.
  *
- * Klient nikdy nenutí PENDING SCHOOL organizaci k vytvoření školního roku.
+ * Domain rule: organization.status is the single source of truth. Readiness applies only when status === ACTIVE.
+ * - SUSPENDED: must NEVER see onboarding; redirect to /organization-suspended immediately.
+ * - PENDING: canonical route /onboarding/pending only (approval waiting).
+ * - ACTIVE: onboarding routes invalid; redirect to dashboard.
+ *
+ * Routing rules:
+ * - SUSPENDED → /organization-suspended (hard block; no onboarding, no repair).
+ * - PENDING SCHOOL → /onboarding/pending only.
+ * - Terminal state (readiness === READY): redirect away from onboarding.
+ * - Repair/init: handled on /app/classrooms, not here.
  */
 export function OnboardingRouteGuard({
   children,
@@ -36,6 +44,13 @@ export function OnboardingRouteGuard({
     if (isLoading) return;
 
     const path = pathname ?? "";
+
+    if (orgState === "SUSPENDED" || org?.status === "SUSPENDED") {
+      if (path !== ORGANIZATION_SUSPENDED_PATH) {
+        router.replace(ORGANIZATION_SUSPENDED_PATH);
+      }
+      return;
+    }
 
     // Uživatel bez organizace – smí pouze na create-organization
     if (!hasOrganization) {
@@ -66,7 +81,7 @@ export function OnboardingRouteGuard({
     // academic-year: pouze pro OWNER s organizací, ne pro členy
     if (path === ACADEMIC_YEAR_PATH) {
       if (!isOwner) {
-        router.replace("/dashboard");
+        router.replace("/app");
         return;
       }
       setReady(true);
@@ -75,12 +90,22 @@ export function OnboardingRouteGuard({
 
     // pending stránka pro jiné než PENDING SCHOOL nedává smysl → na dashboard
     if (path === PENDING_ORG_PATH && !(isSchool && orgState === "PENDING")) {
-      router.replace("/dashboard");
+      router.replace("/app");
+      return;
+    }
+
+    // setup: redirect only for terminal state (READY). All NOT_READY states (including repair) stay on setup.
+    if (path === SETUP_PATH) {
+      if (org?.readiness === "READY") {
+        router.replace("/app");
+        return;
+      }
+      setReady(true);
       return;
     }
 
     setReady(true);
-  }, [pathname, hasOrganization, isOwner, isLoading, orgState, isSchool, router]);
+  }, [pathname, hasOrganization, isOwner, isLoading, orgState, isSchool, org?.status, org?.readiness, router]);
 
   if (isLoading || !ready) {
     return (

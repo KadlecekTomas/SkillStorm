@@ -7,26 +7,24 @@ import { useAuth } from "@/hooks/use-auth";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 const CREATE_ORG_PATH = "/onboarding/create-organization";
-const SETUP_PATH = "/onboarding/setup";
-const DASHBOARD_CLASSROOMS_PATH = "/dashboard/classrooms";
-const DASHBOARD_ONBOARDING_PATH = "/dashboard/onboarding";
-const DASHBOARD_PLATFORM_PATH = "/dashboard/platform";
+const DASHBOARD_CLASSROOMS_PATH = "/app/classrooms";
+const DASHBOARD_ONBOARDING_PATH = "/app/onboarding";
+const DASHBOARD_PLATFORM_PATH = "/app/platform";
 
 /**
- * Organization gate – jediný zdroj pravdy: /auth/me (hasOrganization z memberships).
- * Auth invariant: logout is a hard boundary. No protected component may render after logout.
- * - LOGGING_OUT: return null first (no hooks, no dashboard logic).
- * - Bez org: redirect na create-organization (kromě join flow a platform admin)
- * - ACTIVE + NOT_READY: redirect na /onboarding/setup (žádný fetch dashboard dat)
- * - S org na join stránce: redirect na dashboard (AppReadinessGate zobrazí stavovou obrazovku nebo obsah)
- * - Platform routes: povoleny pouze pro isPlatformAdmin(user) (SUPERADMIN nebo isPlatformAdmin).
+ * Organization gate – route-level enforcement. organization.status is the SINGLE source of truth.
+ * Readiness is evaluated ONLY when status === ACTIVE.
+ *
+ * - status === PENDING   → redirect to /onboarding/pending. No /app/*.
+ * - status === SUSPENDED → redirect to /organization-suspended. No /app/*, no /onboarding/*.
+ * - status === ACTIVE    → allow /app/*; onboarding routes invalid. NOT_READY → repair on /app/classrooms.
+ *
+ * Violations (e.g. treating SUSPENDED as PENDING, redirecting SUSPENDED into onboarding) are SEVERE DOMAIN BUGS.
  */
 export function OrganizationGate({ children }: { children: ReactNode }): ReactNode {
   const router = useRouter();
   const pathname = usePathname();
   const { context, org, hasOrganization, isLoading, isLoggingOut } = useAuth();
-
-  if (isLoggingOut) return null;
 
   const isJoinOnboarding =
     pathname === DASHBOARD_ONBOARDING_PATH || pathname?.startsWith(`${DASHBOARD_ONBOARDING_PATH}/`);
@@ -40,24 +38,39 @@ export function OrganizationGate({ children }: { children: ReactNode }): ReactNo
   const isClassroomsPath =
     pathname === DASHBOARD_CLASSROOMS_PATH ||
     pathname?.startsWith(`${DASHBOARD_CLASSROOMS_PATH}/`);
-  const redirectToSetup = activeNotReady && !isClassroomsPath;
+  const redirectToClassrooms = activeNotReady && !isClassroomsPath;
 
   useEffect(() => {
+    if (isLoggingOut) return;
     if (isLoading) return;
-    if (redirectToSetup) {
-      router.replace(SETUP_PATH);
+    if (mode === "organization" && org?.status === "SUSPENDED") {
+      if (pathname !== "/organization-suspended") {
+        router.replace("/organization-suspended");
+      }
+      return;
+    }
+    if (mode === "organization" && org?.status === "PENDING") {
+      if (!pathname?.startsWith("/onboarding")) {
+        router.replace("/onboarding/pending");
+        return;
+      }
+    }
+    if (redirectToClassrooms) {
+      router.replace(DASHBOARD_CLASSROOMS_PATH);
       return;
     }
     if (mode === "organization") {
       if (isJoinOnboarding) {
-        router.replace("/dashboard");
+        router.replace("/app");
       }
       return;
     }
     if (isJoinOnboarding) return;
     if (isPlatformAdminRoute && mode === "platform") return;
     router.replace(CREATE_ORG_PATH);
-  }, [mode, redirectToSetup, isLoading, isJoinOnboarding, isPlatformAdminRoute, router]);
+  }, [pathname, org?.status, mode, redirectToClassrooms, isLoading, isJoinOnboarding, isPlatformAdminRoute, isLoggingOut, router]);
+
+  if (isLoggingOut) return null;
 
   if (isLoading) {
     return (
@@ -67,7 +80,7 @@ export function OrganizationGate({ children }: { children: ReactNode }): ReactNo
     );
   }
 
-  if (redirectToSetup) {
+  if (redirectToClassrooms) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center">
         <LoadingSpinner label="Přesměrovávám…" />

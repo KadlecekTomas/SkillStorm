@@ -31,6 +31,28 @@ export function useAppState(): {
       setState({ code: "BOOTSTRAPPING" });
       return;
     }
+    if (org?.bootstrap?.hasAcademicYear === false) {
+      setState({ code: "BOOTSTRAPPING" });
+      return;
+    }
+    if (org?.readiness === "NOT_READY") {
+      const bootstrap = org.bootstrap;
+      const hasAcademicYear = bootstrap?.hasAcademicYear === true;
+      const hasClassrooms = bootstrap?.hasClassrooms === true;
+      const hasClassroomsInCurrentYear =
+        bootstrap?.hasClassroomsInCurrentYear === true || bootstrap?.hasClassroomsInActiveYear === true;
+      let errorCode = "NO_CLASS_SECTION";
+      if (hasAcademicYear && hasClassrooms && !hasClassroomsInCurrentYear) {
+        errorCode = "CLASS_NOT_IN_CURRENT_YEAR";
+      } else if (hasAcademicYear && !hasClassrooms) {
+        errorCode = "NO_CLASS_SECTION";
+      }
+      setState({
+        code: "ORG_NOT_READY",
+        errorCode,
+      });
+      return;
+    }
 
     if (orgState === "PENDING") {
       setState({ code: "ORG_PENDING" });
@@ -68,13 +90,22 @@ export function useAppState(): {
       if (err instanceof HttpError && err.status === 409) {
         setState({
           code: "ORG_NOT_READY",
-          errorCode: code ?? "NO_ACTIVE_ACADEMIC_YEAR",
+          errorCode: code ?? "NO_CURRENT_ACADEMIC_YEAR",
         });
         return;
       }
-      if (err instanceof HttpError && (err.status === 403 || err.status === 412) && (code === "ORG_PENDING" || code === "ORG_NOT_READY")) {
-        setState({ code: "ORG_PENDING" });
-        return;
+      if (err instanceof HttpError && (err.status === 403 || err.status === 412)) {
+        if (code === "ORG_PENDING") {
+          setState({ code: "ORG_PENDING" });
+          return;
+        }
+        if (code === "ORG_NOT_READY") {
+          setState({
+            code: "ORG_NOT_READY",
+            errorCode: code ?? "NO_CLASS_SECTION",
+          });
+          return;
+        }
       }
       setState({
         code: "ERROR",

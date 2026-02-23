@@ -6,13 +6,6 @@ import { Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { BaseModal } from "@/components/modals/base-modal";
 import { fetchWithAuth, httpClient, HttpError } from "@/lib/http/client";
 import { useAuth } from "@/hooks/use-auth";
@@ -46,27 +39,12 @@ export const NoOrganizationScreen = (): React.JSX.Element => {
   const [joinCode, setJoinCode] = useState("");
   const [joinStep, setJoinStep] = useState<"code" | "preview" | "confirm">("code");
   const [preview, setPreview] = useState<InvitePreview | null>(null);
-  const [joinRole, setJoinRole] = useState<"TEACHER" | "DIRECTOR">("TEACHER");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [joinSubmitting, setJoinSubmitting] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [joinErrorMessage, setJoinErrorMessage] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const raw = window.sessionStorage.getItem("join_intent");
-    if (!raw) return;
-    try {
-      const parsed = JSON.parse(raw) as { joinCode?: string; role?: string };
-      if (parsed.joinCode) setJoinCode(parsed.joinCode);
-      setJoinModalOpen(true);
-    } catch {
-      // ignore malformed intent
-    } finally {
-      window.sessionStorage.removeItem("join_intent");
-    }
-  }, []);
 
   const handleCreateOrganization = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -171,7 +149,7 @@ export const NoOrganizationScreen = (): React.JSX.Element => {
         sessionToken?: string;
         organization?: { id: string };
       }>("POST", "/invites/accept", {
-        body: preview.type === "ORG_ONLY" ? { code: trimmed, role: joinRole } : { code: trimmed },
+        body: { code: trimmed },
       });
       const token = result?.sessionToken;
       const orgId = (result as { organization?: { id: string } })?.organization?.id ?? preview.organizationId;
@@ -185,7 +163,7 @@ export const NoOrganizationScreen = (): React.JSX.Element => {
       setJoinCode("");
       setPreview(null);
       setJoinStep("code");
-      router.replace("/dashboard");
+      router.replace("/app");
     } catch (err) {
       if (err instanceof HttpError) {
         const resolved = resolveToastFromHttpError(err);
@@ -372,18 +350,6 @@ export const NoOrganizationScreen = (): React.JSX.Element => {
                   </p>
                 )}
               </div>
-              {preview.type === "ORG_ONLY" && (
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-700">Role</label>
-                  <Select value={joinRole} onValueChange={(v) => setJoinRole(v as "TEACHER" | "DIRECTOR")} disabled={joinSubmitting}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="TEACHER">Učitel</SelectItem>
-                      <SelectItem value="DIRECTOR">Ředitel</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
               {joinErrorMessage && (
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-700">
                   {joinErrorMessage}

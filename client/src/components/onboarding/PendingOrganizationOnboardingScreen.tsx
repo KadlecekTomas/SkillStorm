@@ -4,14 +4,16 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Building2, Hourglass, RefreshCw } from "lucide-react";
 import { Card } from "@/components/ui/card";
-import { Alert } from "@/components/ui/alert";
+import { InfoAlert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
+import { useAppState } from "@/lib/app-state/use-app-state";
 import { showToastOnce } from "@/utils/toast";
 
 export const PendingOrganizationOnboardingScreen = (): React.JSX.Element => {
   const router = useRouter();
   const { org, syncProfile } = useAuth();
+  const { refresh: refreshAppState } = useAppState();
   const [isChecking, setIsChecking] = useState(false);
 
   const orgName = org?.name ?? "Škola";
@@ -20,15 +22,18 @@ export const PendingOrganizationOnboardingScreen = (): React.JSX.Element => {
     setIsChecking(true);
     try {
       const profile = await syncProfile({ force: true });
-      // Contract: use ONLY backend data (profile.context, profile.org). No synthesis, no memberships.
-      const canEnterDashboard =
-        profile.context?.mode === "organization" &&
-        profile.org?.status === "ACTIVE";
-      if (canEnterDashboard) {
-        router.replace("/dashboard");
+      await refreshAppState();
+      const organization = profile.organization ?? profile.org;
+      // Invariant: approval = backend organization.status only. Do not gate on context.mode.
+      if (organization?.status === "ACTIVE") {
+        router.replace("/app");
         return;
       }
       showToastOnce("Stále čeká na schválení.", { type: "info" });
+    } catch {
+      showToastOnce("Nepodařilo se ověřit stav. Zkuste to znovu.", {
+        type: "error",
+      });
     } finally {
       setIsChecking(false);
     }
@@ -52,7 +57,7 @@ export const PendingOrganizationOnboardingScreen = (): React.JSX.Element => {
             </div>
           </div>
 
-          <Alert
+          <InfoAlert
             title="Škola čeká na schválení administrátorem"
             description={
               <>

@@ -4,13 +4,22 @@ import { Button } from "@/components/ui/button";
 import { Bell, Plus } from "lucide-react";
 import { motion } from "framer-motion";
 import { usePathname } from "next/navigation";
-import { dashboardNav } from "@/utils/constants";
+import { DASHBOARD_NAV_ITEMS } from "@/config/dashboard-navigation";
 import { PermissionGate } from "@/components/access/permission-gate";
 import { PermissionKey } from "@/types";
 
+function isActive(pathname: string, route: string): boolean {
+  if (route === "/app") {
+    return pathname === "/app";
+  }
+  return pathname === route || pathname.startsWith(route + "/");
+}
+
 export const AppHeader = (): React.JSX.Element => {
   const pathname = usePathname();
-  const active = dashboardNav.find((item) => pathname.startsWith(item.href));
+  const activeItem = DASHBOARD_NAV_ITEMS.find((item) =>
+    isActive(pathname ?? "", item.route),
+  );
 
   return (
     <motion.header
@@ -21,7 +30,7 @@ export const AppHeader = (): React.JSX.Element => {
       <div>
         <p className="text-xs uppercase tracking-wide text-slate-400">Current module</p>
         <h1 className="text-xl font-semibold text-slate-900">
-          {active?.title ?? "Dashboard"}
+          {activeItem?.label ?? "Dashboard"}
         </h1>
       </div>
       <div className="flex items-center gap-3">

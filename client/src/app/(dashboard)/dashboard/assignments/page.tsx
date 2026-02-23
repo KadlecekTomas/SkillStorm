@@ -7,7 +7,7 @@ import { fetchWithAuth } from "@/lib/http/client";
 import { useRouter } from "next/navigation";
 import { Alert } from "@/components/ui/alert";
 import { withGuard } from "@/lib/guard/withGuard";
-import type { OrganizationRole } from "@/types";
+import { PermissionKey } from "@/types";
 import { useAuth } from "@/lib/guard/useAuth";
 
 type AssignmentRow = {
@@ -58,15 +58,23 @@ function AssignmentsPage() {
             </Button>
           </Card>
         ))}
-        {!items.length && <Card className="p-4 text-sm text-slate-600">Žádná aktivní zadání.</Card>}
+        {!items.length && (
+          <Card className="p-4 text-sm text-slate-600">
+            {isStudent
+              ? "Nemáš žádná aktivní zadání."
+              : "Žádná zadání k zobrazení."}
+          </Card>
+        )}
       </div>
     </div>
   );
 }
 
-const assignmentRoles: OrganizationRole[] = ["STUDENT", "TEACHER", "DIRECTOR", "OWNER"];
-
 export default withGuard({
-  requireRoles: assignmentRoles,
+  requirePerms: [
+    PermissionKey.VIEW_OWN_ASSIGNMENTS,
+    PermissionKey.VIEW_CLASS_ASSIGNMENTS,
+    PermissionKey.VIEW_ORG_ASSIGNMENTS,
+  ],
   requireSchoolWorkspace: true,
 })(AssignmentsPage);

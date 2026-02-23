@@ -5,22 +5,45 @@ import type { NextRequest } from "next/server";
 const AUTH_COOKIE = "ss_at";
 
 const LOGIN_PATH = "/login";
-const DASHBOARD_PREFIX = "/dashboard";
+const APP_PREFIX = "/app";
+const JOIN_PREFIX = "/join";
+
+/** Redirect legacy /dashboard* to /app* for bookmarks. */
+function redirectDashboardToApp(pathname: string, request: NextRequest): NextResponse | null {
+  if (pathname === "/dashboard" || pathname.startsWith("/dashboard/")) {
+    const newPath = pathname === "/dashboard" ? "/app" : pathname.replace(/^\/dashboard/, "/app");
+    return NextResponse.redirect(new URL(newPath, request.url));
+  }
+  return null;
+}
 
 /**
- * Server-side gate for dashboard routes:
- * - Unauthenticated (no auth cookie) → redirect to /login.
- * - Role-based access to /dashboard/platform* is enforced client-side (isPlatformAdmin).
- * No redirect loop: we never redirect dashboard → platform or platform → dashboard here.
+ * Server-side gate for app and join routes:
+ * - /dashboard* → redirect to /app* (legacy bookmarks).
+ * - Unauthenticated on /app* → redirect to /login?from=pathname.
+ * - Unauthenticated on /join* → redirect to /login?redirect=fullUrl (join has priority; after login user continues join flow).
+ * - Role-based access to /app/platform* is enforced client-side (isPlatformAdmin).
  */
 export function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
+  const url = request.nextUrl;
+  const { pathname } = url;
 
-  if (!pathname.startsWith(DASHBOARD_PREFIX)) {
+  const legacyRedirect = redirectDashboardToApp(pathname, request);
+  if (legacyRedirect) return legacyRedirect;
+
+  const hasAuthCookie = request.cookies.get(AUTH_COOKIE)?.value != null;
+
+  if (pathname === JOIN_PREFIX || pathname.startsWith(`${JOIN_PREFIX}/`)) {
+    if (!hasAuthCookie) {
+      return NextResponse.redirect(new URL(LOGIN_PATH, request.url));
+    }
     return NextResponse.next();
   }
 
-  const hasAuthCookie = request.cookies.get(AUTH_COOKIE)?.value != null;
+  if (!pathname.startsWith(APP_PREFIX)) {
+    return NextResponse.next();
+  }
+
   if (!hasAuthCookie) {
     const login = new URL(LOGIN_PATH, request.url);
     login.searchParams.set("from", pathname);
@@ -31,5 +54,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard", "/dashboard/:path*"],
+  matcher: ["/dashboard", "/dashboard/:path*", "/app", "/app/:path*", "/join", "/join/:path*"],
 };

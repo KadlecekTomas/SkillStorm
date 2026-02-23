@@ -27,7 +27,9 @@ export class AppErrorBoundary extends React.Component<
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo): void {
-    console.error("AppErrorBoundary caught:", error, errorInfo);
+    if (process.env.NODE_ENV === "development") {
+      console.error("AppErrorBoundary caught:", error, errorInfo);
+    }
   }
 
   handleReset = (): void => {
@@ -45,19 +47,20 @@ export class AppErrorBoundary extends React.Component<
             <div className="flex items-center justify-center gap-2 text-amber-600">
               <AlertTriangle className="h-6 w-6" />
               <p className="font-semibold uppercase tracking-wide">
-                Something went wrong
+                Něco se pokazilo
               </p>
             </div>
             <p className="mt-3 text-sm text-slate-500">
               {this.state.error?.message ??
-                "Unexpected error while rendering this view."}
+                "Neočekávaná chyba při zobrazení stránky."}
             </p>
             <Button
               onClick={this.handleReset}
               className="mt-6 inline-flex items-center gap-2 rounded-2xl"
+              aria-label="Obnovit stránku"
             >
               <RefreshCw className="h-4 w-4" />
-              Reload
+              Obnovit stránku
             </Button>
           </div>
         </div>

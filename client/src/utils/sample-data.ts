@@ -25,6 +25,8 @@ export const classroomSamples: Classroom[] = [
   },
 ];
 
+const sampleOrgId = "org-sample";
+
 export const testSamples: TestSummary[] = [
   {
     id: "ts-1",
@@ -33,7 +35,13 @@ export const testSamples: TestSummary[] = [
     completionRate: 86,
     submissions: 42,
     avgScore: 78,
-    subject: "Matematika",
+    subject: {
+      id: "subj-math",
+      name: "Matematika",
+      gradeFrom: 1,
+      gradeTo: 9,
+      organizationId: sampleOrgId,
+    },
     status: "PUBLISHED",
     version: 3,
   },
@@ -44,7 +52,13 @@ export const testSamples: TestSummary[] = [
     completionRate: 92,
     submissions: 37,
     avgScore: 83,
-    subject: "Jazyky",
+    subject: {
+      id: "subj-lang",
+      name: "Jazyky",
+      gradeFrom: 1,
+      gradeTo: 9,
+      organizationId: sampleOrgId,
+    },
     status: "PUBLISHED",
     version: 2,
   },

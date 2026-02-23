@@ -48,7 +48,7 @@ export const AcademicYearOnboardingScreen = (): React.JSX.Element => {
       showToastOnce("Školní rok byl vytvořen. Aplikace je připravena.", {
         type: "success",
       });
-      router.replace("/dashboard");
+      router.replace("/app");
     } catch (err) {
       if (err instanceof HttpError) {
         const data = err.data as { code?: string; meta?: { code?: string }; message?: string } | undefined;
