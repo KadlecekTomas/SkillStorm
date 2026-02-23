@@ -13,7 +13,9 @@ import { audit } from "@/lib/audit/audit.client";
 
 type AuthEnvelope = {
   user: User;
-  org: OrganizationContext | null;
+  org?: OrganizationContext | null;
+  /** Backend /auth/me returns "organization"; store accepts org ?? organization. */
+  organization?: OrganizationContext | null;
   roles: OrganizationRole[];
   permissions: PermissionKey[];
   context: AuthContext;
@@ -73,7 +75,9 @@ export type LoginPayload = {
   password: string;
 };
 
-const PUBLIC_ROUTES = ["/login", "/register", "/forgot-password"];
+const PUBLIC_ROUTES = ["/login", "/register", "/forgot-password", "/reset-password"];
+const isPublicRoutePath = (path: string) =>
+  PUBLIC_ROUTES.includes(path) || path.startsWith("/reset-password/");
 
 export const useAuth = (): UseAuthResult => {
   const pathname = usePathname();
@@ -125,14 +129,17 @@ export const useAuth = (): UseAuthResult => {
   const isLoggingOut = authPhase === "LOGGING_OUT";
 
   const isPublicRoute = useMemo(
-    () => (pathname ? PUBLIC_ROUTES.includes(pathname) : false),
+    () => (pathname ? isPublicRoutePath(pathname) : false),
     [pathname],
   );
 
   const syncProfile = useCallback(
     async (options?: { force?: boolean }) => {
-      if (syncRef.current) {
+      if (syncRef.current && !options?.force) {
         return syncRef.current;
+      }
+      if (options?.force) {
+        syncRef.current = null;
       }
       syncRef.current = (async () => {
         refreshAttemptedRef.current = false;
@@ -145,11 +152,21 @@ export const useAuth = (): UseAuthResult => {
             { pathname, hydrated, authStatus, loading, userId: user?.id ?? null },
           );
         }
+        const meConfig = {
+          retries: options?.force ? 0 : null,
+          skipAuthRetry: true,
+          ...(options?.force
+            ? {
+                cache: "no-store" as RequestCache,
+                headers: {
+                  "Cache-Control": "no-cache, no-store, must-revalidate",
+                  Pragma: "no-cache",
+                },
+              }
+            : {}),
+        };
         try {
-          const profile = await fetchWithAuth<AuthEnvelope>("GET", "/auth/me", {
-            retries: options?.force ? 0 : null,
-            skipAuthRetry: true,
-          });
+          const profile = await fetchWithAuth<AuthEnvelope>("GET", "/auth/me", meConfig);
           setProfile(profile);
           setAuthStatus("authenticated");
           return profile;
@@ -165,10 +182,7 @@ export const useAuth = (): UseAuthResult => {
             await fetchWithAuth("POST", "/auth/refresh", {
               skipAuthRetry: true,
             });
-            const profile = await fetchWithAuth<AuthEnvelope>("GET", "/auth/me", {
-              retries: 0,
-              skipAuthRetry: true,
-            });
+            const profile = await fetchWithAuth<AuthEnvelope>("GET", "/auth/me", meConfig);
             setProfile(profile);
             setAuthStatus("authenticated");
             return profile;
@@ -318,7 +332,7 @@ export const useAuth = (): UseAuthResult => {
           window.localStorage.setItem("skillstorm_activeMembershipId", membershipId);
           window.localStorage.setItem("skillstorm_activeMembershipSwitchedAt", String(Date.now()));
         }
-        router.replace("/dashboard");
+        router.replace("/app");
         showToastOnce("Přepnuli jsme aktivní organizaci.", {
           type: "info",
         });

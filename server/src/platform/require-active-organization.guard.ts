@@ -12,6 +12,14 @@ import { ORG_SUSPENDED, ORG_PENDING } from '@/shared/org-readiness.utils';
 import { ALLOW_PENDING_ORG } from '@/common/decorators/allow-pending-org.decorator';
 import { ALLOW_ANY_ORG_STATUS } from '@/common/decorators/allow-any-org-status.decorator';
 
+/**
+ * Domain rule: organization.status is the SINGLE source of truth for OWNER accessibility.
+ * PENDING and SUSPENDED are distinct; never treat SUSPENDED as "pending approval".
+ *
+ * - status === SUSPENDED → 403 ORG_SUSPENDED (SUSPENDED must be checked before PENDING).
+ * - status === PENDING   → 403 ORG_PENDING (awaiting initial SUPERADMIN approval).
+ * - status === ACTIVE    → allow (readiness enforced elsewhere when applicable).
+ */
 @Injectable()
 export class RequireActiveOrganizationGuard implements CanActivate {
   constructor(

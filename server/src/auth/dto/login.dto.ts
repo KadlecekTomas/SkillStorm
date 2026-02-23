@@ -1,5 +1,5 @@
-import { IsEmail, IsString } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { IsEmail, IsOptional, IsString, IsUUID } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class LoginDto {
   @ApiProperty({
@@ -15,4 +15,11 @@ export class LoginDto {
   })
   @IsString()
   password!: string;
+
+  @ApiPropertyOptional({
+    description: 'Organization to log in as (JWT will be scoped to this org). User must be a member.',
+  })
+  @IsOptional()
+  @IsUUID()
+  organizationId?: string;
 }

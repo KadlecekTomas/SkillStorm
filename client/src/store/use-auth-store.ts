@@ -17,13 +17,23 @@ export type OrgReadiness = "READY" | "NOT_READY";
 /** Auth invariant: logout is a hard boundary. No protected component may render after logout. */
 export type AuthPhase = "BOOTSTRAP" | "AUTHENTICATED" | "UNAUTHENTICATED" | "LOGGING_OUT";
 
+export type OrgBootstrap = {
+  hasAcademicYear: boolean;
+  hasClassrooms: boolean;
+  /** Current academic year has at least one class. Prefer this; accept deprecated alias. */
+  hasClassroomsInCurrentYear?: boolean;
+  hasClassroomsInActiveYear?: boolean;
+};
+
 export type OrganizationContext = {
   id: string;
   name: string;
   type: OrganizationType;
   status?: OrganizationStatus | null;
-  /** From backend: READY only when org has active academic year + at least one class. */
+  /** From backend: READY only when org has current academic year + at least one class. */
   readiness?: OrgReadiness | null;
+  /** From backend: drives setup vs dashboard. No /academic-years, /analytics, /audit until hasAcademicYear. */
+  bootstrap?: OrgBootstrap | null;
   slug?: string | null;
 };
 

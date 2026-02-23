@@ -11,19 +11,23 @@ import type { RequestWithUser } from '@/types/request-with-user';
 import { ALLOW_ANY_ORG_STATUS } from '@/common/decorators/allow-any-org-status.decorator';
 
 /**
- * Application Readiness Guard – domain invariant enforcement (system-level consistency).
+ * Application Readiness Guard – domain invariant enforcement.
  *
- * Domain endpoints MUST NOT run unless the application is in READY state.
- * READY = organization.status === ACTIVE && exactly one AcademicYear with isCurrent === true.
+ * organization.status is the primary gate. Readiness is NEVER evaluated for non-ACTIVE orgs.
+ * - status === SUSPENDED → 409 ORG_SUSPENDED (hard block; check first; never treat as PENDING).
+ * - status === PENDING   → 409 ORG_PENDING (awaiting approval).
+ * - status === ACTIVE   → apply readiness checks (active year, etc.).
  *
- * This is NOT a UI workaround: backend and frontend together enforce the invariant
- * "invalid application state must NOT be shown to the user". This guard returns
- * structured 409 (never 403) so the frontend can show the correct state screen.
+ * SUSPENDED must never be treated as PENDING. No onboarding or repair for SUSPENDED.
  */
 export const READINESS_ERROR_CODES = {
   ORG_PENDING: 'ORG_PENDING',
   ORG_SUSPENDED: 'ORG_SUSPENDED',
+  NO_CURRENT_ACADEMIC_YEAR: 'NO_CURRENT_ACADEMIC_YEAR',
+  MULTIPLE_CURRENT_ACADEMIC_YEARS: 'MULTIPLE_CURRENT_ACADEMIC_YEARS',
+  /** @deprecated Use NO_CURRENT_ACADEMIC_YEAR. Kept for one release cycle. */
   NO_ACTIVE_ACADEMIC_YEAR: 'NO_ACTIVE_ACADEMIC_YEAR',
+  /** @deprecated Use MULTIPLE_CURRENT_ACADEMIC_YEARS. Kept for one release cycle. */
   MULTIPLE_ACTIVE_ACADEMIC_YEARS: 'MULTIPLE_ACTIVE_ACADEMIC_YEARS',
 } as const;
 
@@ -51,32 +55,38 @@ export class ApplicationReadinessGuard implements CanActivate {
     });
     if (!org) return true;
 
-    if (org.status === OrganizationStatus.PENDING) {
-      throw new ConflictException({
-        message: 'Organization is not yet active',
-        meta: { code: READINESS_ERROR_CODES.ORG_PENDING },
-      });
-    }
     if (org.status === OrganizationStatus.SUSPENDED) {
       throw new ConflictException({
         message: 'Organization is suspended',
         meta: { code: READINESS_ERROR_CODES.ORG_SUSPENDED },
       });
     }
-
-    const activeCount = await this.prisma.academicYear.count({
-      where: { orgId, isCurrent: true },
-    });
-    if (activeCount === 0) {
+    if (org.status === OrganizationStatus.PENDING) {
       throw new ConflictException({
-        message: 'Active academic year is not configured for this organization.',
-        meta: { code: READINESS_ERROR_CODES.NO_ACTIVE_ACADEMIC_YEAR },
+        message: 'Organization is not yet active',
+        meta: { code: READINESS_ERROR_CODES.ORG_PENDING },
       });
     }
-    if (activeCount > 1) {
+
+    const currentCount = await this.prisma.academicYear.count({
+      where: { orgId, isCurrent: true },
+    });
+    if (currentCount === 0) {
       throw new ConflictException({
-        message: 'Multiple academic years are marked as active.',
-        meta: { code: READINESS_ERROR_CODES.MULTIPLE_ACTIVE_ACADEMIC_YEARS },
+        message: 'Current academic year is not configured for this organization.',
+        meta: {
+          code: READINESS_ERROR_CODES.NO_CURRENT_ACADEMIC_YEAR,
+          deprecatedCode: READINESS_ERROR_CODES.NO_ACTIVE_ACADEMIC_YEAR,
+        },
+      });
+    }
+    if (currentCount > 1) {
+      throw new ConflictException({
+        message: 'Multiple academic years are marked as current.',
+        meta: {
+          code: READINESS_ERROR_CODES.MULTIPLE_CURRENT_ACADEMIC_YEARS,
+          deprecatedCode: READINESS_ERROR_CODES.MULTIPLE_ACTIVE_ACADEMIC_YEARS,
+        },
       });
     }
 

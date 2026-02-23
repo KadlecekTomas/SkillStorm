@@ -3,11 +3,18 @@ import {
   IsOptional,
   IsString,
   MinLength,
+  Matches,
   IsEnum,
+  ValidateIf,
+  IsNotEmpty,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { OrganizationRole, SystemRole } from '@prisma/client';
+import { SystemRole } from '@prisma/client';
 import { Transform } from 'class-transformer';
+
+const PASSWORD_POLICY = {
+  message: 'Heslo musí mít alespoň 8 znaků, obsahovat alespoň jedno písmeno a jednu číslici.',
+};
 
 export enum RegisterMode {
   INDIVIDUAL = 'INDIVIDUAL',
@@ -43,20 +50,13 @@ export class RegisterDto {
   @ApiProperty({
     description: 'Heslo',
     example: 'password123',
-    minLength: 6,
+    minLength: 8,
   })
   @IsString()
-  @MinLength(6)
+  @MinLength(8, { message: PASSWORD_POLICY.message })
+  @Matches(/\d/, { message: PASSWORD_POLICY.message })
+  @Matches(/[a-zA-Z]/, { message: PASSWORD_POLICY.message })
   password!: string;
-
-  @ApiPropertyOptional({
-    description: 'Role v organizaci (použije se při JOIN_ORG během explicitního připojení)',
-    enum: OrganizationRole,
-    example: OrganizationRole.TEACHER,
-  })
-  @IsOptional()
-  @IsEnum(OrganizationRole)
-  role?: OrganizationRole;
 
   @ApiPropertyOptional({
     description: 'Systémová role',
@@ -81,14 +81,24 @@ export class RegisterDto {
   mode!: RegisterMode;
 
   @ApiPropertyOptional({
-    description:
-      'Kód organizace pro JOIN_ORG (aktuálně organizationId) – použije se při explicitním připojení.',
-    example: 'organization-id-uuid',
+    description: 'Invitation token for JOIN_ORG (required for join mode)',
+    example: 'invite-token-from-link',
   })
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
-  @IsOptional()
+  @ValidateIf((o) => o.mode === RegisterMode.JOIN_ORG && o.inviteToken !== undefined)
   @IsString()
-  joinCode?: string;
+  @IsNotEmpty()
+  inviteToken?: string;
+
+  @ApiPropertyOptional({
+    description: 'Legacy invite code (backward compatibility). Internally mapped to inviteToken.',
+    example: 'invite-token-from-link',
+  })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @ValidateIf((o) => o.mode === RegisterMode.JOIN_ORG && o.code !== undefined)
+  @IsString()
+  @IsNotEmpty()
+  code?: string;
 
   /** Ignored at register. Required in onboarding step (POST /organizations). Kept optional so clients can send it without 400. */
   @ApiPropertyOptional({ description: 'Ignored. Use POST /organizations in onboarding step.' })

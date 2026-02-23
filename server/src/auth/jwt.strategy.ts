@@ -1,5 +1,4 @@
 import {
-  ForbiddenException,
   Inject,
   Injectable,
   UnauthorizedException,
@@ -39,9 +38,25 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       bearerExtractor,
       sessionHeaderExtractor,
     ]);
+    const secret = configService.get<string>('JWT_SECRET');
+    if (process.env.NODE_ENV === 'production' && !secret) {
+      throw new Error('JWT_SECRET is required in production');
+    }
+    const effectiveSecret =
+      secret ||
+      (process.env.NODE_ENV !== 'production'
+        ? (() => {
+            // eslint-disable-next-line no-console
+            console.warn('JWT_SECRET not set. Using insecure development mode.');
+            return 'insecure-local-only';
+          })()
+        : undefined);
+    if (!effectiveSecret) {
+      throw new Error('JWT_SECRET is required in production');
+    }
     super({
       jwtFromRequest: tokenExtractor,
-      secretOrKey: configService.get<string>('JWT_SECRET') || 'dev',
+      secretOrKey: effectiveSecret,
       ignoreExpiration: false,
       passReqToCallback: true,
     });
@@ -74,9 +89,28 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         name: true,
         systemRole: true,
         isPlatformAdmin: true,
+        passwordChangedAt: true,
+        tokenVersion: true,
       },
     });
     if (!user) throw new UnauthorizedException('User not found');
+
+    const iat = (payload as { iat?: number }).iat;
+    if (typeof iat !== 'number') {
+      throw new UnauthorizedException('Invalid token.');
+    }
+    if (user.passwordChangedAt) {
+      const issuedAtMs = iat * 1000;
+      if (issuedAtMs < user.passwordChangedAt.getTime()) {
+        throw new UnauthorizedException('Token invalidated due to password change.');
+      }
+    }
+    // tokenVersion mismatch also invalidates (e.g. after reset or admin reset)
+    const payloadTokenVersion = (payload as { tokenVersion?: number }).tokenVersion;
+    const userTokenVersion = user.tokenVersion ?? 0;
+    if (payloadTokenVersion !== userTokenVersion) {
+      throw new UnauthorizedException('Token invalidated due to password change.');
+    }
 
     let organizationRole: string | null = null;
     let organizationId: string | null = null;
@@ -98,37 +132,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       organizationRole = membership.role;
       membershipId = membership.id;
     } else {
-      const memberships = await this.prisma.membership.findMany({
-        where: { userId: user.id, deletedAt: null },
-        orderBy: { createdAt: 'asc' },
-        select: { id: true, organizationId: true, role: true },
-      });
-
-      const requestedOrgId =
-        (req.query?.organizationId as string) ??
-        (req.body as any)?.organizationId ??
-        null;
-
-      if (requestedOrgId) {
-        const m = memberships.find((x) => x.organizationId === requestedOrgId);
-        if (m) {
-          organizationRole = m.role;
-          organizationId = m.organizationId;
-          membershipId = m.id;
-        } else {
-          throw new ForbiddenException({
-            statusCode: 403,
-            message: 'Forbidden: organization scope not allowed for user',
-          });
-        }
-      } else {
-        const first = memberships[0];
-        if (first) {
-          organizationRole = first.role;
-          organizationId = first.organizationId;
-          membershipId = null;
-        }
-      }
+      organizationRole = null;
+      organizationId = null;
+      membershipId = null;
     }
 
     // CONTRACT (effective platform admin): SUPERADMIN is always platform admin (governance).

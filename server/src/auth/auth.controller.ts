@@ -3,6 +3,8 @@ import {
   Body,
   Controller,
   ConflictException,
+  ForbiddenException,
+  GoneException,
   Get,
   HttpCode,
   HttpStatus,
@@ -34,6 +36,9 @@ import {
 import { ok } from '@/common/http/envelope';
 import { UseOrgDto } from './dto/use-org.dto';
 import { SwitchOrganizationDto } from './dto/switch-organization.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { AllowAnyOrgStatus } from '@/common/decorators/allow-any-org-status.decorator';
 import { ApiStandardResponses } from '@/common/http/api-standard-responses.decorator';
 
@@ -54,7 +59,11 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     try {
-      const result = await this.authService.register(dto);
+      const ip = req.ip;
+      const result = await this.authService.register(
+        dto,
+        ip ? { ip } : undefined,
+      );
       setAuthCookies(res, result.tokens);
       setCsrfCookie(res, generateCsrfToken());
 
@@ -82,7 +91,10 @@ export class AuthController {
           console.error(error.stack);
         }
       }
-      if (error instanceof BadRequestException || error instanceof ConflictException) {
+      if (
+        error instanceof BadRequestException ||
+        error instanceof ForbiddenException
+      ) {
         throw error;
       }
       throw new BadRequestException(
@@ -94,12 +106,13 @@ export class AuthController {
   @Public()
   @Post('login')
   @ApiOperation({ summary: 'Login user' })
-  @Throttle({ default: { limit: 5, ttl: 60 } })
+  @Throttle({ default: { limit: 10, ttl: 900 } })
   async login(
     @Body() dto: LoginDto,
-    @Req() req: Request,
+    @Req() req: Request & { requestId?: string },
     @Res({ passthrough: true }) res: Response,
   ) {
+    const requestId = req.requestId ?? null;
     try {
       const result = await this.authService.login(dto);
       setAuthCookies(res, result.tokens);
@@ -109,15 +122,26 @@ export class AuthController {
         organizationId: result.user.organizationId ?? null,
       });
 
+      this.logger.log(
+        JSON.stringify({
+          event: 'auth_login_success',
+          email: dto.email,
+          userId: result.user.id,
+          requestId,
+        }),
+      );
       return ok({
         ...ctx,
         sessionToken: result.tokens.accessToken,
       });
-
     } catch (error) {
       this.logger.error(
-        'Login failed',
-        error instanceof Error ? error.stack : error,
+        JSON.stringify({
+          event: 'auth_login_fail',
+          email: dto.email,
+          requestId,
+          error: error instanceof Error ? error.message : String(error),
+        }),
       );
       throw error;
     }
@@ -186,17 +210,7 @@ export class AuthController {
     @Req() req: RequestWithUser,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const result = await this.authService.joinOrganization(req.user.userId, dto);
-    setAuthCookies(res, result.tokens);
-    setCsrfCookie(res, generateCsrfToken());
-    return ok({
-      user: result.user,
-      organization: result.organization,
-      membership: result.membership,
-      roles: result.roles ?? [],
-      permissions: result.permissions ?? [],
-      sessionToken: result.tokens.accessToken,
-    });
+    throw new GoneException('Legacy join disabled. Use invitation token.');
   }
 
 
@@ -255,5 +269,47 @@ export class AuthController {
       permissions: result.permissions ?? [],
       sessionToken: result.tokens.accessToken,
     });
+  }
+
+  @Post('change-password')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Change password (authenticated user)' })
+  @Throttle({ default: { limit: 5, ttl: 60 } })
+  async changePassword(
+    @Req() req: RequestWithUser,
+    @Body() dto: ChangePasswordDto,
+  ) {
+    const ctx = {
+      ipAddress: req.ip ?? null,
+      userAgent: req.get('user-agent') ?? null,
+    };
+    await this.authService.changePassword(req.user.userId, dto, ctx);
+    return ok({ ok: true });
+  }
+
+  @Public()
+  @Post('forgot-password')
+  @ApiOperation({ summary: 'Request password reset email' })
+  @Throttle({ default: { limit: 5, ttl: 900 } })
+  async forgotPassword(@Body() dto: ForgotPasswordDto, @Req() req: Request) {
+    const ctx = {
+      ipAddress: req.ip ?? null,
+      userAgent: req.get('user-agent') ?? null,
+    };
+    return ok(await this.authService.requestPasswordReset(dto, ctx));
+  }
+
+  @Public()
+  @Post('reset-password')
+  @ApiOperation({ summary: 'Reset password with token' })
+  @Throttle({ default: { limit: 5, ttl: 900 } })
+  async resetPassword(@Body() dto: ResetPasswordDto, @Req() req: Request) {
+    const ctx = {
+      ipAddress: req.ip ?? null,
+      userAgent: req.get('user-agent') ?? null,
+    };
+    await this.authService.resetPasswordWithToken(dto, ctx);
+    return ok({ ok: true });
   }
 }

@@ -6,7 +6,7 @@ import {
   roleHome,
 } from "@/types/permissions";
 
-/** Single source of truth: user may access /dashboard/platform* (SUPERADMIN or platform admin flag). */
+/** Single source of truth: user may access /app/platform* (SUPERADMIN or platform admin flag). */
 export function isPlatformAdmin(user: User | null | undefined): boolean {
   if (!user) return false;
   return user.systemRole === "SUPERADMIN" || user.isPlatformAdmin === true;
@@ -15,25 +15,27 @@ export function isPlatformAdmin(user: User | null | undefined): boolean {
 export const derivePermissions = (user: User | null): PermissionKey[] => {
   if (!user) return [];
 
+  if (Array.isArray(user.permissions)) {
+    return Array.from(new Set<PermissionKey>(user.permissions));
+  }
+
   const system = user.systemRole
     ? SYSTEM_ROLE_PERMISSIONS[user.systemRole] ?? []
     : [];
   const org = user.organizationRole
     ? ROLE_PERMISSION_MATRIX[user.organizationRole] ?? []
     : [];
-  const provided = user.permissions ?? [];
   const unique = new Set<PermissionKey>([
-    ...provided,
     ...system,
     ...org,
   ]);
   return Array.from(unique);
 };
 
-/** Fallback when role home is unknown or route missing. Must exist (app/(dashboard)/dashboard/page.tsx). */
-export const DASHBOARD_ENTRY = "/dashboard";
+/** Fallback when role home is unknown or route missing. Must exist (app/(app)/app/page.tsx). */
+export const DASHBOARD_ENTRY = "/app";
 
-const PLATFORM_HOME = "/dashboard/platform";
+const PLATFORM_HOME = "/app/platform";
 
 export const getRoleHomePath = (user: User | null): string => {
   if (!user) return roleHome.DEFAULT;

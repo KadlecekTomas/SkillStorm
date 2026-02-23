@@ -7,27 +7,41 @@ type RoleDefaults = Partial<
 
 const ALL_PERMISSIONS = '*';
 
+/** Business rule: DIRECTOR must have at least the same permissions as TEACHER in their organization. */
+const TEACHER_PERMISSIONS: PermissionKey[] = [
+  PermissionKey.CREATE_TEST,
+  PermissionKey.EDIT_TEST,
+  PermissionKey.VIEW_RESULTS,
+  PermissionKey.VIEW_ANALYTICS,
+  PermissionKey.INVITE_STUDENTS,
+  PermissionKey.VIEW_TEST_OVERVIEW,
+  PermissionKey.MANAGE_TESTS,
+  PermissionKey.ASSIGN_TESTS,
+  PermissionKey.VIEW_SUBMISSIONS,
+  PermissionKey.VIEW_CLASS_ASSIGNMENTS,
+  PermissionKey.VIEW_OWN_ASSIGNMENTS,
+];
+
+const DIRECTOR_EXTRA: PermissionKey[] = [
+  PermissionKey.DELETE_TEST,
+  PermissionKey.MANAGE_STUDENTS,
+  PermissionKey.MANAGE_TEACHERS,
+  PermissionKey.INVITE_TEACHERS,
+  PermissionKey.MANAGE_ASSIGNMENTS,
+  PermissionKey.VIEW_ORG_ASSIGNMENTS,
+];
+
 export const RBAC_DEFAULT_PERMISSIONS: RoleDefaults = {
   OWNER: ALL_PERMISSIONS,
-  DIRECTOR: [
-    PermissionKey.CREATE_TEST,
-    PermissionKey.EDIT_TEST,
-    PermissionKey.DELETE_TEST,
+  DIRECTOR: [...TEACHER_PERMISSIONS, ...DIRECTOR_EXTRA],
+  TEACHER: TEACHER_PERMISSIONS,
+  STUDENT: [
     PermissionKey.VIEW_RESULTS,
-    PermissionKey.MANAGE_STUDENTS,
-    PermissionKey.MANAGE_TEACHERS,
-    PermissionKey.INVITE_STUDENTS,
-    PermissionKey.INVITE_TEACHERS,
+    PermissionKey.VIEW_TEST_OVERVIEW,
+    PermissionKey.VIEW_SUBMISSIONS,
+    PermissionKey.VIEW_OWN_ASSIGNMENTS,
   ],
-  TEACHER: [
-    PermissionKey.CREATE_TEST,
-    PermissionKey.EDIT_TEST,
-    PermissionKey.VIEW_RESULTS,
-    PermissionKey.VIEW_ANALYTICS,
-    PermissionKey.INVITE_STUDENTS,
-  ],
-  STUDENT: [PermissionKey.VIEW_RESULTS],
-  PARENT: [PermissionKey.VIEW_RESULTS],
+  PARENT: [PermissionKey.VIEW_RESULTS, PermissionKey.VIEW_SUBMISSIONS],
 };
 
 export function isPermissionAllowedByDefault(

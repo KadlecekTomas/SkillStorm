@@ -1,6 +1,7 @@
 // src/tests/tests.service.ts
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -15,6 +16,7 @@ import {
   SystemRole,
   OrganizationRole,
   PublishStatus,
+  SchoolGrade,
 } from '@prisma/client';
 import type { CreateTestDto } from './dto/create-test.dto';
 import type { UpdateTestDto } from './dto/update-test.dto';
@@ -37,6 +39,30 @@ import {
   cacheScopeForUser,
   getOrgVersion,
 } from '@/shared/cache/org-cache.utils';
+import {
+  computeAssignability,
+  type AssignabilityReport,
+} from '@/shared/test-assignability.util';
+import { deriveOrgReadiness, OrgReadinessState } from '@/shared/org-readiness-v2';
+import { createOrgReadinessError } from '@/shared/errors/org-readiness.error';
+import { OrgOperationType } from '@/common/decorators/org-operation.decorator';
+
+/** Maps SchoolGrade enum to numeric grade (1–9 ZŠ, 10–13 SŠ) for subject range comparison. */
+const SCHOOL_GRADE_TO_NUM: Record<SchoolGrade, number> = {
+  [SchoolGrade.GRADE_1]: 1,
+  [SchoolGrade.GRADE_2]: 2,
+  [SchoolGrade.GRADE_3]: 3,
+  [SchoolGrade.GRADE_4]: 4,
+  [SchoolGrade.GRADE_5]: 5,
+  [SchoolGrade.GRADE_6]: 6,
+  [SchoolGrade.GRADE_7]: 7,
+  [SchoolGrade.GRADE_8]: 8,
+  [SchoolGrade.GRADE_9]: 9,
+  [SchoolGrade.HIGH_SCHOOL_YEAR_1]: 10,
+  [SchoolGrade.HIGH_SCHOOL_YEAR_2]: 11,
+  [SchoolGrade.HIGH_SCHOOL_YEAR_3]: 12,
+  [SchoolGrade.HIGH_SCHOOL_YEAR_4]: 13,
+};
 
 function searchExpr(search?: string): Prisma.TestWhereInput | undefined {
   const s = search?.trim();
@@ -59,12 +85,50 @@ export class TestsService {
   private includeAll() {
     return Prisma.validator<Prisma.TestInclude>()({
       organization: true,
+      subject: true,
       creator: { include: { user: true, organization: true } },
       questions: {
         include: { options: true, answers: true },
         orderBy: [{ order: 'asc' }, { id: 'asc' }], // => bez createdAt (není ve schématu)
       },
     });
+  }
+
+  private sanitizeForStudentTestDetail(test: Record<string, unknown>) {
+    const questions = Array.isArray(test.questions) ? test.questions : [];
+    return {
+      ...test,
+      questions: questions.map((question) => {
+        if (!question || typeof question !== 'object') return question;
+        const safeQuestion = {
+          ...(question as Record<string, unknown>),
+        };
+        delete safeQuestion.correctAnswer;
+        delete safeQuestion.correctAnswers;
+        delete safeQuestion.answers;
+        delete safeQuestion.solution;
+        return safeQuestion;
+      }),
+    };
+  }
+
+  /** Validate subjectId belongs to organization; return orgSubjectId or null. */
+  private async resolveOrgSubjectId(
+    subjectId: string | undefined,
+    organizationId: string,
+  ): Promise<string | null> {
+    if (!subjectId) return null;
+    const subject = await this.prisma.orgSubject.findUnique({
+      where: { id: subjectId },
+      select: { id: true, organizationId: true },
+    });
+    if (!subject) {
+      throw new BadRequestException('Subject not found');
+    }
+    if (subject.organizationId !== organizationId) {
+      throw new BadRequestException('Subject must belong to the same organization as the test');
+    }
+    return subject.id;
   }
 
   // ----- Audit helper -----
@@ -217,25 +281,9 @@ export class TestsService {
     };
   }
 
-  private isQuestionScoreable(q: {
-    type: string;
-    correctAnswer: string | null;
-    correctAnswers: string[];
-  }) {
-    const hasAnswer = this.normalizeText(q.correctAnswer) !== null;
-    const hasAnswers = Array.isArray(q.correctAnswers) && q.correctAnswers.length > 0;
-
-    if (q.type === 'MULTIPLE_CHOICE') {
-      if (hasAnswer && hasAnswers) return false;
-      return hasAnswer || hasAnswers;
-    }
-    if (q.type === 'TRUE_FALSE' || q.type === 'FILL_IN_THE_BLANK') {
-      return hasAnswer;
-    }
-    return false;
-  }
-
-  private async ensureTestScoreable(testId: string) {
+  private async computeTestAssignability(
+    testId: string,
+  ): Promise<AssignabilityReport> {
     const questions = await this.prisma.question.findMany({
       where: { testId },
       select: {
@@ -243,16 +291,23 @@ export class TestsService {
         type: true,
         correctAnswer: true,
         correctAnswers: true,
+        score: true,
+        options: {
+          select: { text: true },
+        },
       },
     });
-    if (questions.length === 0) {
-      throw new BadRequestException('Test has no questions');
-    }
-    const unscorable = questions.filter((q) => !this.isQuestionScoreable(q));
-    if (unscorable.length > 0) {
-      throw new BadRequestException({
-        message: 'Test contains unscorable questions',
-        questionIds: unscorable.map((q) => q.id),
+    return computeAssignability(questions);
+  }
+
+  private throwIfNotAssignable(report: AssignabilityReport): void {
+    if (!report.isAssignable) {
+      throw new ConflictException({
+        errorCode: 'TEST_NOT_ASSIGNABLE',
+        code: 'TEST_NOT_ASSIGNABLE',
+        message: 'Test is not assignable',
+        reasons: report.reasons,
+        details: report,
       });
     }
   }
@@ -279,18 +334,7 @@ export class TestsService {
     });
 
     if (!author) {
-      if (isSuper) {
-        author = await this.prisma.membership.create({
-          data: {
-            organizationId: dto.organizationId,
-            userId: user.userId,
-            role: OrganizationRole.DIRECTOR, // nebo TEACHER – na politice nezáleží, musí existovat membership
-          },
-          select: { id: true },
-        });
-      } else {
-        throw new ForbiddenException('Nejste členem organizace.');
-      }
+      throw new ForbiddenException('Nejste členem organizace.');
     }
 
     if (dto.status === PublishStatus.PUBLISHED) {
@@ -299,11 +343,14 @@ export class TestsService {
       );
     }
 
+    const orgSubjectId = await this.resolveOrgSubjectId(dto.subjectId, dto.organizationId);
+
     const created = await this.prisma.test.create({
       data: {
         title: dto.title,
         description: dto.description ?? null,
         organizationId: dto.organizationId,
+        orgSubjectId,
         status: dto.status ?? PublishStatus.DRAFT,
         creatorId: author.id,
       },
@@ -332,24 +379,32 @@ export class TestsService {
 
     const isSuper = user.systemRole === SystemRole.SUPERADMIN;
 
-    // ⬇️ dřív: non-super bral jen user.organizationId a query ignoroval
     const effectiveOrgId = isSuper
       ? (q.organizationId ?? null)
-      : (q.organizationId ?? user.organizationId ?? null);
+      : (user.organizationId ?? null);
 
     if (!isSuper) {
       if (!effectiveOrgId) {
         throw new ForbiddenException('Missing organization context.');
       }
-      // ověř, že uživatel je členem dané org
-      const member = await this.prisma.membership.findFirst({
-        where: {
-          userId: user.userId,
-          organizationId: effectiveOrgId,
-          deletedAt: null,
-        },
-        select: { id: true },
-      });
+      const member = user.membershipId
+        ? await this.prisma.membership.findFirst({
+            where: {
+              id: user.membershipId,
+              userId: user.userId,
+              organizationId: effectiveOrgId,
+              deletedAt: null,
+            },
+            select: { id: true },
+          })
+        : await this.prisma.membership.findFirst({
+            where: {
+              userId: user.userId,
+              organizationId: effectiveOrgId,
+              deletedAt: null,
+            },
+            select: { id: true },
+          });
       if (!member) {
         throw new ForbiddenException('Access denied');
       }
@@ -405,20 +460,41 @@ export class TestsService {
     });
     if (!t) throw new NotFoundException('Test nenalezen');
 
-    if (user.systemRole === SystemRole.SUPERADMIN) return t;
+    const assignability = await this.computeTestAssignability(id);
 
-    // ⬇️ dřív: if (t.organizationId !== user.organizationId) -> 403
-    const member = await this.prisma.membership.findFirst({
-      where: {
-        userId: user.userId,
-        organizationId: t.organizationId,
-        deletedAt: null,
-      },
-      select: { id: true },
-    });
+    if (user.systemRole === SystemRole.SUPERADMIN) {
+      return { ...t, assignability };
+    }
+
+    if (!user.organizationId || user.organizationId !== t.organizationId) {
+      throw new NotFoundException('Test nenalezen');
+    }
+
+    const member = user.membershipId
+      ? await this.prisma.membership.findFirst({
+          where: {
+            id: user.membershipId,
+            userId: user.userId,
+            organizationId: user.organizationId,
+            deletedAt: null,
+          },
+          select: { id: true },
+        })
+      : await this.prisma.membership.findFirst({
+          where: {
+            userId: user.userId,
+            organizationId: user.organizationId,
+            deletedAt: null,
+          },
+          select: { id: true },
+        });
     if (!member) throw new ForbiddenException('Cizí organizace.');
 
-    return t;
+    const payload = { ...t, assignability } as Record<string, unknown>;
+    if (user.organizationRole === OrganizationRole.STUDENT) {
+      return this.sanitizeForStudentTestDetail(payload);
+    }
+    return payload;
   }
   async update(id: string, dto: UpdateTestDto, user: JwtPayload): Promise<unknown> {
     const current = await this.prisma.test.findUnique({
@@ -433,10 +509,30 @@ export class TestsService {
     if (!current || current.deletedAt)
       throw new NotFoundException('Test nenalezen');
 
+    if (
+      user.systemRole !== SystemRole.SUPERADMIN &&
+      user.organizationId !== current.organizationId
+    ) {
+      throw new NotFoundException('Test nenalezen');
+    }
+
     await this.ensureCanEditTest(user, current);
 
     if (dto.status === PublishStatus.PUBLISHED) {
-      await this.ensureTestScoreable(id);
+      if (current.organizationId) {
+        const readiness = await deriveOrgReadiness(this.prisma, current.organizationId);
+        if (!readiness.canExecute) {
+          throw createOrgReadinessError({
+            operationType: OrgOperationType.EXECUTION,
+            state: readiness.state,
+            missing: readiness.missing,
+            requiredMinState: OrgReadinessState.R2_STRUCTURE_READY,
+            messageOverride: 'Organization must have a current year and at least one class section before publishing tests.',
+          });
+        }
+      }
+      const report = await this.computeTestAssignability(id);
+      this.throwIfNotAssignable(report);
     }
 
     const updateData: Prisma.TestUncheckedUpdateInput = {};
@@ -448,6 +544,9 @@ export class TestsService {
     }
     if (dto.status !== undefined) {
       updateData.status = dto.status;
+    }
+    if (dto.subjectId !== undefined) {
+      updateData.orgSubjectId = await this.resolveOrgSubjectId(dto.subjectId, current.organizationId);
     }
 
     const updated = await this.prisma.test.update({
@@ -484,6 +583,13 @@ export class TestsService {
     if (!current || current.deletedAt)
       throw new NotFoundException('Test nenalezen');
 
+    if (
+      user.systemRole !== SystemRole.SUPERADMIN &&
+      user.organizationId !== current.organizationId
+    ) {
+      throw new NotFoundException('Test nenalezen');
+    }
+
     if (user.systemRole !== SystemRole.SUPERADMIN) {
       if (
         user.organizationId !== current.organizationId ||
@@ -519,30 +625,57 @@ export class TestsService {
   ): Promise<unknown> {
     const test = await this.prisma.test.findUnique({
       where: { id: testId, deletedAt: null },
-      select: { id: true, organizationId: true },
+      select: {
+        id: true,
+        organizationId: true,
+        subject: {
+          select: { id: true, gradeFrom: true, gradeTo: true },
+        },
+        questions: {
+          select: {
+            id: true,
+            type: true,
+            correctAnswer: true,
+            correctAnswers: true,
+            score: true,
+          },
+        },
+      },
     });
     if (!test) throw new NotFoundException('Test nenalezen');
 
-    await this.ensureTestScoreable(test.id);
+    const report = await this.computeTestAssignability(test.id);
+    this.throwIfNotAssignable(report);
 
     if (user.systemRole !== SystemRole.SUPERADMIN) {
       if (!user.organizationId || user.organizationId !== test.organizationId) {
-        throw new ForbiddenException('Cizí organizace');
+        throw new NotFoundException('Test nenalezen');
       }
     }
 
-    const organizationId = dto.organizationId ?? test.organizationId;
+    const organizationId = test.organizationId;
 
-    if (organizationId !== test.organizationId) {
-      throw new ForbiddenException('Test a assignment musí být ve stejné org');
+    if (dto.organizationId && dto.organizationId !== organizationId) {
+      throw new ForbiddenException('Invalid org scope for test assignment');
     }
 
     const classSection = await this.prisma.classSection.findUnique({
       where: { id: dto.classSectionId },
-      select: { id: true, orgId: true, yearId: true },
+      select: { id: true, orgId: true, yearId: true, grade: true },
     });
     if (!classSection || classSection.orgId !== organizationId) {
-      throw new BadRequestException('Class section neexistuje nebo cizí org');
+      throw new NotFoundException('Class section nenalezena');
+    }
+
+    if (test.subject) {
+      const gradeNum = SCHOOL_GRADE_TO_NUM[classSection.grade];
+      if (gradeNum < test.subject.gradeFrom || gradeNum > test.subject.gradeTo) {
+        throw new BadRequestException({
+          code: 'SUBJECT_GRADE_MISMATCH',
+          message:
+            'Test nelze přiřadit této třídě – předmět není určen pro daný ročník.',
+        });
+      }
     }
 
     const creatorMembership = await this.prisma.membership.findFirst({
@@ -602,7 +735,7 @@ export class TestsService {
 
     if (user.systemRole !== SystemRole.SUPERADMIN) {
       if (!user.organizationId || user.organizationId !== test.organizationId) {
-        throw new ForbiddenException('Cizí organizace');
+        throw new NotFoundException('Test nenalezen');
       }
     }
 
@@ -696,6 +829,7 @@ export class TestsService {
         text: dto.text,
         type: dto.type,
         order: dto.order ?? 0,
+        score: dto.score ?? 1,
         correctAnswer: answers.correctAnswer ?? null,
         correctAnswers: answers.correctAnswers ?? [],
       },
@@ -749,6 +883,9 @@ export class TestsService {
     }
     if (dto.order !== undefined) {
       questionUpdate.order = dto.order;
+    }
+    if (dto.score !== undefined) {
+      questionUpdate.score = dto.score;
     }
     if (answers.correctAnswer !== undefined) {
       questionUpdate.correctAnswer = answers.correctAnswer;

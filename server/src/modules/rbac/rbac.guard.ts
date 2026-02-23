@@ -38,12 +38,7 @@ export class RbacGuard implements CanActivate {
       return true;
     }
 
-    const organizationId =
-      req.params?.organizationId ??
-      req.query?.organizationId ??
-      req.body?.organizationId ??
-      user.organizationId ??
-      null;
+    const organizationId = user.organizationId ?? null;
 
     const evaluations = await Promise.all(
       permissions.map(async (permission) => ({

@@ -46,7 +46,7 @@ export default function SelectOrganizationPage(): React.JSX.Element {
                 {membership.role.toLowerCase()}
               </Badge>
               <Button
-                onClick={() => switchOrganization(membership.organizationId)}
+                onClick={() => switchOrganization(membership.id)}
                 disabled={isLoading}
               >
                 Použít

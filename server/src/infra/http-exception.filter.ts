@@ -9,13 +9,17 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const ctx = host.switchToHttp();
     const res = ctx.getResponse();
 
-    // 1) už je to HttpException → vrať jak je
+    // 1) HttpException → return as-is, but 429 uses generic message (no leak)
     if (exception instanceof HttpException) {
       const status = exception.getStatus();
       const response = exception.getResponse();
-      return res
-        .status(status)
-        .json(typeof response === 'string' ? { message: response } : response);
+      const body =
+        status === 429
+          ? { statusCode: 429, message: 'Operace se nezdařila.' }
+          : typeof response === 'string'
+            ? { message: response }
+            : response;
+      return res.status(status).json(body);
     }
 
     // 2) Zod → 400
@@ -38,6 +42,17 @@ export class HttpExceptionFilter implements ExceptionFilter {
         });
       }
       if (code === 'P2003') {
+        const metaText = JSON.stringify(exception.meta ?? {}).toLowerCase();
+        const isYearMismatchConstraint =
+          metaText.includes('class_section_id') &&
+          metaText.includes('academic_year_id');
+        if (isYearMismatchConstraint) {
+          return res.status(HttpStatus.CONFLICT).json({
+            statusCode: 409,
+            errorCode: 'YEAR_MISMATCH',
+            message: 'Year invariant violation',
+          });
+        }
         return res.status(HttpStatus.BAD_REQUEST).json({
           statusCode: 400,
           message: 'Foreign key constraint failed',
