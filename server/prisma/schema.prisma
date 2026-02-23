@@ -17,7 +17,9 @@ model User {
   preferredLang     String?            @map("preferred_lang") @db.VarChar(10)
   systemRole        SystemRole?        @map("system_role")
   status            UserStatus         @default(ACTIVE)
-  lastLoginAt       DateTime?          @map("last_login_at")
+  lastLoginAt         DateTime?          @map("last_login_at")
+  passwordChangedAt   DateTime?          @map("password_changed_at")
+  tokenVersion        Int                @default(0) @map("token_version")
   lastActiveMembershipId String?       @unique @map("last_active_membership_id")
   createdAt         DateTime           @default(now()) @map("created_at")
   updatedAt         DateTime           @updatedAt @map("updated_at")
@@ -29,9 +31,10 @@ model User {
   auditLogs         AuditLog[]
   materialPurchases MaterialPurchase[]
   memberships       Membership[]
-  refreshTokens     RefreshToken[]
-  revokedTokens     RevokedToken[]
-  userPermissions   UserPermission[]
+  refreshTokens       RefreshToken[]
+  revokedTokens      RevokedToken[]
+  passwordResetTokens PasswordResetToken[]
+  userPermissions     UserPermission[]
   lastActiveMembership Membership?     @relation("LastActiveMembership", fields: [lastActiveMembershipId], references: [id], onDelete: SetNull)
   ownedOrganizations   Organization[]   @relation("OrganizationOwner")
 
@@ -67,11 +70,15 @@ model Organization {
   rolePermissions   RolePermission[]
   students          Student[]
   subjects          Subject[]
+  orgSubjects       OrgSubject[]
   subscriptions     Subscription[]
   teachers          Teacher[]
   tests             Test[]
   userPermissions   UserPermission[]
   invitations       Invitation[]
+  invites           Invite[]
+  promotionLogs     PromotionLog[]
+  submissions       Submission[]
 
   @@index([name])
   @@index([city])
@@ -275,6 +282,21 @@ model RevokedToken {
   @@map("revoked_tokens")
 }
 
+model PasswordResetToken {
+  id        String   @id @default(uuid()) @map("password_reset_token_id")
+  tokenHash String   @unique @map("token_hash") @db.VarChar(64)
+  userId    String   @map("user_id")
+  expiresAt DateTime @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@map("password_reset_tokens")
+}
+
 model AuditLog {
   id             String          @id @default(uuid()) @map("audit_log_id")
   userId         String?         @map("user_id")
@@ -313,6 +335,7 @@ model AnalyticsEvent {
   @@map("analytics_events")
 }
 
+/// @deprecated Legacy invite model. Use Invite instead.
 model Invitation {
   id                    String         @id @default(uuid()) @map("invitation_id")
   organizationId        String         @map("organization_id")
@@ -322,6 +345,9 @@ model Invitation {
   yearId                String?        @map("academic_year_id")
   code                  String         @unique @db.VarChar(64)
   expiresAt             DateTime       @map("expires_at")
+  maxUses               Int            @default(1) @map("max_uses")
+  usedCount             Int            @default(0) @map("used_count")
+  revokedAt             DateTime?      @map("revoked_at")
   createdAt             DateTime       @default(now()) @map("created_at")
   createdByMembershipId String?        @map("created_by_membership_id")
   organization          Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -331,6 +357,30 @@ model Invitation {
   @@index([organizationId])
   @@index([code])
   @@map("invitations")
+}
+
+model Invite {
+  id             String           @id @default(uuid()) @map("invite_id")
+  organizationId String           @map("organization_id")
+  type           InvitationType   @default(ORG_ONLY)
+  token          String           @unique @db.VarChar(64)
+  code           String?          @unique @db.VarChar(64)
+  role           OrganizationRole
+  classSectionId String?          @map("class_section_id")
+  yearId         String?          @map("academic_year_id")
+  expiresAt      DateTime         @map("expires_at")
+  maxUses        Int              @default(1) @map("max_uses")
+  usedCount      Int              @default(0) @map("used_count")
+  revokedAt      DateTime?        @map("revoked_at")
+  createdAt      DateTime         @default(now()) @map("created_at")
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  classSection   ClassSection?    @relation(fields: [classSectionId], references: [id], onDelete: Cascade)
+  academicYear   AcademicYear?    @relation(fields: [yearId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([classSectionId])
+  @@index([yearId])
+  @@map("invites")
 }
 
 enum InvitationType {
@@ -351,9 +401,28 @@ model AcademicYear {
   classSections ClassSection[]
   enrollments   Enrollment[]
   invitations   Invitation[]
+  invites       Invite[]
 
   @@unique([orgId, label])
   @@map("academic_years")
+}
+
+model PromotionLog {
+  id                    String   @id @default(uuid()) @map("promotion_log_id")
+  organizationId        String   @map("organization_id")
+  fromYearId            String   @map("from_year_id")
+  toYearId              String   @map("to_year_id")
+  executedAt            DateTime @default(now()) @map("executed_at")
+  executedBy            String   @map("executed_by")
+  classesCreatedCount   Int      @default(0) @map("classes_created_count")
+  studentsMigratedCount Int      @default(0) @map("students_migrated_count")
+  enrollmentsSkippedCount Int    @default(0) @map("enrollments_skipped_count")
+  skippedClassesCount   Int      @default(0) @map("skipped_classes_count")
+  durationMs            Int      @default(0) @map("duration_ms")
+  organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, fromYearId])
+  @@map("promotion_logs")
 }
 
 model ClassSection {
@@ -370,11 +439,15 @@ model ClassSection {
   organization      Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
   teacher           Teacher?           @relation("Homeroom", fields: [teacherId], references: [id])
   enrollments       Enrollment[]
+  orgSubjects       ClassSectionOrgSubject[]
   studentClassrooms StudentClassroom[]
   invitations       Invitation[]
+  invites           Invite[]
 
   @@unique([orgId, yearId, grade, section])
+  @@unique([id, yearId])
   @@index([orgId, grade])
+  @@index([orgId, yearId])
   @@map("class_sections")
 }
 
@@ -417,7 +490,7 @@ model Enrollment {
   status         EnrollmentStatus @default(ACTIVE)
   createdAt      DateTime         @default(now()) @map("created_at")
   academicYear   AcademicYear     @relation(fields: [yearId], references: [id], onDelete: Cascade)
-  classSection   ClassSection     @relation(fields: [classSectionId], references: [id], onDelete: Cascade)
+  classSection   ClassSection     @relation(fields: [classSectionId, yearId], references: [id, yearId], onDelete: Restrict)
   student        Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
   organization   Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
@@ -425,6 +498,7 @@ model Enrollment {
   @@index([studentId, yearId])
   @@index([classSectionId])
   @@index([orgId])
+  @@index([orgId, yearId])
   @@map("enrollments")
 }
 
@@ -594,9 +668,40 @@ model MaterialPurchase {
   @@map("material_purchases")
 }
 
+model OrgSubject {
+  id              String   @id @default(uuid()) @map("org_subject_id")
+  name            String
+  gradeFrom       Int      @map("grade_from")
+  gradeTo         Int      @map("grade_to")
+  organizationId  String   @map("organization_id")
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  classSections   ClassSectionOrgSubject[]
+  tests           Test[]
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([organizationId])
+  @@unique([organizationId, name, gradeFrom, gradeTo])
+  @@map("org_subjects")
+}
+
+model ClassSectionOrgSubject {
+  id             String       @id @default(uuid()) @map("class_section_org_subject_id")
+  classSectionId String       @map("class_section_id")
+  orgSubjectId   String       @map("org_subject_id")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  classSection   ClassSection @relation(fields: [classSectionId], references: [id], onDelete: Cascade)
+  orgSubject     OrgSubject   @relation(fields: [orgSubjectId], references: [id], onDelete: Cascade)
+
+  @@unique([classSectionId, orgSubjectId])
+  @@index([orgSubjectId])
+  @@map("class_section_org_subjects")
+}
+
 model Test {
   id                   String           @id @default(uuid()) @map("test_id")
   organizationId       String           @map("organization_id")
+  orgSubjectId         String?          @map("org_subject_id")
   title                String
   description          String?
   version              Int              @default(1)
@@ -612,6 +717,7 @@ model Test {
   assignments          TestAssignment[]
   creator              Membership       @relation(fields: [creatorId], references: [id], onDelete: Cascade)
   organization         Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  subject              OrgSubject?     @relation(fields: [orgSubjectId], references: [id], onDelete: SetNull)
 
   @@map("tests")
 }
@@ -666,25 +772,29 @@ model Answer {
 }
 
 model Submission {
-  id           String           @id @default(uuid()) @map("submission_id")
-  studentId    String           @map("student_id")
-  testId       String           @map("test_id")
-  score        Float?
-  status       SubmissionStatus @default(PENDING)
-  submittedAt  DateTime?        @map("submitted_at")
-  deletedAt    DateTime?        @map("deleted_at")
-  assignmentId String           @map("assignment_id")
-  attemptNo    Int              @default(1) @map("attempt_no")
-  createdAt    DateTime         @default(now()) @map("created_at")
-  updatedAt    DateTime         @updatedAt @map("updated_at")
-  isAnonymous  Boolean          @default(false)
-  responses    Response[]
-  assignment   Assignment      @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
-  student      Membership       @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  test         Test             @relation(fields: [testId], references: [id], onDelete: Cascade)
+  id             String           @id @default(uuid()) @map("submission_id")
+  organizationId String           @map("organization_id")
+  studentId      String           @map("student_id")
+  testId         String           @map("test_id")
+  score          Float?
+  status         SubmissionStatus @default(PENDING)
+  submittedAt    DateTime?        @map("submitted_at")
+  deletedAt      DateTime?        @map("deleted_at")
+  assignmentId   String           @map("assignment_id")
+  attemptNo      Int              @default(1) @map("attempt_no")
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
+  isAnonymous    Boolean          @default(false)
+  responses      Response[]
+  assignment     Assignment      @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  student        Membership       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  test           Test             @relation(fields: [testId], references: [id], onDelete: Cascade)
 
-  @@unique([assignmentId, studentId, attemptNo])
+  @@unique([organizationId, studentId, assignmentId, attemptNo])
   @@index([assignmentId])
+  @@index([organizationId])
+  @@index([studentId, assignmentId])
   @@index([testId, status])
   @@index([studentId, submittedAt])
   @@map("submissions")
@@ -700,6 +810,8 @@ model Response {
   explanation   String?
   attemptNumber Int        @default(1) @map("attempt_number")
   corrected     Boolean?   @default(false)
+  createdAt     DateTime   @default(now()) @map("created_at")
+  updatedAt     DateTime   @updatedAt @map("updated_at")
   question      Question   @relation(fields: [questionId], references: [id], onDelete: Cascade)
   submission    Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
 
@@ -795,7 +907,7 @@ model Assignment {
   createdAt      DateTime            @default(now()) @map("created_at")
   students       AssignmentStudent[]
   academicYear   AcademicYear        @relation(fields: [yearId], references: [id], onDelete: Cascade)
-  classSection   ClassSection?       @relation(fields: [classSectionId], references: [id])
+  classSection   ClassSection?       @relation(fields: [classSectionId, yearId], references: [id, yearId], onDelete: Restrict)
   createdBy      Membership          @relation("AssignmentCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
   organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   test           Test                @relation("TestToAssignments", fields: [testId], references: [id], onDelete: Cascade)
@@ -856,6 +968,15 @@ enum PermissionKey {
   VIEW_ANALYTICS
   INVITE_STUDENTS
   INVITE_TEACHERS
+  // Refined semantics (additive; see docs/PERMISSION_MATRIX_REFINEMENT.md)
+  VIEW_TEST_OVERVIEW
+  MANAGE_TESTS
+  ASSIGN_TESTS
+  VIEW_SUBMISSIONS
+  MANAGE_ASSIGNMENTS
+  VIEW_OWN_ASSIGNMENTS
+  VIEW_CLASS_ASSIGNMENTS
+  VIEW_ORG_ASSIGNMENTS
 }
 
 enum QuestionType {
@@ -932,6 +1053,7 @@ enum AuditEntityType {
   TEST
   LEARNING_MATERIAL
   PERMISSION
+  STUDENT
 }
 
 enum PublishStatus {
