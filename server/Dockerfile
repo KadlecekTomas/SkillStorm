@@ -6,6 +6,7 @@ FROM node:20-slim AS deps
 WORKDIR /app
 COPY package*.json ./
 COPY prisma ./prisma
+RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 RUN npm ci
 
 FROM node:20-slim AS builder
@@ -14,6 +15,14 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build
 RUN npm prune --omit=dev
+
+# Stage for running full-walkthrough seed (needs ts-node + source)
+FROM deps AS seed-runner
+WORKDIR /app
+COPY . .
+RUN npx prisma generate
+# Default: run full seed (override in compose if needed)
+CMD ["npx", "ts-node", "prisma/seed/full-walkthrough-seed.ts"]
 
 FROM node:20-slim AS runner
 WORKDIR /app

@@ -20,6 +20,19 @@ const nextConfig: NextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  // Closed beta: noindex in production so search engines do not index
+  async headers() {
+    if (process.env.NODE_ENV !== "production") return [];
+    return [
+      {
+        source: "/:path*",
+        headers: [{ key: "X-Robots-Tag", value: "noindex" }],
+      },
+    ];
+  },
+  env: {
+    NEXT_PUBLIC_BETA_MODE: process.env.BETA_MODE ?? "",
+  },
   async rewrites() {
     const target = getApiProxyTarget();
     return [

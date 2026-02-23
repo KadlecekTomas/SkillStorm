@@ -39,6 +39,24 @@ services:
     networks:
       - app
 
+  # One-off: spustí full walkthrough seed (npm run seed:full). Po dokončení kontejner skončí.
+  # Použití: docker compose --profile dev up -d postgres && docker compose --profile dev run --rm seed-full
+  seed-full:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+      target: seed-runner
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-skillstorm}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles: ["dev", "staging", "prod"]
+    networks:
+      - app
+
   backend:
     build:
       context: ./server
@@ -51,7 +69,8 @@ services:
       NODE_ENV: ${NODE_ENV:-production}
       PORT: 4200
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-skillstorm}
-      JWT_SECRET: ${JWT_SECRET:-change-me}
+      # No default: container must fail if JWT_SECRET not set (production safety).
+      JWT_SECRET: ${JWT_SECRET}
       REDIS_URL: redis://redis:6379
     depends_on:
       postgres:
