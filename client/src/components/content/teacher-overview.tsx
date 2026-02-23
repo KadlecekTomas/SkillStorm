@@ -53,11 +53,11 @@ export const TeacherOverview = ({
           size="icon"
           className="rounded-2xl"
           onClick={() => {
-            console.log("CLICKED: teacher insight cta");
             if (actions[0]) {
               navigate(actions[0].href, actions[0].label);
             }
           }}
+          aria-label={actions[0]?.label ?? "Přejít"}
         >
           <ArrowUpRight className="h-4 w-4" />
         </Button>
@@ -68,10 +68,7 @@ export const TeacherOverview = ({
             key={action.label}
             variant="ghost"
             className="rounded-full border border-slate-200 px-4 py-2 text-xs"
-            onClick={() => {
-              console.log("CLICKED:", action.label);
-              navigate(action.href, action.label);
-            }}
+            onClick={() => navigate(action.href, action.label)}
           >
             {action.label}
           </Button>

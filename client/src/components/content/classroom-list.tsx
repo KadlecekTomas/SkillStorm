@@ -85,21 +85,21 @@ export const ClassroomList = ({
                 </p>
               </div>
               <div className="flex items-center justify-between text-xs text-slate-500">
-                <span>Updated {classroom.updatedAt ?? "just now"}</span>
+                <span>Upraveno {classroom.updatedAt ?? "právě teď"}</span>
                 <Button
                   variant="ghost"
                   size="sm"
                   className="rounded-full px-3"
                   onClick={() => {
-                    console.log("CLICKED: manage classroom", classroom.id);
                     if (onManage) {
                       onManage(classroom);
                     } else {
-                      router.push("/dashboard/classrooms");
+                      router.push("/app/classrooms");
                     }
                   }}
+                  aria-label="Spravovat třídu"
                 >
-                  Manage
+                  Spravovat
                 </Button>
               </div>
             </Card>

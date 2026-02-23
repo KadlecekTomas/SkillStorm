@@ -23,7 +23,14 @@ type UseAcademicYearsResult = {
   setSelectedYear: (yearId: string) => void;
 };
 
-export const useAcademicYears = (): UseAcademicYearsResult => {
+type UseAcademicYearsOptions = {
+  enabled?: boolean;
+};
+
+export const useAcademicYears = (
+  options: UseAcademicYearsOptions = {},
+): UseAcademicYearsResult => {
+  const enabled = options.enabled ?? true;
   const { org } = useAuth();
   const orgId = org?.id ?? null;
   const [years, setYears] = useState<AcademicYear[]>([]);
@@ -40,7 +47,7 @@ export const useAcademicYears = (): UseAcademicYearsResult => {
   const selectedYearId = orgId ? selectedByOrg[orgId] ?? null : null;
 
   const refresh = useCallback(async () => {
-    if (!orgId) {
+    if (!enabled || !orgId) {
       setYears([]);
       setError(null);
       setStatus("loading");
@@ -76,10 +83,10 @@ export const useAcademicYears = (): UseAcademicYearsResult => {
         setLoading(false);
       }
     }
-  }, [orgId]);
+  }, [enabled, orgId]);
 
   useEffect(() => {
-    if (!orgId) {
+    if (!enabled || !orgId) {
       setYears([]);
       setCurrentYear(null);
       setError(null);
@@ -88,18 +95,17 @@ export const useAcademicYears = (): UseAcademicYearsResult => {
       return;
     }
     void refresh();
-  }, [orgId, refresh]);
+  }, [enabled, orgId, refresh]);
 
   useEffect(() => {
-    if (!orgId) return;
-    if (currentYear && selectedYearId === currentYear.id) return;
+    if (!enabled || !orgId) return;
     if (selectedYearId && years.length > 0 && !years.some((year) => year.id === selectedYearId)) {
       clearOrg(orgId);
     }
-  }, [orgId, selectedYearId, years, currentYear, clearOrg]);
+  }, [enabled, orgId, selectedYearId, years, clearOrg]);
 
   useEffect(() => {
-    if (!orgId) return;
+    if (!enabled || !orgId) return;
     setBootstrapState("LOADING");
     setCurrentYear(null);
     let cancelled = false;
@@ -108,7 +114,11 @@ export const useAcademicYears = (): UseAcademicYearsResult => {
       .then((current) => {
         if (cancelled) return;
         setCurrentYear(current);
-        setSelected(activeOrgId, current.id);
+        const selectedForOrg =
+          useAcademicYearStore.getState().selectedByOrg[activeOrgId] ?? null;
+        if (!selectedForOrg) {
+          setSelected(activeOrgId, current.id);
+        }
         setYearConfigError(null);
         setBootstrapState("READY");
       })
@@ -129,10 +139,12 @@ export const useAcademicYears = (): UseAcademicYearsResult => {
     return () => {
       cancelled = true;
     };
-  }, [orgId, setSelected, clearOrg]);
+  }, [enabled, orgId, setSelected, clearOrg]);
 
-  const effectiveSelectedYear = useMemo((): AcademicYear | null => {
+  const activeYear = useMemo((): AcademicYear | null => {
     if (bootstrapState !== "READY" || !currentYear || !orgId) return null;
+    const found = years.find((year) => year.id === currentYear.id);
+    if (found) return found;
     return {
       id: currentYear.id,
       name: currentYear.name,
@@ -142,18 +154,29 @@ export const useAcademicYears = (): UseAcademicYearsResult => {
       isActive: true,
       createdAt: "",
     };
-  }, [bootstrapState, currentYear, orgId]);
-  const activeYear = effectiveSelectedYear;
+  }, [bootstrapState, currentYear, orgId, years]);
+
+  const effectiveSelectedYear = useMemo((): AcademicYear | null => {
+    if (bootstrapState !== "READY" || !orgId || !currentYear) return null;
+    const resolvedSelectedId = selectedYearId ?? currentYear.id;
+    const selectedFromList = years.find((year) => year.id === resolvedSelectedId);
+    if (selectedFromList) return selectedFromList;
+    if (resolvedSelectedId === currentYear.id) {
+      return activeYear;
+    }
+    return null;
+  }, [bootstrapState, orgId, currentYear, selectedYearId, years, activeYear]);
+
   const isReadOnly = effectiveSelectedYear ? !effectiveSelectedYear.isActive : false;
 
   const setSelectedYearId = useCallback(
     (yearId: string) => {
-      if (!orgId) return;
+      if (!enabled || !orgId) return;
       if (bootstrapState !== "READY") return;
       if (yearConfigError) return;
       setSelected(orgId, yearId);
     },
-    [orgId, setSelected, yearConfigError, bootstrapState],
+    [enabled, orgId, setSelected, yearConfigError, bootstrapState],
   );
 
   return {

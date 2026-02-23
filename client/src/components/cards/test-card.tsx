@@ -1,29 +1,73 @@
 "use client";
 
+import { useState } from "react";
 import { Card, CardHeader, CardContent, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import type { TestSummary } from "@/types";
+import type { TestAssignmentSummary } from "@/hooks/use-test-assignments";
 import { motion } from "framer-motion";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Pencil, Send, Users, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { fetchWithAuth } from "@/lib/http/client";
 
 type TestCardProps = {
   test: TestSummary;
+  assignmentSummary?: TestAssignmentSummary | null;
   onView?: (testId: string) => void;
+  onAssign?: (testId: string) => void;
+  onStatusChange?: () => void;
 };
 
-export const TestCard = ({ test, onView }: TestCardProps): React.JSX.Element => {
+const statusLabel: Record<string, string> = {
+  DRAFT: "Koncept",
+  PUBLISHED: "Publikováno",
+  ARCHIVED: "Archivováno",
+};
+
+function assignmentBadgeText(summary: TestAssignmentSummary | null | undefined): string {
+  if (!summary || summary.count === 0) return "Nepřiřazen";
+  if (summary.count === 1) {
+    const label = summary.singleClassLabel ?? "1 třída";
+    return summary.activeCount > 0 ? `Zadán: ${label} (aktivní)` : `Zadán: ${label}`;
+  }
+  return summary.activeCount > 0 ? `Zadán ${summary.count} třídám (aktivní)` : `Zadán ${summary.count} třídám`;
+}
+
+export const TestCard = ({ test, assignmentSummary, onView, onAssign, onStatusChange }: TestCardProps): React.JSX.Element => {
   const router = useRouter();
+  const [publishLoading, setPublishLoading] = useState(false);
+
   const handleView = (): void => {
-    console.log("CLICKED: test card", test.id);
     if (onView) {
       onView(test.id);
       return;
     }
-    router.push(`/dashboard/tests?test=${test.id}`);
+    router.push(`/app/tests/${test.id}`);
   };
+
+  const handleEdit = () => handleView();
+
+  const handlePublishUnpublish = async () => {
+    const next = test.status === "PUBLISHED" ? "DRAFT" : "PUBLISHED";
+    setPublishLoading(true);
+    try {
+      await fetchWithAuth("PATCH", `/tests/${test.id}`, { body: { status: next } });
+      onStatusChange?.();
+    } finally {
+      setPublishLoading(false);
+    }
+  };
+
+  const handleAssign = () => {
+    if (onAssign) {
+      onAssign(test.id);
+    } else {
+      router.push(`/app/tests/${test.id}/assign`);
+    }
+  };
+
   return (
     <motion.div whileHover={{ y: -4 }}>
       <Card>
@@ -31,16 +75,43 @@ export const TestCard = ({ test, onView }: TestCardProps): React.JSX.Element => 
           <div className="space-y-1">
             <CardTitle>{test.title}</CardTitle>
             <p className="text-sm text-slate-500">
-              {test.subject ?? "General subject"}
+              {typeof test.subject === "string"
+                ? test.subject
+                : test.subject != null && typeof test.subject === "object" && "name" in test.subject
+                  ? test.subject.name
+                  : "General subject"}
             </p>
-            <Badge variant="neutral" className="capitalize">
-              {test.status.toLowerCase()}
+            <Badge variant="neutral" className="w-fit capitalize">
+              {statusLabel[test.status] ?? test.status.toLowerCase()}
+            </Badge>
+            <Badge variant="outline" className="w-fit text-slate-600">
+              {assignmentBadgeText(assignmentSummary)}
             </Badge>
           </div>
-          <Button variant="outline" size="sm" onClick={handleView}>
-            Details
-            <ArrowRight className="h-4 w-4" />
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" size="sm" onClick={handleEdit} className="gap-1">
+              <Pencil className="h-3.5 w-3.5" />
+              Upravit
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handlePublishUnpublish}
+              disabled={publishLoading}
+              className="gap-1"
+            >
+              {publishLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+              {test.status === "PUBLISHED" ? "Zrušit publikaci" : "Publikovat"}
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleAssign} className="gap-1">
+              <Users className="h-3.5 w-3.5" />
+              Přiřadit třídě
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleView}>
+              Detail
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="space-y-2">

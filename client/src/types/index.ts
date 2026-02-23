@@ -40,11 +40,19 @@ export type AcademicYear = {
   createdAt: string;
 };
 
+export type OrgSubject = {
+  id: string;
+  name: string;
+  gradeFrom: number;
+  gradeTo: number;
+  organizationId: string;
+};
+
 export type TestSummary = {
   id: string;
   title: string;
   description?: string | null;
-  subject?: string | null;
+  subject?: OrgSubject | null;
   status: PublishStatus;
   version: number;
   completionRate: number;

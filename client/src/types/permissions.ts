@@ -17,6 +17,15 @@ export enum PermissionKey {
   VIEW_ANALYTICS = "VIEW_ANALYTICS",
   INVITE_STUDENTS = "INVITE_STUDENTS",
   INVITE_TEACHERS = "INVITE_TEACHERS",
+  /** Refined: see docs/PERMISSION_MATRIX_REFINEMENT.md */
+  VIEW_TEST_OVERVIEW = "VIEW_TEST_OVERVIEW",
+  MANAGE_TESTS = "MANAGE_TESTS",
+  ASSIGN_TESTS = "ASSIGN_TESTS",
+  VIEW_SUBMISSIONS = "VIEW_SUBMISSIONS",
+  MANAGE_ASSIGNMENTS = "MANAGE_ASSIGNMENTS",
+  VIEW_OWN_ASSIGNMENTS = "VIEW_OWN_ASSIGNMENTS",
+  VIEW_CLASS_ASSIGNMENTS = "VIEW_CLASS_ASSIGNMENTS",
+  VIEW_ORG_ASSIGNMENTS = "VIEW_ORG_ASSIGNMENTS",
 }
 
 export const ROLE_PERMISSION_MATRIX: Record<
@@ -31,9 +40,20 @@ export const ROLE_PERMISSION_MATRIX: Record<
     PermissionKey.VIEW_RESULTS,
     PermissionKey.MANAGE_STUDENTS,
     PermissionKey.INVITE_STUDENTS,
+    PermissionKey.VIEW_TEST_OVERVIEW,
+    PermissionKey.MANAGE_TESTS,
+    PermissionKey.ASSIGN_TESTS,
+    PermissionKey.VIEW_SUBMISSIONS,
+    PermissionKey.VIEW_CLASS_ASSIGNMENTS,
+    PermissionKey.VIEW_OWN_ASSIGNMENTS,
   ],
-  STUDENT: [PermissionKey.VIEW_RESULTS],
-  PARENT: [PermissionKey.VIEW_RESULTS],
+  STUDENT: [
+    PermissionKey.VIEW_RESULTS,
+    PermissionKey.VIEW_TEST_OVERVIEW,
+    PermissionKey.VIEW_SUBMISSIONS,
+    PermissionKey.VIEW_OWN_ASSIGNMENTS,
+  ],
+  PARENT: [PermissionKey.VIEW_RESULTS, PermissionKey.VIEW_SUBMISSIONS],
 };
 
 export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
@@ -49,10 +69,10 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
 };
 
 export const roleHome: Record<OrganizationRole | "DEFAULT", string> = {
-  OWNER: "/dashboard/settings",
-  DIRECTOR: "/dashboard/settings",
-  TEACHER: "/dashboard/tests",
-  STUDENT: "/dashboard/results",
-  PARENT: "/dashboard/results",
-  DEFAULT: "/dashboard",
+  OWNER: "/app/settings",
+  DIRECTOR: "/app/settings",
+  TEACHER: "/app/tests",
+  STUDENT: "/app/results",
+  PARENT: "/app/results",
+  DEFAULT: "/app",
 };
