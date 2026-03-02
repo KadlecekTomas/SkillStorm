@@ -24,6 +24,11 @@ type MembershipSeed = {
 
 const MEMBERSHIPS: MembershipSeed[] = [
   {
+    email: USER_EMAILS.owner,
+    organizationId: ORG_IDS.chodovicka,
+    role: OrganizationRole.OWNER,
+  },
+  {
     email: USER_EMAILS.director,
     organizationId: ORG_IDS.chodovicka,
     role: OrganizationRole.DIRECTOR,
@@ -46,6 +51,11 @@ const MEMBERSHIPS: MembershipSeed[] = [
     role: OrganizationRole.STUDENT,
     asStudent: true,
   },
+  {
+    email: USER_EMAILS.parent,
+    organizationId: ORG_IDS.chodovicka,
+    role: OrganizationRole.PARENT,
+  },
 ];
 
 export async function seed(prisma: PrismaClient) {
@@ -58,6 +68,10 @@ export async function seed(prisma: PrismaClient) {
       email: USER_EMAILS.superadmin,
       name: 'SkillStorm Superadmin',
       systemRole: SystemRole.SUPERADMIN,
+    },
+    {
+      email: USER_EMAILS.owner,
+      name: 'Karel Majitel',
     },
     {
       email: USER_EMAILS.director,
@@ -74,6 +88,10 @@ export async function seed(prisma: PrismaClient) {
     {
       email: USER_EMAILS.student2,
       name: 'Petr Žák',
+    },
+    {
+      email: USER_EMAILS.parent,
+      name: 'Eva Rodiče',
     },
   ];
 

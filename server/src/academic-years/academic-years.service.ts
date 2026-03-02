@@ -13,6 +13,8 @@ import { Prisma, SystemRole } from '@prisma/client';
 
 /** Thrown when DB unique constraint prevents multiple current years (race or concurrent activate). */
 export const MULTIPLE_CURRENT_YEARS_FOR_ORG = 'MULTIPLE_CURRENT_YEARS_FOR_ORG';
+/** Thrown when create(isActive=true) is called while a non-deleted current year already exists. */
+export const CURRENT_YEAR_ALREADY_EXISTS = 'CURRENT_YEAR_ALREADY_EXISTS';
 
 /** Canonical: no academic year with isCurrent=true for the org. */
 export const NO_CURRENT_ACADEMIC_YEAR = 'NO_CURRENT_ACADEMIC_YEAR';
@@ -79,6 +81,21 @@ export class AcademicYearsService {
     const orgId = this.resolveOrgId(user);
     const { startDate: startsAt, endDate: endsAt, label } =
       deriveCzechSchoolYearFromStartYear(dto.startYear);
+
+    // Pre-flight guard: if caller explicitly requests isActive=true, reject when a
+    // non-deleted current year already exists. Use activate() to switch years instead.
+    if (dto.isActive === true) {
+      const existing = await this.prisma.academicYear.findFirst({
+        where: { orgId, isCurrent: true, deletedAt: null },
+        select: { id: true },
+      });
+      if (existing) {
+        throw new BadRequestException({
+          code: CURRENT_YEAR_ALREADY_EXISTS,
+          message: 'Organizace již má aktivní školní rok. Pro přepnutí použijte endpoint /activate.',
+        });
+      }
+    }
 
     let created;
     try {
@@ -237,5 +254,52 @@ export class AcademicYearsService {
         },
       });
     }
+  }
+
+  async createDefaultAcademicYearIfMissing(orgId: string): Promise<void> {
+    const existingCurrent = await this.prisma.academicYear.findFirst({
+      where: { orgId, isCurrent: true },
+      select: { id: true },
+    });
+    if (existingCurrent) return;
+
+    const now = new Date();
+    const month = now.getUTCMonth() + 1;
+    const year = now.getUTCFullYear();
+    const startYear = month >= 9 ? year : year - 1;
+    const endYear = startYear + 1;
+
+    const label = `${startYear}/${endYear}`;
+    const startsAt = new Date(`${startYear}-09-01T00:00:00.000Z`);
+    const endsAt = new Date(`${endYear}-08-31T23:59:59.999Z`);
+
+    await this.prisma.$transaction(async (tx) => {
+      const currentInTx = await tx.academicYear.findFirst({
+        where: { orgId, isCurrent: true },
+        select: { id: true },
+      });
+      if (currentInTx) return;
+
+      await tx.academicYear.updateMany({
+        where: { orgId },
+        data: { isCurrent: false },
+      });
+
+      await tx.academicYear.upsert({
+        where: { orgId_label: { orgId, label } },
+        create: {
+          orgId,
+          label,
+          startsAt,
+          endsAt,
+          isCurrent: true,
+        },
+        update: {
+          startsAt,
+          endsAt,
+          isCurrent: true,
+        },
+      });
+    });
   }
 }

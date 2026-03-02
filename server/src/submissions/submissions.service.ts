@@ -22,6 +22,8 @@ import { createOrgReadinessError } from '@/shared/errors/org-readiness.error';
 import { OrgOperationType } from '@/common/decorators/org-operation.decorator';
 import { GamificationService } from '@/gamification/gamification.service';
 import type { JwtPayload } from '@/auth/types/jwt-payload';
+import type { OrgContext } from '@/common/org-context/org-context.types';
+import { assertTenantWhere, withOrg } from '@/common/prisma/tenant-scope';
 
 type JwtUser = JwtPayload;
 
@@ -98,6 +100,21 @@ export class SubmissionsService {
         ...(teacher ? [{ classSection: { teacherId: teacher.id } }] : []),
       ],
     };
+  }
+
+  private async getMembershipFromCtx(ctx: OrgContext) {
+    const membership = await this.prisma.membership.findFirst({
+      where: {
+        id: ctx.membershipId,
+        organizationId: ctx.organizationId,
+        deletedAt: null,
+      },
+      select: { id: true, organizationId: true, role: true },
+    });
+    if (!membership) {
+      throw new ForbiddenException('Nemáš aktivní členství v organizaci.');
+    }
+    return membership;
   }
 
   private sanitizeSubmission(
@@ -190,7 +207,7 @@ export class SubmissionsService {
 
   // ---- API methods ---------------------------------------------------------
 
-  async create(dto: { assignmentId: string }, user: JwtUser) {
+  async create(dto: { assignmentId: string }, user: JwtUser, ctx?: OrgContext) {
     // 1) assignment + test + (při cílení na STUDENTS i seznam studentů)
     const assignment = await this.prisma.assignment.findUnique({
       where: { id: dto.assignmentId },
@@ -200,6 +217,9 @@ export class SubmissionsService {
       },
     });
     if (!assignment) throw new NotFoundException('Assignment nenalezen');
+    if (ctx && assignment.organizationId !== ctx.organizationId) {
+      throw new NotFoundException('Assignment nenalezen');
+    }
 
     // 1b) Org readiness >= R2 (invariant)
     const readiness = await deriveOrgReadiness(this.prisma, assignment.organizationId);
@@ -214,7 +234,9 @@ export class SubmissionsService {
     }
 
     // 2) membership studenta (nebo učitele – ale submission dává smysl pro STUDENTa)
-    const membership = await this.getActiveMembership(user);
+    const membership = ctx
+      ? await this.getMembershipFromCtx(ctx)
+      : await this.getActiveMembership(user);
     if (String(membership.role) !== 'STUDENT') {
       throw new ForbiddenException('Only students can create submissions.');
     }
@@ -315,8 +337,11 @@ export class SubmissionsService {
     id: string,
     dto: { responses?: RespInDto[] },
     user: JwtUser,
+    ctx?: OrgContext,
   ) {
-    const membership = await this.getActiveMembership(user);
+    const membership = ctx
+      ? await this.getMembershipFromCtx(ctx)
+      : await this.getActiveMembership(user);
     if (String(membership.role) !== 'STUDENT') {
       throw new ForbiddenException('Only students can update submissions.');
     }
@@ -391,9 +416,16 @@ export class SubmissionsService {
     return { success: true };
   }
 
-  async finish(id: string, dto: { responses?: RespInDto[] }, user: JwtUser) {
+  async finish(
+    id: string,
+    dto: { responses?: RespInDto[] },
+    user: JwtUser,
+    ctx?: OrgContext,
+  ) {
     const startMs = Date.now();
-    const membership = await this.getActiveMembership(user);
+    const membership = ctx
+      ? await this.getMembershipFromCtx(ctx)
+      : await this.getActiveMembership(user);
     const submission = await this.prisma.submission.findUnique({
       where: scopedSubmissionWhere(membership.organizationId, id),
       include: {
@@ -618,19 +650,20 @@ export class SubmissionsService {
   async findAll(
     filter: { assignmentId?: string; studentId?: string },
     user: JwtUser,
+    ctx: OrgContext,
     paging?: { page: number; limit: number },
   ) {
-    const membership = await this.getActiveMembership(user);
+    const membership = await this.getMembershipFromCtx(ctx);
     const role = String(membership.role ?? '');
     const page = Math.max(1, paging?.page ?? 1);
     const limit = Math.min(500, Math.max(1, paging?.limit ?? 200));
     const skip = (page - 1) * limit;
 
-    const where: Prisma.SubmissionWhereInput = {
-      organizationId: membership.organizationId,
+    const where: Prisma.SubmissionWhereInput = withOrg({
       deletedAt: null,
       ...(filter.assignmentId ? { assignmentId: filter.assignmentId } : {}),
-    };
+    }, ctx.organizationId);
+    assertTenantWhere(where as Record<string, unknown>, ctx.organizationId);
 
     if (role === 'TEACHER') {
       const scope = await this.getTeacherAssignmentScope(membership.id);
@@ -675,8 +708,8 @@ export class SubmissionsService {
     };
   }
 
-  async findOne(id: string, user: JwtUser) {
-    const membership = await this.getActiveMembership(user);
+  async findOne(id: string, user: JwtUser, ctx: OrgContext) {
+    const membership = await this.getMembershipFromCtx(ctx);
     const role = String(membership.role ?? '');
 
     const submission = await this.prisma.submission.findUnique({

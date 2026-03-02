@@ -1,49 +1,40 @@
 "use client";
 
-import { type JSX, useEffect, useMemo } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { type JSX, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import { AuthForm } from "@/components/forms/auth-form";
 import { useAuth } from "@/hooks/use-auth";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
+/**
+ * Register page: UI only. Post-auth navigation is handled solely by PostAuthResolver in (auth) layout.
+ */
 export default function RegisterPage(): JSX.Element {
-  const router = useRouter();
   const searchParams = useSearchParams();
-  const { isLoading, isAuthenticated, context } = useAuth();
+  const { isLoading, isAuthenticated } = useAuth();
 
   const initialMode = useMemo(() => {
     const modeParam = searchParams.get("mode")?.toUpperCase();
+    if (
+      searchParams.get("inviteToken") ||
+      searchParams.get("invite") ||
+      searchParams.get("token") ||
+      searchParams.get("code")
+    ) return "JOIN_ORG";
     if (modeParam === "INDIVIDUAL" || modeParam === "CREATE_ORG" || modeParam === "JOIN_ORG") {
       return modeParam as "INDIVIDUAL" | "CREATE_ORG" | "JOIN_ORG";
     }
-    if (searchParams.get("code")) return "JOIN_ORG";
     return "INDIVIDUAL";
   }, [searchParams]);
-  const initialJoinCode = useMemo(() => searchParams.get("code") ?? "", [searchParams]);
-  const initialJoinRole = useMemo(() => {
-    const roleParam = searchParams.get("role")?.toUpperCase();
-    if (roleParam === "STUDENT" || roleParam === "TEACHER" || roleParam === "PARENT") {
-      return roleParam as "STUDENT" | "TEACHER" | "PARENT";
-    }
-    return undefined;
-  }, [searchParams]);
-
-  // Auth invariant:
-  // Authenticated users must never access the register page.
-  // Register is reachable only after explicit logout.
-  useEffect(() => {
-    if (!isAuthenticated) return;
-
-    if (context?.mode === "organization") {
-      router.replace("/dashboard");
-    } else if (context?.mode === "platform") {
-      router.replace("/dashboard/platform");
-    } else if (context?.mode === "personal") {
-      router.replace("/onboarding/create-organization");
-    } else {
-      router.replace("/dashboard");
-    }
-  }, [isAuthenticated, context?.mode, router]);
+  const initialJoinCode = useMemo(
+    () =>
+      searchParams.get("inviteToken") ??
+      searchParams.get("invite") ??
+      searchParams.get("token") ??
+      searchParams.get("code") ??
+      "",
+    [searchParams],
+  );
 
   if (isLoading) {
     return (
@@ -79,7 +70,6 @@ export default function RegisterPage(): JSX.Element {
         mode="register"
         initialMode={initialMode}
         initialJoinCode={initialJoinCode}
-        initialJoinRole={initialJoinRole}
       />
     </div>
   );

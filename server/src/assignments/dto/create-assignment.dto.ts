@@ -14,11 +14,13 @@ import {
 import { Type } from 'class-transformer';
 
 export class CreateAssignmentDto {
+  @IsOptional()
   @IsUUID()
-  organizationId!: string;
+  organizationId?: string;
 
+  @IsOptional()
   @IsUUID()
-  academicYearId!: string;
+  academicYearId?: string;
 
   @IsUUID()
   testId!: string;
@@ -62,6 +64,7 @@ export class CreateAssignmentDto {
   @IsString()
   showExplain!: string;
 
+  @IsOptional()
   @IsUUID()
-  createdById!: string;
+  createdById?: string;
 }

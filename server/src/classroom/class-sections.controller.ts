@@ -1,6 +1,7 @@
 // YEAR-SCOPED: Requires current academic year (RequireCurrentAcademicYearGuard)
 // src/modules/classroom/class-sections.controller.ts
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -30,6 +31,7 @@ import { ApiStandardResponses } from '@/common/http/api-standard-responses.decor
 import { RequireCurrentAcademicYearGuard } from '@/academic-years/require-current-academic-year.guard';
 import { AllowPendingOrg } from '@/common/decorators/allow-pending-org.decorator';
 import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
+import { OrgContextService } from '@/common/org-context/org-context.service';
 
 @ApiTags('ClassSections')
 @ApiStandardResponses()
@@ -39,7 +41,10 @@ import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operatio
 @AllowPendingOrg()
 @UseGuards(RequireCurrentAcademicYearGuard)
 export class ClassSectionsController {
-  constructor(private readonly service: ClassSectionsService) {}
+  constructor(
+    private readonly service: ClassSectionsService,
+    private readonly orgContext: OrgContextService,
+  ) {}
 
   @Post()
   @Permission(PermissionKey.MANAGE_TEACHERS)
@@ -48,14 +53,52 @@ export class ClassSectionsController {
     [result?.orgId ?? req?.user?.organizationId].filter(Boolean),
   )
   async create(@Body() dto: CreateClassSectionDto, @Req() req: RequestWithUser) {
-    return ok(this.service.create(dto, req.user));
+    const ctx = await this.orgContext.get(req);
+    if (!ctx.activeAcademicYearId) {
+      throw new BadRequestException('Missing active academic year.');
+    }
+    if (
+      (dto.yearId && dto.yearId !== ctx.activeAcademicYearId) ||
+      (dto.academicYearId && dto.academicYearId !== ctx.activeAcademicYearId)
+    ) {
+      throw new BadRequestException('yearId/academicYearId body is not allowed');
+    }
+    return ok(
+      this.service.create(
+        {
+          ...dto,
+          yearId: ctx.activeAcademicYearId,
+          academicYearId: ctx.activeAcademicYearId,
+        },
+        req.user,
+      ),
+    );
   }
 
   @Get()
   @Permission(PermissionKey.MANAGE_STUDENTS, PermissionKey.VIEW_RESULTS)
   @ApiOperation({ summary: 'List class sections' })
   async findAll(@Req() req: RequestWithUser, @Query() q: QueryClassSectionsDto) {
-    return ok(this.service.findAll(q, req.user));
+    const ctx = await this.orgContext.get(req);
+    if (!ctx.activeAcademicYearId) {
+      throw new BadRequestException('Missing active academic year.');
+    }
+    if (
+      (q.yearId && q.yearId !== ctx.activeAcademicYearId) ||
+      (q.academicYearId && q.academicYearId !== ctx.activeAcademicYearId)
+    ) {
+      throw new BadRequestException('yearId/academicYearId query is not allowed');
+    }
+    return ok(
+      this.service.findAll(
+        {
+          ...q,
+          yearId: ctx.activeAcademicYearId,
+          academicYearId: ctx.activeAcademicYearId,
+        },
+        req.user,
+      ),
+    );
   }
 
   @Get(':id')

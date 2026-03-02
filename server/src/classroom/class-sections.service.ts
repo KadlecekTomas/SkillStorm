@@ -596,14 +596,22 @@ export class ClassSectionsService {
       include: {
         teacher: {
           include: {
-            membership: { include: { user: true } },
+            membership: {
+              include: { user: { select: { id: true, name: true, email: true } } },
+            },
           },
         },
         enrollments: {
           where: { status: { not: EnrollmentStatus.LEFT } },
           include: {
             student: {
-              include: { membership: { include: { user: true } } },
+              include: {
+                membership: {
+                  include: {
+                    user: { select: { id: true, name: true, email: true } },
+                  },
+                },
+              },
             },
           },
         },
@@ -777,12 +785,16 @@ export class ClassSectionsService {
     classroomId: string,
     user: JwtPayload,
     subjectId?: string,
+    limit?: number,
   ): Promise<ClassroomRiskOverviewResponseDto> {
+    const safeLimit = Math.min(100, Math.max(1, limit ?? 20));
     const classSection = await this.prisma.classSection.findUnique({
       where: { id: classroomId },
       include: {
         enrollments: {
           where: { status: { not: EnrollmentStatus.LEFT } },
+          orderBy: { createdAt: 'desc' },
+          take: safeLimit,
           include: {
             student: {
               include: {
@@ -857,9 +869,11 @@ export class ClassSectionsService {
         studentId: { in: membershipIds },
         deletedAt: null,
         submittedAt: { not: null },
-        ...(subjectId && { test: { orgSubjectId: subjectId } }),
+        ...(subjectId && { test: { subjectId: subjectId } }),
       },
       select: { studentId: true, score: true, submittedAt: true },
+      orderBy: { submittedAt: 'desc' },
+      take: Math.min(5000, safeLimit * 50),
     });
 
     const byMembershipId = new Map<string, { score: number | null; submittedAt: Date | null }[]>();
@@ -911,7 +925,9 @@ export class ClassSectionsService {
     classroomId: string,
     user: JwtPayload,
     academicYearId?: string,
+    limit?: number,
   ): Promise<SubjectPerformanceResponseDto> {
+    const safeLimit = Math.min(100, Math.max(1, limit ?? 20));
     const classSection = await this.prisma.classSection.findUnique({
       where: { id: classroomId },
       select: { id: true, orgId: true, yearId: true, teacherId: true },
@@ -964,6 +980,8 @@ export class ClassSectionsService {
         classSectionId: classroomId,
         yearId: academicYearId ?? classSection.yearId,
       },
+      orderBy: { openAt: 'desc' },
+      take: safeLimit,
       include: {
         test: {
           include: {
@@ -982,7 +1000,7 @@ export class ClassSectionsService {
     const bySubject = new Map<
       SubjectKey,
       {
-        subject: { id: string; name: string; gradeFrom: number; gradeTo: number };
+        subject: { id: string; name: string };
         testIds: Set<string>;
         submissions: { score: number; submittedAt: Date | null; maxScore: number }[];
       }
@@ -1003,8 +1021,6 @@ export class ClassSectionsService {
           subject: {
             id: test.subject.id,
             name: test.subject.name,
-            gradeFrom: test.subject.gradeFrom,
-            gradeTo: test.subject.gradeTo,
           },
           testIds: new Set<string>(),
           submissions: [],
@@ -1061,8 +1077,6 @@ export class ClassSectionsService {
       subjects.push({
         subjectId: entry.subject.id,
         name: entry.subject.name,
-        gradeFrom: entry.subject.gradeFrom,
-        gradeTo: entry.subject.gradeTo,
         averageScorePercent: Math.round(averageScorePercent * 10) / 10,
         testCount,
         submissionCount,
@@ -1227,7 +1241,13 @@ export class ClassSectionsService {
       data: { teacherId },
       include: {
         academicYear: true,
-        teacher: { include: { membership: { include: { user: true } } } },
+        teacher: {
+          include: {
+            membership: {
+              include: { user: { select: { id: true, name: true, email: true } } },
+            },
+          },
+        },
       },
     });
 

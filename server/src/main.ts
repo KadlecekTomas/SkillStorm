@@ -1,3 +1,4 @@
+import { validateEnvironment, buildCorsOrigin } from './bootstrap.utils';
 import { NestFactory } from '@nestjs/core';
 import type {
   ArgumentsHost,
@@ -144,19 +145,11 @@ export async function createApp(): Promise<INestApplication> {
     next();
   });
 
-  // 🔒 Frontend origins: from CORS_ORIGINS in production, else dev defaults.
-  const corsOrigins = process.env.CORS_ORIGINS?.split(',')
-    .map((o) => o.trim())
-    .filter(Boolean);
-  const origin = corsOrigins?.length
-    ? corsOrigins
-    : [
-        'http://localhost:3000',
-        'http://127.0.0.1:3000',
-        'http://frontend:3000',
-      ];
   app.enableCors({
-    origin,
+    origin: buildCorsOrigin(
+      process.env.CORS_ORIGINS,
+      process.env.NODE_ENV === 'production',
+    ),
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: [
@@ -212,23 +205,10 @@ export async function createApp(): Promise<INestApplication> {
 }
 
 /**
- * Production env sanity check: fail fast if required vars missing.
- * When NODE_ENV=production: DATABASE_URL, JWT_SECRET, CORS_ORIGINS required;
- * if no SUPERADMIN exists, SUPERADMIN_EMAIL and SUPERADMIN_PASSWORD required.
+ * Production-only check: ensure a SUPERADMIN exists or bootstrap credentials are supplied.
  */
 async function runProductionEnvCheck(app: INestApplication): Promise<void> {
   if (process.env.NODE_ENV !== 'production') return;
-  const missing: string[] = [];
-  if (!process.env.DATABASE_URL?.trim()) missing.push('DATABASE_URL');
-  if (!process.env.JWT_SECRET?.trim()) missing.push('JWT_SECRET');
-  if (!process.env.CORS_ORIGINS?.trim()) missing.push('CORS_ORIGINS');
-  if (missing.length > 0) {
-    // eslint-disable-next-line no-console
-    console.error(
-      `[production] Missing required environment variables: ${missing.join(', ')}. Exiting.`,
-    );
-    process.exit(1);
-  }
   const prisma = app.get(PrismaService);
   const { SystemRole } = await import('@prisma/client');
   const existing = await prisma.user.findFirst({
@@ -237,11 +217,9 @@ async function runProductionEnvCheck(app: INestApplication): Promise<void> {
   });
   if (!existing) {
     if (!process.env.SUPERADMIN_EMAIL?.trim() || !process.env.SUPERADMIN_PASSWORD) {
-      // eslint-disable-next-line no-console
-      console.error(
-        '[production] No SUPERADMIN exists. Set SUPERADMIN_EMAIL and SUPERADMIN_PASSWORD for initial bootstrap. Exiting.',
+      throw new Error(
+        'No SUPERADMIN exists. Set SUPERADMIN_EMAIL and SUPERADMIN_PASSWORD for initial bootstrap.',
       );
-      process.exit(1);
     }
   }
 }
@@ -264,10 +242,8 @@ function initSentryIfConfigured(): void {
  * V test módu se server nespouští – v e2e si zavolej `createApp()` + `app.init()`.
  */
 async function bootstrap() {
+  validateEnvironment();
   initSentryIfConfigured();
-  if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
-    throw new Error('JWT_SECRET is required in production');
-  }
   const app = await createApp();
 
   if (process.env.NODE_ENV === 'production') {
@@ -278,7 +254,7 @@ async function bootstrap() {
     if (process.env.NODE_ENV !== 'production') {
       setupSwagger(app);
     }
-    await app.listen(process.env.PORT ?? 4200);
+    await app.listen(process.env.PORT ?? 4200, '0.0.0.0');
   } else {
     // e2e: pouze inicializace bez otevření portu
     await app.init();

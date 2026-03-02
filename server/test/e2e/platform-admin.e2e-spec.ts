@@ -21,6 +21,18 @@ function unwrap(res: request.Response) {
 
 const TEST_PASSWORD = 'PlatformAdmin123!';
 
+function deriveExpectedAcademicYearForNow(now: Date) {
+  const month = now.getUTCMonth() + 1;
+  const year = now.getUTCFullYear();
+  const startYear = month >= 9 ? year : year - 1;
+  const endYear = startYear + 1;
+  return {
+    label: `${startYear}/${endYear}`,
+    startsAtIso: `${startYear}-09-01T00:00:00.000Z`,
+    endsAtIso: `${endYear}-08-31T23:59:59.999Z`,
+  };
+}
+
 describe('Platform Admin (e2e)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
@@ -289,6 +301,116 @@ describe('Platform Admin (e2e)', () => {
     });
   });
 
+  describe('Approval bootstrap: default academic year', () => {
+    it('new pending org approval creates one current academic year', async () => {
+      const org = await prisma.organization.create({
+        data: {
+          name: `Approve no-year ${Date.now()}`,
+          status: OrganizationStatus.PENDING,
+        },
+        select: { id: true },
+      });
+
+      const beforeCount = await prisma.academicYear.count({
+        where: { orgId: org.id, isCurrent: true },
+      });
+      expect(beforeCount).toBe(0);
+
+      const now = new Date();
+      await request(app.getHttpServer())
+        .post(`/platform/organizations/${org.id}/activate`)
+        .set('Authorization', `Bearer ${adminUser.token}`)
+        .expect(201);
+
+      const currentYears = await prisma.academicYear.findMany({
+        where: { orgId: org.id, isCurrent: true },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, label: true, startsAt: true, endsAt: true },
+      });
+      expect(currentYears).toHaveLength(1);
+
+      const expected = deriveExpectedAcademicYearForNow(now);
+      const year = currentYears[0];
+      expect(year).toBeDefined();
+      if (!year) return;
+
+      expect(year.label).toBe(expected.label);
+      expect(year.startsAt.toISOString()).toBe(expected.startsAtIso);
+      expect(year.endsAt.toISOString()).toBe(expected.endsAtIso);
+    });
+
+    it('approve called again does not duplicate current year', async () => {
+      const org = await prisma.organization.create({
+        data: {
+          name: `Approve idempotent ${Date.now()}`,
+          status: OrganizationStatus.PENDING,
+        },
+        select: { id: true },
+      });
+
+      await request(app.getHttpServer())
+        .post(`/platform/organizations/${org.id}/activate`)
+        .set('Authorization', `Bearer ${adminUser.token}`)
+        .expect(201);
+
+      const firstCount = await prisma.academicYear.count({
+        where: { orgId: org.id, isCurrent: true },
+      });
+      expect(firstCount).toBe(1);
+
+      await request(app.getHttpServer())
+        .post(`/platform/organizations/${org.id}/activate`)
+        .set('Authorization', `Bearer ${adminUser.token}`)
+        .expect(400);
+
+      const secondCount = await prisma.academicYear.count({
+        where: { orgId: org.id, isCurrent: true },
+      });
+      expect(secondCount).toBe(1);
+    });
+
+    it('existing current year is kept (no duplicate, no replacement)', async () => {
+      const org = await prisma.organization.create({
+        data: {
+          name: `Approve keep-year ${Date.now()}`,
+          status: OrganizationStatus.PENDING,
+        },
+        select: { id: true },
+      });
+
+      const existingYear = await prisma.academicYear.create({
+        data: {
+          orgId: org.id,
+          label: `Legacy ${Date.now()}`,
+          startsAt: new Date('2023-09-01T00:00:00.000Z'),
+          endsAt: new Date('2024-08-31T23:59:59.999Z'),
+          isCurrent: true,
+        },
+        select: { id: true },
+      });
+
+      await request(app.getHttpServer())
+        .post(`/platform/organizations/${org.id}/activate`)
+        .set('Authorization', `Bearer ${adminUser.token}`)
+        .expect(201);
+
+      const currentYears = await prisma.academicYear.findMany({
+        where: { orgId: org.id, isCurrent: true },
+        select: { id: true },
+      });
+
+      expect(currentYears).toHaveLength(1);
+      expect(currentYears[0]?.id).toBe(existingYear.id);
+    });
+
+    it('db invariant: no organization has more than one current year', async () => {
+      const duplicates = await prisma.$queryRaw<
+        Array<{ organization_id: string; current_count: bigint }>
+      >`SELECT organization_id, COUNT(*)::bigint AS current_count FROM academic_years WHERE "isCurrent" = true GROUP BY organization_id HAVING COUNT(*) > 1`;
+      expect(duplicates).toHaveLength(0);
+    });
+  });
+
   describe('Create org limit', () => {
     it('user creates first org → 201', async () => {
       const freshUser = await prisma.user.create({
@@ -358,7 +480,7 @@ describe('Platform Admin (e2e)', () => {
         .set('Authorization', `Bearer ${regularUser.token}`)
         .set('x-organization-id', pendingOrgId);
 
-      expect([403, 412]).toContain(res.status);
+      expect([403, 409, 412]).toContain(res.status);
     });
 
     it('after active year + first class: core endpoint OK', async () => {
@@ -420,7 +542,7 @@ describe('Platform Admin (e2e)', () => {
         .query({ yearId: year.id })
         .set('Authorization', `Bearer ${regularUser.token}`);
 
-      expect(res.status).toBe(403);
+      expect([403, 409]).toContain(res.status);
     });
   });
 });

@@ -3,7 +3,6 @@ import {
   IsOptional,
   IsString,
   MinLength,
-  Matches,
   IsEnum,
   ValidateIf,
   IsNotEmpty,
@@ -11,10 +10,7 @@ import {
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { SystemRole } from '@prisma/client';
 import { Transform } from 'class-transformer';
-
-const PASSWORD_POLICY = {
-  message: 'Heslo musí mít alespoň 8 znaků, obsahovat alespoň jedno písmeno a jednu číslici.',
-};
+import { StrongPassword, PASSWORD_POLICY_MESSAGE } from '@/common/validators/password.validator';
 
 export enum RegisterMode {
   INDIVIDUAL = 'INDIVIDUAL',
@@ -53,9 +49,7 @@ export class RegisterDto {
     minLength: 8,
   })
   @IsString()
-  @MinLength(8, { message: PASSWORD_POLICY.message })
-  @Matches(/\d/, { message: PASSWORD_POLICY.message })
-  @Matches(/[a-zA-Z]/, { message: PASSWORD_POLICY.message })
+  @StrongPassword({ message: PASSWORD_POLICY_MESSAGE })
   password!: string;
 
   @ApiPropertyOptional({

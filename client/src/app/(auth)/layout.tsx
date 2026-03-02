@@ -4,10 +4,13 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
+import { PostAuthResolver } from "@/components/auth/PostAuthResolver";
 
 export default function AuthLayout({ children }: { children: ReactNode }): React.JSX.Element {
   return (
-    <div className="grid min-h-screen grid-cols-1 lg:grid-cols-[480px_1fr]">
+    <>
+      <PostAuthResolver />
+      <div className="grid min-h-screen grid-cols-1 lg:grid-cols-[480px_1fr]">
       <motion.section
         initial={{ opacity: 0, x: -20 }}
         animate={{ opacity: 1, x: 0 }}
@@ -42,5 +45,6 @@ export default function AuthLayout({ children }: { children: ReactNode }): React
         </div>
       </div>
     </div>
+    </>
   );
 }

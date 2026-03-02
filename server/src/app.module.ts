@@ -43,8 +43,10 @@ import { PrivacyModule } from './privacy/privacy.module';
 import { EnrollmentsModule } from './enrollments/enrollments.module';
 import { AcademicYearsModule } from './academic-years/academic-years.module';
 import { InvitesModule } from './invites/invites.module';
+import { EventsModule } from './events/events.module';
 import { PlatformModule } from './platform/platform.module';
 import { OrgSubjectModule } from './org-subject/org-subject.module';
+import { OrgContextModule } from './common/org-context/org-context.module';
 
 @Module({
   imports: [
@@ -99,8 +101,10 @@ import { OrgSubjectModule } from './org-subject/org-subject.module';
     EnrollmentsModule,
     AcademicYearsModule,
     InvitesModule,
+    EventsModule,
     PlatformModule,
     OrgSubjectModule,
+    OrgContextModule,
   ],
   providers: [
     { provide: APP_INTERCEPTOR, useClass: ResponseEnvelopeInterceptor },

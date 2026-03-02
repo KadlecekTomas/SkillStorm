@@ -53,6 +53,10 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    command:
+      - sh
+      - -lc
+      - "npx prisma migrate deploy && npx ts-node prisma/seed/full-walkthrough-seed.ts"
     profiles: ["dev", "staging", "prod"]
     networks:
       - app
@@ -78,7 +82,7 @@ services:
       redis:
         condition: service_healthy
     ports:
-      - "${BACKEND_PORT:-4201}:4200"
+      - "4200:4200"
     networks:
       - app
 

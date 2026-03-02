@@ -3,7 +3,7 @@
  */
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
-import SettingsPage from "@/app/(dashboard)/dashboard/settings/page";
+import SettingsPage from "@/app/(app)/app/settings/page";
 import { PermissionKey } from "@/types";
 
 vi.mock("@/hooks/use-auth", () => ({
@@ -19,6 +19,13 @@ const permissionsState: { can: (key: PermissionKey) => boolean } = {
 
 vi.mock("@/hooks/use-permissions", () => ({
   usePermissions: () => permissionsState,
+}));
+
+vi.mock("@/lib/http/client", () => ({
+  fetchWithAuth: vi.fn().mockResolvedValue({
+    inviteToken: "invite-token",
+    code: "invite-token",
+  }),
 }));
 
 vi.mock("next/link", () => ({

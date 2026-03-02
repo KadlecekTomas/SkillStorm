@@ -2,136 +2,95 @@
  * @vitest-environment jsdom
  */
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import DashboardPage from "@/app/(dashboard)/dashboard/page";
-import { httpClient } from "@/lib/http/client";
-import type { TestSummary } from "@/types";
 import { recordPolicyCheck } from "../fePolicyScore";
 
-// Mock recordPolicyCheck to avoid file system issues in tests
 vi.mock("../fePolicyScore", () => ({
   recordPolicyCheck: vi.fn(),
 }));
 
-vi.mock("@/lib/http/client");
+const mockState = {
+  mode: "organization" as "organization" | "personal",
+  permissions: [] as string[],
+};
+
+vi.mock("@/hooks/use-auth", () => ({
+  useAuth: () => ({
+    context: { mode: mockState.mode },
+  }),
+}));
+
 vi.mock("@/hooks/use-permissions", () => ({
   usePermissions: () => ({
-    can: () => true,
+    permissions: mockState.permissions,
+    can: (permission: string) => mockState.permissions.includes(permission),
+    hasRole: (role: "STUDENT" | "TEACHER" | "DIRECTOR" | "OWNER" | "SUPERADMIN") => {
+      if (role === "STUDENT") return mockState.permissions.includes("VIEW_OWN_RESULTS");
+      if (role === "TEACHER") return mockState.permissions.includes("CREATE_TEST");
+      if (role === "DIRECTOR" || role === "OWNER") {
+        return mockState.permissions.includes("MANAGE_TEACHERS");
+      }
+      return false;
+    },
+    isSuperAdmin: false,
   }),
 }));
-vi.mock("@/hooks/use-gamification", () => ({
-  useGamification: () => ({
-    summary: null,
-  }),
-}));
+
 vi.mock("@/lib/guard/withGuard", () => ({
   withGuard: () => (Component: React.ComponentType) => Component,
 }));
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({
-    push: vi.fn(),
-    replace: vi.fn(),
-  }),
-  usePathname: () => "/dashboard",
+
+vi.mock("@/app/(dashboard)/dashboard/components/StudentDashboard", () => ({
+  StudentDashboard: () => <div>student-dashboard</div>,
+}));
+vi.mock("@/app/(dashboard)/dashboard/components/TeacherDashboard", () => ({
+  TeacherDashboard: () => <div>teacher-dashboard</div>,
+}));
+vi.mock("@/app/(dashboard)/dashboard/components/DirectorDashboard", () => ({
+  DirectorDashboard: () => <div>director-dashboard</div>,
 }));
 
 describe("DashboardPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockState.mode = "organization";
+    mockState.permissions = [];
   });
 
-  it("shows loading state while fetching tests", async () => {
-    const mockGet = vi.fn(() => new Promise(() => {})); // Never resolves
-    vi.mocked(httpClient.get).mockImplementation(mockGet);
-
+  it("renders student dashboard when student permissions are present", () => {
+    mockState.permissions = ["VIEW_OWN_RESULTS"];
     render(<DashboardPage />);
 
-    expect(screen.getByText(/loading tests/i)).toBeInTheDocument();
-    recordPolicyCheck("Auth", "dashboard-loading-state", true, "Dashboard shows loading state during fetch.");
+    expect(screen.getByText("student-dashboard")).toBeInTheDocument();
+    expect(screen.queryByText("teacher-dashboard")).not.toBeInTheDocument();
+    expect(screen.queryByText("director-dashboard")).not.toBeInTheDocument();
+    recordPolicyCheck("RBAC", "dashboard-student-surface", true, "Student view is driven by backend permissions.");
   });
 
-  it("displays tests when data is loaded", async () => {
-    const mockTests: TestSummary[] = [
-      {
-        id: "1",
-        title: "Test 1",
-        description: "Description",
-        status: "PUBLISHED",
-        version: 1,
-        completionRate: 80,
-        submissions: 10,
-        avgScore: 85,
-      },
-    ];
-
-    vi.mocked(httpClient.get).mockResolvedValue(mockTests);
-
+  it("renders teacher dashboard when teacher permissions are present", () => {
+    mockState.permissions = ["CREATE_TEST"];
     render(<DashboardPage />);
 
-    await waitFor(() => {
-      expect(screen.getByText("Test 1")).toBeInTheDocument();
-    });
-
-    recordPolicyCheck("Content", "dashboard-data-display", true, "Dashboard displays test data when loaded.");
+    expect(screen.getByText("teacher-dashboard")).toBeInTheDocument();
+    expect(screen.queryByText("student-dashboard")).not.toBeInTheDocument();
+    expect(screen.queryByText("director-dashboard")).not.toBeInTheDocument();
+    recordPolicyCheck("RBAC", "dashboard-teacher-surface", true, "Teacher view is driven by backend permissions.");
   });
 
-  it("shows empty state when no tests are returned", async () => {
-    vi.mocked(httpClient.get).mockResolvedValue([]);
-
+  it("renders director dashboard when management permissions are present", () => {
+    mockState.permissions = ["MANAGE_TEACHERS"];
     render(<DashboardPage />);
 
-    await waitFor(() => {
-      expect(screen.queryByText(/loading tests/i)).not.toBeInTheDocument();
-    });
-
-    // Should not crash when tests array is empty
-    const testCards = screen.queryAllByText(/test \d+/i);
-    expect(testCards).toHaveLength(0);
-    recordPolicyCheck("Content", "dashboard-empty-state", true, "Dashboard handles empty test array without crashing.");
+    expect(screen.getByText("director-dashboard")).toBeInTheDocument();
+    expect(screen.queryByText("student-dashboard")).not.toBeInTheDocument();
+    recordPolicyCheck("RBAC", "dashboard-director-surface", true, "Director view is driven by backend permissions.");
   });
 
-  it("handles null response from API gracefully", async () => {
-    vi.mocked(httpClient.get).mockResolvedValue(null as unknown as TestSummary[]);
-
+  it("renders fallback when no permission-backed dashboard is available", () => {
     render(<DashboardPage />);
 
-    await waitFor(() => {
-      expect(screen.queryByText(/loading tests/i)).not.toBeInTheDocument();
-    });
-
-    // Should not crash on null
-    const testCards = screen.queryAllByText(/test \d+/i);
-    expect(testCards).toHaveLength(0);
-    recordPolicyCheck("Content", "dashboard-null-handling", true, "Dashboard handles null API response without crashing.");
-  });
-
-  it("handles undefined response from API gracefully", async () => {
-    vi.mocked(httpClient.get).mockResolvedValue(undefined as unknown as TestSummary[]);
-
-    render(<DashboardPage />);
-
-    await waitFor(() => {
-      expect(screen.queryByText(/loading tests/i)).not.toBeInTheDocument();
-    });
-
-    // Should not crash on undefined
-    const testCards = screen.queryAllByText(/test \d+/i);
-    expect(testCards).toHaveLength(0);
-    recordPolicyCheck("Content", "dashboard-undefined-handling", true, "Dashboard handles undefined API response without crashing.");
-  });
-
-  it("handles API errors gracefully", async () => {
-    vi.mocked(httpClient.get).mockRejectedValue(new Error("Network error"));
-
-    render(<DashboardPage />);
-
-    await waitFor(() => {
-      expect(screen.queryByText(/loading tests/i)).not.toBeInTheDocument();
-    });
-
-    // Should not crash on error, should show empty state
-    const testCards = screen.queryAllByText(/test \d+/i);
-    expect(testCards).toHaveLength(0);
-    recordPolicyCheck("Content", "dashboard-error-handling", true, "Dashboard handles API errors without crashing.");
+    expect(screen.getByText(/přehled není k dispozici/i)).toBeInTheDocument();
+    recordPolicyCheck("RBAC", "dashboard-fallback", true, "Dashboard fallback renders when no role surface is allowed.");
   });
 });

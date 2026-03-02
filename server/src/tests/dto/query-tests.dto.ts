@@ -41,4 +41,14 @@ export class QueryTestsDto {
   @IsOptional()
   @IsUUID()
   organizationId?: string;
+
+  @ApiPropertyOptional({ description: 'Filter by Subject UUID' })
+  @IsOptional()
+  @IsUUID()
+  subjectId?: string;
+
+  @ApiPropertyOptional({ description: 'Filter by AcademicYear UUID' })
+  @IsOptional()
+  @IsUUID()
+  academicYearId?: string;
 }

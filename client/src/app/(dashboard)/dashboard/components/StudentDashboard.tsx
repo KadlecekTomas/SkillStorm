@@ -1,21 +1,29 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useGamification } from "@/hooks/use-gamification";
 import { GamificationPanel } from "@/components/gamification/gamification-panel";
 import { LevelUpModal } from "@/components/gamification/level-up-modal";
-import { getDashboardStudent, type StudentDashboardResponse } from "@/lib/api/dashboard";
-import { BookOpenCheck, NotebookTabs } from "lucide-react";
+import {
+  getDashboardStudent,
+  getAssignmentsOverview,
+  type StudentDashboardResponse,
+  type AssignmentsOverviewResponse,
+  type AssignmentOverviewItem,
+} from "@/lib/api/dashboard";
+import { BookOpenCheck, NotebookTabs, ClipboardList } from "lucide-react";
 import { OverviewCard } from "@/components/cards/overview-card";
 import { Alert } from "@/components/ui/alert";
 
-const EMPTY_SUBMISSIONS = "Nemáš žádná aktivní zadání.";
-
 export function StudentDashboard(): React.JSX.Element {
+  const router = useRouter();
   const [data, setData] = useState<StudentDashboardResponse | null>(null);
+  const [overview, setOverview] = useState<AssignmentsOverviewResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { summary: gamification } = useGamification();
@@ -26,9 +34,12 @@ export function StudentDashboard(): React.JSX.Element {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    getDashboardStudent()
-      .then((res) => {
-        if (!cancelled) setData(res);
+    Promise.all([getDashboardStudent(), getAssignmentsOverview()])
+      .then(([dashRes, overviewRes]) => {
+        if (!cancelled) {
+          setData(dashRes);
+          setOverview(overviewRes);
+        }
       })
       .catch((err) => {
         if (!cancelled) setError(err instanceof Error ? err.message : "Nepodařilo se načíst data.");
@@ -69,6 +80,10 @@ export function StudentDashboard(): React.JSX.Element {
   }
 
   const submissions = data?.lastSubmissions ?? [];
+  const activeTests = overview?.active ?? [];
+  const upcomingCount = overview?.upcoming.length ?? 0;
+  const closedCount = overview?.closedUnsubmitted.length ?? 0;
+  const completedCount = overview?.completed.length ?? 0;
 
   return (
     <>
@@ -91,6 +106,84 @@ export function StudentDashboard(): React.JSX.Element {
             accent="bg-amber-50 text-amber-600"
           />
         </div>
+
+        {/* Active tests section — always visible */}
+        <Card className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-slate-500">Právě probíhající</p>
+              <p className="text-lg font-semibold text-slate-900">Moje aktivní testy</p>
+            </div>
+            <ClipboardList className="h-5 w-5 text-slate-400" />
+          </div>
+
+          {activeTests.length > 0 ? (
+            <div className="space-y-2">
+              {activeTests.map((item: AssignmentOverviewItem) => (
+                <div
+                  key={item.assignmentId}
+                  className="flex items-center justify-between rounded-lg border border-slate-200 p-3"
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="truncate text-sm font-medium text-slate-900">{item.title}</p>
+                    <p className="text-xs text-slate-500">
+                      Do: {new Date(item.closeAt).toLocaleDateString("cs-CZ", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })}
+                      {" · "}
+                      {item.remainingAttempts === 1
+                        ? "1 pokus zbývá"
+                        : `${item.remainingAttempts} pokusy zbývají`}
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    className="ml-3 shrink-0"
+                    onClick={() => router.push(`/dashboard/assignments/${item.assignmentId}`)}
+                  >
+                    {item.attemptsUsed > 0 ? "Pokračovat" : "Spustit"}
+                  </Button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="py-6 text-center">
+              <p className="text-sm text-slate-500">Nemáš žádné aktivní testy.</p>
+              <p className="mt-1 text-xs text-slate-400">
+                Pokud čekáš na test, ověř, že jsi zapsaný ve správné třídě pro aktuální školní rok.
+              </p>
+            </div>
+          )}
+
+          {/* Summary link row */}
+          <div className="flex flex-wrap gap-3 border-t border-slate-100 pt-3 text-xs text-slate-500">
+            <button
+              className="hover:text-slate-800 hover:underline"
+              onClick={() => router.push("/dashboard/assignments")}
+            >
+              Aktivní: <span className="font-semibold text-slate-700">{activeTests.length}</span>
+            </button>
+            <span>·</span>
+            <button
+              className="hover:text-slate-800 hover:underline"
+              onClick={() => router.push("/dashboard/assignments")}
+            >
+              Nadcházející: <span className="font-semibold text-slate-700">{upcomingCount}</span>
+            </button>
+            <span>·</span>
+            <button
+              className="hover:text-slate-800 hover:underline"
+              onClick={() => router.push("/dashboard/assignments")}
+            >
+              Uzavřené bez pokusu: <span className="font-semibold text-slate-700">{closedCount}</span>
+            </button>
+            <span>·</span>
+            <button
+              className="hover:text-slate-800 hover:underline"
+              onClick={() => router.push("/dashboard/assignments")}
+            >
+              Dokončené: <span className="font-semibold text-slate-700">{completedCount}</span>
+            </button>
+          </div>
+        </Card>
 
         <Card className="space-y-4">
           <div>
@@ -123,7 +216,7 @@ export function StudentDashboard(): React.JSX.Element {
               ))}
             </div>
           ) : (
-            <p className="py-8 text-center text-sm text-slate-500">{EMPTY_SUBMISSIONS}</p>
+            <p className="py-8 text-center text-sm text-slate-500">Žádná odevzdání.</p>
           )}
         </Card>
 

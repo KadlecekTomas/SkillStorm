@@ -553,6 +553,131 @@ describe('Tests (e2e)', () => {
   // NESTED: Questions / Options / Answers / Reorder
   // ---------------------------
 
+  describe('RBAC recovery regression suite', () => {
+    it('Teacher flow: create 201, add question 201, edit 200, delete 403', async () => {
+      const created = await request(app.getHttpServer())
+        .post('/tests')
+        .set('Authorization', `Bearer ${teacherUserA1.token}`)
+        .send({ title: 'Teacher Flow Test', organizationId: orgA.id })
+        .expect(201);
+
+      const testId = created.body.id as string;
+
+      await request(app.getHttpServer())
+        .post(`/tests/${testId}/questions`)
+        .set('Authorization', `Bearer ${teacherUserA1.token}`)
+        .send({
+          text: 'Teacher question',
+          type: QuestionType.TRUE_FALSE,
+          order: 1,
+          correctAnswer: 'true',
+        })
+        .expect(201);
+
+      await request(app.getHttpServer())
+        .patch(`/tests/${testId}`)
+        .set('Authorization', `Bearer ${teacherUserA1.token}`)
+        .send({ title: 'Teacher Flow Test Updated' })
+        .expect(200);
+
+      await request(app.getHttpServer())
+        .delete(`/tests/${testId}`)
+        .set('Authorization', `Bearer ${teacherUserA1.token}`)
+        .expect(403);
+
+      await prisma.test.delete({ where: { id: testId } });
+    });
+
+    it('Director flow: create 201, add question 201, delete 200', async () => {
+      const created = await request(app.getHttpServer())
+        .post('/tests')
+        .set('Authorization', `Bearer ${directorA.token}`)
+        .send({ title: 'Director Flow Test', organizationId: orgA.id })
+        .expect(201);
+
+      const testId = created.body.id as string;
+
+      await request(app.getHttpServer())
+        .post(`/tests/${testId}/questions`)
+        .set('Authorization', `Bearer ${directorA.token}`)
+        .send({
+          text: 'Director question',
+          type: QuestionType.TRUE_FALSE,
+          order: 1,
+          correctAnswer: 'true',
+        })
+        .expect(201);
+
+      await request(app.getHttpServer())
+        .delete(`/tests/${testId}`)
+        .set('Authorization', `Bearer ${directorA.token}`)
+        .expect(200);
+
+      await prisma.test.delete({ where: { id: testId } }).catch(() => {});
+    });
+
+    it('Student flow: POST /tests, POST /tests/:id/questions, PATCH /tests/:id are 403', async () => {
+      const seeded = await prisma.test.create({
+        data: {
+          title: 'Student Forbidden Seed',
+          organizationId: orgA.id,
+          creatorId: mTA1.id,
+        },
+      });
+
+      await request(app.getHttpServer())
+        .post('/tests')
+        .set('Authorization', `Bearer ${studentUser.token}`)
+        .send({ title: 'Forbidden', organizationId: orgA.id })
+        .expect(403);
+
+      await request(app.getHttpServer())
+        .post(`/tests/${seeded.id}/questions`)
+        .set('Authorization', `Bearer ${studentUser.token}`)
+        .send({ text: 'Forbidden', type: QuestionType.TRUE_FALSE, order: 1 })
+        .expect(403);
+
+      await request(app.getHttpServer())
+        .patch(`/tests/${seeded.id}`)
+        .set('Authorization', `Bearer ${studentUser.token}`)
+        .send({ title: 'Forbidden' })
+        .expect(403);
+
+      await prisma.test.delete({ where: { id: seeded.id } });
+    });
+
+    it('Cross-org: teacher from orgA cannot create test in orgB (403)', async () => {
+      await request(app.getHttpServer())
+        .post('/tests')
+        .set('Authorization', `Bearer ${teacherUserA1.token}`)
+        .send({ title: 'Cross-org forbidden', organizationId: orgB.id })
+        .expect(403);
+    });
+
+    it('Soft-delete: teacher cannot add question to deleted test (404)', async () => {
+      const created = await request(app.getHttpServer())
+        .post('/tests')
+        .set('Authorization', `Bearer ${directorA.token}`)
+        .send({ title: 'Soft-delete teacher case', organizationId: orgA.id })
+        .expect(201);
+
+      const testId = created.body.id as string;
+
+      await request(app.getHttpServer())
+        .delete(`/tests/${testId}`)
+        .set('Authorization', `Bearer ${directorA.token}`)
+        .expect(200);
+
+      await request(app.getHttpServer())
+        .post(`/tests/${testId}/questions`)
+        .set('Authorization', `Bearer ${teacherUserA1.token}`)
+        .send({ text: 'Should fail', type: QuestionType.TRUE_FALSE, order: 1 })
+        .expect(404);
+
+      await prisma.test.delete({ where: { id: testId } }).catch(() => {});
+    });
+  });
+
   it('create DRAFT test → add one question → GET test has questions.length === 1', async () => {
     const createRes = await request(app.getHttpServer())
       .post('/tests')

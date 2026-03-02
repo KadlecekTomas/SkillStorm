@@ -1408,7 +1408,7 @@ export function ClassroomsPageContent(): React.JSX.Element {
                             {subjectPerformance.subjects.map((s) => (
                               <tr key={s.subjectId} className="border-b border-slate-100 last:border-0">
                                 <td className="px-4 py-2 font-medium text-slate-900">
-                                  {s.name} ({s.gradeFrom}–{s.gradeTo})
+                                  {s.name}
                                 </td>
                                 <td className="px-4 py-2 text-right">
                                   <span

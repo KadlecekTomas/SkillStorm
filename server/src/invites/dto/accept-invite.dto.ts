@@ -1,19 +1,23 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsString } from 'class-validator';
-import { OrganizationRole } from '@prisma/client';
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsOptional, IsString } from 'class-validator';
 import { Transform } from 'class-transformer';
 
 export class AcceptInviteDto {
-  @ApiProperty({ description: 'Invite code (or legacy: organizationId for ORG_ONLY)' })
+  @ApiPropertyOptional({ description: 'Invite token (preferred field)' })
+  @IsOptional()
   @IsString()
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
-  code!: string;
+  inviteToken?: string;
 
-  @ApiPropertyOptional({
-    description: 'Role for ORG_ONLY invites (TEACHER/DIRECTOR). Ignored for STUDENT_CLASS.',
-    enum: [OrganizationRole.TEACHER, OrganizationRole.DIRECTOR],
-  })
+  @ApiPropertyOptional({ description: 'Invite code (from link or manual entry)' })
   @IsOptional()
-  @IsEnum(OrganizationRole)
-  role?: OrganizationRole;
+  @IsString()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  code?: string;
+
+  @ApiPropertyOptional({ description: 'Invite token (preferred; same as code from invite link)' })
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  token?: string;
 }

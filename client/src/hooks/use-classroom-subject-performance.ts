@@ -6,8 +6,6 @@ import { fetchWithAuth } from "@/lib/http/client";
 export type SubjectPerformanceItem = {
   subjectId: string;
   name: string;
-  gradeFrom: number;
-  gradeTo: number;
   averageScorePercent: number;
   testCount: number;
   submissionCount: number;

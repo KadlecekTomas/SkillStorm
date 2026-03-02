@@ -9,6 +9,7 @@ import {
   OrganizationStatus,
   AuditEntityType,
   OrganizationRole,
+  SchoolGrade,
 } from '@prisma/client';
 import type { QueryOrganizationsDto } from './dto/query-organizations.dto';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
@@ -237,8 +238,45 @@ export class OrganizationsService {
       });
     }
 
+    // Invariant: every new organization gets a Subject record for each CatalogSubject.
+    await this.provisionDefaultSubjects(org.id);
+
     await bumpOrgVersion(this.cache, 'ALL'); // invaliduj globální list
     return org;
+  }
+
+  /**
+   * Idempotently creates one Subject + one SubjectLevel per SchoolGrade per CatalogSubject for the org.
+   * Safe to call multiple times — all operations are upserts (update: {} → no-op when already exists).
+   */
+  private async provisionDefaultSubjects(orgId: string): Promise<void> {
+    const grades = Object.values(SchoolGrade);
+    await this.prisma.$transaction(async (tx) => {
+      const catalogSubjects = await tx.catalogSubject.findMany({ orderBy: { name: 'asc' } });
+      for (const catalog of catalogSubjects) {
+        const subject = await tx.subject.upsert({
+          where: {
+            organizationId_catalogSubjectId: {
+              organizationId: orgId,
+              catalogSubjectId: catalog.id,
+            },
+          },
+          update: {},
+          create: {
+            organizationId: orgId,
+            catalogSubjectId: catalog.id,
+            name: catalog.name,
+          },
+        });
+        for (const grade of grades) {
+          await tx.subjectLevel.upsert({
+            where: { subjectId_grade: { subjectId: subject.id, grade } },
+            update: {},
+            create: { subjectId: subject.id, grade, order: null, label: null },
+          });
+        }
+      }
+    });
   }
 
   async update(

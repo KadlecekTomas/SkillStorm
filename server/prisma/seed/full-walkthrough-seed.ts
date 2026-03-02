@@ -25,6 +25,8 @@ import {
   QuestionType,
   SchoolGrade,
   SubmissionStatus,
+  SystemRole,
+  UserStatus,
 } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 
@@ -52,6 +54,78 @@ function logDone(msg: string) {
 
 async function hash(plain: string) {
   return bcrypt.hash(plain, 10);
+}
+
+// --- 0) PLATFORM BOOTSTRAP USERS (systemRole only, no memberships) ---
+async function ensurePlatformBootstrapUsers() {
+  console.log('🌍 Platform bootstrap');
+  const nodeEnv = process.env.NODE_ENV ?? 'development';
+  if (nodeEnv !== 'development') {
+    console.warn('⚠️ Running platform bootstrap outside development');
+  }
+
+  const passwordHash = await hash(DEMO_PASSWORD);
+  const platformUsers: Array<{
+    email: string;
+    name: string;
+    role: SystemRole;
+    readyLabel: string;
+  }> = [
+    {
+      email: 'superadmin@platform.local',
+      name: 'Platform Superadmin',
+      role: SystemRole.SUPERADMIN,
+      readyLabel: 'SUPERADMIN',
+    },
+    {
+      email: 'devops@platform.local',
+      name: 'Platform DevOps',
+      role: SystemRole.DEVOPS,
+      readyLabel: 'DEVOPS',
+    },
+    {
+      email: 'support@platform.local',
+      name: 'Platform Support',
+      role: SystemRole.SUPPORT,
+      readyLabel: 'SUPPORT',
+    },
+  ];
+
+  for (const entry of platformUsers) {
+    const user = await prisma.user.upsert({
+      where: { email: entry.email },
+      create: {
+        email: entry.email,
+        name: entry.name,
+        passwordHash,
+        systemRole: entry.role,
+        status: UserStatus.ACTIVE,
+        deletedAt: null,
+      },
+      update: {
+        name: entry.name,
+        systemRole: entry.role,
+        status: UserStatus.ACTIVE,
+        deletedAt: null,
+      },
+    });
+
+    const hasDemoPassword = await bcrypt.compare(
+      DEMO_PASSWORD,
+      user.passwordHash,
+    );
+    if (!hasDemoPassword) {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { passwordHash },
+      });
+    }
+
+    // Platform users must never be tenant-bound.
+    await prisma.membership.deleteMany({ where: { userId: user.id } });
+
+    console.log(`✅ ${entry.readyLabel} ready`);
+  }
 }
 
 function printDemoBanner(
@@ -106,9 +180,7 @@ async function createOrganizations() {
 }
 
 // --- 2) ŠKOLNÍ ROKY (1 aktivní na org) ---
-async function createAcademicYears(
-  orgs: { id: string }[],
-) {
+async function createAcademicYears(orgs: { id: string }[]) {
   logStep('Academic years: 1 active per org (2024/2025)');
   const years: { id: string; orgId: string }[] = [];
 
@@ -149,7 +221,12 @@ async function createClassSections(
   years: { id: string; orgId: string }[],
 ) {
   logStep('Class sections: at least 2 per org');
-  const sections: { id: string; orgId: string; yearId: string; label: string }[] = [];
+  const sections: {
+    id: string;
+    orgId: string;
+    yearId: string;
+    label: string;
+  }[] = [];
   const gradeSectionPairs: [SchoolGrade, string, string][] = [
     [SchoolGrade.GRADE_6, 'A', '6.A'],
     [SchoolGrade.GRADE_7, 'B', '7.B'],
@@ -348,11 +425,17 @@ async function setHomeroomTeachers(
     const firstTeacherMembershipId = org.teacherMembershipIds[0];
     if (!firstTeacherMembershipId) continue;
     const teacher = await prisma.teacher.findFirst({
-      where: { membershipId: firstTeacherMembershipId, organizationId: org.orgId, deletedAt: null },
+      where: {
+        membershipId: firstTeacherMembershipId,
+        organizationId: org.orgId,
+        deletedAt: null,
+      },
       select: { id: true },
     });
     if (!teacher) continue;
-    const orgSections = sections.filter((s) => s.orgId === org.orgId && (s.label === '6.A' || s.label === '7.B'));
+    const orgSections = sections.filter(
+      (s) => s.orgId === org.orgId && (s.label === '6.A' || s.label === '7.B'),
+    );
     for (const sec of orgSections) {
       await prisma.classSection.update({
         where: { id: sec.id },
@@ -378,7 +461,14 @@ async function createStudentsAndEnrollments(
     const class8C = orgSections.find((s) => s.label === '8.C');
     if (!class6A || !class7B) continue;
 
-    const studentKeys = ['studentA', 'studentB', 'studentC', 'studentD', 'studentE', 'studentF'];
+    const studentKeys = [
+      'studentA',
+      'studentB',
+      'studentC',
+      'studentD',
+      'studentE',
+      'studentF',
+    ];
     const classByKey: Record<string, typeof class6A> = {
       studentA: class6A,
       studentB: class6A,
@@ -445,11 +535,95 @@ async function createStudentsAndEnrollments(
   logDone('Students + enrollments ready');
 }
 
+// --- 4b) CATALOG SUBJECTS + ORG SUBJECTS (Subject model) ---
+/**
+ * Upserts all CatalogSubjects, then provisions one Subject per catalog entry per org
+ * (mirrors OrganizationsService.provisionDefaultSubjects — idempotent upsert).
+ * Returns a nested map: orgId → catalogCode → subjectId
+ */
+async function ensureCatalogAndSubjects(
+  orgs: OrgWithName[],
+): Promise<Map<string, Map<string, string>>> {
+  logStep('CatalogSubjects + org Subjects');
+
+  const catalogDefs = [
+    { code: 'MAT', name: 'Matematika' },
+    { code: 'CZJ', name: 'Český jazyk' },
+    { code: 'FYZ', name: 'Fyzika' },
+    { code: 'DEJ', name: 'Dějepis' },
+    { code: 'INF', name: 'Informatika' },
+    { code: 'ENG', name: 'Angličtina' },
+    { code: 'ECO', name: 'Finanční gramotnost' },
+  ];
+
+  // Upsert all catalog entries
+  const catalogMap = new Map<string, string>(); // code → id
+  for (const def of catalogDefs) {
+    const cat = await prisma.catalogSubject.upsert({
+      where: { code: def.code },
+      update: {},
+      create: def,
+    });
+    catalogMap.set(def.code, cat.id);
+  }
+
+  // Provision all catalog subjects for every org (all codes, not a subset)
+  const result = new Map<string, Map<string, string>>();
+
+  for (const org of orgs) {
+    const orgMap = new Map<string, string>();
+
+    for (const def of catalogDefs) {
+      const catalogId = catalogMap.get(def.code)!;
+
+      const subject = await prisma.subject.upsert({
+        where: {
+          organizationId_catalogSubjectId: {
+            organizationId: org.id,
+            catalogSubjectId: catalogId,
+          },
+        },
+        update: {},
+        create: { organizationId: org.id, catalogSubjectId: catalogId, name: def.name },
+      });
+
+      // Ensure at least one SubjectLevel
+      const hasLevel = await prisma.subjectLevel.findFirst({ where: { subjectId: subject.id } });
+      if (!hasLevel) {
+        await prisma.subjectLevel.create({
+          data: { subjectId: subject.id, grade: SchoolGrade.GRADE_7, order: 1 },
+        });
+      }
+
+      orgMap.set(def.code, subject.id);
+    }
+    result.set(org.id, orgMap);
+  }
+
+  logDone(`Catalog subjects + org subjects ready`);
+  return result;
+}
+
+// Title → catalog code mapping
+const TITLE_TO_CODE: Record<string, string> = {
+  'Matematika – zlomky': 'MAT',
+  'Český jazyk – pravopis': 'CZJ',
+  'Fyzika – síly': 'FYZ',
+  'Matematika – funkce': 'MAT',
+  'Český jazyk – literatura': 'CZJ',
+  'Dějepis – 20. století': 'DEJ',
+  'Základy programování': 'INF',
+  'Angličtina – B1': 'ENG',
+  'Finanční gramotnost': 'ECO',
+};
+
 // --- 5) TESTY (min. 3 na org, PUBLISHED, scoreable) ---
 type OrgWithName = { id: string; name: string };
 async function createTests(
   orgs: OrgWithName[],
   orgUsers: OrgUserIds[],
+  years: { id: string; orgId: string }[],
+  subjectsByOrg: Map<string, Map<string, string>>,
 ) {
   logStep('Tests: min 3 per org, realistic titles, scoreable');
   const testTitlesByOrg: Record<string, string[]> = {
@@ -470,15 +644,28 @@ async function createTests(
     ],
   };
 
-  const allTests: { id: string; orgId: string; testId: string; questionIds: string[] }[] = [];
+  const allTests: {
+    id: string;
+    orgId: string;
+    testId: string;
+    questionIds: string[];
+  }[] = [];
 
   for (const org of orgs) {
     const titles = testTitlesByOrg[org.name] ?? testTitlesByOrg[ORG_NAMES.ZS];
     if (!titles) continue;
-    const creatorId = orgUsers.find((u) => u.orgId === org.id)?.creatorMembershipId;
+    const creatorId = orgUsers.find(
+      (u) => u.orgId === org.id,
+    )?.creatorMembershipId;
     if (!creatorId) continue;
 
+    const orgYearId = years.find((y) => y.orgId === org.id)?.id ?? null;
+    const orgSubjects = subjectsByOrg.get(org.id) ?? new Map<string, string>();
+
     for (const title of titles) {
+      const code = TITLE_TO_CODE[title];
+      const subjectId = code ? (orgSubjects.get(code) ?? null) : null;
+
       let test = await prisma.test.findFirst({
         where: { organizationId: org.id, title, deletedAt: null },
       });
@@ -490,12 +677,19 @@ async function createTests(
             description: `Test: ${title}`,
             status: PublishStatus.PUBLISHED,
             creatorId,
+            ...(subjectId && { subjectId }),
+            ...(orgYearId && { academicYearId: orgYearId }),
           },
         });
       } else {
         await prisma.test.update({
           where: { id: test.id },
-          data: { status: PublishStatus.PUBLISHED, creatorId },
+          data: {
+            status: PublishStatus.PUBLISHED,
+            creatorId,
+            ...(subjectId && { subjectId }),
+            ...(orgYearId && { academicYearId: orgYearId }),
+          },
         });
       }
 
@@ -543,11 +737,7 @@ async function createTests(
             { questionId: q3.id, text: 'C' },
           ],
         });
-        questions = [
-          { id: q1.id },
-          { id: q2.id },
-          { id: q3.id },
-        ];
+        questions = [{ id: q1.id }, { id: q2.id }, { id: q3.id }];
       }
       allTests.push({
         id: test.id,
@@ -570,11 +760,21 @@ async function createAssignments(
   logStep('Assignments: per test, sensible open/close, maxAttempts 1 or 2–3');
   const openAt = new Date('2024-10-01T08:00:00.000Z');
   const closeAt = new Date('2025-06-30T18:00:00.000Z');
-  const assignments: { id: string; testId: string; classSectionId: string; maxAttempts: number; organizationId: string }[] = [];
+  const assignments: {
+    id: string;
+    testId: string;
+    classSectionId: string;
+    maxAttempts: number;
+    organizationId: string;
+  }[] = [];
 
   for (const test of tests) {
-    const orgSections = sections.filter((s) => s.orgId === test.orgId && (s.label === '6.A' || s.label === '7.B'));
-    const creatorId = orgUsers.find((u) => u.orgId === test.orgId)?.creatorMembershipId;
+    const orgSections = sections.filter(
+      (s) => s.orgId === test.orgId && (s.label === '6.A' || s.label === '7.B'),
+    );
+    const creatorId = orgUsers.find(
+      (u) => u.orgId === test.orgId,
+    )?.creatorMembershipId;
     if (!creatorId) continue;
 
     for (const sec of orgSections) {
@@ -631,9 +831,17 @@ async function createSubmissions(
   orgUsers: OrgUserIds[],
   sections: { id: string; orgId: string; label: string }[],
   tests: { testId: string; orgId: string; questionIds: string[] }[],
-  assignments: { id: string; testId: string; classSectionId: string; maxAttempts: number; organizationId: string }[],
+  assignments: {
+    id: string;
+    testId: string;
+    classSectionId: string;
+    maxAttempts: number;
+    organizationId: string;
+  }[],
 ) {
-  logStep('Submissions: Student A–F scenarios (1 attempt, 2 attempts, 3 attempts, none, decline, 1 test only)');
+  logStep(
+    'Submissions: Student A–F scenarios (1 attempt, 2 attempts, 3 attempts, none, decline, 1 test only)',
+  );
   let created = 0;
 
   const createSubmissionAttempt = async ({
@@ -699,18 +907,21 @@ async function createSubmissions(
     const class7B = orgSections.find((s) => s.label === '7.B');
     if (!class6A || !class7B) continue;
 
-    const assign6A = assignments.filter(
-      (a) => a.classSectionId === class6A.id,
-    );
-    const assign7B = assignments.filter(
-      (a) => a.classSectionId === class7B.id,
-    );
+    const assign6A = assignments.filter((a) => a.classSectionId === class6A.id);
+    const assign7B = assignments.filter((a) => a.classSectionId === class7B.id);
     const orgTests = tests.filter((t) => t.orgId === org.orgId);
     const test1 = orgTests[0];
     const test2 = orgTests[1];
     const test3 = orgTests[2];
 
-    const studentKeys = ['studentA', 'studentB', 'studentC', 'studentD', 'studentE', 'studentF'] as const;
+    const studentKeys = [
+      'studentA',
+      'studentB',
+      'studentC',
+      'studentD',
+      'studentE',
+      'studentF',
+    ] as const;
     const membershipIds = org.studentMembershipIds;
 
     for (let idx = 0; idx < 6; idx++) {
@@ -755,7 +966,9 @@ async function createSubmissions(
             studentId: studentMembershipId,
             attemptNo: attempt + 1,
             score: scoreVal,
-            submittedAt: new Date(baseDate.getTime() + (attempt + 1) * 86400000),
+            submittedAt: new Date(
+              baseDate.getTime() + (attempt + 1) * 86400000,
+            ),
           });
           if (didCreate) {
             created++;
@@ -774,7 +987,9 @@ async function createSubmissions(
             studentId: studentMembershipId,
             attemptNo: attempt + 1,
             score: scoreVal,
-            submittedAt: new Date(baseDate.getTime() + (attempt + 1) * 86400000),
+            submittedAt: new Date(
+              baseDate.getTime() + (attempt + 1) * 86400000,
+            ),
           });
           if (didCreate) {
             created++;
@@ -797,7 +1012,9 @@ async function createSubmissions(
             studentId: studentMembershipId,
             attemptNo: attempt + 1,
             score: scoreVal,
-            submittedAt: new Date(baseDate.getTime() + (attempt + 1) * 86400000),
+            submittedAt: new Date(
+              baseDate.getTime() + (attempt + 1) * 86400000,
+            ),
           });
           if (didCreate) {
             created++;
@@ -826,6 +1043,7 @@ async function createSubmissions(
 
 async function main() {
   console.log('🌱 Full walkthrough seed – start');
+  await ensurePlatformBootstrapUsers();
   const orgs = await createOrganizations();
   const years = await createAcademicYears(orgs);
   const sections = await createClassSections(orgs, years);
@@ -833,7 +1051,8 @@ async function main() {
   await createTeachers(orgUsers);
   await setHomeroomTeachers(orgUsers, sections);
   await createStudentsAndEnrollments(orgUsers, sections);
-  const tests = await createTests(orgs, orgUsers);
+  const subjectsByOrg = await ensureCatalogAndSubjects(orgs);
+  const tests = await createTests(orgs, orgUsers, years, subjectsByOrg);
   const assignments = await createAssignments(orgUsers, sections, tests);
   await createSubmissions(orgUsers, sections, tests, assignments);
 
@@ -848,35 +1067,102 @@ async function main() {
   console.log('Students:', studentCount);
   console.log('Submissions:', submissionCount);
 
-  printDemoBanner([
-    { email: 'director@zs.demo.local', org: ORG_NAMES.ZS, role: 'DIRECTOR' },
-    { email: 'teacher1@zs.demo.local', org: ORG_NAMES.ZS, role: 'TEACHER' },
-    { email: 'teacher2@zs.demo.local', org: ORG_NAMES.ZS, role: 'TEACHER' },
-    { email: 'student-a@zs.demo.local', org: ORG_NAMES.ZS, role: 'STUDENT' },
-    { email: 'student-b@zs.demo.local', org: ORG_NAMES.ZS, role: 'STUDENT' },
-    { email: 'student-c@zs.demo.local', org: ORG_NAMES.ZS, role: 'STUDENT' },
-    { email: 'student-d@zs.demo.local', org: ORG_NAMES.ZS, role: 'STUDENT' },
-    { email: 'student-e@zs.demo.local', org: ORG_NAMES.ZS, role: 'STUDENT' },
-    { email: 'student-f@zs.demo.local', org: ORG_NAMES.ZS, role: 'STUDENT' },
-    { email: 'director@gym.demo.local', org: ORG_NAMES.GYM, role: 'DIRECTOR' },
-    { email: 'teacher1@gym.demo.local', org: ORG_NAMES.GYM, role: 'TEACHER' },
-    { email: 'teacher2@gym.demo.local', org: ORG_NAMES.GYM, role: 'TEACHER' },
-    { email: 'student-a@gym.demo.local', org: ORG_NAMES.GYM, role: 'STUDENT' },
-    { email: 'student-b@gym.demo.local', org: ORG_NAMES.GYM, role: 'STUDENT' },
-    { email: 'student-c@gym.demo.local', org: ORG_NAMES.GYM, role: 'STUDENT' },
-    { email: 'student-d@gym.demo.local', org: ORG_NAMES.GYM, role: 'STUDENT' },
-    { email: 'student-e@gym.demo.local', org: ORG_NAMES.GYM, role: 'STUDENT' },
-    { email: 'student-f@gym.demo.local', org: ORG_NAMES.GYM, role: 'STUDENT' },
-    { email: 'director@kom.demo.local', org: ORG_NAMES.KOMUNITA, role: 'DIRECTOR' },
-    { email: 'teacher1@kom.demo.local', org: ORG_NAMES.KOMUNITA, role: 'TEACHER' },
-    { email: 'teacher2@kom.demo.local', org: ORG_NAMES.KOMUNITA, role: 'TEACHER' },
-    { email: 'student-a@kom.demo.local', org: ORG_NAMES.KOMUNITA, role: 'STUDENT' },
-    { email: 'student-b@kom.demo.local', org: ORG_NAMES.KOMUNITA, role: 'STUDENT' },
-    { email: 'student-c@kom.demo.local', org: ORG_NAMES.KOMUNITA, role: 'STUDENT' },
-    { email: 'student-d@kom.demo.local', org: ORG_NAMES.KOMUNITA, role: 'STUDENT' },
-    { email: 'student-e@kom.demo.local', org: ORG_NAMES.KOMUNITA, role: 'STUDENT' },
-    { email: 'student-f@kom.demo.local', org: ORG_NAMES.KOMUNITA, role: 'STUDENT' },
-  ], DEMO_PASSWORD);
+  printDemoBanner(
+    [
+      { email: 'director@zs.demo.local', org: ORG_NAMES.ZS, role: 'DIRECTOR' },
+      { email: 'teacher1@zs.demo.local', org: ORG_NAMES.ZS, role: 'TEACHER' },
+      { email: 'teacher2@zs.demo.local', org: ORG_NAMES.ZS, role: 'TEACHER' },
+      { email: 'student-a@zs.demo.local', org: ORG_NAMES.ZS, role: 'STUDENT' },
+      { email: 'student-b@zs.demo.local', org: ORG_NAMES.ZS, role: 'STUDENT' },
+      { email: 'student-c@zs.demo.local', org: ORG_NAMES.ZS, role: 'STUDENT' },
+      { email: 'student-d@zs.demo.local', org: ORG_NAMES.ZS, role: 'STUDENT' },
+      { email: 'student-e@zs.demo.local', org: ORG_NAMES.ZS, role: 'STUDENT' },
+      { email: 'student-f@zs.demo.local', org: ORG_NAMES.ZS, role: 'STUDENT' },
+      {
+        email: 'director@gym.demo.local',
+        org: ORG_NAMES.GYM,
+        role: 'DIRECTOR',
+      },
+      { email: 'teacher1@gym.demo.local', org: ORG_NAMES.GYM, role: 'TEACHER' },
+      { email: 'teacher2@gym.demo.local', org: ORG_NAMES.GYM, role: 'TEACHER' },
+      {
+        email: 'student-a@gym.demo.local',
+        org: ORG_NAMES.GYM,
+        role: 'STUDENT',
+      },
+      {
+        email: 'student-b@gym.demo.local',
+        org: ORG_NAMES.GYM,
+        role: 'STUDENT',
+      },
+      {
+        email: 'student-c@gym.demo.local',
+        org: ORG_NAMES.GYM,
+        role: 'STUDENT',
+      },
+      {
+        email: 'student-d@gym.demo.local',
+        org: ORG_NAMES.GYM,
+        role: 'STUDENT',
+      },
+      {
+        email: 'student-e@gym.demo.local',
+        org: ORG_NAMES.GYM,
+        role: 'STUDENT',
+      },
+      {
+        email: 'student-f@gym.demo.local',
+        org: ORG_NAMES.GYM,
+        role: 'STUDENT',
+      },
+      {
+        email: 'director@kom.demo.local',
+        org: ORG_NAMES.KOMUNITA,
+        role: 'DIRECTOR',
+      },
+      {
+        email: 'teacher1@kom.demo.local',
+        org: ORG_NAMES.KOMUNITA,
+        role: 'TEACHER',
+      },
+      {
+        email: 'teacher2@kom.demo.local',
+        org: ORG_NAMES.KOMUNITA,
+        role: 'TEACHER',
+      },
+      {
+        email: 'student-a@kom.demo.local',
+        org: ORG_NAMES.KOMUNITA,
+        role: 'STUDENT',
+      },
+      {
+        email: 'student-b@kom.demo.local',
+        org: ORG_NAMES.KOMUNITA,
+        role: 'STUDENT',
+      },
+      {
+        email: 'student-c@kom.demo.local',
+        org: ORG_NAMES.KOMUNITA,
+        role: 'STUDENT',
+      },
+      {
+        email: 'student-d@kom.demo.local',
+        org: ORG_NAMES.KOMUNITA,
+        role: 'STUDENT',
+      },
+      {
+        email: 'student-e@kom.demo.local',
+        org: ORG_NAMES.KOMUNITA,
+        role: 'STUDENT',
+      },
+      {
+        email: 'student-f@kom.demo.local',
+        org: ORG_NAMES.KOMUNITA,
+        role: 'STUDENT',
+      },
+    ],
+    DEMO_PASSWORD,
+  );
 
   console.log('✅ Full walkthrough seed – done');
 }

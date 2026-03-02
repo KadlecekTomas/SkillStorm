@@ -117,44 +117,43 @@ describe('Academic year invariant (e2e)', () => {
     await prisma.organization.deleteMany({ where: { id: orgId } }).catch(() => {});
   });
 
-  it('GET /academic-years/current returns 409 MULTIPLE_CURRENT_ACADEMIC_YEARS when 2 current years', async () => {
+  it('partial unique index prevents a second current year — DB blocks direct Prisma insert with P2002', async () => {
+    // The state "two isCurrent=true AND deleted_at IS NULL rows for the same org" is now
+    // unreachable via the partial unique index. This test verifies the constraint fires.
     const auth = await authAs(app, OrganizationRole.OWNER, {
       seed: `multi_${Date.now()}`,
       mode: RegisterMode.CREATE_ORG,
     });
-    const token = auth.accessToken;
 
     const createOrgRes = await request(app.getHttpServer())
       .post('/organizations')
-      .set('Authorization', `Bearer ${token}`)
+      .set('Authorization', `Bearer ${auth.accessToken}`)
       .send({ name: `Multi Active Org ${Date.now()}`, type: OrganizationType.SCHOOL })
       .expect(201);
 
     const orgId = unwrap(createOrgRes)?.id ?? createOrgRes.body?.id;
-    await prisma.academicYear.create({
-      data: {
-        orgId,
-        label: '2026/2027',
-        startsAt: new Date('2026-09-01'),
-        endsAt: new Date('2027-08-31'),
-        isCurrent: true,
-      },
-    });
+    expect(orgId).toBeTruthy();
 
-    const useOrgRes = await request(app.getHttpServer())
-      .post('/auth/use-org')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ orgId })
-      .expect(201);
-    const newToken = (unwrap(useOrgRes) ?? useOrgRes.body)?.sessionToken ?? useOrgRes.body?.sessionToken;
+    // Org has exactly one current year from registration
+    const before = await prisma.academicYear.count({ where: { orgId, isCurrent: true } });
+    expect(before).toBe(1);
 
-    const res = await request(app.getHttpServer())
-      .get('/academic-years/current')
-      .set('Authorization', `Bearer ${newToken}`)
-      .expect(409);
+    // Attempting to create a second isCurrent=true year must throw (P2002 unique violation)
+    await expect(
+      prisma.academicYear.create({
+        data: {
+          orgId,
+          label: '2099/2100',
+          startsAt: new Date('2099-09-01'),
+          endsAt: new Date('2100-08-31'),
+          isCurrent: true,
+        },
+      }),
+    ).rejects.toThrow();
 
-    const body = res.body;
-    expect(body?.meta?.code).toBe('MULTIPLE_CURRENT_ACADEMIC_YEARS');
+    // DB still has exactly one current year — constraint held
+    const after = await prisma.academicYear.count({ where: { orgId, isCurrent: true } });
+    expect(after).toBe(1);
 
     await prisma.academicYear.deleteMany({ where: { orgId } }).catch(() => {});
     await prisma.membership.deleteMany({ where: { organizationId: orgId } }).catch(() => {});

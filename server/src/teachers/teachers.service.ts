@@ -84,7 +84,9 @@ export class TeachersService {
   // ---------- Includes (typově bezpečné) ----------
   private teacherListInclude() {
     return Prisma.validator<Prisma.TeacherInclude>()({
-      membership: { include: { user: true } },
+      membership: {
+        include: { user: { select: { id: true, name: true, email: true } } },
+      },
       subjects: { include: { subject: true } }, // TeacherSubject[] + Subject
       homeroomOf: { include: { academicYear: true } }, // ClassSection[]
     });

@@ -51,13 +51,6 @@ export class PrivacyService {
     ]);
   }
 
-  async deleteOldAuditLogs(days: number): Promise<void> {
-    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-    await this.prisma.auditLog.deleteMany({
-      where: { createdAt: { lt: cutoff } },
-    });
-  }
-
   async cleanupDeletedUsers(): Promise<void> {
     const sixMonthsAgo = new Date();
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
@@ -79,9 +72,10 @@ export class PrivacyService {
     await this.prisma.userPermission.deleteMany({ where: { userId: { in: userIds } } });
   }
 
+  // Audit log PII anonymization is handled by AuditRetentionService (runs at 03:15 UTC).
+  // This job runs at 03:00 UTC to clean up anonymized user tokens and sessions only.
   @Cron('0 3 * * *')
   async handleRetention(): Promise<void> {
-    await this.deleteOldAuditLogs(180);
     await this.cleanupDeletedUsers();
   }
 }

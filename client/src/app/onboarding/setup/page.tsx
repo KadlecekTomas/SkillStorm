@@ -5,7 +5,7 @@ import { BookOpen } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
-const DASHBOARD_CLASSROOMS_PATH = "/dashboard/classrooms";
+const DASHBOARD_CLASSROOMS_PATH = "/app/classrooms";
 
 /**
  * Shown when org.status === ACTIVE and org.readiness === NOT_READY (no class yet).

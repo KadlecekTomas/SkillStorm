@@ -29,6 +29,7 @@ import {
   OrganizationType,
   Prisma,
   SystemRole,
+  UserStatus,
   XpEventType,
 } from '@prisma/client';
 import { createHash, randomBytes, randomUUID } from 'crypto';
@@ -40,6 +41,7 @@ import { RbacService } from '@/modules/rbac/rbac.service';
 import { PermissionKey } from '@prisma/client';
 import type { Request } from 'express';
 import { REFRESH_TOKEN_COOKIE } from './token-cookies';
+import { hashToken, matchesTokenHash } from './token.util';
 import { isUUID } from 'class-validator';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
@@ -183,10 +185,11 @@ export class AuthService {
   private async issueRefreshToken(userId: string) {
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        const token = randomBytes(48).toString('hex');
+        const token = randomBytes(64).toString('hex');
+        const tokenHash = hashToken(token);
         await this.prisma.refreshToken.create({
           data: {
-            token,
+            token: tokenHash,
             userId,
             expiresAt: addDays(new Date(), 7),
           },
@@ -223,9 +226,14 @@ export class AuthService {
   }
 
   private async rotateRefreshToken(token: string) {
+    const tokenHash = hashToken(token);
     const row = await this.prisma.refreshToken.findFirst({
-      where: { token },
+      where: { token: tokenHash },
     });
+    if (row && !matchesTokenHash(token, row.token)) {
+      this.logger.warn('Rejected refresh token (hash mismatch)');
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
     if (!row || row.expiresAt < new Date() || row.revokedAt) {
       if (row && !row.revokedAt) {
         await this.prisma.refreshToken.update({
@@ -247,6 +255,9 @@ export class AuthService {
       where: { id: row.userId },
     });
     if (!user) throw new UnauthorizedException('User not found');
+    if (user.status !== UserStatus.ACTIVE || user.deletedAt) {
+      throw new UnauthorizedException('Token invalid');
+    }
 
     let membership: { id: string; role: any; organizationId: string } | null = null;
     if (user.lastActiveMembershipId) {
@@ -293,6 +304,9 @@ export class AuthService {
       where: { id: userId },
     });
     if (!user) throw new UnauthorizedException('User not found');
+    if (user.status !== UserStatus.ACTIVE || user.deletedAt) {
+      throw new UnauthorizedException('Account disabled');
+    }
     const membership = await this.prisma.membership.findUnique({
       where: { id: membershipId },
     });
@@ -877,6 +891,11 @@ export class AuthService {
       throw new UnauthorizedException('Operace se nezdařila.');
     }
 
+    if (user.status !== UserStatus.ACTIVE || user.deletedAt) {
+      this.logger.warn('Failed login – disabled account');
+      throw new UnauthorizedException('Account disabled');
+    }
+
     const isPasswordValid = await bcrypt.compare(
       dto.password,
       user.passwordHash,
@@ -1002,9 +1021,13 @@ export class AuthService {
     }
 
     if (!resolvedUserId && refreshToken) {
+      const refreshTokenHash = hashToken(refreshToken);
       const tokenRow = await this.prisma.refreshToken.findFirst({
-        where: { token: refreshToken },
+        where: { token: refreshTokenHash },
       });
+      if (tokenRow && !matchesTokenHash(refreshToken, tokenRow.token)) {
+        throw new UnauthorizedException('Invalid or expired refresh token');
+      }
       resolvedUserId = tokenRow?.userId ?? null;
     }
 
@@ -1030,13 +1053,23 @@ export class AuthService {
 
     // Smaž refresh token (může existovat i více – smažeme konkrétní)
     if (refreshToken) {
-      await this.prisma.refreshToken.updateMany({
+      const refreshTokenHash = hashToken(refreshToken);
+      const tokenRows = await this.prisma.refreshToken.findMany({
         where: {
-          token: refreshToken,
+          token: refreshTokenHash,
           revokedAt: null,
         },
-        data: { revokedAt: new Date() },
+        select: { id: true, token: true },
       });
+      const matched = tokenRows.filter((row) =>
+        matchesTokenHash(refreshToken, row.token),
+      );
+      if (matched.length > 0) {
+        await this.prisma.refreshToken.updateMany({
+          where: { id: { in: matched.map((row) => row.id) } },
+          data: { revokedAt: new Date() },
+        });
+      }
       this.logger.log('Refresh token revoked');
     }
 
@@ -1510,7 +1543,18 @@ export class AuthService {
     const tokenHash = this.hashResetToken(dto.token);
     const row = await this.prisma.passwordResetToken.findFirst({
       where: { tokenHash },
-      include: { user: true },
+      select: {
+        id: true,
+        userId: true,
+        usedAt: true,
+        expiresAt: true,
+        user: {
+          select: {
+            id: true,
+            tokenVersion: true,
+          },
+        },
+      },
     });
     if (!row || row.usedAt || row.expiresAt < new Date()) {
       throw new BadRequestException('Operace se nezdařila.');

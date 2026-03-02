@@ -3,6 +3,20 @@ import * as bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
+function isProduction() {
+  const nodeEnv = process.env.NODE_ENV ?? '';
+  const appEnv = process.env.APP_ENV ?? '';
+  return nodeEnv === 'production' || appEnv === 'production';
+}
+
+function printDemoBanner(env, email, passwordSource) {
+  console.log('\n--- DEMO SEED BANNER (copy-paste) ---');
+  console.log('NODE_ENV=' + env);
+  console.log('Created user: ' + email + ' | (system) | SUPERADMIN');
+  console.log('Password: ' + passwordSource);
+  console.log('--- END DEMO BANNER ---\n');
+}
+
 async function main() {
   const existingSuperadmin = await prisma.user.findFirst({
     where: { systemRole: SystemRole.SUPERADMIN },
@@ -22,9 +36,9 @@ async function main() {
     const message =
       'Missing SUPERADMIN_EMAIL and/or SUPERADMIN_PASSWORD for initial SUPERADMIN bootstrap.';
 
-    if (nodeEnv === 'production') {
+    if (isProduction()) {
       throw new Error(
-        `${message} In production, these environment variables are required when no SUPERADMIN exists.`,
+        `${message} In production, these environment variables are required when no SUPERADMIN exists. Do not use demo password.`,
       );
     }
 
@@ -47,6 +61,8 @@ async function main() {
   console.log(
     `Superadmin user ready (id=${user.id}, email=${email}, systemRole=${user.systemRole}).`,
   );
+
+  printDemoBanner(nodeEnv, email, '(from SUPERADMIN_PASSWORD env)');
 }
 
 main()

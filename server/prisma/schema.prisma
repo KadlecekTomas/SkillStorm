@@ -1,6 +1,6 @@
 generator client {
   provider      = "prisma-client-js"
-  binaryTargets = ["native", "debian-openssl-3.0.x"]
+  binaryTargets = ["native", "linux-arm64-openssl-3.0.x", "linux-arm64-openssl-1.1.x", "debian-openssl-3.0.x"]
 }
 
 datasource db {
@@ -269,6 +269,7 @@ model RefreshToken {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([token])
   @@map("refresh_tokens")
 }
 
@@ -301,6 +302,7 @@ model AuditLog {
   id             String          @id @default(uuid()) @map("audit_log_id")
   userId         String?         @map("user_id")
   organizationId String?         @map("organization_id")
+  systemRole     String?         @map("system_role")
   entityType     AuditEntityType @map("entity_type")
   entityId       String?         @map("entity_id")
   action         String
@@ -315,6 +317,7 @@ model AuditLog {
   @@index([userId])
   @@index([organizationId])
   @@index([entityType])
+  @@index([createdAt])
   @@map("audit_logs")
 }
 
@@ -378,6 +381,7 @@ model Invite {
   academicYear   AcademicYear?    @relation(fields: [yearId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
+  @@index([organizationId, createdAt])
   @@index([classSectionId])
   @@index([yearId])
   @@map("invites")
@@ -396,14 +400,17 @@ model AcademicYear {
   endsAt        DateTime
   isCurrent     Boolean        @default(false)
   createdAt     DateTime       @default(now()) @map("created_at")
+  deletedAt     DateTime?      @map("deleted_at")
   organization  Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
   assignments   Assignment[]
   classSections ClassSection[]
   enrollments   Enrollment[]
   invitations   Invitation[]
   invites       Invite[]
+  tests         Test[]
 
   @@unique([orgId, label])
+  @@index([orgId, isCurrent])
   @@map("academic_years")
 }
 
@@ -499,6 +506,7 @@ model Enrollment {
   @@index([classSectionId])
   @@index([orgId])
   @@index([orgId, yearId])
+  @@index([orgId, yearId, studentId])
   @@map("enrollments")
 }
 
@@ -528,9 +536,11 @@ model Subject {
   organizationId    String             @map("organization_id")
   catalogSubjectId  String?            @map("catalog_subject_id")
   name              String
+  isActive          Boolean            @default(true) @map("is_active")
   deletedAt         DateTime?          @map("deleted_at")
   learningMaterials LearningMaterial[]
   levels            SubjectLevel[]
+  tests             Test[]
   catalogSubject    CatalogSubject?    @relation(fields: [catalogSubjectId], references: [id], onDelete: Restrict)
   organization      Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   teachers          TeacherSubject[]
@@ -538,6 +548,7 @@ model Subject {
   @@unique([organizationId, catalogSubjectId])
   @@index([organizationId])
   @@index([catalogSubjectId])
+  @@index([organizationId, isActive])
   @@map("subjects")
 }
 
@@ -676,7 +687,6 @@ model OrgSubject {
   organizationId  String   @map("organization_id")
   organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   classSections   ClassSectionOrgSubject[]
-  tests           Test[]
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
@@ -701,7 +711,8 @@ model ClassSectionOrgSubject {
 model Test {
   id                   String           @id @default(uuid()) @map("test_id")
   organizationId       String           @map("organization_id")
-  orgSubjectId         String?          @map("org_subject_id")
+  subjectId            String?          @map("subject_id")
+  academicYearId       String?          @map("academic_year_id")
   title                String
   description          String?
   version              Int              @default(1)
@@ -717,8 +728,14 @@ model Test {
   assignments          TestAssignment[]
   creator              Membership       @relation(fields: [creatorId], references: [id], onDelete: Cascade)
   organization         Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  subject              OrgSubject?     @relation(fields: [orgSubjectId], references: [id], onDelete: SetNull)
+  subject              Subject?         @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  academicYear         AcademicYear?    @relation(fields: [academicYearId], references: [id], onDelete: Restrict)
 
+  @@index([organizationId, status, deletedAt])
+  @@index([organizationId, createdAt, deletedAt])
+  @@index([organizationId, academicYearId])
+  @@index([organizationId, academicYearId, subjectId])
+  @@index([subjectId])
   @@map("tests")
 }
 
@@ -797,6 +814,7 @@ model Submission {
   @@index([studentId, assignmentId])
   @@index([testId, status])
   @@index([studentId, submittedAt])
+  @@index([organizationId, studentId, createdAt])
   @@map("submissions")
 }
 
@@ -917,6 +935,8 @@ model Assignment {
   @@index([organizationId, classSectionId])
   @@index([yearId])
   @@index([testId])
+  @@index([organizationId, yearId, closeAt])
+  @@index([organizationId, createdAt])
   @@map("assignments")
 }
 

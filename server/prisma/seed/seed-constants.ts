@@ -20,10 +20,12 @@ export const ORG_TYPES: Record<keyof typeof ORG_IDS, OrganizationType> = {
 
 export const USER_EMAILS = {
   superadmin: 'superadmin@skillstorm.io',
+  owner: 'owner@chodovicka.cz',
   director: 'director@chodovicka.cz',
   teacher: 'teacher@chodovicka.cz',
   student1: 'student1@chodovicka.cz',
   student2: 'student2@chodovicka.cz',
+  parent: 'parent@chodovicka.cz',
 } as const;
 
 export const PASSWORDS = {

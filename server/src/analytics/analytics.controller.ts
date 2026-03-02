@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -16,11 +17,15 @@ import { RequestWithUser } from '@/types/request-with-user';
 import { JwtAuthGuard } from '@/auth/guards/jwt-auth.guard';
 import { RequireCurrentAcademicYearGuard } from '@/academic-years/require-current-academic-year.guard';
 import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
+import { OrgContextService } from '@/common/org-context/org-context.service';
 
 @Controller('analytics')
 @OrgOperation(OrgOperationType.EXECUTION)
 export class AnalyticsController {
-  constructor(private readonly analytics: AnalyticsService) {}
+  constructor(
+    private readonly analytics: AnalyticsService,
+    private readonly orgContext: OrgContextService,
+  ) {}
 
   @Post('log')
   async log(
@@ -47,13 +52,23 @@ export class AnalyticsController {
     @Query('studentId') studentId: string | undefined,
     @Req() req: RequestWithUser,
   ) {
+    const _ = yearId;
+    void _;
     const resolvedStudentId: string | null =
       typeof studentId === 'string' && studentId.length > 0 ? studentId : null;
-    return this.analytics.studentTimeline(
-      yearId,
-      req.user,
-      resolvedStudentId ?? null,
-    );
+    return this.orgContext.get(req).then((ctx) => {
+      if (!ctx.activeAcademicYearId) {
+        throw new BadRequestException('Missing active academic year');
+      }
+      if (yearId && yearId !== ctx.activeAcademicYearId) {
+        throw new BadRequestException('yearId query is not allowed');
+      }
+      return this.analytics.studentTimeline(
+        ctx.activeAcademicYearId,
+        req.user,
+        resolvedStudentId ?? null,
+      );
+    });
   }
 
   @Get('class-heatmap')
@@ -63,10 +78,18 @@ export class AnalyticsController {
     @Query('yearId') yearId: string,
     @Req() req: RequestWithUser,
   ) {
-    return this.analytics.classHeatmap(
-      yearId,
-      req.user.organizationId ?? null,
-    );
+    return this.orgContext.get(req).then((ctx) => {
+      if (!ctx.activeAcademicYearId) {
+        throw new BadRequestException('Missing active academic year');
+      }
+      if (yearId && yearId !== ctx.activeAcademicYearId) {
+        throw new BadRequestException('yearId query is not allowed');
+      }
+      return this.analytics.classHeatmap(
+        ctx.activeAcademicYearId,
+        ctx.organizationId ?? null,
+      );
+    });
   }
 
   @Get('student/errors')
@@ -76,7 +99,15 @@ export class AnalyticsController {
     @Query('yearId') yearId: string,
     @Req() req: RequestWithUser,
   ) {
-    return this.analytics.studentErrorOverview(yearId, req.user);
+    return this.orgContext.get(req).then((ctx) => {
+      if (!ctx.activeAcademicYearId) {
+        throw new BadRequestException('Missing active academic year');
+      }
+      if (yearId && yearId !== ctx.activeAcademicYearId) {
+        throw new BadRequestException('yearId query is not allowed');
+      }
+      return this.analytics.studentErrorOverview(ctx.activeAcademicYearId, req.user);
+    });
   }
 
   @Get('student/topics')
@@ -86,7 +117,15 @@ export class AnalyticsController {
     @Query('yearId') yearId: string,
     @Req() req: RequestWithUser,
   ) {
-    return this.analytics.studentTopicOverview(yearId, req.user);
+    return this.orgContext.get(req).then((ctx) => {
+      if (!ctx.activeAcademicYearId) {
+        throw new BadRequestException('Missing active academic year');
+      }
+      if (yearId && yearId !== ctx.activeAcademicYearId) {
+        throw new BadRequestException('yearId query is not allowed');
+      }
+      return this.analytics.studentTopicOverview(ctx.activeAcademicYearId, req.user);
+    });
   }
 
   @Get('teacher/:classId/errors')
@@ -97,7 +136,19 @@ export class AnalyticsController {
     @Query('yearId') yearId: string,
     @Req() req: RequestWithUser,
   ) {
-    return this.analytics.teacherClassErrorOverview(yearId, classId, req.user);
+    return this.orgContext.get(req).then((ctx) => {
+      if (!ctx.activeAcademicYearId) {
+        throw new BadRequestException('Missing active academic year');
+      }
+      if (yearId && yearId !== ctx.activeAcademicYearId) {
+        throw new BadRequestException('yearId query is not allowed');
+      }
+      return this.analytics.teacherClassErrorOverview(
+        ctx.activeAcademicYearId,
+        classId,
+        req.user,
+      );
+    });
   }
 
   @Get('teacher/:classId/topics')
@@ -108,6 +159,18 @@ export class AnalyticsController {
     @Query('yearId') yearId: string,
     @Req() req: RequestWithUser,
   ) {
-    return this.analytics.teacherClassTopicOverview(yearId, classId, req.user);
+    return this.orgContext.get(req).then((ctx) => {
+      if (!ctx.activeAcademicYearId) {
+        throw new BadRequestException('Missing active academic year');
+      }
+      if (yearId && yearId !== ctx.activeAcademicYearId) {
+        throw new BadRequestException('yearId query is not allowed');
+      }
+      return this.analytics.teacherClassTopicOverview(
+        ctx.activeAcademicYearId,
+        classId,
+        req.user,
+      );
+    });
   }
 }

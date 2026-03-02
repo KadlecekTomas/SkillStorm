@@ -14,10 +14,21 @@ vi.mock("../fePolicyScore", () => ({
 }));
 
 vi.mock("@/lib/http/client");
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({
-    push: vi.fn(),
+vi.mock("@/hooks/use-auth", () => ({
+  useAuth: () => ({
+    org: { id: "org-1" },
+    context: { mode: "organization" },
+    user: { organizationRole: "TEACHER" },
   }),
+}));
+vi.mock("@/hooks/use-academic-years", () => ({
+  useAcademicYears: () => ({ selectedYearId: "year-1" }),
+}));
+vi.mock("@/hooks/use-test-assignments", () => ({
+  useTestAssignments: () => ({ byTestId: {} }),
+}));
+vi.mock("@/lib/guard/withGuard", () => ({
+  withGuard: () => (Component: React.ComponentType) => Component,
 }));
 
 describe("TestsPage", () => {
@@ -31,7 +42,7 @@ describe("TestsPage", () => {
 
     render(<TestsPage />);
 
-    expect(screen.getByText(/loading tests/i)).toBeInTheDocument();
+    expect(screen.getByText(/načítám testy/i)).toBeInTheDocument();
     recordPolicyCheck("Content", "tests-page-loading-state", true, "Tests page shows loading state during fetch.");
   });
 
@@ -68,11 +79,10 @@ describe("TestsPage", () => {
     render(<TestsPage />);
 
     await waitFor(() => {
-      expect(screen.queryByText(/loading tests/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/načítám testy/i)).not.toBeInTheDocument();
     });
 
-    // DataTable should show empty state
-    expect(screen.getByText(/no data yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/zatím nemáš žádné testy/i)).toBeInTheDocument();
     recordPolicyCheck("Content", "tests-page-empty-state", true, "Tests page shows empty state when no tests.");
   });
 
@@ -82,11 +92,10 @@ describe("TestsPage", () => {
     render(<TestsPage />);
 
     await waitFor(() => {
-      expect(screen.queryByText(/loading tests/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/načítám testy/i)).not.toBeInTheDocument();
     });
 
-    // Should use fallback to empty array
-    expect(screen.getByText(/no data yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/zatím nemáš žádné testy/i)).toBeInTheDocument();
     recordPolicyCheck("Content", "tests-page-null-handling", true, "Tests page handles null API response with fallback.");
   });
 
@@ -96,11 +105,10 @@ describe("TestsPage", () => {
     render(<TestsPage />);
 
     await waitFor(() => {
-      expect(screen.queryByText(/loading tests/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/načítám testy/i)).not.toBeInTheDocument();
     });
 
-    // Should not crash, should show empty state
-    expect(screen.getByText(/no data yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/zatím nemáš žádné testy/i)).toBeInTheDocument();
     recordPolicyCheck("Content", "tests-page-error-handling", true, "Tests page handles API errors without crashing.");
   });
 
@@ -122,12 +130,12 @@ describe("TestsPage", () => {
     render(<TestsPage />);
 
     await waitFor(() => {
-      expect(screen.queryByText(/loading tests/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/načítám testy/i)).not.toBeInTheDocument();
     });
 
-    // Should not show loading spinner when data is loaded
-    const loadingSpinners = screen.queryAllByText(/loading tests/i);
+    const loadingSpinners = screen.queryAllByText(/načítám testy/i);
     expect(loadingSpinners).toHaveLength(0);
+    expect(screen.getByRole("heading", { name: /moje testy/i })).toBeInTheDocument();
     recordPolicyCheck("Content", "tests-page-loading-consistency", true, "Tests page does not show loading and data simultaneously.");
   });
 });

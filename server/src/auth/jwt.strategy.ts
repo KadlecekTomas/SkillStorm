@@ -11,7 +11,7 @@ import type { Request } from 'express';
 import { PrismaService } from '@/prisma/prisma.service';
 import type { JwtPayload } from './types/jwt-payload';
 import { ACCESS_TOKEN_COOKIE } from './token-cookies';
-import { SystemRole } from '@prisma/client';
+import { SystemRole, UserStatus } from '@prisma/client';
 
 const bearerExtractor = ExtractJwt.fromAuthHeaderAsBearerToken();
 const cookieExtractor = (req: Request): string | null =>
@@ -31,7 +31,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(ConfigService)
-    private readonly configService: ConfigService,
+    configService: ConfigService,
   ) {
     const tokenExtractor = ExtractJwt.fromExtractors([
       cookieExtractor,
@@ -39,24 +39,12 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       sessionHeaderExtractor,
     ]);
     const secret = configService.get<string>('JWT_SECRET');
-    if (process.env.NODE_ENV === 'production' && !secret) {
-      throw new Error('JWT_SECRET is required in production');
-    }
-    const effectiveSecret =
-      secret ||
-      (process.env.NODE_ENV !== 'production'
-        ? (() => {
-            // eslint-disable-next-line no-console
-            console.warn('JWT_SECRET not set. Using insecure development mode.');
-            return 'insecure-local-only';
-          })()
-        : undefined);
-    if (!effectiveSecret) {
-      throw new Error('JWT_SECRET is required in production');
+    if (!secret) {
+      throw new Error('JWT_SECRET is required');
     }
     super({
       jwtFromRequest: tokenExtractor,
-      secretOrKey: effectiveSecret,
+      secretOrKey: secret,
       ignoreExpiration: false,
       passReqToCallback: true,
     });
@@ -88,12 +76,17 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         username: true,
         name: true,
         systemRole: true,
+        status: true,
+        deletedAt: true,
         isPlatformAdmin: true,
         passwordChangedAt: true,
         tokenVersion: true,
       },
     });
     if (!user) throw new UnauthorizedException('User not found');
+    if (user.status !== UserStatus.ACTIVE || user.deletedAt) {
+      throw new UnauthorizedException('Token invalid');
+    }
 
     const iat = (payload as { iat?: number }).iat;
     if (typeof iat !== 'number') {

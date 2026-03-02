@@ -1,4 +1,3 @@
-// src/tests/dto/create-test.dto.ts
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsEnum, IsOptional, IsString, IsUUID, Length } from 'class-validator';
 import { PublishStatus } from '@prisma/client';
@@ -14,17 +13,19 @@ export class CreateTestDto {
   @IsString()
   description?: string;
 
-  @ApiProperty({ description: 'Cílová organizace', example: 'uuid' })
-  @IsUUID()
-  organizationId!: string;
-
   @ApiPropertyOptional({ enum: PublishStatus, example: PublishStatus.DRAFT })
   @IsOptional()
   @IsEnum(PublishStatus)
   status?: PublishStatus;
 
-  @ApiPropertyOptional({ description: 'Org subject UUID (validated against organization)' })
+  @ApiProperty({ description: 'Subject UUID (must belong to the org, not deleted)' })
+  @IsUUID()
+  subjectId!: string;
+
+  @ApiPropertyOptional({
+    description: 'AcademicYear UUID — defaults to the active year from OrgContext if omitted',
+  })
   @IsOptional()
   @IsUUID()
-  subjectId?: string;
+  academicYearId?: string;
 }

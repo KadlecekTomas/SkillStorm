@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  GoneException,
   Inject,
   Injectable,
   NotFoundException,
@@ -33,56 +34,7 @@ export class MembershipsService {
 
   // -------- CREATE --------
   async create(dto: CreateMembershipDto, user: any) {
-    // RBAC: director může jen ve své org; superadmin kdekoliv
-    const isSuper = user?.systemRole === SystemRole.SUPERADMIN;
-    const sameOrg =
-      user?.organizationId && user.organizationId === dto.organizationId;
-    if (!(isSuper || sameOrg)) {
-      throw new ForbiddenException('Cross-organization create is forbidden.');
-    }
-
-    // Validace existence org + user
-    const [org, memberUser] = await Promise.all([
-      this.prisma.organization.findUnique({
-        where: { id: dto.organizationId },
-      }),
-      this.prisma.user.findUnique({ where: { id: dto.userId } }),
-    ]);
-    if (!org) throw new NotFoundException('Organizace nebyla nalezena');
-    if (!memberUser) throw new NotFoundException('Uživatel nebyl nalezen');
-
-    // Unikátní členství v rámci organizace
-    const exists = await this.prisma.membership.findUnique({
-      where: {
-        userId_organizationId: {
-          userId: dto.userId,
-          organizationId: dto.organizationId,
-        },
-      },
-    });
-    if (exists) {
-      throw new ConflictException('Uživatel je už členem této organizace.');
-    }
-
-    const created = await this.prisma.membership.create({ data: dto });
-
-    // invalidace listů v rámci org
-    await Promise.all([
-      bumpOrgVersion(this.cache, dto.organizationId),
-      this.auditMembershipChange({
-        action: 'MEMBERSHIP_CREATE',
-        membershipId: created.id,
-        organizationId: dto.organizationId,
-        actorId: user?.userId ?? user?.sub ?? null,
-        metadata: { userId: created.userId, role: created.role },
-      }),
-    ]);
-    emitRbacInvalidation({
-      userId: created.userId,
-      organizationId: created.organizationId,
-      reason: 'MEMBERSHIP_CREATE',
-    });
-    return created;
+    throw new GoneException('Legacy membership create disabled. Use invitation token.');
   }
 
   // -------- LIST (search + pagination + cache) --------

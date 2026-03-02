@@ -27,4 +27,12 @@ export class QuerySubjectsDto {
   @ApiPropertyOptional({ example: true })
   @IsOptional()
   includeLevels?: boolean;
+
+  @ApiPropertyOptional({
+    example: false,
+    description: 'When true, includes inactive subjects. Default: false (active only).',
+  })
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
+  includeInactive?: boolean;
 }

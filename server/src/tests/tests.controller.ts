@@ -9,7 +9,9 @@ import {
   Body,
   Query,
   Req,
+  Header,
   ParseUUIDPipe,
+  BadRequestException,
   ForbiddenException,
   UseGuards,
 } from '@nestjs/common';
@@ -22,8 +24,8 @@ import {
 } from '@nestjs/swagger';
 import { Permission } from '@/modules/rbac/permission.decorator';
 import { PermissionKey } from '@prisma/client';
-import { CacheTTL } from '@nestjs/cache-manager';
 import { InvalidateScopes } from '@/common/cache/invalidate.decorator';
+import { NoHttpCache } from '@/common/cache/no-http-cache.decorator';
 
 import { TestsService } from './tests.service';
 import { CreateTestDto } from './dto/create-test.dto';
@@ -44,6 +46,7 @@ import {
   OrgOperation,
   OrgOperationType,
 } from '@/common/decorators/org-operation.decorator';
+import { OrgContextService } from '@/common/org-context/org-context.service';
 
 @ApiTags('tests')
 @ApiStandardResponses()
@@ -52,32 +55,32 @@ import {
 @UseGuards(RequireCurrentAcademicYearGuard)
 @OrgOperation(OrgOperationType.AUTHORING)
 export class TestsController {
-  constructor(private readonly service: TestsService) {}
+  constructor(
+    private readonly service: TestsService,
+    private readonly orgContext: OrgContextService,
+  ) {}
 
   // TESTS ------------------------------------------------
   @Post()
   @Permission(PermissionKey.CREATE_TEST)
   @ApiOperation({ summary: 'Create test' })
-  @InvalidateScopes(({ req }) => [req.body?.organizationId].filter(Boolean))
-  create(@Body() dto: CreateTestDto, @Req() req: RequestWithUser) {
-    if (req.user.systemRole !== 'SUPERADMIN') {
-      if (!req.user.organizationId) {
-        throw new ForbiddenException('Missing organization context.');
-      }
-      if (dto.organizationId && dto.organizationId !== req.user.organizationId) {
-        throw new ForbiddenException('Invalid org scope for test creation');
-      }
-      dto.organizationId = req.user.organizationId;
-    }
-    return ok(this.service.create(dto, req.user));
+  @InvalidateScopes(({ req }) => [req.user?.organizationId].filter(Boolean))
+  async create(@Body() dto: CreateTestDto, @Req() req: RequestWithUser) {
+    const ctx = await this.orgContext.get(req);
+    return ok(this.service.create(dto, req.user, ctx));
   }
 
   @Get()
   @Permission(PermissionKey.VIEW_RESULTS)
   @ApiOperation({ summary: 'List tests' })
   @ApiQuery({ name: 'organizationId', required: false, type: String })
-  @CacheTTL(0)
-  findAll(@Req() req: RequestWithUser, @Query() q: QueryTestsDto) {
+  @NoHttpCache()
+  async findAll(@Req() req: RequestWithUser, @Query() q: QueryTestsDto) {
+    const ctx = await this.orgContext.get(req);
+    if (q.organizationId && q.organizationId !== ctx.organizationId) {
+      throw new ForbiddenException('organizationId query is not allowed');
+    }
+
     if (req.user.systemRole !== 'SUPERADMIN') {
       if (!req.user.organizationId) {
         throw new ForbiddenException('Missing organization context.');
@@ -88,17 +91,43 @@ export class TestsController {
       return ok(
         this.service.findAll(req.user, {
           ...q,
-          organizationId: req.user.organizationId,
+          organizationId: ctx.organizationId,
         }),
       );
     }
     return ok(this.service.findAll(req.user, q));
   }
 
+  // [TEMP DEBUG] — remove before release
+  // Requires VIEW_RESULTS permission (teacher/admin).
+  // RequireCurrentAcademicYearGuard still applies (class-level).
+  @Get('debug/student-visibility')
+  @Permission(PermissionKey.VIEW_RESULTS)
+  @ApiOperation({ summary: '[DEBUG TEMP] Student test visibility analysis' })
+  @NoHttpCache()
+  debugStudentVisibility(
+    @Query('membershipId') membershipId: string,
+    @Query('organizationId') orgIdOverride: string | undefined,
+    @Req() req: RequestWithUser,
+  ) {
+    if (!membershipId) {
+      throw new BadRequestException('membershipId query param is required');
+    }
+    const organizationId =
+      req.user.systemRole === 'SUPERADMIN' && orgIdOverride
+        ? orgIdOverride
+        : (req.user.organizationId ?? orgIdOverride ?? '');
+    if (!organizationId) {
+      throw new ForbiddenException('Cannot determine organization context');
+    }
+    return ok(this.service.debugStudentVisibility(membershipId, organizationId));
+  }
+
   @Get(':id')
   @Permission(PermissionKey.VIEW_RESULTS)
   @ApiOperation({ summary: 'Get test detail' })
-  @CacheTTL(0)
+  @NoHttpCache()
+  @Header('Cache-Control', 'no-store')
   findOne(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Req() req: RequestWithUser,
@@ -149,8 +178,16 @@ export class TestsController {
   @OrgOperation(OrgOperationType.EXECUTION)
   @Permission(PermissionKey.VIEW_RESULTS)
   @ApiOperation({ summary: 'Get test results (submissions + scores)' })
-  results(@Param('id', new ParseUUIDPipe()) id: string, @Req() req: RequestWithUser) {
-    return ok(this.service.results(id, req.user));
+  results(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Query('page') pageStr: string | undefined,
+    @Query('limit') limitStr: string | undefined,
+    @Req() req: RequestWithUser,
+  ) {
+    const page = Math.max(1, parseInt(String(pageStr ?? '1'), 10) || 1);
+    const rawLimit = parseInt(String(limitStr ?? '20'), 10) || 20;
+    const limit = Math.min(100, Math.max(1, rawLimit));
+    return ok(this.service.results(id, req.user, { page, limit }));
   }
 
   // QUESTIONS -------------------------------------------

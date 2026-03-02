@@ -383,14 +383,22 @@ export class StudentsService {
         this.prisma.student.findMany({
           where,
           include: {
-            membership: { include: { user: true } },
+            membership: {
+              include: { user: { select: { id: true, name: true, email: true } } },
+            },
             enrollments: {
               include: {
                 academicYear: true,
                 classSection: {
                   include: {
                     teacher: {
-                      include: { membership: { include: { user: true } } },
+                      include: {
+                        membership: {
+                          include: {
+                            user: { select: { id: true, name: true, email: true } },
+                          },
+                        },
+                      },
                     },
                   },
                 },
@@ -424,7 +432,13 @@ export class StudentsService {
     const student = await this.prisma.student.findUnique({
       where: { id },
       include: {
-        membership: { select: { id: true, userId: true, user: true } },
+        membership: {
+          select: {
+            id: true,
+            userId: true,
+            user: { select: { id: true, name: true, email: true } },
+          },
+        },
         enrollments: {
           include: {
             academicYear: true,
@@ -432,7 +446,12 @@ export class StudentsService {
               include: {
                 teacher: {
                   include: {
-                    membership: { select: { userId: true, user: true } },
+                    membership: {
+                      select: {
+                        userId: true,
+                        user: { select: { id: true, name: true, email: true } },
+                      },
+                    },
                   },
                 },
               },
@@ -680,14 +699,22 @@ export class StudentsService {
     const student = await this.prisma.student.findUnique({
       where: { id },
       include: {
-        membership: { include: { user: true } },
+        membership: {
+          include: { user: { select: { id: true, name: true, email: true } } },
+        },
         enrollments: {
           include: {
             academicYear: true,
             classSection: {
               include: {
                 teacher: {
-                  include: { membership: { include: { user: true } } },
+                  include: {
+                    membership: {
+                      include: {
+                        user: { select: { id: true, name: true, email: true } },
+                      },
+                    },
+                  },
                 },
               },
             },
@@ -728,13 +755,23 @@ export class StudentsService {
 
     const studentInclude = Prisma.validator<Prisma.StudentInclude>()({
       organization: true,
-      membership: { include: { user: true } },
+      membership: {
+        include: { user: { select: { id: true, name: true, email: true } } },
+      },
       enrollments: {
         include: {
           academicYear: true,
           classSection: {
             include: {
-              teacher: { include: { membership: { include: { user: true } } } },
+              teacher: {
+                include: {
+                  membership: {
+                    include: {
+                      user: { select: { id: true, name: true, email: true } },
+                    },
+                  },
+                },
+              },
             },
           },
         },

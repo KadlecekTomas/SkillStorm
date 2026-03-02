@@ -26,6 +26,7 @@ import { Permission } from '@/modules/rbac/permission.decorator';
 import { CreateSubjectDto } from './dto/create-subject.dto';
 import { UpdateSubjectDto } from './dto/update-subject.dto';
 import { QuerySubjectsDto } from './dto/query-subjects.dto';
+import { SetActiveSubjectDto } from './dto/set-active-subject.dto';
 import { SubjectsService } from './subject.service';
 
 import { InvalidateScopes } from '@/common/cache/invalidate.decorator';
@@ -47,7 +48,7 @@ export class SubjectsController {
 
   // ---------- LIST ----------
   @Get()
-  @Permission(PermissionKey.MANAGE_TEACHERS)
+  @Permission(PermissionKey.VIEW_TEST_OVERVIEW)
   @ApiOperation({
     summary: 'Získat předměty (search, pagination, includeLevels)',
   })
@@ -55,6 +56,7 @@ export class SubjectsController {
   @ApiQuery({ name: 'limit', required: false, example: 20 })
   @ApiQuery({ name: 'search', required: false, example: 'mat' })
   @ApiQuery({ name: 'includeLevels', required: false, example: false })
+  @ApiQuery({ name: 'includeInactive', required: false, example: false, description: 'Include inactive subjects' })
   @CacheTTL(0) // čtecí endpointy necacheujeme na HTTP vrstvě – používáme verziovanou cache v service
   findAll(@Req() req: RequestWithUser, @Query() q: QuerySubjectsDto) {
     return this.service.findAll(req.user, q);
@@ -62,7 +64,7 @@ export class SubjectsController {
 
   // ---------- DETAIL ----------
   @Get(':id')
-  @Permission(PermissionKey.MANAGE_TEACHERS)
+  @Permission(PermissionKey.VIEW_TEST_OVERVIEW)
   @ApiOperation({ summary: 'Detail předmětu' })
   @CacheTTL(0)
   findOne(
@@ -85,6 +87,25 @@ export class SubjectsController {
     @Req() req: RequestWithUser,
   ) {
     return this.service.update(id, dto, req.user);
+  }
+
+  // ---------- ACTIVATE / DEACTIVATE ----------
+  @Patch(':id/activation')
+  @Permission(PermissionKey.MANAGE_TEACHERS)
+  @ApiOperation({
+    summary: 'Activate or deactivate a subject',
+    description:
+      'Deactivating blocks new test creation for this subject. Existing tests remain untouched. Fully reversible.',
+  })
+  @InvalidateScopes(({ result }) =>
+    result?.organizationId ? [result.organizationId] : [],
+  )
+  setActive(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: SetActiveSubjectDto,
+    @Req() req: RequestWithUser,
+  ) {
+    return this.service.setActive(id, dto.isActive, req.user);
   }
 
   // ---------- DELETE (soft) ----------

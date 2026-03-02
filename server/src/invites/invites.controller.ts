@@ -35,8 +35,13 @@ export class InvitesController {
   @Get('preview')
   @Public()
   @ApiOperation({ summary: 'Preview invite by code (resolves type, org, class)' })
-  preview(@Query('code') code: string) {
-    return ok(this.service.preview(code ?? ''));
+  preview(
+    @Query('inviteToken') inviteToken: string,
+    @Query('code') code: string,
+    @Query('token') token: string,
+    @Req() req: RequestWithUser,
+  ) {
+    return ok(this.service.preview(inviteToken ?? code ?? token ?? '', req.ip));
   }
 
   @Post('accept')
@@ -48,7 +53,7 @@ export class InvitesController {
     @Req() req: RequestWithUser,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const result = await this.service.acceptInvite(req.user.userId, dto);
+    const result = await this.service.acceptInvite(req.user.userId, dto, req.ip);
     setAuthCookies(res, result.tokens);
     setCsrfCookie(res, generateCsrfToken());
     return ok({

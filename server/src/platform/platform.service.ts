@@ -8,6 +8,23 @@ import { AuditEntityType, OrganizationStatus } from '@prisma/client';
 import type { Prisma } from '@prisma/client';
 import { assertOrgReady } from '@/shared/org-readiness.utils';
 import { AuditService } from '@/audit/audit.service';
+import { AcademicYearsService } from '@/academic-years/academic-years.service';
+
+/**
+ * Internal DTO returned from listPlatformUsers.
+ * Contains `anonymized` for GDPR scoping — NEVER serialize this directly.
+ * Always pass through PlatformDataScopeService.scopeUsers() first.
+ */
+export type PlatformUserInternal = {
+  id: string;
+  name: string;
+  email: string | null;
+  systemRole: string | null;
+  status: string;
+  createdAt: Date;
+  lastLoginAt: Date | null;
+  anonymized: boolean;
+};
 
 export type PlatformOrgListDto = {
   id: string;
@@ -36,7 +53,63 @@ export class PlatformService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
+    private readonly academicYearsService: AcademicYearsService,
   ) {}
+
+  async listPlatformUsers(input: {
+    page: number;
+    limit: number;
+    search?: string;
+  }): Promise<{
+    items: PlatformUserInternal[];
+    meta: { total: number; page: number; limit: number };
+  }> {
+    const { page, limit } = input;
+    const search = input.search?.trim();
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.UserWhereInput = { deletedAt: null };
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    const [total, users] = await Promise.all([
+      this.prisma.user.count({ where }),
+      this.prisma.user.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          systemRole: true,
+          status: true,
+          createdAt: true,
+          lastLoginAt: true,
+          anonymized: true,
+        },
+      }),
+    ]);
+
+    return {
+      items: users.map((u) => ({
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        systemRole: u.systemRole,
+        status: u.status,
+        createdAt: u.createdAt,
+        lastLoginAt: u.lastLoginAt,
+        anonymized: u.anonymized,
+      })),
+      meta: { total, page, limit },
+    };
+  }
 
   async listOrganizations(q: {
     page?: number;
@@ -238,6 +311,7 @@ export class PlatformService {
       where: { id },
       data: { status: OrganizationStatus.ACTIVE },
     });
+    await this.academicYearsService.createDefaultAcademicYearIfMissing(id);
     await this.auditService.log({
       action: 'ORG_APPROVED',
       entityType: AuditEntityType.ORGANIZATION,

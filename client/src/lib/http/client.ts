@@ -2,6 +2,7 @@
 
 import { API_BASE_PATH, AUTH_DEBUG } from "@/utils/env";
 import { useAuthStore, type OrganizationContext } from "@/store/use-auth-store";
+import { setAuthIntent, buildReturnToPath } from "@/lib/auth-intent";
 
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
@@ -16,6 +17,8 @@ export type RequestConfig<TBody = unknown> = {
   retries?: number | null;
   query?: Record<string, string | number | boolean | undefined>;
   skipAuthRetry?: boolean;
+  /** e.g. 'no-store' for hard refresh (superadmin platform). */
+  cache?: RequestCache;
 };
 
 type InternalRequestConfig<TBody> = RequestConfig<TBody> & {
@@ -42,7 +45,9 @@ export class ForbiddenError extends HttpError {
 }
 
 const LOGIN_REDIRECT = "/login?reason=expired";
-const PUBLIC_ROUTES = ["/login", "/register", "/forgot-password"];
+const PUBLIC_ROUTES = ["/login", "/register", "/forgot-password", "/reset-password"];
+const isPublicRoutePath = (path: string) =>
+  PUBLIC_ROUTES.includes(path) || path.startsWith("/reset-password/");
 
 const DEFAULT_HEADERS: Record<string, string> = {
   "Content-Type": "application/json",
@@ -180,7 +185,7 @@ const normalizePath = (path: string): string => {
 
 const isOnPublicRoute = (): boolean => {
   if (typeof window === "undefined") return false;
-  return PUBLIC_ROUTES.includes(window.location.pathname);
+  return isPublicRoutePath(window.location.pathname);
 };
 
 const shouldAllowProfileRetry = (path: string): boolean => {
@@ -203,14 +208,17 @@ const logoutAndRedirect = (): void => {
   useAuthStore.getState().logout();
 
   if (typeof window !== "undefined") {
-    // ⛔ Neredirectuj, pokud už jsme na login/register stránce (prevence loop)
     const currentPath = window.location.pathname;
+    // ⛔ Do not store RETURN_TO or redirect if already on login/register (prevent loop)
     if (currentPath === "/login" || currentPath === "/register") {
       return;
     }
 
-    const hasReason = window.location.search.includes("reason=");
-    const target = hasReason ? `/login${window.location.search}` : LOGIN_REDIRECT;
+    // Preserve current path so PostAuthResolver can return user after re-login (fixes 401 "black hole")
+    const path = buildReturnToPath();
+    setAuthIntent({ type: "RETURN_TO", path });
+
+    const target = LOGIN_REDIRECT;
     window.location.replace(target);
   }
 };
@@ -264,12 +272,19 @@ const performFetch = async (
 
   await limiter.acquire(controller.signal);
 
+  const cache =
+    config.cache !== undefined
+      ? config.cache
+      : method === "GET"
+        ? "no-cache"
+        : undefined;
   const init: RequestInit = {
     method,
     headers: buildHeaders(config.headers),
     credentials: "include",
     mode: "cors",
     signal: controller.signal,
+    ...(cache !== undefined && { cache }),
   };
 
   if (config.body !== undefined) {
@@ -497,5 +512,13 @@ export const httpClient = {
 };
 
 
-// Backward-compatible alias
-export const fetchWithAuth = request;
+export async function fetchWithAuth<T>(
+  method: string,
+  url: string,
+  options?: {
+    body?: unknown;
+    signal?: AbortSignal;
+  } & RequestConfig<unknown>,
+): Promise<T> {
+  return request<T, unknown>(method as HttpMethod, url, options);
+}

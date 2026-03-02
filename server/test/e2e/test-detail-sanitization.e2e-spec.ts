@@ -4,7 +4,7 @@ import * as request from 'supertest';
 import { AppModule } from '@/app.module';
 import { PrismaService } from '@/prisma/prisma.service';
 import { HttpExceptionFilter } from '@/infra/http-exception.filter';
-import { OrganizationRole, OrganizationStatus, QuestionType } from '@prisma/client';
+import { EnrollmentStatus, OrganizationRole, OrganizationStatus, PublishStatus, QuestionType, SchoolGrade } from '@prisma/client';
 import { authAs, useOrg } from 'test/helpers';
 
 describe('Tests detail sanitization (e2e)', () => {
@@ -15,6 +15,11 @@ describe('Tests detail sanitization (e2e)', () => {
   let studentToken = '';
   let orgId = '';
   let testId = '';
+  let unpublishedTestId = '';
+  let softDeletedTestId = '';
+  let classSectionId = '';
+  let studentMembershipId = '';
+  let assignmentId = '';
 
   beforeAll(async () => {
     const moduleRef = await NestTest.createTestingModule({
@@ -63,6 +68,20 @@ describe('Tests detail sanitization (e2e)', () => {
         role: OrganizationRole.STUDENT,
       },
     });
+    const studentMembership = await prisma.membership.findUnique({
+      where: {
+        userId_organizationId: {
+          userId: student.user.id,
+          organizationId: orgId,
+        },
+      },
+      select: { id: true },
+    });
+    if (!studentMembership) {
+      throw new Error('Missing student membership in org');
+    }
+    studentMembershipId = studentMembership.id;
+
     studentToken = await useOrg(app, student.accessToken, orgId);
 
     await prisma.organization.update({
@@ -86,15 +105,88 @@ describe('Tests detail sanitization (e2e)', () => {
       });
     }
 
+    const year = await prisma.academicYear.findFirst({
+      where: { orgId, isCurrent: true },
+      select: { id: true },
+    });
+    if (!year) {
+      throw new Error('Missing current year');
+    }
+
+    await prisma.student.upsert({
+      where: { membershipId: studentMembershipId },
+      update: { orgId, deletedAt: null },
+      create: { membershipId: studentMembershipId, orgId },
+    });
+
+    const classSection = await prisma.classSection.create({
+      data: {
+        orgId,
+        yearId: year.id,
+        grade: SchoolGrade.GRADE_8,
+        section: `S-${Date.now()}`,
+        label: 'Security Class',
+      },
+      select: { id: true },
+    });
+    classSectionId = classSection.id;
+
+    const studentRow = await prisma.student.findUnique({
+      where: { membershipId: studentMembershipId },
+      select: { id: true },
+    });
+    if (!studentRow) {
+      throw new Error('Missing student row');
+    }
+
+    await prisma.enrollment.upsert({
+      where: { studentId_yearId: { studentId: studentRow.id, yearId: year.id } },
+      update: {
+        classSectionId: classSection.id,
+        status: EnrollmentStatus.ACTIVE,
+      },
+      create: {
+        studentId: studentRow.id,
+        classSectionId: classSection.id,
+        yearId: year.id,
+        orgId,
+        status: EnrollmentStatus.ACTIVE,
+      },
+    });
+
     const created = await prisma.test.create({
       data: {
         title: 'Sanitization sample test',
         organizationId: orgId,
         creatorId: director.membership.id,
+        status: PublishStatus.PUBLISHED,
       },
       select: { id: true },
     });
     testId = created.id;
+
+    const unpublished = await prisma.test.create({
+      data: {
+        title: 'Unpublished hidden test',
+        organizationId: orgId,
+        creatorId: director.membership.id,
+        status: PublishStatus.DRAFT,
+      },
+      select: { id: true },
+    });
+    unpublishedTestId = unpublished.id;
+
+    const softDeleted = await prisma.test.create({
+      data: {
+        title: 'Soft deleted hidden test',
+        organizationId: orgId,
+        creatorId: director.membership.id,
+        status: PublishStatus.PUBLISHED,
+        deletedAt: new Date(),
+      },
+      select: { id: true },
+    });
+    softDeletedTestId = softDeleted.id;
 
     const question = await prisma.question.create({
       data: {
@@ -115,6 +207,26 @@ describe('Tests detail sanitization (e2e)', () => {
         text: 'true',
       },
     });
+
+    const openAt = new Date(Date.now() - 60 * 60 * 1000);
+    const closeAt = new Date(Date.now() + 60 * 60 * 1000);
+    const assignment = await prisma.assignment.create({
+      data: {
+        organizationId: orgId,
+        yearId: year.id,
+        testId,
+        targetType: 'CLASS',
+        classSectionId,
+        openAt,
+        closeAt,
+        maxAttempts: 1,
+        shuffle: false,
+        showExplain: 'after_close',
+        createdById: director.membership.id,
+      },
+      select: { id: true },
+    });
+    assignmentId = assignment.id;
   });
 
   afterAll(async () => {
@@ -122,7 +234,13 @@ describe('Tests detail sanitization (e2e)', () => {
       where: { question: { testId } },
     }).catch(() => {});
     await prisma.question.deleteMany({ where: { testId } }).catch(() => {});
-    await prisma.test.deleteMany({ where: { id: testId } }).catch(() => {});
+    await prisma.assignment.deleteMany({ where: { id: assignmentId } }).catch(() => {});
+    await prisma.enrollment.deleteMany({ where: { classSectionId } }).catch(() => {});
+    await prisma.classSection.deleteMany({ where: { id: classSectionId } }).catch(() => {});
+    await prisma.student.deleteMany({ where: { membershipId: studentMembershipId } }).catch(() => {});
+    await prisma.test
+      .deleteMany({ where: { id: { in: [testId, unpublishedTestId, softDeletedTestId] } } })
+      .catch(() => {});
     await prisma.$disconnect();
     await app.close();
   });
@@ -153,5 +271,80 @@ describe('Tests detail sanitization (e2e)', () => {
     expect(directorPayload.questions[0]).toHaveProperty('correctAnswer');
     expect(directorPayload.questions[0]).toHaveProperty('correctAnswers');
     expect(directorPayload.questions[0]).toHaveProperty('answers');
+  });
+
+  it('student GET /tests does not list all organization tests', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/tests')
+      .set('Authorization', `Bearer ${studentToken}`)
+      .expect(200);
+    const payload = res.body?.data ?? res.body;
+    const items = payload?.items ?? [];
+    const ids = items.map((item: { id: string }) => item.id);
+    expect(ids).toContain(testId);
+    expect(ids).not.toContain(unpublishedTestId);
+  });
+
+  it('student GET /tests/:id cannot read unpublished test', async () => {
+    await request(app.getHttpServer())
+      .get(`/tests/${unpublishedTestId}`)
+      .set('Authorization', `Bearer ${studentToken}`)
+      .expect(404);
+  });
+
+  it('soft-deleted test is not visible to student nor director', async () => {
+    await request(app.getHttpServer())
+      .get(`/tests/${softDeletedTestId}`)
+      .set('Authorization', `Bearer ${studentToken}`)
+      .expect(404);
+
+    await request(app.getHttpServer())
+      .get(`/tests/${softDeletedTestId}`)
+      .set('Authorization', `Bearer ${directorToken}`)
+      .expect(404);
+  });
+
+  it('student without assignment access cannot read full test', async () => {
+    const detached = await authAs(app, OrganizationRole.STUDENT, {
+      seed: 'test_detail_sanitization_detached',
+      name: 'Detached Student',
+    });
+    await prisma.membership.upsert({
+      where: {
+        userId_organizationId: {
+          userId: detached.user.id,
+          organizationId: orgId,
+        },
+      },
+      update: { role: OrganizationRole.STUDENT, deletedAt: null },
+      create: {
+        userId: detached.user.id,
+        organizationId: orgId,
+        role: OrganizationRole.STUDENT,
+      },
+    });
+    const detachedMembership = await prisma.membership.findUnique({
+      where: {
+        userId_organizationId: {
+          userId: detached.user.id,
+          organizationId: orgId,
+        },
+      },
+      select: { id: true },
+    });
+    if (!detachedMembership) {
+      throw new Error('Missing detached membership');
+    }
+    await prisma.student.upsert({
+      where: { membershipId: detachedMembership.id },
+      update: { orgId, deletedAt: null },
+      create: { membershipId: detachedMembership.id, orgId },
+    });
+    const detachedToken = await useOrg(app, detached.accessToken, orgId);
+
+    const denied = await request(app.getHttpServer())
+      .get(`/tests/${testId}`)
+      .set('Authorization', `Bearer ${detachedToken}`);
+    expect([403, 404]).toContain(denied.status);
   });
 });

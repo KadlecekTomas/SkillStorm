@@ -66,7 +66,13 @@ export class SubjectsService {
       levels: includeLevels ? { include: { topics: true } } : false, // SubjectLevel[] + TopicLevel[]
       teachers: {
         include: {
-          teacher: { include: { membership: { include: { user: true } } } },
+          teacher: {
+            include: {
+              membership: {
+                include: { user: { select: { id: true, name: true, email: true } } },
+              },
+            },
+          },
         },
       },
       learningMaterials: false,
@@ -80,7 +86,13 @@ export class SubjectsService {
       levels: { include: { topics: true } },
       teachers: {
         include: {
-          teacher: { include: { membership: { include: { user: true } } } },
+          teacher: {
+            include: {
+              membership: {
+                include: { user: { select: { id: true, name: true, email: true } } },
+              },
+            },
+          },
         },
       },
       learningMaterials: true,
@@ -162,6 +174,11 @@ export class SubjectsService {
       where.organizationId = user.organizationId;
     }
 
+    // Default: active subjects only. ?includeInactive=true returns all non-deleted.
+    if (!q.includeInactive) {
+      where.isActive = true;
+    }
+
     const s = makeSubjectSearch(q.search);
     if (s) Object.assign(where, s);
 
@@ -177,9 +194,8 @@ export class SubjectsService {
       page,
       limit,
       search: q.search ?? '',
-      ...(q.includeLevels !== undefined
-        ? { includeLevels: q.includeLevels }
-        : {}),
+      ...(q.includeLevels !== undefined ? { includeLevels: q.includeLevels } : {}),
+      ...(q.includeInactive ? { includeInactive: true } : {}),
       order: [{ name: 'asc' }, { id: 'asc' }],
       filters: null,
     });
@@ -300,6 +316,36 @@ export class SubjectsService {
       cacheScopeForUser(user.systemRole, current.organizationId),
     );
     return updated; // obsahuje organizationId → controller invaliduje scope
+  }
+
+  /** ---------- ACTIVATE / DEACTIVATE ---------- */
+  async setActive(id: string, isActive: boolean, user: JwtPayload) {
+    const subject = await this.prisma.subject.findUnique({
+      where: { id },
+      select: { id: true, organizationId: true, deletedAt: true, isActive: true },
+    });
+    if (!subject || subject.deletedAt) throw new NotFoundException('Předmět nebyl nalezen');
+
+    assertTeacherOrDirectorInOrgOrSuperadmin(user, subject.organizationId, 'předmět');
+
+    const updated = await this.prisma.subject.update({
+      where: { id },
+      data: { isActive },
+      select: { id: true, organizationId: true, isActive: true },
+    });
+
+    await this.audit({
+      userId: user.userId,
+      orgId: subject.organizationId,
+      action: isActive ? 'SUBJECT_ACTIVATE' : 'SUBJECT_DEACTIVATE',
+      entityId: id,
+    });
+
+    await bumpOrgVersion(
+      this.cache,
+      cacheScopeForUser(user.systemRole, subject.organizationId),
+    );
+    return updated;
   }
 
   /** ---------- DELETE (soft) ---------- */

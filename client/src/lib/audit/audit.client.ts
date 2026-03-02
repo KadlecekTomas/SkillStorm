@@ -61,6 +61,7 @@ const sendViaBeacon = (payload: AuditEvent[]) => {
 export const audit = (event: AuditInput): void => {
   const state = useAuthStore.getState();
   if (!state.user || state.authPhase === "LOGGING_OUT") return;
+  if (state.context?.mode === "organization" && state.org?.bootstrap?.hasAcademicYear === false) return;
   const enriched: AuditEvent = {
     action: event.action,
     ts: Date.now(),
@@ -77,7 +78,9 @@ export const flushAuditQueue = async (options?: {
   useBeacon?: boolean;
 }): Promise<boolean> => {
   if (!queue.length || flushing) return true;
-  if (useAuthStore.getState().authPhase === "LOGGING_OUT") return false;
+  const authState = useAuthStore.getState();
+  if (authState.authPhase === "LOGGING_OUT") return false;
+  if (authState.context?.mode === "organization" && authState.org?.bootstrap?.hasAcademicYear === false) return false;
   if (!options?.force && !canFlush()) return false;
 
   const payload = queue.splice(0, queue.length);

@@ -1,34 +1,16 @@
 "use client";
 
-import { type JSX, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { type JSX } from "react";
+import Link from "next/link";
 import { useAuth } from "@/hooks/use-auth";
 import { AuthForm } from "@/components/forms/auth-form";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
+/**
+ * Login page: UI only. Post-auth navigation is handled solely by PostAuthResolver in (auth) layout.
+ */
 export default function LoginPage(): JSX.Element {
-  const router = useRouter();
-  const { context, isLoading, isAuthenticated } = useAuth();
-
-  // Auth invariant:
-  // Authenticated users must never access the login page.
-  // Login is only reachable after explicit logout.
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    if (context?.mode === "organization") {
-      router.replace("/dashboard");
-      return;
-    }
-    if (context?.mode === "platform") {
-      router.replace("/dashboard/platform");
-      return;
-    }
-    if (context?.mode === "personal") {
-      router.replace("/onboarding/create-organization");
-      return;
-    }
-    router.replace("/dashboard");
-  }, [isAuthenticated, context?.mode, router]);
+  const { isLoading, isAuthenticated } = useAuth();
 
   if (isLoading) {
     return (
@@ -60,6 +42,11 @@ export default function LoginPage(): JSX.Element {
         </p>
       </div>
       <AuthForm key="login" mode="login" />
+      <p className="text-center text-sm text-slate-500">
+        <Link href="/reset-password" className="font-medium text-slate-700 underline hover:text-slate-900">
+          Zapomněli jste heslo?
+        </Link>
+      </p>
     </div>
   );
 }

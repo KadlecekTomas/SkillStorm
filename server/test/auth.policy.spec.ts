@@ -15,6 +15,7 @@ import {
   ACCESS_TOKEN_COOKIE,
   REFRESH_TOKEN_COOKIE,
 } from '@/auth/token-cookies';
+import { hashToken } from '@/auth/token.util';
 
 jest.setTimeout(30000);
 
@@ -237,14 +238,18 @@ describe('Auth & Role Policy (integration)', () => {
       if (!refreshPlain) {
         throw new Error('Missing refresh token cookie');
       }
+      const refreshTokenValue = refreshPlain;
+      expect(refreshTokenValue.length).toBe(128);
 
       const tokens = await prisma.refreshToken.findMany({
         where: { userId },
       });
       expect(tokens.length).toBeGreaterThan(0);
-      expect(tokens.some((t) => t.token === refreshPlain)).toBe(true);
+      expect(tokens.some((t) => t.token === refreshTokenValue)).toBe(false);
+      expect(tokens.some((t) => t.token === hashToken(refreshTokenValue))).toBe(true);
       tokens.forEach((t) => {
         expect(t.token).toBeTruthy();
+        expect(t.token).toMatch(/^[a-f0-9]{64}$/);
       });
     });
 
@@ -254,7 +259,7 @@ describe('Auth & Role Policy (integration)', () => {
       }
       const oldToken = refreshPlain;
       const oldRow = await prisma.refreshToken.findFirst({
-        where: { token: oldToken },
+        where: { token: hashToken(oldToken) },
       });
       expect(oldRow).toBeTruthy();
 
@@ -284,7 +289,7 @@ describe('Auth & Role Policy (integration)', () => {
       }
       const newToken = refreshPlain;
       const newRow = await prisma.refreshToken.findFirst({
-        where: { token: newToken },
+        where: { token: hashToken(newToken) },
       });
       expect(newRow).toBeTruthy();
     });
@@ -305,7 +310,7 @@ describe('Auth & Role Policy (integration)', () => {
 
       const logoutToken = refreshPlain;
       const revokedRow = await prisma.refreshToken.findFirst({
-        where: { token: logoutToken },
+        where: { token: hashToken(logoutToken) },
       });
       expect(revokedRow?.revokedAt).not.toBeNull();
 

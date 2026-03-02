@@ -25,6 +25,7 @@ import { TransferEnrollmentDto } from './dto/transfer-enrollment.dto';
 import { QueryEnrollmentsDto } from './dto/query-enrollments.dto';
 import { RequireCurrentAcademicYearGuard } from '@/academic-years/require-current-academic-year.guard';
 import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
+import { OrgContextService } from '@/common/org-context/org-context.service';
 
 @ApiTags('Enrollments')
 @ApiStandardResponses()
@@ -33,19 +34,29 @@ import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operatio
 @OrgOperation(OrgOperationType.EXECUTION)
 @UseGuards(RequireCurrentAcademicYearGuard)
 export class EnrollmentsController {
-  constructor(private readonly service: EnrollmentsService) {}
+  constructor(
+    private readonly service: EnrollmentsService,
+    private readonly orgContext: OrgContextService,
+  ) {}
 
   @Post()
   @Permission(PermissionKey.MANAGE_STUDENTS)
   @ApiOperation({ summary: 'Create enrollment (student ↔ class section)' })
-  create(@Body() dto: CreateEnrollmentDto, @Req() req: RequestWithUser) {
+  async create(@Body() dto: CreateEnrollmentDto, @Req() req: RequestWithUser) {
+    const ctx = await this.orgContext.get(req);
+    if (!ctx.activeAcademicYearId) {
+      throw new BadRequestException('Missing active academic year.');
+    }
     const classSectionId = dto.classSectionId ?? dto.classroomId;
-    const academicYearId = dto.yearId ?? dto.academicYearId;
+    const academicYearId = ctx.activeAcademicYearId;
     if (!classSectionId) {
       throw new BadRequestException('Chybí classroomId.');
     }
-    if (!academicYearId) {
-      throw new BadRequestException('Chybí yearId / academicYearId.');
+    if (
+      (dto.yearId && dto.yearId !== ctx.activeAcademicYearId) ||
+      (dto.academicYearId && dto.academicYearId !== ctx.activeAcademicYearId)
+    ) {
+      throw new BadRequestException('yearId / academicYearId is not allowed.');
     }
     return ok(this.service.create({ ...dto, classSectionId, academicYearId }, req.user));
   }
@@ -53,32 +64,45 @@ export class EnrollmentsController {
   @Post('bulk')
   @Permission(PermissionKey.MANAGE_STUDENTS)
   @ApiOperation({ summary: 'Bulk enrollment (create students and enroll them)' })
-  bulk(@Body() dto: BulkEnrollmentDto, @Req() req: RequestWithUser) {
+  async bulk(@Body() dto: BulkEnrollmentDto, @Req() req: RequestWithUser) {
+    const ctx = await this.orgContext.get(req);
+    if (!ctx.activeAcademicYearId) {
+      throw new BadRequestException('Missing active academic year.');
+    }
     const classSectionId = dto.classSectionId ?? dto.classroomId;
     if (!classSectionId) {
       throw new BadRequestException('Chybí classroomId.');
     }
-    if (!dto.academicYearId) {
-      throw new BadRequestException('Chybí academicYearId.');
+    if (dto.academicYearId && dto.academicYearId !== ctx.activeAcademicYearId) {
+      throw new BadRequestException('academicYearId is not allowed.');
     }
-    return ok(this.service.bulkCreate({ ...dto, classSectionId }, req.user));
+    return ok(
+      this.service.bulkCreate(
+        { ...dto, classSectionId, academicYearId: ctx.activeAcademicYearId },
+        req.user,
+      ),
+    );
   }
 
   @Get()
   @Permission(PermissionKey.MANAGE_STUDENTS, PermissionKey.VIEW_RESULTS)
   @ApiOperation({ summary: 'List enrollments for a class section' })
-  list(@Query() q: QueryEnrollmentsDto, @Req() req: RequestWithUser) {
+  async list(@Query() q: QueryEnrollmentsDto, @Req() req: RequestWithUser) {
+    const ctx = await this.orgContext.get(req);
+    if (!ctx.activeAcademicYearId) {
+      throw new BadRequestException('Missing active academic year.');
+    }
     const classSectionId = q.classSectionId ?? q.classroomId;
     if (!classSectionId) {
       throw new BadRequestException('Chybí classroomId.');
     }
-    if (!q.academicYearId) {
-      throw new BadRequestException('Chybí academicYearId.');
+    if (q.academicYearId && q.academicYearId !== ctx.activeAcademicYearId) {
+      throw new BadRequestException('academicYearId is not allowed.');
     }
     return ok(
       this.service.listByClassSection(
         classSectionId,
-        q.academicYearId,
+        ctx.activeAcademicYearId,
         req.user,
       ),
     );

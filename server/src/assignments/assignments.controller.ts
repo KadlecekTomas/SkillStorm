@@ -10,7 +10,7 @@ import {
   Body,
   Req,
   ForbiddenException,
-  NotFoundException,
+  BadRequestException,
   UseGuards,
   Logger,
 } from '@nestjs/common';
@@ -25,6 +25,8 @@ import { ApiStandardResponses } from '@/common/http/api-standard-responses.decor
 import { MyAssignmentDto } from './my-assignments.dto';
 import { RequireCurrentAcademicYearGuard } from '@/academic-years/require-current-academic-year.guard';
 import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
+import { OrgContextService } from '@/common/org-context/org-context.service';
+import { NoHttpCache } from '@/common/cache/no-http-cache.decorator';
 
 @ApiTags('assignments')
 @ApiStandardResponses()
@@ -34,7 +36,10 @@ import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operatio
 @UseGuards(RequireCurrentAcademicYearGuard)
 export class AssignmentsController {
   private readonly logger = new Logger(AssignmentsController.name);
-  constructor(private readonly assignmentsService: AssignmentsService) {}
+  constructor(
+    private readonly assignmentsService: AssignmentsService,
+    private readonly orgContext: OrgContextService,
+  ) {}
 
   @Post()
   @Permission(PermissionKey.MANAGE_TEACHERS)
@@ -43,16 +48,31 @@ export class AssignmentsController {
     @Body() dto: CreateAssignmentDto,
     @Req() req: RequestWithUser,
   ) {
-    if (req.user.systemRole !== 'SUPERADMIN') {
-      if (!req.user.organizationId) {
-        throw new ForbiddenException('Missing organization context.');
-      }
-      if (dto.organizationId && dto.organizationId !== req.user.organizationId) {
-        throw new NotFoundException('Assignment nenalezen');
-      }
-      dto.organizationId = req.user.organizationId;
+    const ctx = await this.orgContext.get(req);
+    if (!ctx.activeAcademicYearId) {
+      throw new ForbiddenException('Missing active academic year.');
     }
-    const assignment = await this.assignmentsService.create(dto);
+
+    if (dto.organizationId && dto.organizationId !== ctx.organizationId) {
+      throw new BadRequestException(
+        'organizationId in request body is not allowed for this endpoint.',
+      );
+    }
+    if (dto.academicYearId && dto.academicYearId !== ctx.activeAcademicYearId) {
+      throw new BadRequestException(
+        'academicYearId in request body is not allowed for this endpoint.',
+      );
+    }
+
+    const assignment = await this.assignmentsService.create(
+      {
+        ...dto,
+        organizationId: ctx.organizationId,
+        academicYearId: ctx.activeAcademicYearId,
+        createdById: ctx.membershipId,
+      },
+      ctx,
+    );
     const requestId = (req as RequestWithUser & { requestId?: string }).requestId;
     if (requestId) {
       this.logger.log(
@@ -77,7 +97,22 @@ export class AssignmentsController {
   async myAssignments(
     @Req() req: RequestWithUser,
   ): Promise<{ success: boolean; data?: MyAssignmentDto[]; error?: string }> {
-    const data = await this.assignmentsService.listForUser(req.user);
+    const ctx = await this.orgContext.get(req);
+    const data = await this.assignmentsService.listForUser(req.user, ctx);
+    return ok(data);
+  }
+
+  @Get('overview')
+  @Permission(PermissionKey.VIEW_OWN_ASSIGNMENTS)
+  @NoHttpCache()
+  @ApiOperation({ summary: 'Student assignment overview bucketed by status (active/upcoming/closedUnsubmitted/completed)' })
+  async overview(@Req() req: RequestWithUser) {
+    const ctx = await this.orgContext.get(req);
+    const data = await this.assignmentsService.getStudentOverview(
+      ctx.membershipId,
+      ctx.organizationId,
+      ctx.activeAcademicYearId,
+    );
     return ok(data);
   }
 
@@ -92,23 +127,13 @@ export class AssignmentsController {
     @Param('id') id: string,
     @Req() req: RequestWithUser,
   ) {
-    const assignment = await this.assignmentsService.findOneOrThrow(id);
-    if (
-      req.user.systemRole !== 'SUPERADMIN' &&
-      assignment.organizationId !== (req.user.organizationId ?? null)
-    ) {
-      throw new NotFoundException('Assignment nenalezen');
-    }
-    const membershipId = req.user.membershipId;
-    const orgId = req.user.organizationId ?? null;
-    if (!membershipId || !orgId) {
-      throw new ForbiddenException('Access denied');
-    }
+    const ctx = await this.orgContext.get(req);
+    const assignment = await this.assignmentsService.findOneOrThrowScoped(id, ctx);
     const allowed = await this.assignmentsService.canAccessAssignment(
       assignment,
       req.user.userId,
-      orgId,
-      membershipId,
+      ctx.organizationId,
+      ctx.membershipId,
     );
     if (!allowed) {
       throw new ForbiddenException('Access denied');
@@ -124,14 +149,9 @@ export class AssignmentsController {
     @Body() dto: UpdateAssignmentDto,
     @Req() req: RequestWithUser,
   ) {
-    const assignment = await this.assignmentsService.findOneOrThrow(id);
-    if (
-      req.user.systemRole !== 'SUPERADMIN' &&
-      assignment.organizationId !== (req.user.organizationId ?? null)
-    ) {
-      throw new NotFoundException('Assignment nenalezen');
-    }
-    return ok(this.assignmentsService.update(id, dto));
+    const ctx = await this.orgContext.get(req);
+    await this.assignmentsService.findOneOrThrowScoped(id, ctx);
+    return ok(this.assignmentsService.update(id, dto, ctx));
   }
 
   @Delete(':id')
@@ -141,13 +161,8 @@ export class AssignmentsController {
     @Param('id') id: string,
     @Req() req: RequestWithUser,
   ) {
-    const assignment = await this.assignmentsService.findOneOrThrow(id);
-    if (
-      req.user.systemRole !== 'SUPERADMIN' &&
-      assignment.organizationId !== (req.user.organizationId ?? null)
-    ) {
-      throw new NotFoundException('Assignment nenalezen');
-    }
-    return ok(this.assignmentsService.remove(id));
+    const ctx = await this.orgContext.get(req);
+    await this.assignmentsService.findOneOrThrowScoped(id, ctx);
+    return ok(this.assignmentsService.remove(id, ctx));
   }
 }

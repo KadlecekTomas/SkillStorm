@@ -63,7 +63,7 @@ describe("TestCard", () => {
   it("renders status badge correctly", () => {
     render(<TestCard test={mockTest} />);
 
-    expect(screen.getByText("published")).toBeInTheDocument();
+    expect(screen.getByText(/publikováno/i)).toBeInTheDocument();
     recordPolicyCheck("Content", "test-card-status-badge", true, "TestCard renders status badge correctly.");
   });
 
@@ -71,7 +71,7 @@ describe("TestCard", () => {
     const onView = vi.fn();
     render(<TestCard test={mockTest} onView={onView} />);
 
-    const detailsButton = screen.getByRole("button", { name: /details/i });
+    const detailsButton = screen.getByRole("button", { name: /detail/i });
     detailsButton.click();
 
     expect(onView).toHaveBeenCalledWith("1");

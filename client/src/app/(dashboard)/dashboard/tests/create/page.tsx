@@ -6,28 +6,29 @@ import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Alert } from "@/components/ui/alert";
+import { Alert, InfoAlert } from "@/components/ui/alert";
 import { fetchWithAuth } from "@/lib/http/client";
-import { useAuth } from "@/hooks/use-auth";
+import { useSubjects, subjectLabel } from "@/hooks/use-subjects";
 import { withGuard } from "@/lib/guard/withGuard";
 import { PermissionKey } from "@/types";
 
 function CreateTestPage(): React.JSX.Element {
   const router = useRouter();
-  const { org } = useAuth();
+  const { subjects, loading: subjectsLoading } = useSubjects();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [subjectId, setSubjectId] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!org?.id) {
-      setError("Nejprve vyber organizaci.");
-      return;
-    }
     if (!title.trim() || title.trim().length < 3) {
       setError("Název testu musí mít alespoň 3 znaky.");
+      return;
+    }
+    if (!subjectId) {
+      setError("Vyberte předmět.");
       return;
     }
     setError(null);
@@ -37,8 +38,8 @@ function CreateTestPage(): React.JSX.Element {
         body: {
           title: title.trim(),
           description: description.trim() || undefined,
-          organizationId: org.id,
           status: "DRAFT",
+          subjectId,
         },
       });
       const id = created && typeof created === "object" && "id" in created ? (created as { id: string }).id : null;
@@ -54,6 +55,8 @@ function CreateTestPage(): React.JSX.Element {
     }
   };
 
+  const noSubjects = !subjectsLoading && subjects.length === 0;
+
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div>
@@ -63,6 +66,12 @@ function CreateTestPage(): React.JSX.Element {
         <h1 className="mt-2 text-2xl font-semibold text-slate-900">Vytvořit test</h1>
         <p className="text-sm text-slate-500">Zadej název a popis. Po vytvoření můžeš přidat otázky a přiřadit třídě.</p>
       </div>
+      {noSubjects && (
+        <InfoAlert
+          title="Nejsou vytvořeny žádné předměty"
+          description="Nejdříve vytvořte předmět v nastavení organizace. Test musí být přiřazen k předmětu."
+        />
+      )}
       <Card className="p-6">
         <form onSubmit={handleSubmit} className="space-y-4">
           <label className="block space-y-2">
@@ -85,11 +94,28 @@ function CreateTestPage(): React.JSX.Element {
               className="w-full"
             />
           </label>
+          <label className="block space-y-2">
+            <span className="text-sm font-medium text-slate-700">Předmět *</span>
+            <select
+              value={subjectId}
+              onChange={(e) => setSubjectId(e.target.value)}
+              required
+              disabled={subjectsLoading || noSubjects}
+              className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm disabled:opacity-50"
+            >
+              <option value="">{subjectsLoading ? "Načítám předměty…" : "Vyberte předmět"}</option>
+              {subjects.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {subjectLabel(s)}
+                </option>
+              ))}
+            </select>
+          </label>
           {error && (
             <Alert title="Chyba" description={error} variant="warning" />
           )}
           <div className="flex gap-3 pt-2">
-            <Button type="submit" disabled={loading}>
+            <Button type="submit" disabled={loading || noSubjects}>
               {loading ? "Vytvářím…" : "Vytvořit test"}
             </Button>
             <Link href="/dashboard/tests">

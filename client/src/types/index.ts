@@ -48,11 +48,22 @@ export type OrgSubject = {
   organizationId: string;
 };
 
+/** Curriculum-linked subject (Subject model, not OrgSubject). */
+export type Subject = {
+  id: string;
+  name: string;
+  organizationId: string;
+  isActive: boolean;
+  catalogSubjectId: string | null;
+  catalogSubject: { id: string; code: string; name: string } | null;
+  deletedAt: string | null;
+};
+
 export type TestSummary = {
   id: string;
   title: string;
   description?: string | null;
-  subject?: OrgSubject | null;
+  subject?: Subject | null;
   status: PublishStatus;
   version: number;
   completionRate: number;

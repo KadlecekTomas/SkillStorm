@@ -21,7 +21,7 @@ describe("resolvePostAuthTarget", () => {
   it("returns null when JOIN intent and already on join URL", () => {
     const result = resolvePostAuthTarget({
       authIntent: { type: "JOIN", token: "XYZ" },
-      currentPath: "/join?token=XYZ&role=TEACHER",
+      currentPath: "/join?token=XYZ",
       searchParams: searchParams({}),
       contextMode: "organization",
     });

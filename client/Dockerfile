@@ -29,4 +29,4 @@ COPY next.config.* ./
 
 EXPOSE 3000
 
-CMD ["npm", "run", "start"]
+CMD ["npx", "next", "start", "-H", "0.0.0.0", "-p", "3000"]

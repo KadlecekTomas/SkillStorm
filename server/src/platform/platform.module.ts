@@ -1,13 +1,27 @@
 import { Module } from '@nestjs/common';
 import { PlatformController } from './platform.controller';
 import { PlatformService } from './platform.service';
-import { PlatformAdminGuard } from './platform-admin.guard';
+import { PlatformDataScopeService } from './platform-data-scope.service';
+import { PlatformMutationAuditInterceptor } from './platform-mutation-audit.interceptor';
+import { PlatformHealthService } from './platform-health.service';
+import { CatalogSyncService } from './catalog-sync.service';
 import { PrismaModule } from '@/prisma/prisma.module';
 import { AuditModule } from '@/audit/audit.module';
+import { AcademicYearsModule } from '@/academic-years/academic-years.module';
+import { SystemRoleGuard } from '@/common/guards/system-role.guard';
+import { PlatformAccessGuard } from '@/common/guards/platform-access.guard';
 
 @Module({
-  imports: [PrismaModule, AuditModule],
+  imports: [PrismaModule, AuditModule, AcademicYearsModule],
   controllers: [PlatformController],
-  providers: [PlatformService, PlatformAdminGuard],
+  providers: [
+    PlatformService,
+    PlatformDataScopeService,
+    PlatformMutationAuditInterceptor,
+    PlatformHealthService,
+    CatalogSyncService,
+    SystemRoleGuard,
+    PlatformAccessGuard,
+  ],
 })
 export class PlatformModule {}

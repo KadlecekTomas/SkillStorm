@@ -971,6 +971,7 @@ describe('Students (e2e)', () => {
     expect(res.body).not.toHaveProperty('email');
     expect(res.body).not.toHaveProperty('username');
     expect(res.body).not.toHaveProperty('password');
+    expect(res.body).not.toHaveProperty('passwordHash');
     expect(res.body).not.toHaveProperty('tokenVersion');
     expect(res.body).not.toHaveProperty('preferredLang');
     expect(res.body).not.toHaveProperty('systemRole');

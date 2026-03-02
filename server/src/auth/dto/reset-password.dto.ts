@@ -1,9 +1,6 @@
-import { IsString, Matches, MinLength } from 'class-validator';
+import { IsString } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-
-const PASSWORD_POLICY = {
-  message: 'Heslo musí mít alespoň 8 znaků, obsahovat alespoň jedno písmeno a jednu číslici.',
-};
+import { StrongPassword, PASSWORD_POLICY_MESSAGE } from '@/common/validators/password.validator';
 
 export class ResetPasswordDto {
   @ApiProperty({ description: 'Token z e-mailu' })
@@ -12,8 +9,6 @@ export class ResetPasswordDto {
 
   @ApiProperty({ description: 'Nové heslo', minLength: 8 })
   @IsString()
-  @MinLength(8, { message: PASSWORD_POLICY.message })
-  @Matches(/\d/, { message: PASSWORD_POLICY.message })
-  @Matches(/[a-zA-Z]/, { message: PASSWORD_POLICY.message })
+  @StrongPassword({ message: PASSWORD_POLICY_MESSAGE })
   newPassword!: string;
 }

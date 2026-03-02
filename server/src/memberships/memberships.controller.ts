@@ -9,6 +9,7 @@ import {
   Query,
   Req,
   ParseUUIDPipe,
+  GoneException,
 } from '@nestjs/common';
 import { RequestWithUser } from '@/types/request-with-user';
 import {
@@ -35,13 +36,12 @@ export class MembershipsController {
   // CREATE
   @Post()
   @ApiOperation({
-    summary: 'Add user to organization (SUPERADMIN or DIRECTOR)',
+    summary: 'Legacy create disabled (use invite token)',
   })
   @Permission(SystemRole.SUPERADMIN, OrganizationRole.OWNER, OrganizationRole.DIRECTOR)
   @InvalidateScopes(({ req }) => [req.body?.organizationId].filter(Boolean))
   async create(@Body() dto: CreateMembershipDto, @Req() req: RequestWithUser) {
-    // org‑scope kontrola probíhá v service (effectiveOrgId)
-    return this.service.create(dto, req.user);
+    throw new GoneException('Legacy membership create disabled. Use invitation token.');
   }
 
   // LIST (org-scoped)

@@ -6,6 +6,7 @@ import {
   Injectable,
   NotFoundException,
   Inject,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
@@ -16,7 +17,7 @@ import {
   SystemRole,
   OrganizationRole,
   PublishStatus,
-  SchoolGrade,
+  EnrollmentStatus,
 } from '@prisma/client';
 import type { CreateTestDto } from './dto/create-test.dto';
 import type { UpdateTestDto } from './dto/update-test.dto';
@@ -43,26 +44,17 @@ import {
   computeAssignability,
   type AssignabilityReport,
 } from '@/shared/test-assignability.util';
-import { deriveOrgReadiness, OrgReadinessState } from '@/shared/org-readiness-v2';
+import {
+  deriveOrgReadiness,
+  OrgReadinessState,
+} from '@/shared/org-readiness-v2';
 import { createOrgReadinessError } from '@/shared/errors/org-readiness.error';
 import { OrgOperationType } from '@/common/decorators/org-operation.decorator';
+import type { TeacherTestViewDTO } from './dto/teacher-test-view.dto';
+import type { StudentTestViewDTO } from './dto/student-test-view.dto';
+import { assertTenantWhere, withOrg } from '@/common/prisma/tenant-scope';
+import type { OrgContext } from '@/common/org-context/org-context.types';
 
-/** Maps SchoolGrade enum to numeric grade (1–9 ZŠ, 10–13 SŠ) for subject range comparison. */
-const SCHOOL_GRADE_TO_NUM: Record<SchoolGrade, number> = {
-  [SchoolGrade.GRADE_1]: 1,
-  [SchoolGrade.GRADE_2]: 2,
-  [SchoolGrade.GRADE_3]: 3,
-  [SchoolGrade.GRADE_4]: 4,
-  [SchoolGrade.GRADE_5]: 5,
-  [SchoolGrade.GRADE_6]: 6,
-  [SchoolGrade.GRADE_7]: 7,
-  [SchoolGrade.GRADE_8]: 8,
-  [SchoolGrade.GRADE_9]: 9,
-  [SchoolGrade.HIGH_SCHOOL_YEAR_1]: 10,
-  [SchoolGrade.HIGH_SCHOOL_YEAR_2]: 11,
-  [SchoolGrade.HIGH_SCHOOL_YEAR_3]: 12,
-  [SchoolGrade.HIGH_SCHOOL_YEAR_4]: 13,
-};
 
 function searchExpr(search?: string): Prisma.TestWhereInput | undefined {
   const s = search?.trim();
@@ -77,58 +69,272 @@ function searchExpr(search?: string): Prisma.TestWhereInput | undefined {
 
 @Injectable()
 export class TestsService {
+  private readonly logger = new Logger(TestsService.name);
+
   constructor(
     private prisma: PrismaService,
     @Inject(CACHE_MANAGER) private cache: Cache,
   ) {}
 
-  private includeAll() {
-    return Prisma.validator<Prisma.TestInclude>()({
-      organization: true,
-      subject: true,
-      creator: { include: { user: true, organization: true } },
-      questions: {
-        include: { options: true, answers: true },
-        orderBy: [{ order: 'asc' }, { id: 'asc' }], // => bez createdAt (není ve schématu)
+  private testListSelect() {
+    return Prisma.validator<Prisma.TestSelect>()({
+      id: true,
+      organizationId: true,
+      title: true,
+      description: true,
+      status: true,
+      createdAt: true,
+      updatedAt: true,
+      subject: {
+        select: {
+          id: true,
+          name: true,
+          catalogSubject: { select: { code: true, name: true } },
+        },
+      },
+      academicYear: {
+        select: { id: true, label: true, isCurrent: true },
+      },
+      creator: {
+        select: {
+          id: true,
+          organizationId: true,
+          user: {
+            select: { id: true, name: true, email: true },
+          },
+        },
       },
     });
   }
 
-  private sanitizeForStudentTestDetail(test: Record<string, unknown>) {
-    const questions = Array.isArray(test.questions) ? test.questions : [];
-    return {
-      ...test,
-      questions: questions.map((question) => {
-        if (!question || typeof question !== 'object') return question;
-        const safeQuestion = {
-          ...(question as Record<string, unknown>),
-        };
-        delete safeQuestion.correctAnswer;
-        delete safeQuestion.correctAnswers;
-        delete safeQuestion.answers;
-        delete safeQuestion.solution;
-        return safeQuestion;
-      }),
-    };
+  private teacherDetailSelect() {
+    return Prisma.validator<Prisma.TestSelect>()({
+      id: true,
+      organizationId: true,
+      title: true,
+      description: true,
+      status: true,
+      createdAt: true,
+      updatedAt: true,
+      subject: {
+        select: {
+          id: true,
+          name: true,
+          catalogSubject: { select: { code: true, name: true } },
+        },
+      },
+      academicYear: {
+        select: { id: true, label: true, isCurrent: true },
+      },
+      creator: {
+        select: {
+          id: true,
+          organizationId: true,
+          user: {
+            select: { id: true, name: true, email: true },
+          },
+        },
+      },
+      questions: true,
+    });
   }
 
-  /** Validate subjectId belongs to organization; return orgSubjectId or null. */
-  private async resolveOrgSubjectId(
-    subjectId: string | undefined,
+  private studentDetailSelect() {
+    return Prisma.validator<Prisma.TestSelect>()({
+      id: true,
+      organizationId: true,
+      title: true,
+      description: true,
+      status: true,
+      createdAt: true,
+      updatedAt: true,
+      subject: {
+        select: {
+          id: true,
+          name: true,
+          catalogSubject: { select: { code: true, name: true } },
+        },
+      },
+      academicYear: {
+        select: { id: true, label: true, isCurrent: true },
+      },
+      questions: {
+        select: {
+          id: true,
+          text: true,
+          type: true,
+          options: { select: { id: true, text: true } },
+        },
+        orderBy: [{ order: 'asc' }, { id: 'asc' }],
+      },
+    });
+  }
+
+  /**
+   * Centralized projection builder for every test response surface.
+   * STUDENT never receives answer key fields.
+   */
+  private buildTestProjection(
+    role: OrganizationRole | null,
+    mode: 'list' | 'detail',
+  ): Prisma.TestSelect {
+    if (mode === 'list') {
+      return this.testListSelect();
+    }
+    if (role === OrganizationRole.STUDENT) {
+      return this.studentDetailSelect();
+    }
+    return this.teacherDetailSelect();
+  }
+
+  private mapTeacherView(
+    test: unknown,
+    assignability: AssignabilityReport,
+  ): TeacherTestViewDTO {
+    return {
+      ...(test as Record<string, unknown>),
+      assignability,
+    } as TeacherTestViewDTO;
+  }
+
+  private mapStudentView(test: unknown): StudentTestViewDTO {
+    return test as StudentTestViewDTO;
+  }
+
+  private async ensureStudentCanAccessTest(
+    user: JwtPayload,
+    testId: string,
     organizationId: string,
-  ): Promise<string | null> {
-    if (!subjectId) return null;
-    const subject = await this.prisma.orgSubject.findUnique({
-      where: { id: subjectId },
-      select: { id: true, organizationId: true },
+  ): Promise<void> {
+    if (
+      user.organizationRole !== OrganizationRole.STUDENT ||
+      !user.membershipId
+    ) {
+      return;
+    }
+
+    const now = new Date();
+    const student = await this.prisma.student.findFirst({
+      where: {
+        membershipId: user.membershipId,
+        orgId: organizationId,
+        deletedAt: null,
+      },
+      select: { id: true },
+    });
+    if (!student) {
+      throw new ForbiddenException('Access denied');
+    }
+
+    const activeClassIds = await this.prisma.enrollment.findMany({
+      where: {
+        studentId: student.id,
+        status: { not: EnrollmentStatus.LEFT },
+      },
+      select: { classSectionId: true },
+    });
+    const classIds = activeClassIds.map((x) => x.classSectionId);
+
+    const openAssignment = await this.prisma.assignment.findFirst({
+      where: {
+        organizationId,
+        testId,
+        openAt: { lte: now },
+        closeAt: { gte: now },
+        OR: [
+          { students: { some: { studentId: user.membershipId } } },
+          ...(classIds.length > 0
+            ? [{ classSectionId: { in: classIds } }]
+            : []),
+        ],
+      },
+      select: { id: true },
+    });
+
+    if (openAssignment) return;
+
+    const ownSubmission = await this.prisma.submission.findFirst({
+      where: {
+        organizationId,
+        testId,
+        studentId: user.membershipId,
+        deletedAt: null,
+      },
+      select: { id: true },
+    });
+    if (!ownSubmission) {
+      throw new ForbiddenException('Access denied');
+    }
+  }
+
+  /** Validate that subjectId belongs to the org, has not been soft-deleted, and is active. */
+  private async validateSubject(
+    subjectId: string,
+    organizationId: string,
+    db: Prisma.TransactionClient = this.prisma,
+  ): Promise<void> {
+    const subject = await db.subject.findFirst({
+      where: { id: subjectId, organizationId, deletedAt: null },
+      select: { id: true, isActive: true },
     });
     if (!subject) {
-      throw new BadRequestException('Subject not found');
+      throw new BadRequestException({
+        code: 'SUBJECT_NOT_FOUND',
+        message: 'Předmět neexistuje nebo byl smazán.',
+      });
     }
-    if (subject.organizationId !== organizationId) {
-      throw new BadRequestException('Subject must belong to the same organization as the test');
+    if (!subject.isActive) {
+      throw new BadRequestException({
+        code: 'SUBJECT_INACTIVE',
+        message: 'Předmět je deaktivován. Aktivujte jej před vytvořením testu.',
+      });
     }
-    return subject.id;
+  }
+
+  /**
+   * Resolve academicYearId: validate it belongs to the org and is not soft-deleted.
+   * If academicYearId is omitted, fall back to ctx.activeAcademicYearId and verify
+   * it against the DB — never trust the cached context value blindly.
+   * Returns the resolved year id.
+   */
+  private async resolveAcademicYear(
+    ctx: OrgContext,
+    academicYearId: string | undefined,
+    db: Prisma.TransactionClient = this.prisma,
+  ): Promise<string> {
+    if (academicYearId) {
+      const year = await db.academicYear.findFirst({
+        where: { id: academicYearId, orgId: ctx.organizationId, deletedAt: null },
+        select: { id: true },
+      });
+      if (!year) {
+        throw new BadRequestException({
+          code: 'INVALID_ACADEMIC_YEAR',
+          message: 'Školní rok neexistuje, nepatří do organizace, nebo byl smazán.',
+        });
+      }
+      return year.id;
+    }
+
+    // Fallback: ctx.activeAcademicYearId comes from a short-lived cache —
+    // verify the year still exists in the DB and has not been soft-deleted.
+    if (!ctx.activeAcademicYearId) {
+      throw new BadRequestException({
+        code: 'NO_ACTIVE_ACADEMIC_YEAR',
+        message: 'Není aktivní školní rok. Požádejte ředitele o nastavení aktívního roku.',
+      });
+    }
+    const fallbackYear = await db.academicYear.findFirst({
+      where: { id: ctx.activeAcademicYearId, orgId: ctx.organizationId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!fallbackYear) {
+      throw new BadRequestException({
+        code: 'NO_ACTIVE_ACADEMIC_YEAR',
+        message: 'Aktivní školní rok byl smazán nebo je neplatný. Požádejte ředitele o aktualizaci.',
+      });
+    }
+    return fallbackYear.id;
   }
 
   // ----- Audit helper -----
@@ -156,10 +362,7 @@ export class TestsService {
     return this.prisma.auditLog.create({ data }).then(() => undefined);
   }
 
-  private async resolveOrgMembership(
-    user: JwtPayload,
-    organizationId: string,
-  ) {
+  private async resolveOrgMembership(user: JwtPayload, organizationId: string) {
     if (user.systemRole === SystemRole.SUPERADMIN) return null;
     const membership = await this.prisma.membership.findFirst({
       where: {
@@ -250,8 +453,9 @@ export class TestsService {
         );
       }
       return {
-        correctAnswer:
-          hasAnswerInput ? normalizedAnswer : existing?.correctAnswer ?? null,
+        correctAnswer: hasAnswerInput
+          ? normalizedAnswer
+          : (existing?.correctAnswer ?? null),
         correctAnswers: [],
       };
     }
@@ -275,8 +479,9 @@ export class TestsService {
     }
 
     return {
-      correctAnswer:
-        hasAnswerInput ? normalizedAnswer : existing?.correctAnswer ?? null,
+      correctAnswer: hasAnswerInput
+        ? normalizedAnswer
+        : (existing?.correctAnswer ?? null),
       correctAnswers: existing?.correctAnswers ?? [],
     };
   }
@@ -313,26 +518,17 @@ export class TestsService {
   }
 
   // ====== TESTS ===================================================
-  async create(dto: CreateTestDto, user: JwtPayload): Promise<unknown> {
-    const isSuper = user.systemRole === SystemRole.SUPERADMIN;
+  async create(
+    dto: CreateTestDto,
+    user: JwtPayload,
+    ctx: OrgContext,
+  ): Promise<unknown> {
+    const orgId = ctx.organizationId;
 
-    if (!isSuper) {
-      if (!user.organizationId || user.organizationId !== dto.organizationId) {
-        throw new ForbiddenException(
-          'Test lze vytvořit jen ve své organizaci.',
-        );
-      }
-    }
-
-    let author = await this.prisma.membership.findFirst({
-      where: {
-        userId: user.userId,
-        organizationId: dto.organizationId,
-        deletedAt: null,
-      },
+    const author = await this.prisma.membership.findFirst({
+      where: { userId: user.userId, organizationId: orgId, deletedAt: null },
       select: { id: true },
     });
-
     if (!author) {
       throw new ForbiddenException('Nejste členem organizace.');
     }
@@ -343,23 +539,31 @@ export class TestsService {
       );
     }
 
-    const orgSubjectId = await this.resolveOrgSubjectId(dto.subjectId, dto.organizationId);
+    // Validate subject and year atomically — no test.create before both pass.
+    const created = await this.prisma.$transaction(async (tx) => {
+      await this.validateSubject(dto.subjectId, orgId, tx);
+      const yearId = await this.resolveAcademicYear(ctx, dto.academicYearId, tx);
 
-    const created = await this.prisma.test.create({
-      data: {
-        title: dto.title,
-        description: dto.description ?? null,
-        organizationId: dto.organizationId,
-        orgSubjectId,
-        status: dto.status ?? PublishStatus.DRAFT,
-        creatorId: author.id,
-      },
-      include: this.includeAll(),
+      return tx.test.create({
+        data: {
+          title: dto.title,
+          description: dto.description ?? null,
+          organizationId: orgId,
+          subjectId: dto.subjectId,
+          academicYearId: yearId,
+          status: dto.status ?? PublishStatus.DRAFT,
+          creatorId: author.id,
+        },
+        select: this.buildTestProjection(
+          user.organizationRole ?? OrganizationRole.DIRECTOR,
+          'detail',
+        ),
+      });
     });
 
     await this.audit({
       userId: user.userId,
-      orgId: dto.organizationId ?? null,
+      orgId,
       action: 'TEST_CREATE',
       entityId: created.id,
       changedFields: dto as unknown as Record<string, unknown>,
@@ -367,7 +571,7 @@ export class TestsService {
 
     await bumpOrgVersion(
       this.cache,
-      cacheScopeForUser(user.systemRole, dto.organizationId),
+      cacheScopeForUser(user.systemRole, orgId),
     );
     return created;
   }
@@ -410,13 +614,86 @@ export class TestsService {
       }
     }
 
+    if (user.organizationRole === OrganizationRole.STUDENT) {
+      if (!effectiveOrgId || !user.membershipId) {
+        throw new ForbiddenException('Access denied');
+      }
+      const now = new Date();
+      const student = await this.prisma.student.findFirst({
+        where: {
+          membershipId: user.membershipId,
+          orgId: effectiveOrgId,
+          deletedAt: null,
+        },
+        select: { id: true },
+      });
+      if (!student) {
+        return { items: [], meta: { page, limit, total: 0, pages: 1 } };
+      }
+      const enrollments = await this.prisma.enrollment.findMany({
+        where: {
+          studentId: student.id,
+          status: { not: EnrollmentStatus.LEFT },
+        },
+        select: { classSectionId: true },
+      });
+      const classIds = enrollments.map((e) => e.classSectionId);
+      const assignmentWhere: Prisma.AssignmentWhereInput = {
+        organizationId: effectiveOrgId,
+        openAt: { lte: now },
+        closeAt: { gte: now },
+        OR: [
+          { students: { some: { studentId: user.membershipId } } },
+          ...(classIds.length > 0
+            ? [{ classSectionId: { in: classIds } }]
+            : []),
+        ],
+      };
+      const whereStudent: Prisma.TestWhereInput = {
+        deletedAt: null,
+        organizationId: effectiveOrgId,
+        status: PublishStatus.PUBLISHED,
+        scheduledAssignments: { some: assignmentWhere },
+        ...(q.status ? { status: q.status } : {}),
+        ...(searchExpr(q.search) ?? {}),
+      };
+      const select = this.buildTestProjection(OrganizationRole.STUDENT, 'list');
+      const [total, items] = await this.prisma.$transaction([
+        this.prisma.test.count({ where: whereStudent }),
+        this.prisma.test.findMany({
+          where: whereStudent,
+          select,
+          skip,
+          take: limit,
+          orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+        }),
+      ]);
+      return {
+        items,
+        meta: {
+          page,
+          limit,
+          total,
+          pages: Math.max(1, Math.ceil(total / limit)),
+        },
+      };
+    }
+
     const where: Prisma.TestWhereInput = {
       deletedAt: null,
       ...(effectiveOrgId ? { organizationId: effectiveOrgId } : {}),
       ...(q.status ? { status: q.status } : {}),
+      ...(q.subjectId ? { subjectId: q.subjectId } : {}),
+      ...(q.academicYearId ? { academicYearId: q.academicYearId } : {}),
       ...(searchExpr(q.search) ?? {}),
     };
-    const include = this.includeAll();
+    if (effectiveOrgId) {
+      assertTenantWhere(where as Record<string, unknown>, effectiveOrgId);
+    }
+    const select = this.buildTestProjection(
+      user.organizationRole ?? null,
+      'list',
+    );
     const scopeId = effectiveOrgId ?? 'GLOBAL';
     const ver = await getOrgVersion(this.cache, scopeId);
     const cacheKey = buildVersionedListKey({
@@ -427,7 +704,12 @@ export class TestsService {
       limit,
       search: q.search ?? '',
       order: [{ createdAt: 'desc' }, { id: 'asc' }],
-      filters: { status: q.status ?? null, organizationId: effectiveOrgId },
+      filters: {
+        status: q.status ?? null,
+        organizationId: effectiveOrgId,
+        subjectId: q.subjectId ?? null,
+        academicYearId: q.academicYearId ?? null,
+      },
     });
 
     return cacheGetOrSet(this.cache, cacheKey, 600_000, async () => {
@@ -435,7 +717,7 @@ export class TestsService {
         this.prisma.test.count({ where }),
         this.prisma.test.findMany({
           where,
-          include,
+          select,
           skip,
           take: limit,
           orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
@@ -453,20 +735,44 @@ export class TestsService {
     });
   }
 
+  /**
+   * IMPORTANT:
+   * Always use findUnique when querying by primary key.
+   * Using findFirst on PK can lead to nondeterministic results,
+   * especially with soft-delete or multi-tenant scenarios.
+   */
   async findOne(id: string, user: JwtPayload): Promise<unknown> {
-    const t = await this.prisma.test.findFirst({
-      where: { id, deletedAt: null },
-      include: this.includeAll(),
+    // eslint-disable-next-line no-console
+    console.log('FINDONE ENTRY testId=', id, 'role=', user.organizationRole ?? 'null');
+    if (user.organizationId) {
+      const scopedBaseWhere = withOrg(
+        { id, deletedAt: null },
+        user.organizationId,
+      );
+      assertTenantWhere(scopedBaseWhere, user.organizationId);
+    }
+
+    // Use findUnique (PK lookup) + explicit deletedAt guard instead of findFirst.
+    const base = await this.prisma.test.findUnique({
+      where: { id },
+      select: { id: true, organizationId: true, status: true, deletedAt: true },
     });
-    if (!t) throw new NotFoundException('Test nenalezen');
+    if (!base || base.deletedAt !== null) {
+      throw new NotFoundException('Test nenalezen');
+    }
 
     const assignability = await this.computeTestAssignability(id);
 
     if (user.systemRole === SystemRole.SUPERADMIN) {
-      return { ...t, assignability };
+      const teacherView = await this.prisma.test.findUnique({
+        where: { id },
+        select: this.buildTestProjection(OrganizationRole.DIRECTOR, 'detail'),
+      });
+      if (!teacherView) throw new NotFoundException('Test nenalezen');
+      return this.mapTeacherView(teacherView, assignability);
     }
 
-    if (!user.organizationId || user.organizationId !== t.organizationId) {
+    if (!user.organizationId || user.organizationId !== base.organizationId) {
       throw new NotFoundException('Test nenalezen');
     }
 
@@ -490,13 +796,68 @@ export class TestsService {
         });
     if (!member) throw new ForbiddenException('Cizí organizace.');
 
-    const payload = { ...t, assignability } as Record<string, unknown>;
     if (user.organizationRole === OrganizationRole.STUDENT) {
-      return this.sanitizeForStudentTestDetail(payload);
+      if (base.status !== PublishStatus.PUBLISHED) {
+        throw new NotFoundException('Test nenalezen');
+      }
+      await this.ensureStudentCanAccessTest(user, base.id, base.organizationId);
+      const studentView = await this.prisma.test.findUnique({
+        where: { id },
+        select: this.buildTestProjection(OrganizationRole.STUDENT, 'detail'),
+      });
+      if (!studentView) throw new NotFoundException('Test nenalezen');
+      return this.mapStudentView(studentView);
     }
-    return payload;
+
+    // PHASE 1: raw count via direct query — bypasses Prisma relation resolution entirely.
+    // If rawCount > 0 but questions.length = 0 → problem is in relation select, not data.
+    // If rawCount = 0 → insert used a different testId than this GET.
+    const rawCount = await this.prisma.question.count({
+      where: { testId: id },
+    });
+    // eslint-disable-next-line no-console
+    console.log('RAW QUESTION COUNT (DIRECT QUERY)', rawCount);
+    // PHASE RAW-SQL: bypass ORM entirely — check DB state with raw SQL.
+    const rawSql = await this.prisma.$queryRaw<{ qid: string; tid: string }[]>`
+      SELECT question_id AS qid, test_id AS tid FROM questions WHERE test_id = ${id}
+    `;
+    // eslint-disable-next-line no-console
+    console.log('RAW SQL QUESTIONS', rawSql.length, rawSql.map((r) => r.qid));
+
+    // PHASE 7: absolute isolation — include instead of select, bypasses buildTestProjection.
+    // Uncomment this block and comment out the teacherView below to test.
+    // const teacherView = await this.prisma.test.findUnique({
+    //   where: { id },
+    //   include: { questions: true },
+    // });
+
+    const teacherView = await this.prisma.test.findUnique({
+      where: { id },
+      select: this.buildTestProjection(user.organizationRole ?? null, 'detail'),
+    });
+    if (!teacherView) throw new NotFoundException('Test nenalezen');
+    // eslint-disable-next-line no-console
+    console.log('VERIFY FIND UNIQUE TEST ID', teacherView.id);
+    // eslint-disable-next-line no-console
+    console.log('FINDONE QUESTIONS COUNT', teacherView.questions?.length ?? 0);
+    const findOneTrace = `[TRACE][findOne] testId=${id} orgId=${base.organizationId} role=${String(
+      user.organizationRole ?? 'null',
+    )} questions=${teacherView.questions?.length ?? 0}`;
+    this.logger.log(findOneTrace);
+    // Temporary trace for debugging flow visibility in tests/local runs.
+    // eslint-disable-next-line no-console
+    console.log(findOneTrace);
+    return this.mapTeacherView(teacherView, assignability);
   }
-  async update(id: string, dto: UpdateTestDto, user: JwtPayload): Promise<unknown> {
+  async update(
+    id: string,
+    dto: UpdateTestDto,
+    user: JwtPayload,
+  ): Promise<unknown> {
+    if (user.organizationId) {
+      const scopedWhere = withOrg({ id }, user.organizationId);
+      assertTenantWhere(scopedWhere, user.organizationId);
+    }
     const current = await this.prisma.test.findUnique({
       where: { id },
       select: {
@@ -520,14 +881,18 @@ export class TestsService {
 
     if (dto.status === PublishStatus.PUBLISHED) {
       if (current.organizationId) {
-        const readiness = await deriveOrgReadiness(this.prisma, current.organizationId);
+        const readiness = await deriveOrgReadiness(
+          this.prisma,
+          current.organizationId,
+        );
         if (!readiness.canExecute) {
           throw createOrgReadinessError({
             operationType: OrgOperationType.EXECUTION,
             state: readiness.state,
             missing: readiness.missing,
             requiredMinState: OrgReadinessState.R2_STRUCTURE_READY,
-            messageOverride: 'Organization must have a current year and at least one class section before publishing tests.',
+            messageOverride:
+              'Organization must have a current year and at least one class section before publishing tests.',
           });
         }
       }
@@ -546,13 +911,17 @@ export class TestsService {
       updateData.status = dto.status;
     }
     if (dto.subjectId !== undefined) {
-      updateData.orgSubjectId = await this.resolveOrgSubjectId(dto.subjectId, current.organizationId);
+      await this.validateSubject(dto.subjectId, current.organizationId);
+      updateData.subjectId = dto.subjectId;
     }
 
     const updated = await this.prisma.test.update({
       where: { id },
       data: updateData,
-      include: this.includeAll(),
+      select: this.buildTestProjection(
+        user.organizationRole ?? OrganizationRole.DIRECTOR,
+        'detail',
+      ),
     });
 
     await this.audit({
@@ -570,6 +939,10 @@ export class TestsService {
   }
 
   async remove(id: string, user: JwtPayload): Promise<unknown> {
+    if (user.organizationId) {
+      const scopedWhere = withOrg({ id }, user.organizationId);
+      assertTenantWhere(scopedWhere, user.organizationId);
+    }
     // Soft delete: testy tvoří auditní stopu (submissions/hodnocení).
     const current = await this.prisma.test.findUnique({
       where: { id },
@@ -593,7 +966,10 @@ export class TestsService {
     if (user.systemRole !== SystemRole.SUPERADMIN) {
       if (
         user.organizationId !== current.organizationId ||
-        !hasAtLeastRole(user.organizationRole ?? null, OrganizationRole.DIRECTOR)
+        !hasAtLeastRole(
+          user.organizationRole ?? null,
+          OrganizationRole.DIRECTOR,
+        )
       ) {
         throw new ForbiddenException(
           'Mazat smí jen ředitel/owner nebo superadmin.',
@@ -628,9 +1004,6 @@ export class TestsService {
       select: {
         id: true,
         organizationId: true,
-        subject: {
-          select: { id: true, gradeFrom: true, gradeTo: true },
-        },
         questions: {
           select: {
             id: true,
@@ -665,17 +1038,6 @@ export class TestsService {
     });
     if (!classSection || classSection.orgId !== organizationId) {
       throw new NotFoundException('Class section nenalezena');
-    }
-
-    if (test.subject) {
-      const gradeNum = SCHOOL_GRADE_TO_NUM[classSection.grade];
-      if (gradeNum < test.subject.gradeFrom || gradeNum > test.subject.gradeTo) {
-        throw new BadRequestException({
-          code: 'SUBJECT_GRADE_MISMATCH',
-          message:
-            'Test nelze přiřadit této třídě – předmět není určen pro daný ročník.',
-        });
-      }
     }
 
     const creatorMembership = await this.prisma.membership.findFirst({
@@ -726,9 +1088,28 @@ export class TestsService {
     return assignment;
   }
 
-  async results(testId: string, user: JwtPayload): Promise<unknown> {
+  async results(
+    testId: string,
+    user: JwtPayload,
+    paging?: { page?: number; limit?: number },
+  ): Promise<unknown> {
+    const page = Math.max(1, paging?.page ?? 1);
+    const limit = Math.min(100, Math.max(1, paging?.limit ?? 20));
+    const skip = (page - 1) * limit;
+
+    const testWhere: Prisma.TestWhereInput = withOrg(
+      { id: testId, deletedAt: null },
+      user.organizationId ?? '',
+    );
+    if (user.organizationId) {
+      assertTenantWhere(
+        testWhere as Record<string, unknown>,
+        user.organizationId,
+      );
+    }
+
     const test = await this.prisma.test.findFirst({
-      where: { id: testId, deletedAt: null },
+      where: user.organizationId ? testWhere : { id: testId, deletedAt: null },
       select: { id: true, organizationId: true },
     });
     if (!test) throw new NotFoundException('Test nenalezen');
@@ -760,39 +1141,226 @@ export class TestsService {
       };
     }
 
-    const submissions = await this.prisma.submission.findMany({
-      where: {
-        testId,
-        assignment: assignmentScope ?? { organizationId: test.organizationId },
-        deletedAt: null,
-        ...(role === OrganizationRole.STUDENT && membership
-          ? { studentId: membership.id }
-          : {}),
-      },
-      include: {
-        assignment: { select: { id: true, classSectionId: true } },
-        student: {
-          select: {
-            user: { select: { name: true } },
+    const submissionsWhere: Prisma.SubmissionWhereInput = {
+      testId,
+      assignment: assignmentScope ?? { organizationId: test.organizationId },
+      deletedAt: null,
+      ...(role === OrganizationRole.STUDENT && membership
+        ? { studentId: membership.id }
+        : {}),
+    };
+
+    const [total, submissions] = await this.prisma.$transaction([
+      this.prisma.submission.count({ where: submissionsWhere }),
+      this.prisma.submission.findMany({
+        where: submissionsWhere,
+        include: {
+          assignment: { select: { id: true, classSectionId: true } },
+          student: {
+            select: {
+              user: { select: { name: true } },
+            },
           },
         },
-      },
-      orderBy: { submittedAt: 'desc' },
-    });
+        orderBy: { submittedAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+    ]);
 
-    return submissions.map((s) => ({
-      id: s.id,
-      score: s.score,
-      submittedAt: s.submittedAt,
-      attemptNo: s.attemptNo,
-      assignmentId: s.assignmentId,
-      classSectionId: s.assignment?.classSectionId ?? null,
-      student:
-        role === OrganizationRole.STUDENT
-          ? null
-          : { name: s.student?.user?.name ?? null },
-      isAnonymous: s.isAnonymous ?? false,
-    }));
+    return {
+      items: submissions.map((s) => ({
+        id: s.id,
+        score: s.score,
+        submittedAt: s.submittedAt,
+        attemptNo: s.attemptNo,
+        assignmentId: s.assignmentId,
+        classSectionId: s.assignment?.classSectionId ?? null,
+        student:
+          role === OrganizationRole.STUDENT
+            ? null
+            : { name: s.student?.user?.name ?? null },
+        isAnonymous: s.isAnonymous ?? false,
+      })),
+      meta: {
+        page,
+        limit,
+        total,
+        pages: Math.max(1, Math.ceil(total / limit)),
+      },
+    };
+  }
+
+  // ====== TEMPORARY DEBUG — remove before release ====================
+  /**
+   * [TEMP DEBUG] Full visibility trace for a given student.
+   * Returns structured JSON explaining why each assignment is or isn't visible.
+   * DO NOT ship to production — no pagination, no rate-limit, scans all org assignments.
+   */
+  async debugStudentVisibility(
+    membershipId: string,
+    organizationId: string,
+  ): Promise<unknown> {
+    const now = new Date();
+    // eslint-disable-next-line no-console
+    console.log('[DEBUG] debugStudentVisibility', { membershipId, organizationId, now: now.toISOString() });
+
+    // 1. Current academic year for this org
+    const currentYear = await this.prisma.academicYear.findFirst({
+      where: { orgId: organizationId, isCurrent: true },
+      select: { id: true, label: true, startsAt: true, endsAt: true },
+    });
+    // eslint-disable-next-line no-console
+    console.log('[DEBUG] currentAcademicYear', currentYear);
+
+    // 2. Student record (via membershipId)
+    const student = await this.prisma.student.findFirst({
+      where: { membershipId, orgId: organizationId, deletedAt: null },
+      select: { id: true, membershipId: true, orgId: true, studentNumber: true },
+    });
+    // eslint-disable-next-line no-console
+    console.log('[DEBUG] student', student);
+
+    // 3. ALL enrollments for this student (all statuses — full debug)
+    const enrollments = student
+      ? await this.prisma.enrollment.findMany({
+          where: { studentId: student.id, orgId: organizationId },
+          select: {
+            id: true,
+            classSectionId: true,
+            yearId: true,
+            status: true,
+          },
+        })
+      : [];
+    const classSectionIds = enrollments.map((e) => e.classSectionId);
+    // eslint-disable-next-line no-console
+    console.log('[DEBUG] enrollments', enrollments);
+    // eslint-disable-next-line no-console
+    console.log('[DEBUG] classSectionIds', classSectionIds);
+
+    // 4. ALL assignments in this org — no pre-filter, we analyse every one
+    const assignments = await this.prisma.assignment.findMany({
+      where: { organizationId },
+      select: {
+        id: true,
+        testId: true,
+        targetType: true,
+        classSectionId: true,
+        yearId: true,
+        openAt: true,
+        closeAt: true,
+        maxAttempts: true,
+        students: { select: { studentId: true } },
+      },
+    });
+    // eslint-disable-next-line no-console
+    console.log('[DEBUG] totalAssignmentsInOrg', assignments.length);
+
+    // 5. Per-assignment visibility computation
+    const assignmentAnalysis = await Promise.all(
+      assignments.map(async (a) => {
+        // Targeting check
+        const isTargetedByClass =
+          a.targetType === 'CLASS' &&
+          a.classSectionId !== null &&
+          classSectionIds.includes(a.classSectionId as string);
+
+        const isTargetedByStudent =
+          a.targetType === 'STUDENTS' &&
+          a.students.some((s) => s.studentId === membershipId);
+
+        const isTargetedToStudent = isTargetedByClass || isTargetedByStudent;
+
+        // Time window check
+        const isWithinTimeWindow = a.openAt <= now && a.closeAt >= now;
+
+        // Submission / attempt check
+        const submissions = await this.prisma.submission.findMany({
+          where: {
+            assignmentId: a.id,
+            studentId: membershipId,
+            deletedAt: null,
+          },
+          select: { id: true, attemptNo: true },
+        });
+        const attemptsUsed = submissions.length;
+        const hasSubmission = attemptsUsed > 0;
+        const remainingAttempts = a.maxAttempts - attemptsUsed;
+
+        // Final visibility
+        const visible =
+          isTargetedToStudent && isWithinTimeWindow && remainingAttempts > 0;
+
+        // Human-readable reasons for being hidden
+        const hiddenReasons: string[] = [];
+        if (!isTargetedToStudent) {
+          hiddenReasons.push(
+            `not_targeted (targetType=${a.targetType}, assignmentClassSection=${String(a.classSectionId)}, studentSections=${JSON.stringify(classSectionIds)})`,
+          );
+        }
+        if (!isWithinTimeWindow) {
+          if (a.openAt > now) {
+            hiddenReasons.push(`not_open_yet (opens=${a.openAt.toISOString()})`);
+          } else {
+            hiddenReasons.push(`already_closed (closedAt=${a.closeAt.toISOString()})`);
+          }
+        }
+        if (remainingAttempts <= 0) {
+          hiddenReasons.push(`no_remaining_attempts (used=${attemptsUsed}, max=${a.maxAttempts})`);
+        }
+
+        // eslint-disable-next-line no-console
+        console.log('[DEBUG] assignment', a.id, {
+          visible,
+          isTargetedToStudent,
+          isTargetedByClass,
+          isTargetedByStudent,
+          isWithinTimeWindow,
+          attemptsUsed,
+          remainingAttempts,
+          hiddenReasons,
+        });
+
+        return {
+          id: a.id,
+          testId: a.testId,
+          targetType: a.targetType,
+          classSectionId: a.classSectionId,
+          yearId: a.yearId,
+          openAt: a.openAt,
+          closeAt: a.closeAt,
+          maxAttempts: a.maxAttempts,
+          isTargetedByClass,
+          isTargetedByStudent,
+          isTargetedToStudent,
+          isWithinTimeWindow,
+          hasSubmission,
+          attemptsUsed,
+          remainingAttempts,
+          visible,
+          hiddenReasons,
+        };
+      }),
+    );
+
+    const result = {
+      now: now.toISOString(),
+      student: student ?? null,
+      currentAcademicYear: currentYear ?? null,
+      enrollments,
+      classSectionIds,
+      assignments: assignmentAnalysis,
+      summary: {
+        totalAssignments: assignments.length,
+        visibleToStudent: assignmentAnalysis.filter((a) => a.visible).length,
+        hiddenAssignments: assignmentAnalysis.filter((a) => !a.visible).length,
+      },
+    };
+
+    // eslint-disable-next-line no-console
+    console.log('[DEBUG] debugStudentVisibility SUMMARY', result.summary);
+    return result;
   }
 
   // ====== QUESTIONS / OPTIONS / ANSWERS ===========================
@@ -817,7 +1385,18 @@ export class TestsService {
     dto: CreateQuestionDto,
     user: JwtPayload,
   ): Promise<unknown> {
+    // Temporary end-to-end trace for addQuestion diagnostics.
+    // eslint-disable-next-line no-console
+    console.log('ADD QUESTION CALLED', { testId, dto });
     const t = await this.getEditableTestFor(user, testId);
+
+    // Scope mismatch guard: test's org must match the calling user's org.
+    // Use the DB-verified organizationId from the test, never trust the
+    // raw DTO or ctx directly without this validation.
+    if (user.organizationId && t.organizationId !== user.organizationId) {
+      throw new ForbiddenException('Scope mismatch');
+    }
+
     const answers = this.buildAnswerFields({
       type: dto.type,
       correctAnswer: dto.correctAnswer,
@@ -825,7 +1404,7 @@ export class TestsService {
     });
     const q = await this.prisma.question.create({
       data: {
-        testId,
+        testId: t.id,
         text: dto.text,
         type: dto.type,
         order: dto.order ?? 0,
@@ -834,6 +1413,26 @@ export class TestsService {
         correctAnswers: answers.correctAnswers ?? [],
       },
     });
+    // eslint-disable-next-line no-console
+    console.log('QUESTION CREATED WITH SCOPE', {
+      id: q.id,
+      testId: q.testId,
+      org: t.organizationId,
+      paramTestId: testId,
+      resolvedTestId: t.id,
+    });
+    const testQuestionCount = await this.prisma.question.count({
+      where: { testId: t.id },
+    });
+    // eslint-disable-next-line no-console
+    console.log('COUNT AFTER INSERT', testQuestionCount);
+    const addQuestionTrace = `[TRACE][addQuestion] testId=${testId} createdQuestionId=${q.id} createdOrder=${String(
+      q.order,
+    )} countAfterInsert=${testQuestionCount}`;
+    this.logger.log(addQuestionTrace);
+    // Temporary trace for debugging flow visibility in tests/local runs.
+    // eslint-disable-next-line no-console
+    console.log(addQuestionTrace);
     await this.audit({
       userId: user.userId,
       orgId: t.organizationId,

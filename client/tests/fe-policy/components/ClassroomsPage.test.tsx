@@ -16,6 +16,7 @@ const academicYearsState = {
     { id: "year-1", name: "2024/25", isActive: true },
     { id: "year-2", name: "2023/24", isActive: false },
   ],
+  status: "ready" as const,
   selectedYear: { id: "year-1", name: "2024/25", isActive: true },
   selectedYearId: "year-1",
   activeYear: { id: "year-1", name: "2024/25", isActive: true },
@@ -25,6 +26,7 @@ const academicYearsState = {
   error: null,
   yearConfigError: null,
   refresh: vi.fn(),
+  setSelectedYearId: vi.fn(),
   setSelectedYear: vi.fn(),
 };
 
@@ -38,6 +40,23 @@ vi.mock("@/hooks/use-permissions", () => ({
   }),
 }));
 
+vi.mock("@/hooks/use-auth", () => ({
+  useAuth: () => ({
+    org: { id: "org-1", status: "ACTIVE", readiness: "READY", bootstrap: null },
+    syncProfile: vi.fn(),
+    isLoading: false,
+    isAuthenticated: true,
+    roles: ["TEACHER"],
+  }),
+}));
+
+vi.mock("@/hooks/use-teachers", () => ({
+  useTeachers: () => ({
+    teachers: [],
+    loading: false,
+  }),
+}));
+
 vi.mock("@/lib/http/client", () => ({
   fetchWithAuth: vi.fn(),
 }));
@@ -45,6 +64,7 @@ vi.mock("@/lib/http/client", () => ({
 describe("ClassroomsPageContent", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    academicYearsState.status = "ready";
     academicYearsState.selectedYear = { id: "year-1", name: "2024/25", isActive: true };
     academicYearsState.selectedYearId = "year-1";
     academicYearsState.isReadOnly = false;
@@ -56,7 +76,7 @@ describe("ClassroomsPageContent", () => {
     render(<ClassroomsPageContent />);
 
     await waitFor(() => {
-      expect(screen.getByText(/zatím žádné třídy/i)).toBeInTheDocument();
+      expect(screen.getByText(/zatím.*žádné třídy/i)).toBeInTheDocument();
     });
     recordPolicyCheck(
       "UX",
@@ -95,11 +115,11 @@ describe("ClassroomsPageContent", () => {
     render(<ClassroomsPageContent />);
 
     await waitFor(() => {
-      expect(screen.getByText(/read-only/i)).toBeInTheDocument();
+      expect(screen.getByText(/^read-only$/i)).toBeInTheDocument();
     });
 
-    const addButton = screen.getByRole("button", { name: /přidat studenta/i });
-    expect(addButton).toBeDisabled();
+    const createButton = screen.getByRole("button", { name: /vytvořit třídu/i });
+    expect(createButton).toBeDisabled();
     recordPolicyCheck(
       "UX",
       "classrooms-read-only",
@@ -114,9 +134,13 @@ describe("ClassroomsPageContent", () => {
     const { rerender } = render(<ClassroomsPageContent />);
 
     await waitFor(() => {
-      expect(fetchWithAuth).toHaveBeenCalledWith("GET", "/classrooms", {
-        query: { yearId: "year-1" },
-      });
+      expect(fetchWithAuth).toHaveBeenCalledWith(
+        "GET",
+        "/classrooms",
+        expect.objectContaining({
+          query: expect.objectContaining({ yearId: "year-1" }),
+        }),
+      );
     });
 
     academicYearsState.selectedYear = { id: "year-2", name: "2023/24", isActive: false };
@@ -128,9 +152,13 @@ describe("ClassroomsPageContent", () => {
     rerender(<ClassroomsPageContent />);
 
     await waitFor(() => {
-      expect(fetchWithAuth).toHaveBeenCalledWith("GET", "/classrooms", {
-        query: { yearId: "year-2" },
-      });
+      expect(fetchWithAuth).toHaveBeenCalledWith(
+        "GET",
+        "/classrooms",
+        expect.objectContaining({
+          query: expect.objectContaining({ yearId: "year-2" }),
+        }),
+      );
     });
 
     recordPolicyCheck(

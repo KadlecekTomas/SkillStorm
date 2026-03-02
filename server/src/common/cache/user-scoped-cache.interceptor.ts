@@ -3,10 +3,17 @@ import { CacheInterceptor } from '@nestjs/cache-manager';
 import type { ExecutionContext } from '@nestjs/common';
 import { Injectable } from '@nestjs/common';
 import type { Request } from 'express';
+import { NO_HTTP_CACHE } from './no-http-cache.decorator';
 
 @Injectable()
 export class UserScopedCacheInterceptor extends CacheInterceptor {
   protected override trackBy(context: ExecutionContext): string | undefined {
+    // Respect @NoHttpCache() decorator — skip caching entirely for this handler/class.
+    const noCache =
+      this.reflector?.get<boolean>(NO_HTTP_CACHE, context.getHandler()) ??
+      this.reflector?.get<boolean>(NO_HTTP_CACHE, context.getClass());
+    if (noCache) return undefined;
+
     const req = context.switchToHttp().getRequest<Request>();
     if (!req) return super.trackBy(context);
 

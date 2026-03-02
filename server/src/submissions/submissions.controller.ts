@@ -28,6 +28,7 @@ import { ForbiddenException } from '@nestjs/common';
 import { ApiStandardResponses } from '@/common/http/api-standard-responses.decorator';
 import { RequireCurrentAcademicYearGuard } from '@/academic-years/require-current-academic-year.guard';
 import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
+import { OrgContextService } from '@/common/org-context/org-context.service';
 
 @ApiTags('submissions')
 @ApiStandardResponses()
@@ -36,38 +37,44 @@ import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operatio
 @OrgOperation(OrgOperationType.EXECUTION)
 @UseGuards(JwtAuthGuard, RequireCurrentAcademicYearGuard)
 export class SubmissionsController {
-  constructor(private readonly submissionsService: SubmissionsService) {}
+  constructor(
+    private readonly submissionsService: SubmissionsService,
+    private readonly orgContext: OrgContextService,
+  ) {}
 
   @Post()
   @Permission(OrganizationRole.STUDENT)
-  create(@Body() dto: CreateSubmissionDto, @Req() req: RequestWithUser) {
-    return ok(this.submissionsService.create(dto, req.user));
+  async create(@Body() dto: CreateSubmissionDto, @Req() req: RequestWithUser) {
+    const ctx = await this.orgContext.get(req);
+    return ok(this.submissionsService.create(dto, req.user, ctx));
   }
 
   @Patch(':id/responses')
   @Permission(OrganizationRole.STUDENT)
-  updateResponses(
+  async updateResponses(
     @Param('id') id: string,
     @Body() dto: UpdateSubmissionDto,
     @Req() req: RequestWithUser,
   ) {
-    return this.submissionsService.updateResponses(id, dto, req.user);
+    const ctx = await this.orgContext.get(req);
+    return this.submissionsService.updateResponses(id, dto, req.user, ctx);
   }
 
   @Post(':id/finish')
   @HttpCode(HttpStatus.OK)
   @Permission(OrganizationRole.STUDENT)
-  finish(
+  async finish(
     @Param('id') id: string,
     @Body() dto: FinishSubmissionDto,
     @Req() req: RequestWithUser,
   ) {
-    return ok(this.submissionsService.finish(id, dto, req.user));
+    const ctx = await this.orgContext.get(req);
+    return ok(this.submissionsService.finish(id, dto, req.user, ctx));
   }
 
   @Get()
   @Permission(PermissionKey.VIEW_RESULTS, PermissionKey.MANAGE_STUDENTS)
-  findAll(
+  async findAll(
     @Req() req: RequestWithUser,
     @Query('assignmentId') assignmentId: string,
     @Query('studentId') studentId: string,
@@ -77,18 +84,14 @@ export class SubmissionsController {
     const page = Math.max(1, parseInt(String(pageStr ?? '1'), 10) || 1);
     const rawLimit = parseInt(String(limitStr ?? '200'), 10) || 200;
     const limit = Math.min(500, Math.max(1, rawLimit));
-    return ok(
-      this.submissionsService.findAll(
-        { assignmentId, studentId },
-        req.user,
-        { page, limit },
-      ),
-    );
+    const ctx = await this.orgContext.get(req);
+    return ok(this.submissionsService.findAll({ assignmentId, studentId }, req.user, ctx, { page, limit }));
   }
 
   @Get(':id')
   @Permission(PermissionKey.VIEW_RESULTS, PermissionKey.MANAGE_STUDENTS)
-  findOne(@Param('id') id: string, @Req() req: RequestWithUser) {
-    return ok(this.submissionsService.findOne(id, req.user));
+  async findOne(@Param('id') id: string, @Req() req: RequestWithUser) {
+    const ctx = await this.orgContext.get(req);
+    return ok(this.submissionsService.findOne(id, req.user, ctx));
   }
 }

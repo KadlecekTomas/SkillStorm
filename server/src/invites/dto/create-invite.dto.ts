@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsUUID } from 'class-validator';
+import { IsEnum, IsInt, IsOptional, IsUUID, Min } from 'class-validator';
 import { InvitationType, OrganizationRole } from '@prisma/client';
 
 export class CreateInviteDto {
@@ -25,4 +25,10 @@ export class CreateInviteDto {
   @ApiPropertyOptional({ description: 'Expiry in days from now', default: 7 })
   @IsOptional()
   expiresInDays?: number;
+
+  @ApiPropertyOptional({ description: 'Max number of accepts (default 1)', default: 1 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  maxUses?: number;
 }

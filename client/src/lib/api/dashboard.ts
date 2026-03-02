@@ -106,3 +106,33 @@ export async function getDashboardTeacher(): Promise<TeacherDashboardResponse> {
 export async function getDashboardStudent(): Promise<StudentDashboardResponse> {
   return httpClient.get<StudentDashboardResponse>("/dashboards/student");
 }
+
+// ---------------------------------------------------------------------------
+// Student assignment overview
+// ---------------------------------------------------------------------------
+
+export type AssignmentOverviewItem = {
+  assignmentId: string;
+  testId: string;
+  title: string;
+  openAt: string;
+  closeAt: string;
+  maxAttempts: number;
+  remainingAttempts: number;
+  attemptsUsed: number;
+};
+
+export type AssignmentsOverviewResponse = {
+  now: string;
+  active: AssignmentOverviewItem[];
+  upcoming: AssignmentOverviewItem[];
+  closedUnsubmitted: AssignmentOverviewItem[];
+  completed: AssignmentOverviewItem[];
+};
+
+/**
+ * Fetch bucketed assignment overview for the current student.
+ */
+export async function getAssignmentsOverview(): Promise<AssignmentsOverviewResponse> {
+  return httpClient.get<AssignmentsOverviewResponse>("/assignments/overview");
+}

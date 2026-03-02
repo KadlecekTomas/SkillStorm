@@ -393,7 +393,15 @@ export class EnrollmentsService {
     if (user.systemRole === SystemRole.SUPERADMIN) {
       return this.prisma.enrollment.findMany({
         where: { classSectionId, status: { not: EnrollmentStatus.LEFT } },
-        include: { student: { include: { membership: { include: { user: true } } } } },
+        include: {
+          student: {
+            include: {
+              membership: {
+                include: { user: { select: { id: true, name: true, email: true } } },
+              },
+            },
+          },
+        },
       });
     }
 
@@ -417,7 +425,15 @@ export class EnrollmentsService {
           classSectionId,
           status: { not: EnrollmentStatus.LEFT },
         },
-        include: { student: { include: { membership: { include: { user: true } } } } },
+        include: {
+          student: {
+            include: {
+              membership: {
+                include: { user: { select: { id: true, name: true, email: true } } },
+              },
+            },
+          },
+        },
       });
     }
 
@@ -427,7 +443,15 @@ export class EnrollmentsService {
           classSectionId,
           status: { not: EnrollmentStatus.LEFT },
         },
-        include: { student: { include: { membership: { include: { user: true } } } } },
+        include: {
+          student: {
+            include: {
+              membership: {
+                include: { user: { select: { id: true, name: true, email: true } } },
+              },
+            },
+          },
+        },
       });
     }
 
