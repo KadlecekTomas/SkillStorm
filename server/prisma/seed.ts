@@ -1,5 +1,6 @@
 import { PrismaClient, SystemRole, UserStatus } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
+import { runDemoSeed } from './demo-seed';
 
 /**
  * Environment variables are used ONLY for initial bootstrap.
@@ -102,6 +103,9 @@ async function ensureE2EOnboardingUser(prisma: PrismaClient): Promise<void> {
 
 main()
   .then(async () => {
+    if (process.env.DEMO_SEED === '1') {
+      await runDemoSeed();
+    }
     await ensureE2EOnboardingUser(prisma);
   })
   .catch((error) => {
@@ -111,4 +115,3 @@ main()
   .finally(async () => {
     await prisma.$disconnect();
   });
-

@@ -67,12 +67,11 @@ async function seedSuperadmin() {
 }
 
 async function main() {
+  await seedSuperadmin();
+
   if (process.env.DEMO_SEED === '1') {
     await runDemoSeed();
-    return;
   }
-
-  await seedSuperadmin();
 }
 
 main()

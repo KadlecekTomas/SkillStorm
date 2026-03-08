@@ -2,8 +2,15 @@
 
 ## Demo Credentials
 
+- Director: `director.demo@skillstorm.local` / `Password123!`
 - Teacher: `teacher.demo@skillstorm.local` / `Password123!`
 - Student: `student.demo@skillstorm.local` / `Password123!`
+
+## Demo Invite Codes
+
+- Student org invite: `DEMO-STUDENT`
+- Teacher org invite: `DEMO-TEACHER`
+- Class invite (8.A): `DEMO-8A`
 
 ## Demo URLs
 
@@ -19,23 +26,28 @@
 - Class: `8.A Demo`
 - Test: `Demo test: Zlomky a logika`
 - Assignment: open immediately, closes in 7 days, `maxAttempts=1`
+- Director has active organization context for settings / invite demo
 
 ## 2-Minute Guided Flow
 
-### 1. Teacher view (about 45 seconds)
+### 1. Director / teacher view (about 45 seconds)
 
 1. Open `http://localhost:3000/login`.
-2. Log in as `teacher.demo@skillstorm.local`.
+2. Log in as `director.demo@skillstorm.local` if you want to show settings + invites, or as `teacher.demo@skillstorm.local` if you want to go straight to tests.
 3. You should land in the school workspace.
-4. Open `http://localhost:3000/app/tests`.
-5. Verify the test `Demo test: Zlomky a logika` is visible.
-6. Open the test detail.
-7. Expected output:
+4. Optional director step:
+   - open `http://localhost:3000/app/settings`
+   - verify invite section is prefilled and usable
+   - use code `DEMO-STUDENT` or `DEMO-8A` for onboarding demonstration
+5. Open `http://localhost:3000/app/tests`.
+6. Verify the test `Demo test: Zlomky a logika` is visible.
+7. Open the test detail.
+8. Expected output:
    - test title is visible
    - there are 3 questions
    - the test is already published
-8. Open `http://localhost:3000/app/assignments`.
-9. Expected output:
+9. Open `http://localhost:3000/app/assignments`.
+10. Expected output:
    - one assignment is present for the demo class
    - the assignment window is already open
 

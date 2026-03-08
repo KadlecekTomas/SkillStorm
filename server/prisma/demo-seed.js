@@ -17,6 +17,12 @@ const DEMO_PASSWORD = 'Password123!';
 const DEMO = {
   organizationName: 'SkillStorm Demo School',
   classSection: { grade: SchoolGrade.GRADE_8, section: 'A', label: '8.A Demo' },
+  director: {
+    email: 'director.demo@skillstorm.local',
+    username: 'director.demo',
+    name: 'Demo Director',
+    role: OrganizationRole.DIRECTOR,
+  },
   teacher: {
     email: 'teacher.demo@skillstorm.local',
     username: 'teacher.demo',
@@ -32,6 +38,26 @@ const DEMO = {
   test: {
     title: 'Demo test: Zlomky a logika',
     description: 'Krátký demo test pro živou ukázku o 3 otázkách.',
+  },
+  invites: {
+    studentOrgOnly: {
+      token: 'demo-student-org-invite',
+      code: 'DEMO-STUDENT',
+      role: OrganizationRole.STUDENT,
+      type: 'ORG_ONLY',
+    },
+    teacherOrgOnly: {
+      token: 'demo-teacher-org-invite',
+      code: 'DEMO-TEACHER',
+      role: OrganizationRole.TEACHER,
+      type: 'ORG_ONLY',
+    },
+    studentClass: {
+      token: 'demo-class-student-invite',
+      code: 'DEMO-8A',
+      role: OrganizationRole.STUDENT,
+      type: 'STUDENT_CLASS',
+    },
   },
 };
 
@@ -161,6 +187,13 @@ async function ensureMembership(userId, organizationId, role) {
       organizationId,
       role,
     },
+  });
+}
+
+async function ensureLastActiveMembership(userId, membershipId) {
+  await prisma.user.update({
+    where: { id: userId },
+    data: { lastActiveMembershipId: membershipId },
   });
 }
 
@@ -422,6 +455,47 @@ async function ensureAssignment(organizationId, yearId, testId, classSectionId, 
   });
 }
 
+async function ensureInvite({
+  organizationId,
+  role,
+  type,
+  token,
+  code,
+  classSectionId = null,
+  yearId = null,
+}) {
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+  const existing = await prisma.invite.findFirst({
+    where: {
+      OR: [{ token }, { code }],
+    },
+    select: { id: true },
+  });
+
+  const data = {
+    organizationId,
+    role,
+    type,
+    token,
+    code,
+    classSectionId,
+    yearId,
+    expiresAt,
+    maxUses: 25,
+    usedCount: 0,
+    revokedAt: null,
+  };
+
+  if (existing) {
+    return prisma.invite.update({
+      where: { id: existing.id },
+      data,
+    });
+  }
+
+  return prisma.invite.create({ data });
+}
+
 async function resetDemoSubmission(assignmentId, studentMembershipId) {
   const submissions = await prisma.submission.findMany({
     where: {
@@ -446,12 +520,21 @@ async function runDemoSeed() {
   const organization = await ensureOrganization();
   const academicYear = await ensureAcademicYear(organization.id);
 
+  const directorUser = await ensureUser(DEMO.director);
+  const directorMembership = await ensureMembership(
+    directorUser.id,
+    organization.id,
+    DEMO.director.role,
+  );
+  await ensureLastActiveMembership(directorUser.id, directorMembership.id);
+
   const teacherUser = await ensureUser(DEMO.teacher);
   const teacherMembership = await ensureMembership(
     teacherUser.id,
     organization.id,
     DEMO.teacher.role,
   );
+  await ensureLastActiveMembership(teacherUser.id, teacherMembership.id);
   const teacher = await ensureTeacher(teacherMembership.id, organization.id);
 
   const classSection = await ensureClassSection(
@@ -466,6 +549,7 @@ async function runDemoSeed() {
     organization.id,
     DEMO.student.role,
   );
+  await ensureLastActiveMembership(studentUser.id, studentMembership.id);
   const student = await ensureStudent(studentMembership.id, organization.id);
   await ensureEnrollment(student.id, classSection.id, academicYear.id, organization.id);
 
@@ -482,12 +566,40 @@ async function runDemoSeed() {
 
   await resetDemoSubmission(assignment.id, studentMembership.id);
 
+  const studentInvite = await ensureInvite({
+    organizationId: organization.id,
+    role: DEMO.invites.studentOrgOnly.role,
+    type: DEMO.invites.studentOrgOnly.type,
+    token: DEMO.invites.studentOrgOnly.token,
+    code: DEMO.invites.studentOrgOnly.code,
+  });
+  const teacherInvite = await ensureInvite({
+    organizationId: organization.id,
+    role: DEMO.invites.teacherOrgOnly.role,
+    type: DEMO.invites.teacherOrgOnly.type,
+    token: DEMO.invites.teacherOrgOnly.token,
+    code: DEMO.invites.teacherOrgOnly.code,
+  });
+  const classInvite = await ensureInvite({
+    organizationId: organization.id,
+    role: DEMO.invites.studentClass.role,
+    type: DEMO.invites.studentClass.type,
+    token: DEMO.invites.studentClass.token,
+    code: DEMO.invites.studentClass.code,
+    classSectionId: classSection.id,
+    yearId: academicYear.id,
+  });
+
   console.log('\n--- DEMO PROFILE READY ---');
   console.log(`Organization: ${organization.name}`);
   console.log(`Academic year: ${academicYear.label}`);
+  console.log(`Director: ${DEMO.director.email} / ${DEMO_PASSWORD}`);
   console.log(`Teacher: ${DEMO.teacher.email} / ${DEMO_PASSWORD}`);
   console.log(`Student: ${DEMO.student.email} / ${DEMO_PASSWORD}`);
   console.log(`Test: ${test.title}`);
+  console.log(`Student invite code: ${studentInvite.code}`);
+  console.log(`Teacher invite code: ${teacherInvite.code}`);
+  console.log(`Class invite code: ${classInvite.code}`);
   console.log('Assignment window: open now, closes in 7 days, maxAttempts=1');
   console.log('--- END DEMO PROFILE ---\n');
 }
