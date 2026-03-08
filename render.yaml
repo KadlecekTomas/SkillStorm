@@ -1,0 +1,75 @@
+services:
+  - type: web
+    name: skillstorm-demo-api-tomaskadlecek
+    runtime: docker
+    plan: free
+    dockerContext: ./server
+    dockerfilePath: ./server/Dockerfile
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: DATABASE_URL
+        fromDatabase:
+          name: skillstorm-demo-db-tomaskadlecek
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: METRICS_INGEST_KEY
+        generateValue: true
+      - key: PUBLIC_APP_URL
+        value: https://skillstorm-demo-client-tomaskadlecek.onrender.com
+      - key: API_URL
+        value: https://skillstorm-demo-api-tomaskadlecek.onrender.com
+      - key: CORS_ORIGINS
+        value: https://skillstorm-demo-client-tomaskadlecek.onrender.com
+      - key: ALLOW_CROSS_SITE_COOKIES
+        value: "0"
+      - key: CACHE_TTL_SECONDS
+        value: "60"
+      - key: RUN_MIGRATIONS
+        value: "1"
+      - key: RUN_SEED
+        value: "1"
+      - key: DEMO_SEED
+        value: "1"
+      - key: DEMO_MODE
+        value: "1"
+      - key: ALLOW_PUBLIC_ORG_CREATION
+        value: "true"
+      - key: ENABLE_RBAC_TELEMETRY_CLIENT
+        value: "0"
+      - key: SUPERADMIN_EMAIL
+        sync: false
+      - key: SUPERADMIN_PASSWORD
+        sync: false
+
+  - type: web
+    name: skillstorm-demo-client-tomaskadlecek
+    runtime: docker
+    plan: free
+    dockerContext: ./client
+    dockerfilePath: ./client/Dockerfile
+    healthCheckPath: /
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: API_PROXY_TARGET
+        fromService:
+          type: web
+          name: skillstorm-demo-api-tomaskadlecek
+          property: hostport
+      - key: ENABLE_RBAC_TELEMETRY_CLIENT
+        value: "0"
+      - key: DEMO_MODE
+        value: "1"
+
+databases:
+  - name: skillstorm-demo-db-tomaskadlecek
+    plan: free

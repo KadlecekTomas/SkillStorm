@@ -6,7 +6,9 @@ import path from "node:path";
 // - Local dev: set API_PROXY_TARGET=http://localhost:4200 in .env, or we fallback to it in development.
 function getApiProxyTarget(): string {
   const env = process.env.API_PROXY_TARGET?.trim();
-  if (env) return env;
+  if (env) {
+    return /^https?:\/\//i.test(env) ? env : `http://${env}`;
+  }
   if (process.env.NODE_ENV !== "production") {
     return "http://localhost:4200";
   }
@@ -32,6 +34,8 @@ const nextConfig: NextConfig = {
   },
   env: {
     NEXT_PUBLIC_BETA_MODE: process.env.BETA_MODE ?? "",
+    NEXT_PUBLIC_ENABLE_RBAC_TELEMETRY_CLIENT:
+      process.env.ENABLE_RBAC_TELEMETRY_CLIENT ?? "0",
   },
   async rewrites() {
     const target = getApiProxyTarget();
