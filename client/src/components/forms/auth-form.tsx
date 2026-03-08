@@ -10,7 +10,6 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { type JSX, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
-import { useAuthStore } from "@/store/use-auth-store";
 import { Loader2 } from "lucide-react";
 import { showToastOnce } from "@/utils/toast";
 
@@ -150,17 +149,10 @@ export const AuthForm = ({
           payload.inviteToken = token;
         }
       }
-      const registerResult = await httpClient.post<{
+      await httpClient.post<{
         user: unknown;
-        sessionToken?: string;
       }>("/auth/register", payload);
-      
-      // ✅ Ulož sessionToken pokud je v odpovědi (kompatibilita s backendem)
-      if (registerResult?.sessionToken && typeof registerResult.sessionToken === "string") {
-        const { setSessionToken } = useAuthStore.getState();
-        setSessionToken(registerResult.sessionToken);
-      }
-      
+
       if (selectedRegisterMode === "CREATE_ORG" && typeof window !== "undefined") {
         window.sessionStorage.setItem("create_org_intent", "1");
       }

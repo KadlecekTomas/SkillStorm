@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { TestCard } from "@/components/cards/test-card";
 import { DataTable, type Column } from "@/components/ui/table";
 import type { TestSummary } from "@/types";
@@ -17,9 +18,33 @@ import { AssignToClassModal } from "@/components/tests/AssignToClassModal";
 import { useTestAssignments } from "@/hooks/use-test-assignments";
 import { useSubjects, subjectLabel } from "@/hooks/use-subjects";
 import type { Subject } from "@/types";
+import { formatPercent, formatInt } from "@/utils/format";
 
 /** API can return items with creator for director filter */
 type TestListItem = TestSummary & { creator?: { user?: { name?: string | null } } };
+
+type EffectiveAssignmentStatus = "UPCOMING" | "OPEN" | "IN_PROGRESS" | "SUBMITTED" | "CLOSED" | "NO_ATTEMPTS_LEFT";
+
+type MyAssignment = {
+  id: string;
+  testId: string;
+  openAt: string;
+  closeAt: string;
+  maxAttempts: number;
+  attemptsUsed: number;
+  submittedAt: string | null;
+  submissionStatus: string | null;
+  effectiveStatus: EffectiveAssignmentStatus;
+};
+
+const STATUS_CONFIG: Record<EffectiveAssignmentStatus, { label: string; className: string }> = {
+  SUBMITTED:        { label: "Odevzdáno",       className: "bg-emerald-100 text-emerald-800" },
+  IN_PROGRESS:      { label: "Probíhá",          className: "bg-blue-100 text-blue-800" },
+  OPEN:             { label: "Otevřeno",          className: "bg-amber-100 text-amber-800" },
+  CLOSED:           { label: "Uzavřeno",          className: "bg-slate-100 text-slate-600" },
+  UPCOMING:         { label: "Připravuje se",     className: "bg-slate-100 text-slate-400" },
+  NO_ATTEMPTS_LEFT: { label: "Pokusy vyčerpány", className: "bg-red-100 text-red-700" },
+};
 
 function subjectColumnRender(row: TestSummary): string {
   const sub = row.subject;
@@ -33,19 +58,18 @@ const baseColumns: Column<TestSummary>[] = [
   {
     key: "avgScore",
     label: "Průměr",
-    render: (row) => `${row.avgScore}%`,
+    render: (row) => formatPercent(row.avgScore),
   },
   {
     key: "completionRate",
     label: "Dokončeno",
-    render: (row) => `${row.completionRate}%`,
+    render: (row) => formatPercent(row.completionRate),
   },
-  { key: "submissions", label: "Odevzdání" },
-];
-
-const studentColumns: Column<TestSummary>[] = [
-  { key: "title", label: "Test" },
-  { key: "subject", label: "Předmět", render: subjectColumnRender },
+  {
+    key: "submissions",
+    label: "Odevzdání",
+    render: (row) => formatInt(row.submissions),
+  },
 ];
 
 function TestsPage(): React.JSX.Element {
@@ -56,6 +80,8 @@ function TestsPage(): React.JSX.Element {
   const [assignTestId, setAssignTestId] = useState<string | null>(null);
   const [teacherFilter, setTeacherFilter] = useState<string>("");
   const [subjectFilterId, setSubjectFilterId] = useState<string>("");
+  const [studentAssignments, setStudentAssignments] = useState<MyAssignment[]>([]);
+  const router = useRouter();
   const { org, context, user } = useAuth();
   const { selectedYearId } = useAcademicYears();
   const { byTestId: assignmentByTestId } = useTestAssignments(selectedYearId);
@@ -88,6 +114,21 @@ function TestsPage(): React.JSX.Element {
     return () => { cancelled = true; };
   }, [org?.id, fetchTests]);
 
+  useEffect(() => {
+    if (!isStudent || !org?.id) return;
+    let cancelled = false;
+    fetchWithAuth<{ data?: MyAssignment[] } | MyAssignment[]>("GET", "/assignments/my")
+      .then((res) => {
+        if (cancelled) return;
+        const list = res && typeof res === "object" && "data" in res
+          ? (res as { data?: MyAssignment[] }).data ?? []
+          : Array.isArray(res) ? res : [];
+        setStudentAssignments(list);
+      })
+      .catch(() => { /* non-fatal — status badges just won't show */ });
+    return () => { cancelled = true; };
+  }, [isStudent, org?.id]);
+
   const teachers = useMemo(() => {
     const names = new Set<string>();
     tests.forEach((t) => {
@@ -108,8 +149,46 @@ function TestsPage(): React.JSX.Element {
     return list;
   }, [tests, teacherFilter, subjectFilterId]);
 
+  const studentAssignmentsByTestId = useMemo(() => {
+    const map: Record<string, MyAssignment> = {};
+    for (const a of studentAssignments) {
+      const existing = map[a.testId];
+      if (!existing) {
+        map[a.testId] = a;
+        continue;
+      }
+      // Prefer open assignment; otherwise latest closeAt
+      const now = Date.now();
+      const aIsOpen = new Date(a.openAt).getTime() <= now && new Date(a.closeAt).getTime() > now;
+      const exIsOpen = new Date(existing.openAt).getTime() <= now && new Date(existing.closeAt).getTime() > now;
+      if (aIsOpen && !exIsOpen) { map[a.testId] = a; continue; }
+      if (!aIsOpen && exIsOpen) continue;
+      if (new Date(a.closeAt).getTime() > new Date(existing.closeAt).getTime()) map[a.testId] = a;
+    }
+    return map;
+  }, [studentAssignments]);
+
   const columns: Column<TestSummary>[] = useMemo(() => {
-    if (isStudent) return studentColumns;
+    if (isStudent) {
+      return [
+        { key: "title", label: "Test" },
+        { key: "subject", label: "Předmět", render: subjectColumnRender },
+        {
+          key: "studentStatus",
+          label: "Stav",
+          render: (row) => {
+            const assignment = studentAssignmentsByTestId[row.id];
+            const status: EffectiveAssignmentStatus = assignment?.effectiveStatus ?? "UPCOMING";
+            const cfg = STATUS_CONFIG[status];
+            return (
+              <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${cfg.className}`}>
+                {cfg.label}
+              </span>
+            );
+          },
+        },
+      ];
+    }
     if (!isDirector) return baseColumns;
 
     return [
@@ -138,16 +217,20 @@ function TestsPage(): React.JSX.Element {
       {
         key: "avgScore",
         label: "Průměr",
-        render: (row) => `${row.avgScore}%`,
+        render: (row) => formatPercent(row.avgScore),
       },
       {
         key: "completionRate",
         label: "Dokončeno",
-        render: (row) => `${row.completionRate}%`,
+        render: (row) => formatPercent(row.completionRate),
       },
-      { key: "submissions", label: "Odevzdání" },
+      {
+        key: "submissions",
+        label: "Odevzdání",
+        render: (row) => formatInt(row.submissions),
+      },
     ];
-  }, [isStudent, isDirector, assignmentByTestId]);
+  }, [isStudent, isDirector, assignmentByTestId, studentAssignmentsByTestId]);
 
   const handleOpenAssign = (testId: string) => {
     setAssignTestId(testId);
@@ -253,7 +336,12 @@ function TestsPage(): React.JSX.Element {
               ))}
             </div>
           )}
-          <DataTable data={filteredTests} columns={columns} loading={loading} />
+          <DataTable
+            data={filteredTests}
+            columns={columns}
+            loading={loading}
+            onRowClick={isStudent ? (test) => router.push(`/app/tests/${test.id}`) : undefined}
+          />
         </>
       ) : (
         <div className="flex flex-col items-center justify-center rounded-xl border border-slate-200 bg-slate-50/50 py-16 px-6 text-center">

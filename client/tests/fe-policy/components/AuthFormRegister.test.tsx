@@ -33,9 +33,7 @@ vi.mock("@/lib/http/client", () => ({
 
 vi.mock("@/store/use-auth-store", () => ({
   useAuthStore: {
-    getState: () => ({
-      setSessionToken: vi.fn(),
-    }),
+    getState: () => ({}),
   },
 }));
 
@@ -50,7 +48,7 @@ describe("AuthForm (register)", () => {
   });
 
   it("submits JOIN_ORG mode with invite token", async () => {
-    vi.mocked(httpClient.post).mockResolvedValue({ sessionToken: "token-1" });
+    vi.mocked(httpClient.post).mockResolvedValue({ user: { id: "user-1" } });
 
     render(
       <AuthForm

@@ -73,10 +73,7 @@ export class AuthController {
         organizationId: orgId,
       });
 
-      return ok({
-        ...ctx,
-        sessionToken: result.tokens.accessToken,
-      });
+      return ok(ctx);
 
     } catch (error) {
       this.logger.error(
@@ -130,10 +127,7 @@ export class AuthController {
           requestId,
         }),
       );
-      return ok({
-        ...ctx,
-        sessionToken: result.tokens.accessToken,
-      });
+      return ok(ctx);
     } catch (error) {
       this.logger.error(
         JSON.stringify({
@@ -240,7 +234,6 @@ export class AuthController {
       roles: result.roles ?? [],
       permissions: result.permissions ?? [],
       context: result.context,
-      sessionToken: result.tokens.accessToken,
     });
   }
 
@@ -267,7 +260,6 @@ export class AuthController {
       membership: result.membership,
       roles: result.roles ?? [],
       permissions: result.permissions ?? [],
-      sessionToken: result.tokens.accessToken,
     });
   }
 

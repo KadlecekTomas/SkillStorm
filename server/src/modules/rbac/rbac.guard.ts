@@ -6,12 +6,15 @@ import { PERMISSION_KEY } from './permission.decorator';
 import type { PermissionToken } from './rbac.types';
 import { RbacService } from './rbac.service';
 import { hasAtLeastRole } from '@/shared/access.utils';
+import { MetricsService } from '@/metrics/metrics.service';
+import { PermissionKey } from '@prisma/client';
 
 @Injectable()
 export class RbacGuard implements CanActivate {
   constructor(
     private readonly rbac: RbacService,
     private readonly reflector: Reflector,
+    private readonly metrics: MetricsService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -27,6 +30,7 @@ export class RbacGuard implements CanActivate {
     const req = context.switchToHttp().getRequest();
     const user = req.user;
     if (!user) {
+      await this.recordDenied(req, null, permissions, 'Forbidden: user not resolved from token');
       throw new ForbiddenException({
         statusCode: 403,
         message: 'Forbidden: user not resolved from token',
@@ -58,6 +62,12 @@ export class RbacGuard implements CanActivate {
     }
 
     const missingKey = permissions.join(' | ');
+    await this.recordDenied(
+      req,
+      user,
+      permissions,
+      `Forbidden: missing permission ${missingKey}`,
+    );
     throw new ForbiddenException({
       statusCode: 403,
       message: `Forbidden: missing permission ${missingKey}`,
@@ -97,5 +107,39 @@ export class RbacGuard implements CanActivate {
     token: PermissionToken,
   ): token is OrganizationRole {
     return Object.values(OrganizationRole).includes(token as OrganizationRole);
+  }
+
+  private async recordDenied(
+    req: {
+      originalUrl?: string;
+      url?: string;
+    },
+    user: {
+      userId?: string | null;
+      id?: string | null;
+      organizationId?: string | null;
+    } | null,
+    permissions: PermissionToken[],
+    message: string,
+  ): Promise<void> {
+    const firstPermission = permissions[0];
+    const permissionKey =
+      permissions.length === 1 &&
+      firstPermission !== undefined &&
+      this.isPermissionKey(firstPermission)
+        ? firstPermission
+        : null;
+
+    await this.metrics.recordForbiddenAccess({
+      route: req.originalUrl ?? req.url ?? 'unknown',
+      userId: user?.userId ?? user?.id ?? null,
+      organizationId: user?.organizationId ?? null,
+      permissionKey,
+      message,
+    });
+  }
+
+  private isPermissionKey(token: PermissionToken): token is PermissionKey {
+    return Object.values(PermissionKey).includes(token as PermissionKey);
   }
 }

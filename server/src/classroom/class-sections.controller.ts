@@ -23,6 +23,7 @@ import { UpdateClassroomDto } from './dto/update-classroom.dto';
 import { SetHomeroomDto } from './dto/set-homeroom.dto';
 import { QueryClassSectionsDto } from './dto/query-class-sections.dto';
 import { AttachOrgSubjectsDto } from './dto/attach-org-subjects.dto';
+import { AssignTeacherDto } from './dto/assign-teacher.dto';
 import { ClassSectionsService } from './class-sections.service';
 import { InvalidateScopes } from '@/common/cache/invalidate.decorator';
 import { Permission } from '@/modules/rbac/permission.decorator';
@@ -171,5 +172,35 @@ export class ClassSectionsController {
     @Req() req: RequestWithUser,
   ) {
     return ok(this.service.setHomeroom(classSectionId, dto, req.user));
+  }
+
+  @Post(':id/teachers')
+  @Permission(PermissionKey.MANAGE_TEACHERS)
+  @ApiOperation({ summary: 'Assign teacher to class section (explicit teaching role)' })
+  @InvalidateScopes(({ req }) => [req?.user?.organizationId].filter(Boolean))
+  async assignTeacher(
+    @Param('id', new ParseUUIDPipe()) classSectionId: string,
+    @Body() dto: AssignTeacherDto,
+    @Req() req: RequestWithUser,
+  ) {
+    const ctx = await this.orgContext.get(req);
+    return ok(
+      this.service.assignTeacherToClass(classSectionId, dto.teacherId, ctx.organizationId),
+    );
+  }
+
+  @Delete(':id/teachers/:teacherId')
+  @Permission(PermissionKey.MANAGE_TEACHERS)
+  @ApiOperation({ summary: 'Remove teacher from class section (soft-delete assignment)' })
+  @InvalidateScopes(({ req }) => [req?.user?.organizationId].filter(Boolean))
+  async removeTeacher(
+    @Param('id', new ParseUUIDPipe()) classSectionId: string,
+    @Param('teacherId', new ParseUUIDPipe()) teacherId: string,
+    @Req() req: RequestWithUser,
+  ) {
+    const ctx = await this.orgContext.get(req);
+    return ok(
+      this.service.removeTeacherFromClass(classSectionId, teacherId, ctx.organizationId),
+    );
   }
 }

@@ -66,6 +66,7 @@ services:
       context: ./server
       dockerfile: Dockerfile
       target: runner
+    restart: unless-stopped
     profiles: ["dev", "staging", "prod"]
     env_file:
       - .env
@@ -76,11 +77,31 @@ services:
       # No default: container must fail if JWT_SECRET not set (production safety).
       JWT_SECRET: ${JWT_SECRET}
       REDIS_URL: redis://redis:6379
+      RUN_MIGRATIONS: ${RUN_MIGRATIONS:-1}
+      RUN_SEED: ${RUN_SEED:-0}
+      DEMO_SEED: ${DEMO_SEED:-0}
+      DEMO_MODE: ${DEMO_MODE:-0}
+      METRICS_INGEST_KEY: ${METRICS_INGEST_KEY}
+      PUBLIC_APP_URL: ${PUBLIC_APP_URL:-http://localhost:3000}
+      API_URL: ${API_URL:-http://localhost:4200}
+      ALLOW_CROSS_SITE_COOKIES: ${ALLOW_CROSS_SITE_COOKIES:-0}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:4200/health').then((res) => process.exit(res.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     ports:
       - "4200:4200"
     networks:
@@ -94,6 +115,7 @@ services:
       args:
         # Build-time fallback; runtime env from environment: below overrides for next start.
         API_PROXY_TARGET: http://backend:4200
+    restart: unless-stopped
     profiles: ["dev", "staging", "prod"]
     env_file:
       - .env
@@ -102,9 +124,23 @@ services:
       # Proxy /api/* to backend. Must resolve host "backend" → same Docker network required.
       API_PROXY_TARGET: http://backend:4200
       NODE_ENV: ${NODE_ENV:-production}
+      ENABLE_RBAC_TELEMETRY_CLIENT: ${ENABLE_RBAC_TELEMETRY_CLIENT:-0}
+      DEMO_MODE: ${DEMO_MODE:-0}
     depends_on:
       backend:
-        condition: service_started
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000').then((res) => process.exit(res.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     ports:
       - "3000:3000"
     networks:

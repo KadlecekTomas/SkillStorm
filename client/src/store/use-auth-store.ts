@@ -52,7 +52,6 @@ export type AuthState = {
     | "refreshing"
     | "unauthenticated";
   offline: boolean;
-  sessionToken: string | null;
   hadSession: boolean;
   hydrated: boolean;
   setProfile: (payload: {
@@ -68,7 +67,6 @@ export type AuthState = {
   setLoading: (loading: boolean) => void;
   setAuthStatus: (status: AuthState["authStatus"]) => void;
   setOffline: (offline: boolean) => void;
-  setSessionToken: (token: string | null) => void;
   setHadSession: (hadSession: boolean) => void;
   setHydrated: (hydrated: boolean) => void;
   logout: () => Promise<void>;
@@ -97,7 +95,6 @@ export const useAuthStore = create<AuthState>()(
       authStatus: "anonymous",
       offline: false,
       permissions: [],
-      sessionToken: null,
       hadSession: false,
       hydrated: false,
       context: null,
@@ -138,7 +135,6 @@ export const useAuthStore = create<AuthState>()(
                 : s.authPhase,
         })),
       setOffline: (offline) => set(() => ({ offline })),
-      setSessionToken: (sessionToken) => set(() => ({ sessionToken })),
       setHadSession: (hadSession) => set(() => ({ hadSession })),
       setHydrated: (hydrated) => set(() => ({ hydrated })),
       logout: () => {
@@ -153,7 +149,6 @@ export const useAuthStore = create<AuthState>()(
             roles: [],
             loading: false,
             authStatus: "unauthenticated",
-            sessionToken: null,
             hadSession: false,
           })),
         );
@@ -162,12 +157,11 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: "skillstorm_auth",
-      partialize: ({ user, permissions, roles, org, sessionToken, hadSession, context }) => ({
+      partialize: ({ user, permissions, roles, org, hadSession, context }) => ({
         user,
         permissions,
         roles,
         org,
-        sessionToken,
         hadSession,
         context,
       }),

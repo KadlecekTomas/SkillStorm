@@ -7,12 +7,12 @@ import {
   ForbiddenException,
   Logger,
 } from '@nestjs/common';
-import { EnrollmentStatus, PermissionKey } from '@prisma/client';
+import { EnrollmentStatus, PermissionKey, PublishStatus } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
 import type { Assignment, Prisma } from '@prisma/client';
 import type { CreateAssignmentDto, UpdateAssignmentDto } from './dto';
 import type { JwtPayload } from '@/auth/types/jwt-payload';
-import type { MyAssignmentDto } from './my-assignments.dto';
+import type { MyAssignmentDto, EffectiveAssignmentStatus } from './my-assignments.dto';
 import { RbacService } from '@/modules/rbac/rbac.service';
 import {
   computeAssignability,
@@ -149,13 +149,20 @@ export class AssignmentsService {
     assertTenantWhere(testWhere, ctx.organizationId);
     const test = await this.prisma.test.findFirst({
       where: testWhere,
-      select: { id: true, organizationId: true, status: true },
+      select: { id: true, organizationId: true, status: true, academicYearId: true },
     });
     if (!test || test.organizationId !== ctx.organizationId) {
       throw new NotFoundException('Test nenalezen');
     }
     if (String(test.status) !== 'PUBLISHED') {
       throw new BadRequestException('Test must be published before assignment');
+    }
+    // Guard: test's academic year must match the current active year.
+    if (test.academicYearId && test.academicYearId !== ctx.activeAcademicYearId) {
+      throw new BadRequestException({
+        code: 'YEAR_MISMATCH',
+        message: 'Test byl vytvořen pro jiný školní rok než je aktuální.',
+      });
     }
     await this.ensureTestAssignable(test.id);
 
@@ -365,6 +372,8 @@ export class AssignmentsService {
             where: {
               studentId: student.id,
               classSectionId: assignment.classSectionId,
+              yearId: assignment.yearId,
+              status: EnrollmentStatus.ACTIVE,
             },
             select: { id: true },
           });
@@ -653,6 +662,99 @@ export class AssignmentsService {
     };
   }
 
+  private computeEffectiveStatus(
+    assignment: { openAt: Date; closeAt: Date; maxAttempts: number },
+    latestSubmission: { submittedAt: Date | null } | null,
+    attemptsUsed: number,
+    now: Date,
+  ): EffectiveAssignmentStatus {
+    // 1. Explicit submission always wins — student can always view their result.
+    if (latestSubmission?.submittedAt) return 'SUBMITTED';
+    // 2. Time window checks: temporal state beats in-progress state.
+    if (now < assignment.openAt) return 'UPCOMING';
+    if (now > assignment.closeAt) return 'CLOSED';
+    // 3. Exhausted attempts (window is still open but no tries left).
+    if (attemptsUsed >= assignment.maxAttempts) return 'NO_ATTEMPTS_LEFT';
+    // 4. Started but not yet submitted (and window is open, attempts remain).
+    if (attemptsUsed > 0) return 'IN_PROGRESS';
+    return 'OPEN';
+  }
+
+  /** Enrollment-first student path: single enrollment per year, PUBLISHED tests only. */
+  private async listForStudent(
+    membershipId: string,
+    orgId: string,
+    ctx: OrgContext,
+  ): Promise<MyAssignmentDto[]> {
+    // 1. Resolve student domain record.
+    const student = await this.prisma.student.findFirst({
+      where: { membershipId, orgId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!student) {
+      this.logger.warn(
+        `[listForStudent] No Student record found. membershipId=${membershipId} orgId=${orgId}`,
+      );
+      return [];
+    }
+
+    // 2. Find the single ACTIVE enrollment for the current academic year.
+    //    Enrollment has @@unique([studentId, yearId]) — at most one per year.
+    const enrollment = await this.prisma.enrollment.findFirst({
+      where: {
+        studentId: student.id,
+        orgId,
+        status: EnrollmentStatus.ACTIVE,
+        ...(ctx.activeAcademicYearId ? { yearId: ctx.activeAcademicYearId } : {}),
+      },
+      select: { classSectionId: true },
+    });
+
+    this.logger.log(
+      `[listForStudent] studentId=${student.id} classSectionId=${enrollment?.classSectionId ?? 'NONE'} ` +
+      `yearId=${ctx.activeAcademicYearId ?? 'NONE'}`,
+    );
+
+    if (!enrollment) return [];
+
+    // 3. Fetch assignments for this class + year + org, PUBLISHED tests only.
+    const assignments = await this.prisma.assignment.findMany({
+      where: {
+        organizationId: orgId,
+        classSectionId: enrollment.classSectionId,
+        ...(ctx.activeAcademicYearId ? { yearId: ctx.activeAcademicYearId } : {}),
+        test: { status: PublishStatus.PUBLISHED, deletedAt: null },
+      },
+      include: {
+        submissions: {
+          where: { studentId: membershipId, deletedAt: null },
+          orderBy: { attemptNo: 'desc' },
+        },
+      },
+      orderBy: { openAt: 'asc' },
+    });
+
+    const now = new Date();
+    return assignments.map((a) => {
+      const attemptsUsed = a.submissions?.length ?? 0;
+      const latestSubmission = a.submissions?.[0] ?? null;
+      return {
+        id: a.id,
+        testId: a.testId,
+        classSectionId: a.classSectionId,
+        organizationId: a.organizationId,
+        openAt: a.openAt,
+        closeAt: a.closeAt,
+        maxAttempts: a.maxAttempts,
+        attemptNo: latestSubmission?.attemptNo ?? 0,
+        attemptsUsed,
+        submittedAt: latestSubmission?.submittedAt?.toISOString() ?? null,
+        submissionStatus: latestSubmission?.status ?? null,
+        effectiveStatus: this.computeEffectiveStatus(a, latestSubmission, attemptsUsed, now),
+      };
+    });
+  }
+
   async listForUser(user: JwtPayload, ctx: OrgContext): Promise<MyAssignmentDto[]> {
     const membership = await this.prisma.membership.findFirst({
       where: {
@@ -671,6 +773,12 @@ export class AssignmentsService {
       return [];
     }
 
+    // Fast path: pure student — use enrollment-first query with PUBLISHED test filter.
+    if (scopes.viewOwn && !scopes.viewOrg && !scopes.viewClass) {
+      return this.listForStudent(membership.id, orgId, ctx);
+    }
+
+    // Teacher / Director path — collect assignment IDs then fetch with submissions.
     const idSets: Set<string> = new Set();
 
     if (scopes.viewOrg) {
@@ -698,50 +806,38 @@ export class AssignmentsService {
       }
     }
 
-    if (scopes.viewOwn) {
-      const student = await this.prisma.student.findFirst({
-        where: { membershipId: membership.id, orgId },
-        select: { id: true },
-      });
-      if (student) {
-        const enrolledSections = await this.prisma.enrollment.findMany({
-          where: { studentId: student.id },
-          select: { classSectionId: true },
-        });
-        const sectionIds = enrolledSections.map((e) => e.classSectionId);
-        if (sectionIds.length > 0) {
-          const ownClassAssignments = await this.prisma.assignment.findMany({
-            where: { organizationId: orgId, classSectionId: { in: sectionIds } },
-            select: { id: true },
-          });
-          ownClassAssignments.forEach((a) => idSets.add(a.id));
-        }
-      }
-      const directStudentAssignments = await this.prisma.assignment.findMany({
-        where: withOrg({ students: { some: { studentId: membership.id } } }, orgId),
-        select: { id: true },
-      });
-      directStudentAssignments.forEach((a) => idSets.add(a.id));
-    }
-
     const ids = Array.from(idSets);
     if (ids.length === 0) {
       return [];
     }
     const assignments = await this.prisma.assignment.findMany({
       where: withOrg({ id: { in: ids } }, orgId),
-      include: { submissions: { where: { studentId: membership.id } } },
+      include: {
+        submissions: {
+          where: { studentId: membership.id, deletedAt: null },
+          orderBy: { attemptNo: 'desc' },
+        },
+      },
       orderBy: { openAt: 'asc' },
     });
-    return assignments.map((a) => ({
-      id: a.id,
-      testId: a.testId,
-      classSectionId: a.classSectionId,
-      organizationId: a.organizationId,
-      openAt: a.openAt,
-      closeAt: a.closeAt,
-      maxAttempts: a.maxAttempts,
-      attemptNo: a.submissions?.[0]?.attemptNo ?? 0,
-    }));
+    const now = new Date();
+    return assignments.map((a) => {
+      const attemptsUsed = a.submissions?.length ?? 0;
+      const latestSubmission = a.submissions?.[0] ?? null;
+      return {
+        id: a.id,
+        testId: a.testId,
+        classSectionId: a.classSectionId,
+        organizationId: a.organizationId,
+        openAt: a.openAt,
+        closeAt: a.closeAt,
+        maxAttempts: a.maxAttempts,
+        attemptNo: latestSubmission?.attemptNo ?? 0,
+        attemptsUsed,
+        submittedAt: latestSubmission?.submittedAt?.toISOString() ?? null,
+        submissionStatus: latestSubmission?.status ?? null,
+        effectiveStatus: this.computeEffectiveStatus(a, latestSubmission, attemptsUsed, now),
+      };
+    });
   }
 }

@@ -112,6 +112,37 @@ describe("TestsPage", () => {
     recordPolicyCheck("Content", "tests-page-error-handling", true, "Tests page handles API errors without crashing.");
   });
 
+  it("shows '—' for null metrics without NaN or undefined in output", async () => {
+    const mockTests: TestSummary[] = [
+      {
+        id: "1",
+        title: "Empty Test",
+        status: "PUBLISHED",
+        version: 1,
+        completionRate: null,
+        submissions: null,
+        avgScore: null,
+      },
+    ];
+
+    vi.mocked(fetchWithAuth).mockResolvedValue(mockTests);
+
+    render(<TestsPage />);
+
+    await waitFor(() => {
+      expect(screen.queryByText(/načítám testy/i)).not.toBeInTheDocument();
+    });
+
+    expect(screen.queryByText(/NaN/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/undefined/)).not.toBeInTheDocument();
+    recordPolicyCheck(
+      "Content",
+      "tests-page-null-metrics-no-nan",
+      true,
+      "Tests page never renders NaN% or undefined% when metric fields are null.",
+    );
+  });
+
   it("does not show loading spinner and data table simultaneously", async () => {
     const mockTests: TestSummary[] = [
       {

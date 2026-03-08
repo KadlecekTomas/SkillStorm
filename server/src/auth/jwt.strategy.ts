@@ -16,13 +16,6 @@ import { SystemRole, UserStatus } from '@prisma/client';
 const bearerExtractor = ExtractJwt.fromAuthHeaderAsBearerToken();
 const cookieExtractor = (req: Request): string | null =>
   req?.cookies?.[ACCESS_TOKEN_COOKIE] ?? null;
-const sessionHeaderExtractor = (req: Request): string | null => {
-  const header = req?.headers?.['x-session-token'];
-  if (Array.isArray(header)) {
-    return header[0] ?? null;
-  }
-  return typeof header === 'string' && header.length ? header : null;
-};
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -36,7 +29,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     const tokenExtractor = ExtractJwt.fromExtractors([
       cookieExtractor,
       bearerExtractor,
-      sessionHeaderExtractor,
     ]);
     const secret = configService.get<string>('JWT_SECRET');
     if (!secret) {

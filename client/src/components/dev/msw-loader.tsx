@@ -14,17 +14,6 @@ declare global {
 const shouldEnable = process.env.NEXT_PUBLIC_ENABLE_MSW === "true";
 
 const assignTestingHelpers = () => {
-  const resolveSessionToken = () => {
-    try {
-      const raw = window.localStorage.getItem("skillstorm_auth");
-      if (!raw) return null;
-      const parsed = JSON.parse(raw) as { state?: { sessionToken?: string | null } };
-      return parsed?.state?.sessionToken ?? null;
-    } catch {
-      return null;
-    }
-  };
-
   window.__MSW_RESET__ = async () => {
     try {
       await fetch("/api/testing/reset", { method: "POST" });
@@ -36,13 +25,8 @@ const assignTestingHelpers = () => {
   };
 
   window.__MSW_EXPIRE__ = async () => {
-    const token = resolveSessionToken();
     try {
-      const init: RequestInit = { method: "POST" };
-      if (token) {
-        init.headers = { "x-session-token": token };
-      }
-      await fetch("/api/testing/expire-token", init);
+      await fetch("/api/testing/expire-token", { method: "POST" });
     } catch {
       // ignore
     }

@@ -92,10 +92,10 @@ export class TestsController {
         this.service.findAll(req.user, {
           ...q,
           organizationId: ctx.organizationId,
-        }),
+        }, ctx),
       );
     }
-    return ok(this.service.findAll(req.user, q));
+    return ok(this.service.findAll(req.user, q, ctx));
   }
 
   // [TEMP DEBUG] — remove before release
@@ -188,6 +188,19 @@ export class TestsController {
     const rawLimit = parseInt(String(limitStr ?? '20'), 10) || 20;
     const limit = Math.min(100, Math.max(1, rawLimit));
     return ok(this.service.results(id, req.user, { page, limit }));
+  }
+
+  @Get(':id/results/:studentId')
+  @OrgOperation(OrgOperationType.EXECUTION)
+  @Permission(PermissionKey.VIEW_RESULTS)
+  @ApiOperation({ summary: 'Get per-student answer breakdown (teachers/directors only)' })
+  async getStudentResult(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Param('studentId', new ParseUUIDPipe()) studentId: string,
+    @Req() req: RequestWithUser,
+  ) {
+    const ctx = await this.orgContext.get(req);
+    return ok(this.service.getStudentResult(id, studentId, req.user, ctx));
   }
 
   // QUESTIONS -------------------------------------------

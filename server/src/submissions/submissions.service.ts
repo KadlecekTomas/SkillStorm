@@ -136,7 +136,9 @@ export class SubmissionsService {
       student?: { user?: { name: string | null } | null } | null;
     },
     role: string | null,
+    options?: { includeResponses?: boolean },
   ) {
+    const includeResponses = options?.includeResponses ?? true;
     return {
       id: submission.id,
       assignmentId: submission.assignmentId,
@@ -146,12 +148,16 @@ export class SubmissionsService {
       submittedAt: submission.submittedAt,
       attemptNo: submission.attemptNo,
       isAnonymous: submission.isAnonymous ?? false,
-      responses:
-        submission.responses?.map((r) => ({
-          questionId: r.questionId,
-          givenText: r.givenText,
-          isCorrect: r.isCorrect,
-        })) ?? [],
+      ...(includeResponses
+        ? {
+            responses:
+              submission.responses?.map((r) => ({
+                questionId: r.questionId,
+                givenText: r.givenText,
+                isCorrect: r.isCorrect,
+              })) ?? [],
+          }
+        : {}),
       student:
         role === 'STUDENT'
           ? null
@@ -502,6 +508,7 @@ export class SubmissionsService {
               questions: {
                 select: {
                   id: true,
+                  text: true,
                   type: true,
                   correctAnswer: true,
                   correctAnswers: true,
@@ -547,8 +554,10 @@ export class SubmissionsService {
         select: { id: true, questionId: true, givenText: true },
       });
 
-      const questions = (locked.test?.questions ?? []).map((q) => ({
+      const rawQuestions = locked.test?.questions ?? [];
+      const questions = rawQuestions.map((q) => ({
         id: q.id,
+        text: q.text,
         type: q.type,
         correctAnswer: q.correctAnswer,
         correctAnswers: q.correctAnswers,
@@ -563,11 +572,44 @@ export class SubmissionsService {
         })),
       );
 
+      this.logger.debug(
+        JSON.stringify({
+          event: 'scoring_result',
+          submissionId: id,
+          total: scoreResult.total,
+          maxScore: scoreResult.maxScore,
+          normalizedScore: scoreResult.normalizedScore,
+          unscorableCount: scoreResult.unscorableQuestionIds.length,
+          results: scoreResult.results.map((r) => ({
+            qId: r.questionId,
+            correct: r.correct,
+            gained: r.gained,
+          })),
+        }),
+      );
+
+      // Build question lookup for immutable snapshot fields.
+      const questionMap = new Map(questions.map((q) => [q.id, q]));
+
       for (const item of scoreResult.results) {
         if (item.responseId) {
+          const q = questionMap.get(item.questionId);
+          const correctAnswerSnapshot = q
+            ? (q.correctAnswer ??
+               (Array.isArray(q.correctAnswers) && q.correctAnswers.length > 0
+                 ? JSON.stringify(q.correctAnswers)
+                 : null))
+            : null;
+          const maxPoints = q?.score ?? 1;
           await tx.response.update({
             where: { id: item.responseId },
-            data: { isCorrect: item.correct },
+            data: {
+              isCorrect: item.correct,
+              awardedPoints: item.gained,
+              maxPoints,
+              correctAnswerSnapshot,
+              questionTextSnapshot: q?.text ?? null,
+            },
           });
         }
       }
@@ -656,7 +698,7 @@ export class SubmissionsService {
     const membership = await this.getMembershipFromCtx(ctx);
     const role = String(membership.role ?? '');
     const page = Math.max(1, paging?.page ?? 1);
-    const limit = Math.min(500, Math.max(1, paging?.limit ?? 200));
+    const limit = Math.min(100, Math.max(1, paging?.limit ?? 50));
     const skip = (page - 1) * limit;
 
     const where: Prisma.SubmissionWhereInput = withOrg({
@@ -680,15 +722,15 @@ export class SubmissionsService {
       this.prisma.submission.count({ where }),
       this.prisma.submission.findMany({
         where,
-        include: {
-          responses: {
-            select: {
-              id: true,
-              questionId: true,
-              givenText: true,
-              isCorrect: true,
-            },
-          },
+        select: {
+          id: true,
+          assignmentId: true,
+          testId: true,
+          status: true,
+          score: true,
+          submittedAt: true,
+          attemptNo: true,
+          isAnonymous: true,
           student: { select: { user: { select: { name: true } } } },
         },
         orderBy: { createdAt: 'desc' },
@@ -698,7 +740,9 @@ export class SubmissionsService {
     ]);
 
     return {
-      data: submissions.map((s) => this.sanitizeSubmission(s, role)),
+      data: submissions.map((s) =>
+        this.sanitizeSubmission(s, role, { includeResponses: false }),
+      ),
       meta: {
         page,
         limit,

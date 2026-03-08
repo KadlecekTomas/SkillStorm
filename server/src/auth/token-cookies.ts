@@ -25,7 +25,11 @@ export function setCsrfCookie(res: Response, token: string) {
 }
 
 export function clearCsrfCookie(res: Response) {
-  res.clearCookie(CSRF_TOKEN_COOKIE, { path: '/' });
+  res.clearCookie(CSRF_TOKEN_COOKIE, {
+    path: '/',
+    secure: isSecure,
+    sameSite: 'lax',
+  });
 }
 
 export function generateCsrfToken() {
@@ -48,6 +52,16 @@ export function setAuthCookies(
 }
 
 export function clearAuthCookies(res: Response) {
-  res.clearCookie(ACCESS_TOKEN_COOKIE, { path: '/' });
-  res.clearCookie(REFRESH_TOKEN_COOKIE, { path: '/' });
+  res.clearCookie(ACCESS_TOKEN_COOKIE, {
+    path: '/',
+    httpOnly: true,
+    secure: isSecure,
+    sameSite: 'lax',
+  });
+  res.clearCookie(REFRESH_TOKEN_COOKIE, {
+    path: '/',
+    httpOnly: true,
+    secure: isSecure,
+    sameSite: 'lax',
+  });
 }

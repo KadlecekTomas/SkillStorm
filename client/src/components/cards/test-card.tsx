@@ -11,6 +11,7 @@ import { motion } from "framer-motion";
 import { ArrowRight, Pencil, Send, Users, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { fetchWithAuth } from "@/lib/http/client";
+import { formatPercent, formatInt } from "@/utils/format";
 
 type TestCardProps = {
   test: TestSummary;
@@ -118,22 +119,22 @@ export const TestCard = ({ test, assignmentSummary, onView, onAssign, onStatusCh
             <div className="flex items-center justify-between text-sm text-slate-500">
               <span>Completion rate</span>
               <span className="font-semibold text-slate-900">
-                {Math.round(test.completionRate)}%
+                {formatPercent(test.completionRate)}
               </span>
             </div>
-            <Progress value={test.completionRate} />
+            <Progress value={test.completionRate ?? 0} />
           </div>
           <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
             <div className="rounded-2xl bg-slate-50 p-3">
               <p className="text-xs text-slate-500">Avg Score</p>
               <p className="text-lg font-semibold text-slate-900">
-                {Math.round(test.avgScore)}%
+                {formatPercent(test.avgScore)}
               </p>
             </div>
             <div className="rounded-2xl bg-slate-50 p-3">
               <p className="text-xs text-slate-500">Submissions</p>
               <p className="text-lg font-semibold text-slate-900">
-                {test.submissions}
+                {formatInt(test.submissions)}
               </p>
             </div>
           </div>

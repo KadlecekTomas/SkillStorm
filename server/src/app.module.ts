@@ -72,7 +72,12 @@ import { OrgContextModule } from './common/org-context/org-context.module';
     ThrottlerModule.forRoot([
       {
         ttl: process.env.DISABLE_THROTTLE === '1' ? 1 : 60,
-        limit: process.env.DISABLE_THROTTLE === '1' ? 10000 : 20,
+        limit:
+          process.env.DISABLE_THROTTLE === '1'
+            ? 10000
+            : process.env.DEMO_MODE === '1' || process.env.DEMO_MODE === 'true'
+              ? 1000
+              : 100,
       },
     ]),
     PrismaModule,

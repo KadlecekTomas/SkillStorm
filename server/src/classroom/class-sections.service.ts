@@ -1256,4 +1256,68 @@ export class ClassSectionsService {
 
     return updated;
   }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Teacher ↔ ClassSection explicit assignment (TeacherClassSection)
+  // ──────────────────────────────────────────────────────────────────────────
+
+  async assignTeacherToClass(
+    classSectionId: string,
+    teacherId: string,
+    orgId: string,
+  ) {
+    const classSection = await this.prisma.classSection.findUnique({
+      where: { id: classSectionId },
+      select: { id: true, orgId: true },
+    });
+    if (!classSection || classSection.orgId !== orgId) {
+      throw new NotFoundException('Třída nenalezena v organizaci');
+    }
+
+    const teacher = await this.prisma.teacher.findFirst({
+      where: { id: teacherId, organizationId: orgId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!teacher) {
+      throw new NotFoundException('Učitel nenalezen v organizaci');
+    }
+
+    const record = await this.prisma.teacherClassSection.upsert({
+      where: { teacherId_classSectionId: { teacherId, classSectionId } },
+      update: { deletedAt: null },
+      create: { teacherId, classSectionId },
+      select: { id: true, teacherId: true, classSectionId: true, createdAt: true },
+    });
+
+    return record;
+  }
+
+  async removeTeacherFromClass(
+    classSectionId: string,
+    teacherId: string,
+    orgId: string,
+  ) {
+    const classSection = await this.prisma.classSection.findUnique({
+      where: { id: classSectionId },
+      select: { id: true, orgId: true },
+    });
+    if (!classSection || classSection.orgId !== orgId) {
+      throw new NotFoundException('Třída nenalezena v organizaci');
+    }
+
+    const record = await this.prisma.teacherClassSection.findFirst({
+      where: { teacherId, classSectionId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!record) {
+      throw new NotFoundException('Přiřazení učitele k třídě nenalezeno');
+    }
+
+    await this.prisma.teacherClassSection.update({
+      where: { id: record.id },
+      data: { deletedAt: new Date() },
+    });
+
+    return { success: true };
+  }
 }

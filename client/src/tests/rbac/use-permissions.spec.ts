@@ -9,7 +9,6 @@ describe("usePermissions", () => {
     act(() => {
       useAuthStore.setState({
         user: null,
-        sessionToken: null,
         loading: false,
         permissions: [],
       } satisfies Partial<AuthState>);

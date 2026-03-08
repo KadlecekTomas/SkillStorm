@@ -8,6 +8,7 @@ import { OrganizationRole, PermissionKey } from '@prisma/client';
 import { RbacGuard } from '@/modules/rbac/rbac.guard';
 import { APP_GUARD } from '@nestjs/core';
 import { RbacService } from '@/modules/rbac/rbac.service';
+import { MetricsService } from '@/metrics/metrics.service';
 
 let currentUser: any = null;
 
@@ -31,6 +32,7 @@ describe('RbacGuard (e2e-like)', () => {
       controllers: [SecureController],
       providers: [
         { provide: RbacService, useValue: { canUser } },
+        { provide: MetricsService, useValue: { recordForbiddenAccess: jest.fn().mockResolvedValue(undefined) } },
         { provide: APP_GUARD, useClass: RbacGuard },
       ],
     }).compile();

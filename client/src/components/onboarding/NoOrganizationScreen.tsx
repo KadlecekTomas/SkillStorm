@@ -10,7 +10,6 @@ import { BaseModal } from "@/components/modals/base-modal";
 import { fetchWithAuth, httpClient, HttpError } from "@/lib/http/client";
 import { useAuth } from "@/hooks/use-auth";
 import { ORG_OWNER_LIMIT_REACHED } from "@/lib/org-state";
-import { useAuthStore } from "@/store/use-auth-store";
 import { useAcademicYearStore } from "@/store/use-academic-year-store";
 import { showToastOnce, resolveToastFromHttpError } from "@/utils/toast";
 
@@ -146,16 +145,11 @@ export const NoOrganizationScreen = (): React.JSX.Element => {
     setJoinErrorMessage(null);
     try {
       const result = await fetchWithAuth<{
-        sessionToken?: string;
         organization?: { id: string };
       }>("POST", "/invites/accept", {
         body: { code: trimmed },
       });
-      const token = result?.sessionToken;
       const orgId = (result as { organization?: { id: string } })?.organization?.id ?? preview.organizationId;
-      if (token) {
-        useAuthStore.getState().setSessionToken(token);
-      }
       clearOrg(orgId);
       await syncProfile({ force: true });
       showToastOnce("Připojení proběhlo úspěšně.", { type: "success" });

@@ -1,5 +1,6 @@
-import { PrismaClient, SystemRole, UserStatus } from '@prisma/client';
-import * as bcrypt from 'bcryptjs';
+const { PrismaClient, SystemRole, UserStatus } = require('@prisma/client');
+const bcrypt = require('bcryptjs');
+const { runDemoSeed } = require('./demo-seed');
 
 const prisma = new PrismaClient();
 
@@ -17,7 +18,7 @@ function printDemoBanner(env, email, passwordSource) {
   console.log('--- END DEMO BANNER ---\n');
 }
 
-async function main() {
+async function seedSuperadmin() {
   const existingSuperadmin = await prisma.user.findFirst({
     where: { systemRole: SystemRole.SUPERADMIN },
   });
@@ -65,9 +66,18 @@ async function main() {
   printDemoBanner(nodeEnv, email, '(from SUPERADMIN_PASSWORD env)');
 }
 
+async function main() {
+  if (process.env.DEMO_SEED === '1') {
+    await runDemoSeed();
+    return;
+  }
+
+  await seedSuperadmin();
+}
+
 main()
   .catch((error) => {
-    console.error('Superadmin seed failed:', error);
+    console.error('Seed failed:', error);
     process.exit(1);
   })
   .finally(async () => {

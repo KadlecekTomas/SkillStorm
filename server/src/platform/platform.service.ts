@@ -200,18 +200,28 @@ export class PlatformService {
     ]);
 
     const byId = new Map(orgs.map((o) => [o.id, o]));
+    const currentYearIds = orgs
+      .map((org) => org.academicYears[0]?.id ?? null)
+      .filter((yearId): yearId is string => Boolean(yearId));
+    const classCountsByYear = currentYearIds.length
+      ? new Map(
+          (
+            await this.prisma.classSection.groupBy({
+              by: ['yearId'],
+              where: { yearId: { in: currentYearIds } },
+              _count: { _all: true },
+            })
+          ).map((group) => [group.yearId, group._count._all]),
+        )
+      : new Map<string, number>();
     const items: PlatformOrgListDto[] = [];
     for (const id of idList) {
       const o = byId.get(id);
       if (!o) continue;
       const currentYearId = o.academicYears[0]?.id ?? null;
-      let hasAnyClassSectionInCurrentYear = false;
-      if (currentYearId) {
-        const count = await this.prisma.classSection.count({
-          where: { yearId: currentYearId },
-        });
-        hasAnyClassSectionInCurrentYear = count > 0;
-      }
+      const hasAnyClassSectionInCurrentYear = currentYearId
+        ? (classCountsByYear.get(currentYearId) ?? 0) > 0
+        : false;
       items.push({
         id: o.id,
         name: o.name,

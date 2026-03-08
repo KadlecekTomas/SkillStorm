@@ -22,13 +22,11 @@ type AuthEnvelope = {
 };
 
 type SwitchOrganizationResponse = AuthEnvelope & {
-  sessionToken?: string;
   organization?: OrganizationContext | null;
   membership?: { id: string; role: OrganizationRole; organizationId: string } | null;
 };
 
 type UseOrgResponse = AuthEnvelope & {
-  sessionToken?: string;
   organization?: OrganizationContext | null;
 };
 
@@ -67,7 +65,6 @@ export type UseAuthResult = {
 
 
 type AuthResponse = AuthEnvelope & {
-  sessionToken?: string;
 };
 
 export type LoginPayload = {
@@ -100,7 +97,6 @@ export const useAuth = (): UseAuthResult => {
     setLoading,
     setAuthStatus,
     setOffline,
-    setSessionToken,
     setHadSession,
     setHydrated,
     logout: clearStore,
@@ -120,7 +116,6 @@ export const useAuth = (): UseAuthResult => {
     setLoading: state.setLoading,
     setAuthStatus: state.setAuthStatus,
     setOffline: state.setOffline,
-    setSessionToken: state.setSessionToken,
     setHadSession: state.setHadSession,
     setHydrated: state.setHydrated,
     logout: state.logout,
@@ -271,10 +266,6 @@ export const useAuth = (): UseAuthResult => {
           body: payload,
           skipAuthRetry: true,
         });
-        const incomingToken = loginResult?.sessionToken;
-        if (typeof incomingToken === "string" && incomingToken.length > 0) {
-          setSessionToken(incomingToken);
-        }
         if (loginResult) {
           setProfile(loginResult);
         }
@@ -289,7 +280,7 @@ export const useAuth = (): UseAuthResult => {
         setLoading(false);
       }
     },
-    [setLoading, setSessionToken, setProfile, setHadSession, setAuthStatus],
+    [setLoading, setProfile, setHadSession, setAuthStatus],
   );
 
   // Auth invariant: logout is a hard boundary. No protected component may render after logout.
@@ -311,9 +302,6 @@ export const useAuth = (): UseAuthResult => {
           "/auth/switch-organization",
           { body: { membershipId }, skipAuthRetry: true },
         );
-        if (typeof res?.sessionToken === "string") {
-          setSessionToken(res.sessionToken);
-        }
         const nextOrg = res?.organization ?? res?.org ?? null;
         const nextUser = res?.user ?? null;
         const nextRoles = res?.roles ?? [];
@@ -343,7 +331,7 @@ export const useAuth = (): UseAuthResult => {
         setLoading(false);
       }
     },
-    [org?.id, setLoading, setSessionToken, setProfile, router],
+    [org?.id, setLoading, setProfile, router],
   );
 
   /**
@@ -375,9 +363,6 @@ export const useAuth = (): UseAuthResult => {
           throw new Error("USE_ORG_FAILED_OR_BAD_CONTEXT");
         }
         const effectiveContext = res.context;
-        if (typeof res?.sessionToken === "string") {
-          setSessionToken(res.sessionToken);
-        }
         const nextOrg = res?.organization ?? res?.org ?? null;
         if (res.user != null) {
           setProfile({
@@ -402,7 +387,7 @@ export const useAuth = (): UseAuthResult => {
         setLoading(false);
       }
     },
-    [org?.id, setLoading, setSessionToken, setProfile],
+    [org?.id, setLoading, setProfile],
   );
 
   const hasOrganization = context?.mode === "organization";

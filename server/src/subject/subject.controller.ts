@@ -27,6 +27,7 @@ import { CreateSubjectDto } from './dto/create-subject.dto';
 import { UpdateSubjectDto } from './dto/update-subject.dto';
 import { QuerySubjectsDto } from './dto/query-subjects.dto';
 import { SetActiveSubjectDto } from './dto/set-active-subject.dto';
+import { ToggleSubjectLevelDto } from './dto/toggle-subject-level.dto';
 import { SubjectsService } from './subject.service';
 
 import { InvalidateScopes } from '@/common/cache/invalidate.decorator';
@@ -132,6 +133,22 @@ export class SubjectsController {
     @Req() req: RequestWithUser,
   ) {
     return this.service.findLevels(subjectId, req.user);
+  }
+
+  // ---------- SubjectLevel → toggle isEnabled ----------
+  @Patch(':id/levels/:grade')
+  @Permission(PermissionKey.MANAGE_TEACHERS)
+  @ApiOperation({ summary: 'Enable or disable a subject grade level' })
+  @InvalidateScopes(({ result }) =>
+    result?.subject?.organizationId ? [result.subject.organizationId] : [],
+  )
+  toggleSubjectLevel(
+    @Param('id', new ParseUUIDPipe()) subjectId: string,
+    @Param('grade') grade: string,
+    @Body() dto: ToggleSubjectLevelDto,
+    @Req() req: RequestWithUser,
+  ) {
+    return this.service.toggleSubjectLevel(subjectId, grade, dto.isEnabled, req.user);
   }
 
   // ---------- Subject → TopicLevels (přes Levels) ----------

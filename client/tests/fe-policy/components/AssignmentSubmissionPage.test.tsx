@@ -4,7 +4,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { useParams } from "next/navigation";
-import AssignmentSubmissionPage from "@/app/(app)/app/assignments/[assignmentId]/page";
+import AssignmentSubmissionPage from "@/app/(school)/app/assignments/[assignmentId]/page";
 import { fetchWithAuth } from "@/lib/http/client";
 import { recordPolicyCheck } from "../fePolicyScore";
 

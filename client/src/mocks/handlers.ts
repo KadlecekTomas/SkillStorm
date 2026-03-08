@@ -139,9 +139,8 @@ export const handlers = [
     return HttpResponse.json({ ok: true });
   }),
 
-  http.post("*/testing/expire-token", ({ request }) => {
-    const sessionToken = request.headers.get("x-session-token") ?? MSW_SESSION;
-    expireTokenOnce(sessionToken);
+  http.post("*/testing/expire-token", () => {
+    expireTokenOnce(MSW_SESSION);
     return HttpResponse.json({ ok: true });
   }),
 

@@ -3,7 +3,7 @@
  */
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
-import SettingsPage from "@/app/(app)/app/settings/page";
+import SettingsPage from "@/app/(school)/app/settings/page";
 import { PermissionKey } from "@/types";
 
 vi.mock("@/hooks/use-auth", () => ({

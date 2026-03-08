@@ -8,8 +8,14 @@ import { OrganizationRole } from '@prisma/client';
 describe('SubmissionsService (integrity)', () => {
   let service: SubmissionsService;
   let prisma: {
-    submission: { findUnique: jest.Mock; findFirst: jest.Mock };
+    submission: {
+      count: jest.Mock;
+      findFirst: jest.Mock;
+      findMany: jest.Mock;
+      findUnique: jest.Mock;
+    };
     membership: { findFirst: jest.Mock };
+    $transaction: jest.Mock;
   };
 
   const orgA = 'org-a';
@@ -22,8 +28,14 @@ describe('SubmissionsService (integrity)', () => {
 
   beforeEach(async () => {
     prisma = {
-      submission: { findUnique: jest.fn(), findFirst: jest.fn() },
+      submission: {
+        count: jest.fn(),
+        findFirst: jest.fn(),
+        findMany: jest.fn(),
+        findUnique: jest.fn(),
+      },
       membership: { findFirst: jest.fn() },
+      $transaction: jest.fn(),
     };
     const module = await Test.createTestingModule({
       providers: [
@@ -79,6 +91,9 @@ describe('SubmissionsService (integrity)', () => {
           userId: 'u1',
           organizationId: orgA,
           membershipId: membershipA.id,
+        } as any, {
+          organizationId: orgA,
+          membershipId: membershipA.id,
         } as any),
       ).rejects.toThrow(NotFoundException);
 
@@ -86,6 +101,74 @@ describe('SubmissionsService (integrity)', () => {
         where: { id: 'sub-other-org', organizationId: orgA },
         include: expect.any(Object),
       });
+    });
+  });
+
+  describe('list payload hardening', () => {
+    it('findAll omits responses from list payload', async () => {
+      prisma.membership.findFirst.mockResolvedValue(membershipA);
+      prisma.submission.count.mockReturnValue('count-query');
+      prisma.submission.findMany.mockReturnValue('findMany-query');
+      prisma.$transaction.mockResolvedValue([
+        1,
+        [
+          {
+            id: 'sub-1',
+            assignmentId: 'a1',
+            testId: 't1',
+            status: 'APPROVED',
+            score: 0.8,
+            submittedAt: new Date('2025-01-01T00:00:00.000Z'),
+            attemptNo: 1,
+            isAnonymous: false,
+            student: { user: { name: 'Student A' } },
+          },
+        ],
+      ]);
+
+      const result = await service.findAll(
+        {},
+        {
+          userId: 'u1',
+          organizationId: orgA,
+          membershipId: membershipA.id,
+        } as any,
+        {
+          organizationId: orgA,
+          membershipId: membershipA.id,
+        } as any,
+        { page: 1, limit: 50 },
+      );
+
+      expect(prisma.submission.findMany).toHaveBeenCalledWith({
+        where: expect.any(Object),
+        select: expect.objectContaining({
+          assignmentId: true,
+          attemptNo: true,
+          id: true,
+          isAnonymous: true,
+          score: true,
+          status: true,
+          student: expect.any(Object),
+          submittedAt: true,
+          testId: true,
+        }),
+        orderBy: { createdAt: 'desc' },
+        skip: 0,
+        take: 50,
+      });
+      expect(result.data[0]).toEqual({
+        id: 'sub-1',
+        assignmentId: 'a1',
+        testId: 't1',
+        status: 'APPROVED',
+        score: 0.8,
+        submittedAt: new Date('2025-01-01T00:00:00.000Z'),
+        attemptNo: 1,
+        isAnonymous: false,
+        student: null,
+      });
+      expect(result.data[0]).not.toHaveProperty('responses');
     });
   });
 });

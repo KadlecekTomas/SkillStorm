@@ -1,8 +1,16 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
 import type { RecordRbacMetricDto } from './dto/record-rbac-metric.dto';
-import { AuditEntityType } from '@prisma/client';
+import { AuditEntityType, PermissionKey } from '@prisma/client';
 import { subDays } from 'date-fns';
+
+type ForbiddenAccessMetric = {
+  route: string;
+  userId?: string | null;
+  organizationId?: string | null;
+  permissionKey?: PermissionKey | string | null;
+  message?: string | null;
+};
 
 @Injectable()
 export class MetricsService {
@@ -10,11 +18,13 @@ export class MetricsService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async recordForbiddenAccess(payload: RecordRbacMetricDto) {
+  async recordForbiddenAccess(payload: RecordRbacMetricDto | ForbiddenAccessMetric) {
     try {
       await this.prisma.auditLog.create({
         data: {
           userId: payload.userId ?? null,
+          organizationId:
+            'organizationId' in payload ? payload.organizationId ?? null : null,
           entityType: AuditEntityType.PERMISSION,
           action: 'FORBIDDEN_ACCESS',
           metadata: {

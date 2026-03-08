@@ -1,4 +1,17 @@
-import type { Classroom, ContentItem, ResultInsight, TestSummary } from "@/types";
+import type { Classroom, ContentItem, ResultInsight, Subject, TestSummary } from "@/types";
+
+export function createMockSubject(overrides?: Partial<Subject>): Subject {
+  return {
+    id: "mock-subject",
+    name: "Mock Subject",
+    organizationId: "mock-org",
+    catalogSubjectId: null,
+    catalogSubject: null,
+    deletedAt: null,
+    isActive: true,
+    ...overrides,
+  };
+}
 
 export const classroomSamples: Classroom[] = [
   {
@@ -35,14 +48,7 @@ export const testSamples: TestSummary[] = [
     completionRate: 86,
     submissions: 42,
     avgScore: 78,
-    subject: {
-      id: "subj-math",
-      name: "Matematika",
-      organizationId: sampleOrgId,
-      catalogSubjectId: null,
-      catalogSubject: null,
-      deletedAt: null,
-    },
+    subject: createMockSubject({ id: "subj-math", name: "Matematika", organizationId: sampleOrgId }),
     status: "PUBLISHED",
     version: 3,
   },
@@ -53,14 +59,7 @@ export const testSamples: TestSummary[] = [
     completionRate: 92,
     submissions: 37,
     avgScore: 83,
-    subject: {
-      id: "subj-lang",
-      name: "Jazyky",
-      organizationId: sampleOrgId,
-      catalogSubjectId: null,
-      catalogSubject: null,
-      deletedAt: null,
-    },
+    subject: createMockSubject({ id: "subj-lang", name: "Jazyky", organizationId: sampleOrgId }),
     status: "PUBLISHED",
     version: 2,
   },

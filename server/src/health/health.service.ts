@@ -1,6 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Inject, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
+import type { Cache } from 'cache-manager';
 import { readFileSync } from 'fs';
 import { join } from 'path';
+import { PrismaService } from '@/prisma/prisma.service';
 
 const PACKAGE_JSON_PATH =
   process.env.NEST_PACKAGE_PATH ?? join(process.cwd(), 'package.json');
@@ -8,6 +11,11 @@ const PACKAGE_JSON_PATH =
 export interface HealthPayload {
   status: 'ok';
   timestamp: string;
+  checks: {
+    process: 'ok';
+    db: 'ok';
+    redis: 'ok' | 'disabled';
+  };
 }
 
 export interface VersionPayload {
@@ -20,14 +28,24 @@ export class HealthService {
   private readonly logger = new Logger(HealthService.name);
   private readonly versionInfo: VersionPayload;
 
-  constructor() {
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(CACHE_MANAGER) private readonly cache: Cache,
+  ) {
     this.versionInfo = this.loadVersionInfo();
   }
 
-  getHealth(): HealthPayload {
+  async getHealth(): Promise<HealthPayload> {
+    await this.checkDatabase();
+    const redis = await this.checkRedis();
     return {
       status: 'ok',
       timestamp: new Date().toISOString(),
+      checks: {
+        process: 'ok',
+        db: 'ok',
+        redis,
+      },
     };
   }
 
@@ -55,6 +73,35 @@ export class HealthService {
         version: '0.0.0',
         commitHash: process.env.COMMIT_SHA ?? null,
       };
+    }
+  }
+
+  private async checkDatabase(): Promise<void> {
+    try {
+      await this.prisma.$queryRaw`SELECT 1`;
+    } catch (error) {
+      this.logger.error(`Database healthcheck failed: ${error}`);
+      throw new ServiceUnavailableException('Database unavailable');
+    }
+  }
+
+  private async checkRedis(): Promise<'ok' | 'disabled'> {
+    if (!process.env.REDIS_URL?.trim()) {
+      return 'disabled';
+    }
+
+    const key = `healthcheck:${Date.now()}`;
+    try {
+      await this.cache.set(key, 'ok', 1_000);
+      const value = await this.cache.get<string>(key);
+      if (value !== 'ok') {
+        throw new Error('Unexpected cache probe value');
+      }
+      await this.cache.del(key);
+      return 'ok';
+    } catch (error) {
+      this.logger.error(`Redis healthcheck failed: ${error}`);
+      throw new ServiceUnavailableException('Redis unavailable');
     }
   }
 }

@@ -35,6 +35,13 @@ Volitelné:
 - `DISABLE_THROTTLE` – vypnutí rate limitu (pouze lokálně)
 - `DISABLE_CSRF` – vypnutí CSRF ochrany (pouze lokálně)
 
+### Supported Production Topology
+- Production auth is cookie-only and supported by default only in same-site deployment.
+- Supported topology: browser -> `PUBLIC_APP_URL` (Next.js) -> `/api/*` reverse proxy -> Nest backend.
+- `PUBLIC_APP_URL` and `API_URL` must be same-site in production, unless `ALLOW_CROSS_SITE_COOKIES=1` is explicitly set after review.
+- `CORS_ORIGINS` must be an explicit allowlist. Wildcards are rejected at startup.
+- Client-side RBAC telemetry is disabled by default in production. Authorization denies are recorded server-side by Nest.
+
 ### Migrace / seed
 ```bash
 cd server
@@ -86,7 +93,7 @@ This section demonstrates the minimal happy-path flow that proves the system is 
 
 Poznámka: odpovědi jsou obalené do `{ success, data }`.  
 V příkladech používáme `jq` pro extrakci hodnot z `.data`.  
-Poznámka: v ukázkách se používá `sessionToken` jako Bearer token.
+Poznámka: produkční auth flow používá HttpOnly cookies přes same-site `/api` proxy. Starší Bearer ukázky níže jsou historické a nejsou doporučený produkční pattern.
 
 1) Register + login (DIRECTOR)
 ```bash

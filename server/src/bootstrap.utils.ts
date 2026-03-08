@@ -8,11 +8,46 @@
  */
 export function validateEnvironment(): void {
   if (process.env.NODE_ENV !== 'production') return;
-  const required = ['JWT_SECRET', 'CORS_ORIGINS', 'DATABASE_URL'] as const;
+  const required = [
+    'JWT_SECRET',
+    'CORS_ORIGINS',
+    'DATABASE_URL',
+    'METRICS_INGEST_KEY',
+    'PUBLIC_APP_URL',
+    'API_URL',
+  ] as const;
   const missing = required.filter((key) => !process.env[key]?.trim());
   if (missing.length > 0) {
     throw new Error(
       `Missing required environment variables: ${missing.join(', ')}`,
+    );
+  }
+
+  const corsOrigins = process.env.CORS_ORIGINS!
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+  if (corsOrigins.some((origin) => origin.includes('*'))) {
+    throw new Error(
+      'CORS_ORIGINS must be an explicit allowlist in production. Wildcards are not allowed.',
+    );
+  }
+
+  const publicAppUrl = parseRequiredUrl('PUBLIC_APP_URL', process.env.PUBLIC_APP_URL!);
+  const apiUrl = parseRequiredUrl('API_URL', process.env.API_URL!);
+  const allowCrossSiteCookies = process.env.ALLOW_CROSS_SITE_COOKIES === '1';
+
+  if (!corsOrigins.includes(publicAppUrl.origin)) {
+    throw new Error(
+      `CORS_ORIGINS must include PUBLIC_APP_URL origin (${publicAppUrl.origin}).`,
+    );
+  }
+
+  if (!isSameSite(publicAppUrl, apiUrl) && !allowCrossSiteCookies) {
+    throw new Error(
+      'Cross-site cookie deployment detected: PUBLIC_APP_URL and API_URL are not same-site. ' +
+        'Use the same-site /api proxy topology or set ALLOW_CROSS_SITE_COOKIES=1 only after an explicit review.',
     );
   }
 }
@@ -42,4 +77,37 @@ export function buildCorsOrigin(
     }
     return callback(new Error('Not allowed by CORS'));
   };
+}
+
+function parseRequiredUrl(name: string, value: string): URL {
+  try {
+    return new URL(value);
+  } catch {
+    throw new Error(`${name} must be a valid absolute URL.`);
+  }
+}
+
+function isSameSite(left: URL, right: URL): boolean {
+  return left.protocol === right.protocol && siteKey(left.hostname) === siteKey(right.hostname);
+}
+
+function siteKey(hostname: string): string {
+  const normalized = hostname.trim().toLowerCase();
+  if (
+    normalized === 'localhost' ||
+    normalized === 'frontend' ||
+    normalized === 'backend' ||
+    /^\d{1,3}(\.\d{1,3}){3}$/.test(normalized) ||
+    normalized.includes(':') ||
+    !normalized.includes('.')
+  ) {
+    return normalized;
+  }
+
+  const labels = normalized.split('.');
+  if (labels.length < 2) {
+    return normalized;
+  }
+
+  return labels.slice(-2).join('.');
 }

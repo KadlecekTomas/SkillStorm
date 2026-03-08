@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  ForbiddenException,
+  Get,
+  Headers,
+  Post,
+} from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { MetricsService } from './metrics.service';
 import { RecordRbacMetricDto } from './dto/record-rbac-metric.dto';
 import { Public } from '@/common/decorators/public.decorator';
@@ -11,7 +19,15 @@ export class MetricsController {
 
   @Post('rbac')
   @Public()
-  async record(@Body() dto: RecordRbacMetricDto) {
+  @Throttle({ default: { limit: 20, ttl: 60 } })
+  async record(
+    @Body() dto: RecordRbacMetricDto,
+    @Headers('x-metrics-key') ingestKey?: string,
+  ) {
+    const expectedKey = process.env.METRICS_INGEST_KEY?.trim();
+    if (!expectedKey || ingestKey !== expectedKey) {
+      throw new ForbiddenException('Invalid metrics ingest key');
+    }
     await this.metrics.recordForbiddenAccess(dto);
     return { status: 'queued' };
   }

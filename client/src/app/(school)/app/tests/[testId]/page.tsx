@@ -19,8 +19,9 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { useAuth } from "@/lib/guard/useAuth";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
@@ -107,6 +108,198 @@ function progressBarFillClass(percent: number): string {
   return "bg-red-500";
 }
 
+// ---------------------------------------------------------------------------
+// Student view — shown when the authenticated user has the STUDENT role.
+// Displays test metadata + the student's assignment for this test (if any),
+// then links to /app/assignments/[assignmentId] for the actual submission flow.
+// ---------------------------------------------------------------------------
+
+type EffectiveAssignmentStatus = "UPCOMING" | "OPEN" | "IN_PROGRESS" | "SUBMITTED" | "CLOSED" | "NO_ATTEMPTS_LEFT";
+
+type StudentAssignment = {
+  id: string;
+  testId: string;
+  openAt: string;
+  closeAt: string;
+  maxAttempts: number;
+  attemptsUsed: number;
+  submittedAt: string | null;
+  submissionStatus: string | null;
+  effectiveStatus: EffectiveAssignmentStatus;
+};
+
+type StudentTestDetail = {
+  id: string;
+  title: string;
+  description: string | null;
+  subject: { id: string; name: string; catalogSubject?: { code: string; name: string } | null } | null;
+  academicYear?: { id: string; label: string; isCurrent: boolean } | null;
+  questions: Array<{ id: string; text: string; type: string }>;
+};
+
+function AssignmentCta({ assignment, onNavigate }: { assignment: StudentAssignment; onNavigate: () => void }): React.JSX.Element {
+  switch (assignment.effectiveStatus) {
+    case "SUBMITTED":
+      return (
+        <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={onNavigate}>
+          Zobrazit výsledek
+        </Button>
+      );
+    case "IN_PROGRESS":
+      return (
+        <Button className="bg-slate-900 hover:bg-slate-800" onClick={onNavigate}>
+          Pokračovat v testu
+        </Button>
+      );
+    case "UPCOMING":
+      return (
+        <Button disabled className="cursor-not-allowed opacity-60">
+          Dostupné od {new Date(assignment.openAt).toLocaleString("cs-CZ")}
+        </Button>
+      );
+    case "CLOSED":
+      return <p className="text-sm text-slate-500">Termín pro odevzdání vypršel.</p>;
+    case "NO_ATTEMPTS_LEFT":
+      return <p className="text-sm text-slate-500">Vyčerpali jste všechny pokusy ({assignment.maxAttempts}/{assignment.maxAttempts}).</p>;
+    case "OPEN":
+    default:
+      return (
+        <Button className="bg-slate-900 hover:bg-slate-800" onClick={onNavigate}>
+          Začít test
+        </Button>
+      );
+  }
+}
+
+function StudentTestView({ testId }: { testId: string }): React.JSX.Element {
+  const router = useRouter();
+  const [test, setTest] = useState<StudentTestDetail | null>(null);
+  const [assignment, setAssignment] = useState<StudentAssignment | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setFetchError(null);
+
+    const load = async () => {
+      try {
+        const [testData, assignments] = await Promise.all([
+          fetchWithAuth<StudentTestDetail>("GET", `/tests/${testId}`),
+          fetchWithAuth<StudentAssignment[]>("GET", "/assignments/my").catch(() => [] as StudentAssignment[]),
+        ]);
+        if (!active) return;
+        setTest(testData ?? null);
+        const matching = (assignments ?? []).filter((a) => a.testId === testId);
+        const nowTs = Date.now();
+        const open = matching.filter(
+          (a) => new Date(a.openAt).getTime() <= nowTs && new Date(a.closeAt).getTime() > nowTs,
+        );
+        const pool = open.length > 0 ? open : matching;
+        const found = pool.sort(
+          (a, b) => new Date(b.closeAt).getTime() - new Date(a.closeAt).getTime(),
+        )[0] ?? null;
+        setAssignment(found);
+      } catch (e) {
+        if (!active) return;
+        setFetchError(
+          e instanceof HttpError && e.status === 404
+            ? "404"
+            : "error",
+        );
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+
+    load();
+    return () => { active = false; };
+  }, [testId]);
+
+  if (loading) return <LoadingSpinner label="Načítám test" />;
+
+  if (fetchError === "404") {
+    return (
+      <div className="space-y-4">
+        <WarningAlert title="Test nenalezen" description="Test nenalezen nebo k němu nemáte přístup." />
+        <Link href="/app/tests"><Button variant="outline">Zpět na testy</Button></Link>
+      </div>
+    );
+  }
+
+  if (fetchError === "error" || !test) {
+    return (
+      <div className="space-y-4">
+        <ErrorAlert title="Chyba" description="Nepodařilo se načíst test." />
+        <Link href="/app/tests"><Button variant="outline">Zpět na testy</Button></Link>
+      </div>
+    );
+  }
+
+  const qCount = test.questions?.length ?? 0;
+
+  return (
+    <div className="space-y-8 pb-8">
+      <header className="sticky top-0 z-10 -mx-4 -mt-2 bg-white/95 px-4 py-4 backdrop-blur sm:-mx-6 sm:px-6 md:-mx-8 md:px-8">
+        <Link href="/app/tests" className="text-xs text-slate-500 hover:text-slate-700">
+          ← Zpět na testy
+        </Link>
+        <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-900">{test.title}</h1>
+        {test.description && (
+          <p className="mt-1 line-clamp-2 text-sm text-slate-500">{test.description}</p>
+        )}
+        {test.subject && (
+          <p className="mt-1 text-sm text-slate-600">
+            Předmět: {test.subject.catalogSubject?.name ?? test.subject.name}
+          </p>
+        )}
+        {test.academicYear && (
+          <p className="mt-0.5 text-sm text-slate-500">Školní rok: {test.academicYear.label}</p>
+        )}
+        {qCount > 0 && (
+          <p className="mt-1 text-xs text-slate-400">
+            {qCount === 1 ? "1 otázka" : qCount <= 4 ? `${qCount} otázky` : `${qCount} otázek`}
+          </p>
+        )}
+      </header>
+
+      {!assignment && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+          Test ještě není přiřazen tvé třídě. Kontaktuj svého učitele.
+        </div>
+      )}
+
+      {assignment && (
+        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm space-y-5">
+          <div className="grid gap-3 sm:grid-cols-3 text-sm">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Otevřeno od</p>
+              <p className="mt-0.5 font-medium text-slate-800">
+                {new Date(assignment.openAt).toLocaleString("cs-CZ")}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Uzavřeno</p>
+              <p className="mt-0.5 font-medium text-slate-800">
+                {new Date(assignment.closeAt).toLocaleString("cs-CZ")}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Max. pokusů</p>
+              <p className="mt-0.5 font-medium text-slate-800">{assignment.maxAttempts}</p>
+            </div>
+          </div>
+
+          <div className="border-t border-slate-100 pt-4">
+            <AssignmentCta assignment={assignment} onNavigate={() => router.push(`/app/assignments/${assignment.id}`)} />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /**
  * Wrapper + Inner split for Rules of Hooks: React requires the same number and order
  * of hooks on every render. The wrapper only reads testId from the URL and guards
@@ -116,6 +309,8 @@ function progressBarFillClass(percent: number): string {
 function TestPageWrapper(): React.JSX.Element {
   const params = useParams<{ testId: string }>();
   const testId = params?.testId ?? null;
+  const { roles } = useAuth();
+  const isStudent = roles.includes("STUDENT");
 
   if (!testId) {
     return (
@@ -126,6 +321,10 @@ function TestPageWrapper(): React.JSX.Element {
         </Link>
       </div>
     );
+  }
+
+  if (isStudent) {
+    return <StudentTestView testId={testId} />;
   }
 
   return <TestPageInner testId={testId} />;
@@ -778,5 +977,5 @@ function TestPageInner({ testId }: { testId: string }): React.JSX.Element {
 }
 
 export default withGuard({
-  requirePerms: [PermissionKey.CREATE_TEST, PermissionKey.EDIT_TEST],
+  requirePerms: [PermissionKey.CREATE_TEST, PermissionKey.EDIT_TEST, PermissionKey.VIEW_OWN_ASSIGNMENTS],
 })(TestPageWrapper);

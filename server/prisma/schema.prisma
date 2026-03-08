@@ -450,6 +450,7 @@ model ClassSection {
   studentClassrooms StudentClassroom[]
   invitations       Invitation[]
   invites           Invite[]
+  teachers          TeacherClassSection[]
 
   @@unique([orgId, yearId, grade, section])
   @@unique([id, yearId])
@@ -459,17 +460,33 @@ model ClassSection {
 }
 
 model Teacher {
-  id             String           @id @default(uuid()) @map("teacher_id")
-  membershipId   String           @unique @map("membership_id")
-  organizationId String           @map("organization_id")
-  deletedAt      DateTime?        @map("deleted_at")
-  homeroomOf     ClassSection[]   @relation("Homeroom")
+  id             String                @id @default(uuid()) @map("teacher_id")
+  membershipId   String                @unique @map("membership_id")
+  organizationId String                @map("organization_id")
+  deletedAt      DateTime?             @map("deleted_at")
+  homeroomOf     ClassSection[]        @relation("Homeroom")
   subjects       TeacherSubject[]
-  membership     Membership       @relation(fields: [membershipId], references: [id], onDelete: Cascade)
-  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  classSections  TeacherClassSection[]
+  membership     Membership            @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  organization   Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
   @@map("teachers")
+}
+
+model TeacherClassSection {
+  id             String       @id @default(uuid()) @map("teacher_class_section_id")
+  teacherId      String       @map("teacher_id")
+  classSectionId String       @map("class_section_id")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  deletedAt      DateTime?    @map("deleted_at")
+  teacher        Teacher      @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  classSection   ClassSection @relation(fields: [classSectionId], references: [id], onDelete: Cascade)
+
+  @@unique([teacherId, classSectionId])
+  @@index([classSectionId])
+  @@index([teacherId])
+  @@map("teacher_class_sections")
 }
 
 model Student {
@@ -558,6 +575,7 @@ model SubjectLevel {
   grade     SchoolGrade
   order     Int?
   label     String?
+  isEnabled Boolean      @default(true) @map("is_enabled")
   subject   Subject      @relation(fields: [subjectId], references: [id], onDelete: Cascade)
   topics    TopicLevel[]
 
@@ -717,6 +735,7 @@ model Test {
   description          String?
   version              Int              @default(1)
   status               PublishStatus    @default(DRAFT)
+  publishedAt          DateTime?        @map("published_at")
   order                Int?
   creatorId            String           @map("creator_id")
   createdAt            DateTime         @default(now()) @map("created_at")
@@ -812,6 +831,7 @@ model Submission {
   @@index([assignmentId])
   @@index([organizationId])
   @@index([studentId, assignmentId])
+  @@index([testId, studentId])
   @@index([testId, status])
   @@index([studentId, submittedAt])
   @@index([organizationId, studentId, createdAt])
@@ -819,15 +839,19 @@ model Submission {
 }
 
 model Response {
-  id            String     @id @default(uuid()) @map("response_id")
-  submissionId  String     @map("submission_id")
-  questionId    String     @map("question_id")
-  givenText     String
-  isCorrect     Boolean?
-  feedback      String?
-  explanation   String?
-  attemptNumber Int        @default(1) @map("attempt_number")
-  corrected     Boolean?   @default(false)
+  id                    String     @id @default(uuid()) @map("response_id")
+  submissionId          String     @map("submission_id")
+  questionId            String     @map("question_id")
+  givenText             String
+  isCorrect             Boolean?
+  awardedPoints         Int?       @map("awarded_points")
+  maxPoints             Int?       @map("max_points")
+  correctAnswerSnapshot String?    @map("correct_answer_snapshot")
+  questionTextSnapshot  String?    @map("question_text_snapshot")
+  feedback              String?
+  explanation           String?
+  attemptNumber         Int        @default(1) @map("attempt_number")
+  corrected             Boolean?   @default(false)
   createdAt     DateTime   @default(now()) @map("created_at")
   updatedAt     DateTime   @updatedAt @map("updated_at")
   question      Question   @relation(fields: [questionId], references: [id], onDelete: Cascade)

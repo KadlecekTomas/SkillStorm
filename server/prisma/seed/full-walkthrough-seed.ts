@@ -446,7 +446,33 @@ async function setHomeroomTeachers(
   logDone('Homeroom set');
 }
 
-// --- Studenti + Enrollment (A,B,C v 6.A; D,E,F v 7.B; 8.C prázdná pro „třída bez testů“) ---
+// --- TeacherClassSection: teacher2 explicitly teaches 8.C (not homeroom) ---
+// Demonstrates the “teaches” model: teacher2 is homeroom of none, but can see 8.C results.
+async function createTeacherClassSections(
+  orgUsers: OrgUserIds[],
+  sections: { id: string; orgId: string; label: string }[],
+) {
+  logStep('TeacherClassSection: teacher2 explicitly assigned to 8.C');
+  for (const org of orgUsers) {
+    const secondTeacherMembershipId = org.teacherMembershipIds[1];
+    if (!secondTeacherMembershipId) continue;
+    const teacher = await prisma.teacher.findFirst({
+      where: { membershipId: secondTeacherMembershipId, organizationId: org.orgId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!teacher) continue;
+    const class8C = sections.find((s) => s.orgId === org.orgId && s.label === '8.C');
+    if (!class8C) continue;
+    await prisma.teacherClassSection.upsert({
+      where: { teacherId_classSectionId: { teacherId: teacher.id, classSectionId: class8C.id } },
+      update: { deletedAt: null },
+      create: { teacherId: teacher.id, classSectionId: class8C.id },
+    });
+  }
+  logDone('TeacherClassSection set');
+}
+
+// --- Studenti + Enrollment (A,B,C v 6.A; D,E,F v 7.B; 8.C prázdná pro „třída bez testů”) ---
 async function createStudentsAndEnrollments(
   orgUsers: OrgUserIds[],
   sections: { id: string; orgId: string; yearId: string; label: string }[],
@@ -1050,6 +1076,7 @@ async function main() {
   const orgUsers = await createUsersAndMembers(orgs);
   await createTeachers(orgUsers);
   await setHomeroomTeachers(orgUsers, sections);
+  await createTeacherClassSections(orgUsers, sections);
   await createStudentsAndEnrollments(orgUsers, sections);
   const subjectsByOrg = await ensureCatalogAndSubjects(orgs);
   const tests = await createTests(orgs, orgUsers, years, subjectsByOrg);

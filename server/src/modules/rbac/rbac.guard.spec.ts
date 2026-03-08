@@ -4,6 +4,7 @@ import type { Reflector } from '@nestjs/core';
 import { PermissionKey, SystemRole, OrganizationRole } from '@prisma/client';
 import { RbacGuard } from './rbac.guard';
 import type { RbacService } from './rbac.service';
+import type { MetricsService } from '@/metrics/metrics.service';
 
 describe('RbacGuard', () => {
   const reflector = {
@@ -14,7 +15,11 @@ describe('RbacGuard', () => {
     canUser: jest.fn(),
   } as unknown as RbacService;
 
-  const guard = new RbacGuard(rbacService, reflector);
+  const metricsService = {
+    recordForbiddenAccess: jest.fn().mockResolvedValue(undefined),
+  } as unknown as MetricsService;
+
+  const guard = new RbacGuard(rbacService, reflector, metricsService);
 
   const makeContext = (user: any): ExecutionContext =>
     ({
@@ -76,6 +81,14 @@ describe('RbacGuard', () => {
 
     await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(
       ForbiddenException,
+    );
+    expect(metricsService.recordForbiddenAccess).toHaveBeenCalledWith(
+      expect.objectContaining({
+        route: 'unknown',
+        userId: 'user-2',
+        organizationId: 'org-2',
+        permissionKey: PermissionKey.MANAGE_STUDENTS,
+      }),
     );
   });
 

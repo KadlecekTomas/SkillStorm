@@ -25,6 +25,15 @@ function normalizeFitb(s?: string | null): string {
     .toLowerCase();
 }
 
+/**
+ * Normalize a single answer for case-insensitive, whitespace-collapsed comparison.
+ * Used for MULTIPLE_CHOICE single-mode and multi-mode element normalization.
+ */
+function normalizeAnswer(v: unknown): string {
+  if (v == null) return '';
+  return String(v).trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
 function normalizeAnswerList(value: unknown): string[] {
   if (Array.isArray(value)) {
     return value.map((v) => String(v).trim()).filter((v) => v.length > 0);
@@ -101,8 +110,8 @@ export function computeScore(
 
     let mode: 'single' | 'multi' | null = null;
     if (q.type === QuestionType.MULTIPLE_CHOICE) {
-      if (hasSingle && hasMulti) mode = null;
-      else if (hasMulti) mode = 'multi';
+      // correctAnswers array takes precedence; fall back to single correctAnswer
+      if (hasMulti) mode = 'multi';
       else if (hasSingle) mode = 'single';
     } else if (
       q.type === QuestionType.TRUE_FALSE ||
@@ -135,12 +144,12 @@ export function computeScore(
       gained = correct ? qScore : 0;
     } else if (q.type === QuestionType.MULTIPLE_CHOICE) {
       if (mode === 'multi') {
-        const corr = [...correctAnswers].sort().join(',');
-        const giv = normalizeAnswerList(given).sort().join(',');
+        const corr = [...correctAnswers].map(normalizeAnswer).sort().join(',');
+        const giv = normalizeAnswerList(given).map(normalizeAnswer).sort().join(',');
         correct = corr === giv;
       } else {
         const givenSingle = Array.isArray(given) ? given[0] : given;
-        correct = String(givenSingle ?? '') === String(correctAnswer ?? '');
+        correct = normalizeAnswer(givenSingle) === normalizeAnswer(correctAnswer);
       }
       gained = correct ? qScore : 0;
     }

@@ -158,9 +158,9 @@ export async function createApp(): Promise<INestApplication> {
       'X-Requested-With',
       'Accept',
       'x-org-id',
-      'x-session-token',
       'x-csrf-token',
       'x-cid',
+      'x-metrics-key',
       'x-request-id',
     ],
   });

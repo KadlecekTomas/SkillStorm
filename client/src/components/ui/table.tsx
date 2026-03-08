@@ -17,6 +17,7 @@ type DataTableProps<T> = {
   pageSize?: number;
   emptyState?: React.ReactNode;
   loading?: boolean;
+  onRowClick?: ((row: T) => void) | undefined;
 };
 
 const resolveValue = <T extends { id: string }>(row: T, column: Column<T>) => {
@@ -33,6 +34,7 @@ export const DataTable = <T extends { id: string }>({
   pageSize = 6,
   emptyState,
   loading,
+  onRowClick,
 }: DataTableProps<T>): React.JSX.Element => {
   const [page, setPage] = useState(1);
   const totalPages = Math.max(1, Math.ceil(data.length / pageSize));
@@ -63,7 +65,11 @@ export const DataTable = <T extends { id: string }>({
               </tr>
             ) : rows.length ? (
               rows.map((row) => (
-                <tr key={row.id} className="hover:bg-slate-50/70">
+                <tr
+                  key={row.id}
+                  className={cn("hover:bg-slate-50/70", onRowClick && "cursor-pointer")}
+                  onClick={onRowClick ? () => onRowClick(row) : undefined}
+                >
                   {columns.map((column) => (
                     <td
                       key={String(column.key)}

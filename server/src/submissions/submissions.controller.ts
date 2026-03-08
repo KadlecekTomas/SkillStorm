@@ -82,8 +82,8 @@ export class SubmissionsController {
     @Query('limit') limitStr?: string,
   ) {
     const page = Math.max(1, parseInt(String(pageStr ?? '1'), 10) || 1);
-    const rawLimit = parseInt(String(limitStr ?? '200'), 10) || 200;
-    const limit = Math.min(500, Math.max(1, rawLimit));
+    const rawLimit = parseInt(String(limitStr ?? '50'), 10) || 50;
+    const limit = Math.min(100, Math.max(1, rawLimit));
     const ctx = await this.orgContext.get(req);
     return ok(this.submissionsService.findAll({ assignmentId, studentId }, req.user, ctx, { page, limit }));
   }

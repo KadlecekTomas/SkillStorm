@@ -9,7 +9,6 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { fetchWithAuth, httpClient, HttpError } from "@/lib/http/client";
 import { useAuth } from "@/hooks/use-auth";
-import { useAuthStore } from "@/store/use-auth-store";
 import { useAcademicYearStore } from "@/store/use-academic-year-store";
 import { showToastOnce, resolveToastFromHttpError } from "@/utils/toast";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
@@ -37,10 +36,10 @@ async function fetchPreviewByToken(token: string): Promise<InvitePreview> {
 /** Accept invite via token-based API (production). */
 async function acceptByToken(
   token: string,
-): Promise<{ sessionToken?: string; organization?: { id: string } }> {
+): Promise<{ organization?: { id: string } }> {
   return fetchWithAuth("POST", "/invitations/accept", {
     body: { token },
-  }) as Promise<{ sessionToken?: string; organization?: { id: string }; role?: string }>;
+  }) as Promise<{ organization?: { id: string }; role?: string }>;
 }
 
 export default function JoinPage(): JSX.Element {
@@ -145,13 +144,9 @@ export default function JoinPage(): JSX.Element {
     setJoinErrorMessage(null);
     try {
       const result = await acceptByToken(trimmed);
-      const sessionToken = result?.sessionToken;
       const orgId =
         (result as { organization?: { id: string } })?.organization?.id ??
         preview.organizationId;
-      if (sessionToken) {
-        useAuthStore.getState().setSessionToken(sessionToken);
-      }
       clearOrg(orgId);
       await syncProfile({ force: true });
       clearAuthIntent();

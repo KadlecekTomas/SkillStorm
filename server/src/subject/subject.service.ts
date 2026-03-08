@@ -399,6 +399,28 @@ export class SubjectsService {
     });
   }
 
+  /** ---------- SubjectLevel → toggle isEnabled ---------- */
+  async toggleSubjectLevel(subjectId: string, grade: string, isEnabled: boolean, user: JwtPayload) {
+    const subj = await this.prisma.subject.findUnique({
+      where: { id: subjectId },
+      select: { id: true, organizationId: true, deletedAt: true },
+    });
+    if (!subj || subj.deletedAt) throw new NotFoundException('Předmět nebyl nalezen');
+    assertTeacherOrDirectorInOrgOrSuperadmin(user, subj.organizationId, 'předmět');
+
+    const level = await this.prisma.subjectLevel.findFirst({
+      where: { subjectId, grade: grade as any },
+      select: { id: true },
+    });
+    if (!level) throw new NotFoundException('SubjectLevel pro daný ročník nebyl nalezen');
+
+    return this.prisma.subjectLevel.update({
+      where: { id: level.id },
+      data: { isEnabled },
+      include: { subject: { select: { organizationId: true } } },
+    });
+  }
+
   /** ---------- Subject → TopicLevels (přes Levels) ---------- */
   async findTopicLevels(subjectId: string, user: JwtPayload) {
     const subj = await this.prisma.subject.findUnique({

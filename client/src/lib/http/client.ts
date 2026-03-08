@@ -55,7 +55,6 @@ const DEFAULT_HEADERS: Record<string, string> = {
 
 type PersistedAuthState = {
   org?: OrganizationContext | null;
-  sessionToken?: string | null;
 };
 
 const readPersistedAuthState = (): PersistedAuthState | null => {
@@ -225,8 +224,7 @@ const logoutAndRedirect = (): void => {
 
 const buildHeaders = (configHeaders?: Record<string, string>): Record<string, string> => {
   const state = useAuthStore.getState();
-  const persisted =
-    !state.sessionToken || !state.org ? readPersistedAuthState() : null;
+  const persisted = !state.org ? readPersistedAuthState() : null;
 
   const headers: Record<string, string> = {
     ...DEFAULT_HEADERS,
@@ -238,12 +236,6 @@ const buildHeaders = (configHeaders?: Record<string, string>): Record<string, st
     state.org?.id ?? persisted?.org?.id ?? state.user?.organizationId ?? null;
   if (orgId) {
     headers["x-org-id"] = orgId;
-  }
-
-  // If you are purely cookie-based auth, consider removing x-session-token entirely.
-  const sessionToken = state.sessionToken ?? persisted?.sessionToken ?? null;
-  if (sessionToken) {
-    headers["x-session-token"] = sessionToken;
   }
 
   if (typeof document !== "undefined") {

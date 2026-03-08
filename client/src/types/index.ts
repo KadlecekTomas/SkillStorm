@@ -66,9 +66,12 @@ export type TestSummary = {
   subject?: Subject | null;
   status: PublishStatus;
   version: number;
-  completionRate: number;
-  submissions: number;
-  avgScore: number;
+  /** null when no submissions exist yet */
+  completionRate: number | null;
+  /** null when no submissions exist yet */
+  submissions: number | null;
+  /** null when no submissions exist yet */
+  avgScore: number | null;
 };
 
 export type ContentItem = {

@@ -62,7 +62,6 @@ export class InvitesController {
       membership: result.membership,
       roles: result.roles,
       permissions: result.permissions,
-      sessionToken: result.tokens.accessToken,
       classSectionId: result.classSectionId,
       yearId: result.yearId,
     });
