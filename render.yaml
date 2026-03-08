@@ -61,10 +61,7 @@ services:
       - key: PORT
         value: 10000
       - key: API_PROXY_TARGET
-        fromService:
-          type: web
-          name: skillstorm-demo-api-tomaskadlecek
-          property: hostport
+        value: https://skillstorm-demo-api-tomaskadlecek.onrender.com
       - key: ENABLE_RBAC_TELEMETRY_CLIENT
         value: "0"
       - key: DEMO_MODE
