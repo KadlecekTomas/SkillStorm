@@ -1367,6 +1367,9 @@ export class TestsService {
         where: submissionsWhere,
         include: {
           assignment: { select: { id: true, classSectionId: true } },
+          responses: {
+            select: { isCorrect: true },
+          },
           student: {
             select: {
               user: { select: { name: true } },
@@ -1380,19 +1383,30 @@ export class TestsService {
     ]);
 
     return {
-      items: submissions.map((s) => ({
-        id: s.id,
-        score: s.score,
-        submittedAt: s.submittedAt,
-        attemptNo: s.attemptNo,
-        assignmentId: s.assignmentId,
-        classSectionId: s.assignment?.classSectionId ?? null,
-        student:
-          role === OrganizationRole.STUDENT
-            ? null
-            : { name: s.student?.user?.name ?? null },
-        isAnonymous: s.isAnonymous ?? false,
-      })),
+      items: submissions.map((s) => {
+        const correctCount = s.responses.filter((r) => r.isCorrect === true).length;
+        const incorrectCount = s.responses.filter((r) => r.isCorrect === false).length;
+        const pendingCount = s.responses.filter((r) => r.isCorrect == null).length;
+        const totalEvaluated = correctCount + incorrectCount;
+        return {
+          id: s.id,
+          score: s.score,
+          status: s.status,
+          submittedAt: s.submittedAt,
+          attemptNo: s.attemptNo,
+          assignmentId: s.assignmentId,
+          classSectionId: s.assignment?.classSectionId ?? null,
+          correctCount,
+          incorrectCount,
+          pendingCount,
+          totalEvaluated,
+          student:
+            role === OrganizationRole.STUDENT
+              ? null
+              : { name: s.student?.user?.name ?? null },
+          isAnonymous: s.isAnonymous ?? false,
+        };
+      }),
       meta: {
         page,
         limit,

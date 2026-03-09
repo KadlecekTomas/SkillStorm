@@ -587,3 +587,73 @@ describe('O: GET /assignments/my — cross-org isolation → student sees [] (e2
     expect(ids).not.toContain(orgAAssignmentId);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Test P — Direct student targeting: assignment with targetType=STUDENTS
+// ---------------------------------------------------------------------------
+
+describe('P: GET /assignments/my — direct student assignment is visible (e2e)', () => {
+  let app: INestApplication;
+  let prisma: PrismaService;
+
+  let orgId: string;
+  let yearId: string;
+  let studentToken: string;
+  let studentMembershipId: string;
+  let assignmentId: string;
+
+  beforeAll(async () => {
+    const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    app = moduleRef.createNestApplication();
+    app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: true }));
+    await app.init();
+    prisma = app.get(PrismaService);
+    await prisma.$connect();
+
+    const seed = `my_P_${Date.now()}`;
+    const ctx = await buildOrgWithEnrolledStudent(app, prisma, seed);
+    orgId = ctx.orgId;
+    yearId = ctx.yearId;
+    studentToken = ctx.studentToken;
+    studentMembershipId = ctx.studentMembershipId;
+
+    const now = Date.now();
+    const directAssignment = await prisma.assignment.create({
+      data: {
+        organizationId: orgId,
+        yearId,
+        testId: ctx.testId,
+        targetType: 'STUDENTS',
+        openAt: new Date(now - 60_000),
+        closeAt: new Date(now + 3_600_000),
+        maxAttempts: 2,
+        shuffle: false,
+        showExplain: 'NEVER',
+        createdById: ctx.teacherMembershipId,
+        students: {
+          create: [{ studentId: studentMembershipId }],
+        },
+      },
+      select: { id: true },
+    });
+    assignmentId = directAssignment.id;
+  });
+
+  afterAll(async () => {
+    await cleanupOrg(prisma, orgId, yearId);
+    await prisma.$disconnect();
+    await app.close();
+  });
+
+  it('student sees directly assigned assignment in /assignments/my', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/assignments/my')
+      .set('Authorization', `Bearer ${studentToken}`)
+      .expect(200);
+
+    const items: Array<{ id: string; effectiveStatus: string }> = res.body?.data ?? res.body;
+    const directAssignment = (Array.isArray(items) ? items : []).find((a) => a.id === assignmentId);
+    expect(directAssignment).toBeDefined();
+    expect(directAssignment?.effectiveStatus).toBe('OPEN');
+  });
+});

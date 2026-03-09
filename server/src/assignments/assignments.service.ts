@@ -695,44 +695,70 @@ export class AssignmentsService {
       this.logger.warn(
         `[listForStudent] No Student record found. membershipId=${membershipId} orgId=${orgId}`,
       );
-      return [];
     }
 
     // 2. Find the single ACTIVE enrollment for the current academic year.
     //    Enrollment has @@unique([studentId, yearId]) — at most one per year.
-    const enrollment = await this.prisma.enrollment.findFirst({
-      where: {
-        studentId: student.id,
-        orgId,
-        status: EnrollmentStatus.ACTIVE,
-        ...(ctx.activeAcademicYearId ? { yearId: ctx.activeAcademicYearId } : {}),
-      },
-      select: { classSectionId: true },
-    });
+    const enrollments = student
+      ? await this.prisma.enrollment.findMany({
+          where: {
+            studentId: student.id,
+            orgId,
+            status: EnrollmentStatus.ACTIVE,
+            ...(ctx.activeAcademicYearId ? { yearId: ctx.activeAcademicYearId } : {}),
+          },
+          select: { classSectionId: true },
+        })
+      : [];
+
+    const classSectionIds = enrollments.map((enrollment) => enrollment.classSectionId);
 
     this.logger.log(
-      `[listForStudent] studentId=${student.id} classSectionId=${enrollment?.classSectionId ?? 'NONE'} ` +
-      `yearId=${ctx.activeAcademicYearId ?? 'NONE'}`,
+      `[listForStudent] membershipId=${membershipId} studentId=${student?.id ?? 'NONE'} ` +
+      `classSectionIds=${JSON.stringify(classSectionIds)} yearId=${ctx.activeAcademicYearId ?? 'NONE'}`,
     );
 
-    if (!enrollment) return [];
-
-    // 3. Fetch assignments for this class + year + org, PUBLISHED tests only.
-    const assignments = await this.prisma.assignment.findMany({
-      where: {
-        organizationId: orgId,
-        classSectionId: enrollment.classSectionId,
-        ...(ctx.activeAcademicYearId ? { yearId: ctx.activeAcademicYearId } : {}),
-        test: { status: PublishStatus.PUBLISHED, deletedAt: null },
-      },
-      include: {
-        submissions: {
-          where: { studentId: membershipId, deletedAt: null },
-          orderBy: { attemptNo: 'desc' },
+    // 3. Fetch assignments targeted either to the student's class(es) or directly to the student.
+    const [classAssignments, directAssignments] = await Promise.all([
+      classSectionIds.length > 0
+        ? this.prisma.assignment.findMany({
+            where: {
+              organizationId: orgId,
+              classSectionId: { in: classSectionIds },
+              ...(ctx.activeAcademicYearId ? { yearId: ctx.activeAcademicYearId } : {}),
+              test: { status: PublishStatus.PUBLISHED, deletedAt: null },
+            },
+            include: {
+              submissions: {
+                where: { studentId: membershipId, deletedAt: null },
+                orderBy: { attemptNo: 'desc' },
+              },
+            },
+            orderBy: { openAt: 'asc' },
+          })
+        : [],
+      this.prisma.assignment.findMany({
+        where: {
+          organizationId: orgId,
+          targetType: 'STUDENTS',
+          students: { some: { studentId: membershipId } },
+          ...(ctx.activeAcademicYearId ? { yearId: ctx.activeAcademicYearId } : {}),
+          test: { status: PublishStatus.PUBLISHED, deletedAt: null },
         },
-      },
-      orderBy: { openAt: 'asc' },
-    });
+        include: {
+          submissions: {
+            where: { studentId: membershipId, deletedAt: null },
+            orderBy: { attemptNo: 'desc' },
+          },
+        },
+        orderBy: { openAt: 'asc' },
+      }),
+    ]);
+
+    const assignments = [...classAssignments, ...directAssignments].filter(
+      (assignment, index, all) =>
+        all.findIndex((candidate) => candidate.id === assignment.id) === index,
+    );
 
     const now = new Date();
     return assignments.map((a) => {

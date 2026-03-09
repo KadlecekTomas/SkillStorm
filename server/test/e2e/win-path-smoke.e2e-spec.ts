@@ -35,6 +35,22 @@ type RegisterJoinResponse = {
   organization?: { id: string } | null;
 };
 
+type TestResultsResponse = {
+  items: Array<{
+    id: string;
+    assignmentId: string;
+    classSectionId: string | null;
+    score: number | null;
+    status?: string;
+    correctCount?: number;
+    incorrectCount?: number;
+    pendingCount?: number;
+  }>;
+  meta?: {
+    total: number;
+  };
+};
+
 function suffix(seed: string): string {
   return `${seed}-${randomUUID().slice(0, 8)}`;
 }
@@ -413,25 +429,26 @@ describe('Win path smoke (e2e)', () => {
       .get(`/tests/${testId}/results`)
       .set('Authorization', `Bearer ${teacherToken}`)
       .expect(200);
-    const teacherResults = teacherResultsRes.body as Array<{
-      id: string;
-      assignmentId: string;
-      classSectionId: string | null;
-      score: number | null;
-    }>;
+    const teacherResults = (teacherResultsRes.body?.data ?? teacherResultsRes.body) as TestResultsResponse;
+    const teacherItems = teacherResults.items ?? [];
 
-    const teacherResult = teacherResults.find((entry) => entry.id === submissionId);
+    const teacherResult = teacherItems.find((entry) => entry.id === submissionId);
     expect(teacherResult).toBeDefined();
     expect(teacherResult?.assignmentId).toBe(assignmentId);
     expect(teacherResult?.classSectionId).toBe(classSectionId);
     expect(teacherResult?.score).toBe(1);
+    expect(teacherResult?.status).toBe('APPROVED');
+    expect(teacherResult?.correctCount).toBe(1);
+    expect(teacherResult?.incorrectCount).toBe(0);
+    expect(teacherResult?.pendingCount).toBe(0);
+    expect(teacherResults.meta?.total).toBeGreaterThanOrEqual(1);
 
     const directorResultsRes = await request(app.getHttpServer())
       .get(`/tests/${testId}/results`)
       .set('Authorization', `Bearer ${directorToken}`)
       .expect(200);
-    const directorResults = directorResultsRes.body as Array<{ id: string }>;
-    expect(directorResults.some((entry) => entry.id === submissionId)).toBe(true);
+    const directorResults = (directorResultsRes.body?.data ?? directorResultsRes.body) as TestResultsResponse;
+    expect((directorResults.items ?? []).some((entry) => entry.id === submissionId)).toBe(true);
 
     // Keep these explicit so smoke clearly proves the requested path artifacts exist.
     expect(directorMembershipId).toBeTruthy();
