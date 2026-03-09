@@ -58,6 +58,7 @@ export default function SettingsPage(): React.JSX.Element {
   const [origin, setOrigin] = useState("");
   const [inviteRole, setInviteRole] = useState<"STUDENT" | "TEACHER" | null>(null);
   const [inviteCode, setInviteCode] = useState("");
+  const [inviteToken, setInviteToken] = useState("");
   const [inviteLoading, setInviteLoading] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
 
@@ -91,13 +92,14 @@ export default function SettingsPage(): React.JSX.Element {
     }
   }, [inviteRole, inviteRoleOptions]);
 
-  const inviteLink = inviteCode && origin
-    ? `${origin}/register?mode=JOIN_ORG&inviteToken=${encodeURIComponent(inviteCode)}`
+  const inviteLink = inviteToken && origin
+    ? `${origin}/join?token=${encodeURIComponent(inviteToken)}`
     : "";
 
   const generateInvite = useCallback(async () => {
     if (!inviteRole || !canInvite) {
       setInviteCode("");
+      setInviteToken("");
       setInviteError(null);
       return;
     }
@@ -115,9 +117,11 @@ export default function SettingsPage(): React.JSX.Element {
           role: inviteRole,
         },
       });
-      setInviteCode(invite?.inviteToken ?? invite?.code ?? "");
+      setInviteCode(invite?.code ?? "");
+      setInviteToken(invite?.inviteToken ?? invite?.code ?? "");
     } catch (e) {
       setInviteCode("");
+      setInviteToken("");
       setInviteError(
         e instanceof Error ? e.message : "Pozvánku se nepodařilo vytvořit.",
       );

@@ -185,6 +185,7 @@ export function ClassroomsPageContent(): React.JSX.Element {
   const [selectedOrgSubjectIds, setSelectedOrgSubjectIds] = useState<Set<string>>(new Set());
   const [subjectSaveError, setSubjectSaveError] = useState<string | null>(null);
   const [inviteCode, setInviteCode] = useState("");
+  const [inviteToken, setInviteToken] = useState("");
   const [inviteLoading, setInviteLoading] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const { teachers, loading: teachersLoading } = useTeachers();
@@ -754,6 +755,7 @@ export function ClassroomsPageContent(): React.JSX.Element {
   const generateStudentInvite = useCallback(async () => {
     if (!effectiveSelectedId || !yearFilterId) {
       setInviteCode("");
+      setInviteToken("");
       setInviteError("Nejdřív vyber třídu a školní rok.");
       return;
     }
@@ -773,9 +775,11 @@ export function ClassroomsPageContent(): React.JSX.Element {
           yearId: yearFilterId,
         },
       });
-      setInviteCode(invite?.inviteToken ?? invite?.code ?? "");
+      setInviteCode(invite?.code ?? "");
+      setInviteToken(invite?.inviteToken ?? invite?.code ?? "");
     } catch (err) {
       setInviteCode("");
+      setInviteToken("");
       setInviteError(getApiErrorMessage(err));
     } finally {
       setInviteLoading(false);
@@ -788,8 +792,8 @@ export function ClassroomsPageContent(): React.JSX.Element {
   }, [addOpen, addMode, generateStudentInvite]);
 
   const inviteLink =
-    inviteCode && origin
-      ? `${origin}/register?mode=JOIN_ORG&inviteToken=${encodeURIComponent(inviteCode)}`
+    inviteToken && origin
+      ? `${origin}/join?token=${encodeURIComponent(inviteToken)}`
       : "";
 
   const copyToClipboard = async (value: string, message: string) => {

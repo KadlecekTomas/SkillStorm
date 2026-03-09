@@ -35,7 +35,9 @@ export function middleware(request: NextRequest) {
 
   if (pathname === JOIN_PREFIX || pathname.startsWith(`${JOIN_PREFIX}/`)) {
     if (!hasAuthCookie) {
-      return NextResponse.redirect(new URL(LOGIN_PATH, request.url));
+      const login = new URL(LOGIN_PATH, request.url);
+      login.searchParams.set("redirect", `${pathname}${url.search}`);
+      return NextResponse.redirect(login);
     }
     return NextResponse.next();
   }
