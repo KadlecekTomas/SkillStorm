@@ -753,8 +753,6 @@ export class TestsService {
         organizationId: effectiveOrgId,
         // Year-scope the assignment so cross-year assignments don't leak through.
         ...(activeYearId ? { yearId: activeYearId } : {}),
-        openAt: { lte: now },
-        closeAt: { gte: now },
         OR: [
           { students: { some: { studentId: user.membershipId } } },
           ...(classIds.length > 0

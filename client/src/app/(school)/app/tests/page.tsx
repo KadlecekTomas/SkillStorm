@@ -257,7 +257,7 @@ function TestsPage(): React.JSX.Element {
             {isDirector
               ? "Všechny testy a přiřazení. Filtruj podle učitele."
               : isStudent
-              ? "Testy přiřazené tvé třídě."
+              ? "Testy přiřazené tobě nebo tvé třídě."
               : "Přehled testů, odevzdání a průměry."}
           </p>
         </div>
