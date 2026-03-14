@@ -166,15 +166,23 @@ export class LearningMaterialsService {
 
     // volitelné FK validace (pokud posláno)
     if (dto.subjectId) {
-      const subjectOrgFilter = orgId ?? undefined;
       const subject = await this.prisma.subject.findFirst({
-        where: {
-          id: dto.subjectId,
-          deletedAt: null,
-          ...(subjectOrgFilter ? { organizationId: subjectOrgFilter } : {}),
-        },
+        where: { id: dto.subjectId, deletedAt: null },
         select: { id: true },
       });
+      if (subject && orgId) {
+        const enabled = await this.prisma.orgSubject.findFirst({
+          where: {
+            organizationId: orgId,
+            subjectId: dto.subjectId,
+            isEnabled: true,
+          },
+          select: { id: true },
+        });
+        if (!enabled) {
+          throw new BadRequestException('Subject není pro danou organizaci povolen.');
+        }
+      }
       if (!subject)
         throw new BadRequestException('Subject neexistuje v dané organizaci.');
     }

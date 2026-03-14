@@ -1,4 +1,4 @@
-import { PrismaClient, PublishStatus, QuestionType } from '@prisma/client';
+import { PrismaClient, PublishStatus, QuestionType, SchoolGrade } from '@prisma/client';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { CATALOG_TOPIC_IDS, ORG_IDS, TEST_IDS } from './seed-constants';
 import { getMembershipId, logDone, logStep, SEED_USERS } from './seed-helpers';
@@ -98,7 +98,9 @@ export async function seed(prisma: PrismaClient) {
       where: {
         catalogTopicId: testDef.catalogTopicId,
         subjectLevel: {
-          subject: { organizationId: ORG_IDS.chodovicka },
+          subject: {
+            orgSubjects: { some: { organizationId: ORG_IDS.chodovicka } },
+          },
         },
       },
       select: { id: true },
@@ -121,6 +123,7 @@ export async function seed(prisma: PrismaClient) {
           organizationId: ORG_IDS.chodovicka,
           title: testDef.title,
           description: `Ukázkový test pro téma ${testDef.title}`,
+          allowedGrades: [SchoolGrade.GRADE_6],
           status: PublishStatus.PUBLISHED,
           creatorId: teacherMembershipId,
           questions: {
@@ -153,6 +156,7 @@ export async function seed(prisma: PrismaClient) {
           data: {
             title: testDef.title,
             description: `${testDef.title} – refreshed`,
+            allowedGrades: [SchoolGrade.GRADE_6],
             status: PublishStatus.PUBLISHED,
           },
         });

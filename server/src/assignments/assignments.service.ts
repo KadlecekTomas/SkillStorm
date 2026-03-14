@@ -77,20 +77,28 @@ export class AssignmentsService {
   ) {}
 
   private async ensureTestAssignable(testId: string): Promise<void> {
-    const questions = await this.prisma.question.findMany({
-      where: { testId },
+    const test = await this.prisma.test.findUnique({
+      where: { id: testId },
       select: {
-        id: true,
-        type: true,
-        correctAnswer: true,
-        correctAnswers: true,
-        score: true,
-        options: {
-          select: { text: true },
+        allowedGrades: true,
+        questions: {
+          select: {
+            id: true,
+            type: true,
+            correctAnswer: true,
+            correctAnswers: true,
+            score: true,
+            options: {
+              select: { text: true },
+            },
+          },
         },
       },
     });
-    const report: AssignabilityReport = computeAssignability(questions);
+    const report: AssignabilityReport = computeAssignability(
+      test?.questions ?? [],
+      test?.allowedGrades ?? [],
+    );
     if (!report.isAssignable) {
       throw new BadRequestException({
         code: 'TEST_NOT_ASSIGNABLE',
@@ -149,7 +157,7 @@ export class AssignmentsService {
     assertTenantWhere(testWhere, ctx.organizationId);
     const test = await this.prisma.test.findFirst({
       where: testWhere,
-      select: { id: true, organizationId: true, status: true, academicYearId: true },
+      select: { id: true, organizationId: true, status: true, academicYearId: true, allowedGrades: true },
     });
     if (!test || test.organizationId !== ctx.organizationId) {
       throw new NotFoundException('Test nenalezen');
@@ -193,13 +201,20 @@ export class AssignmentsService {
     if (dto.classSectionId) {
       const cs = await this.prisma.classSection.findUnique({
         where: { id: dto.classSectionId },
-        select: { id: true, orgId: true, yearId: true },
+        select: { id: true, orgId: true, yearId: true, grade: true },
       });
       if (!cs || cs.orgId !== ctx.organizationId) {
         throw new NotFoundException('Class section nenalezena');
       }
       if (cs.yearId !== ctx.activeAcademicYearId) {
         throw new BadRequestException('Assignment year mismatch');
+      }
+
+      if (!test.allowedGrades.includes(cs.grade)) {
+        throw new BadRequestException({
+          code: 'TEST_NOT_ALLOWED_FOR_GRADE',
+          message: 'Test není určen pro daný ročník.',
+        });
       }
 
       // 6b) Enrollment guard: class must have at least one ACTIVE enrolled student

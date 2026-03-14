@@ -4,11 +4,11 @@ export function createMockSubject(overrides?: Partial<Subject>): Subject {
   return {
     id: "mock-subject",
     name: "Mock Subject",
-    organizationId: "mock-org",
     catalogSubjectId: null,
     catalogSubject: null,
     deletedAt: null,
-    isActive: true,
+    gradeFrom: 1,
+    gradeTo: 9,
     ...overrides,
   };
 }
@@ -48,7 +48,8 @@ export const testSamples: TestSummary[] = [
     completionRate: 86,
     submissions: 42,
     avgScore: 78,
-    subject: createMockSubject({ id: "subj-math", name: "Matematika", organizationId: sampleOrgId }),
+    subject: createMockSubject({ id: "subj-math", name: "Matematika" }),
+    allowedGrades: ["GRADE_7", "GRADE_8"],
     status: "PUBLISHED",
     version: 3,
   },
@@ -59,7 +60,8 @@ export const testSamples: TestSummary[] = [
     completionRate: 92,
     submissions: 37,
     avgScore: 83,
-    subject: createMockSubject({ id: "subj-lang", name: "Jazyky", organizationId: sampleOrgId }),
+    subject: createMockSubject({ id: "subj-lang", name: "Jazyky" }),
+    allowedGrades: ["GRADE_6", "GRADE_7"],
     status: "PUBLISHED",
     version: 2,
   },

@@ -107,6 +107,48 @@ export async function getDashboardStudent(): Promise<StudentDashboardResponse> {
   return httpClient.get<StudentDashboardResponse>("/dashboards/student");
 }
 
+/**
+ * Director Dashboard Response from backend
+ */
+export interface DirectorDashboardResponse {
+  testsThisMonth: number;
+  submissionsThisWeek: number;
+  activeTeachersThisWeek: number;
+  activeClassesThisWeek: number;
+  classes: Array<{
+    id: string;
+    label: string;
+    teacherName: string | null;
+    studentCount: number;
+    avgScore: number | null;
+    submissionsThisWeek: number;
+    lastActivityAt: string | null;
+    riskLevel: "NONE" | "MEDIUM" | "HIGH";
+  }>;
+  teachers: Array<{
+    membershipId: string;
+    name: string;
+    testsCreated: number;
+    submissionsThisWeek: number;
+    lastActivityAt: string | null;
+    activeThisWeek: boolean;
+  }>;
+  atRiskStudents: Array<{
+    studentId: string;
+    displayName: string;
+    classLabel: string;
+    averageScorePercent: number;
+    lastActivityAt: string | null;
+  }>;
+}
+
+/**
+ * Fetch director dashboard data
+ */
+export async function getDashboardDirector(): Promise<DirectorDashboardResponse> {
+  return httpClient.get<DirectorDashboardResponse>("/dashboards/director");
+}
+
 // ---------------------------------------------------------------------------
 // Student assignment overview
 // ---------------------------------------------------------------------------

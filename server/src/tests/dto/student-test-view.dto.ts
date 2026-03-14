@@ -10,6 +10,7 @@ export type StudentTestViewDTO = {
   organizationId: string;
   title: string;
   description: string | null;
+  allowedGrades: string[];
   status: string;
   createdAt: Date;
   updatedAt: Date;

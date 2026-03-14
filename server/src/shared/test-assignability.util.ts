@@ -4,6 +4,7 @@
  */
 
 export type AssignabilityIssueReason =
+  | 'NO_ALLOWED_GRADES'
   | 'NO_QUESTIONS'
   | 'NO_SCORE'
   | 'NO_CORRECT_ANSWER'
@@ -19,6 +20,7 @@ export type AssignabilityReport = {
   totalPoints: number;
   issues: AssignabilityIssue[];
   reasons: {
+    missingAllowedGrades: number;
     missingQuestions: number;
     missingCorrectAnswers: number;
     invalidOptions: number;
@@ -59,24 +61,25 @@ function normalizedAnswerList(values?: string[] | null): string[] {
 
 export function computeAssignability(
   questions: QuestionInput[],
+  allowedGrades: string[],
 ): AssignabilityReport {
   const issues: AssignabilityIssue[] = [];
   const reasons = {
+    missingAllowedGrades: 0,
     missingQuestions: 0,
     missingCorrectAnswers: 0,
     invalidOptions: 0,
     zeroPoints: 0,
   };
 
+  if (allowedGrades.length === 0) {
+    reasons.missingAllowedGrades = 1;
+    issues.push({ reason: 'NO_ALLOWED_GRADES' });
+  }
+
   if (questions.length === 0) {
     reasons.missingQuestions = 1;
     issues.push({ reason: 'NO_QUESTIONS' });
-    return {
-      isAssignable: false,
-      totalPoints: 0,
-      issues,
-      reasons,
-    };
   }
 
   let totalPoints = 0;
@@ -123,6 +126,7 @@ export function computeAssignability(
   }
 
   const isAssignable =
+    reasons.missingAllowedGrades === 0 &&
     reasons.missingQuestions === 0 &&
     reasons.zeroPoints === 0 &&
     reasons.missingCorrectAnswers === 0 &&

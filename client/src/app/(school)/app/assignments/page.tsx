@@ -50,7 +50,7 @@ function AssignmentsPage() {
               <p className="text-sm text-slate-600">Close: {new Date(a.closeAt).toLocaleString()}</p>
             </div>
             <Button
-              onClick={() => router.push(`/assignments/${a.id}`)}
+              onClick={() => router.push(`/app/assignments/${a.id}`)}
               disabled={!isStudent}
               title={isStudent ? "" : "Pouze student může odevzdat assignment"}
             >

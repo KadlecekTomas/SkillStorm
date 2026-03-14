@@ -69,7 +69,6 @@ model Organization {
   settings          OrganizationSettings?
   rolePermissions   RolePermission[]
   students          Student[]
-  subjects          Subject[]
   orgSubjects       OrgSubject[]
   subscriptions     Subscription[]
   teachers          Teacher[]
@@ -402,12 +401,13 @@ model AcademicYear {
   createdAt     DateTime       @default(now()) @map("created_at")
   deletedAt     DateTime?      @map("deleted_at")
   organization  Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  assignments   Assignment[]
-  classSections ClassSection[]
-  enrollments   Enrollment[]
-  invitations   Invitation[]
-  invites       Invite[]
-  tests         Test[]
+  assignments          Assignment[]
+  classSections        ClassSection[]
+  enrollments          Enrollment[]
+  invitations          Invitation[]
+  invites              Invite[]
+  tests                Test[]
+  teacherClassSections TeacherClassSection[]
 
   @@unique([orgId, label])
   @@index([orgId, isCurrent])
@@ -478,14 +478,17 @@ model TeacherClassSection {
   id             String       @id @default(uuid()) @map("teacher_class_section_id")
   teacherId      String       @map("teacher_id")
   classSectionId String       @map("class_section_id")
+  yearId         String       @map("academic_year_id")
   createdAt      DateTime     @default(now()) @map("created_at")
   deletedAt      DateTime?    @map("deleted_at")
   teacher        Teacher      @relation(fields: [teacherId], references: [id], onDelete: Cascade)
   classSection   ClassSection @relation(fields: [classSectionId], references: [id], onDelete: Cascade)
+  academicYear   AcademicYear @relation(fields: [yearId], references: [id], onDelete: Cascade)
 
   @@unique([teacherId, classSectionId])
   @@index([classSectionId])
   @@index([teacherId])
+  @@index([teacherId, yearId])
   @@map("teacher_class_sections")
 }
 
@@ -550,22 +553,21 @@ model CatalogTopic {
 
 model Subject {
   id                String             @id @default(uuid()) @map("subject_id")
-  organizationId    String             @map("organization_id")
-  catalogSubjectId  String?            @map("catalog_subject_id")
+  catalogSubjectId  String?            @unique @map("catalog_subject_id")
   name              String
-  isActive          Boolean            @default(true) @map("is_active")
+  gradeFrom         Int                @default(1) @map("grade_from")
+  gradeTo           Int                @default(9) @map("grade_to")
+  createdAt         DateTime           @default(now()) @map("created_at")
   deletedAt         DateTime?          @map("deleted_at")
   learningMaterials LearningMaterial[]
   levels            SubjectLevel[]
+  orgSubjects       OrgSubject[]
   tests             Test[]
   catalogSubject    CatalogSubject?    @relation(fields: [catalogSubjectId], references: [id], onDelete: Restrict)
-  organization      Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   teachers          TeacherSubject[]
 
-  @@unique([organizationId, catalogSubjectId])
-  @@index([organizationId])
+  @@unique([name])
   @@index([catalogSubjectId])
-  @@index([organizationId, isActive])
   @@map("subjects")
 }
 
@@ -698,18 +700,20 @@ model MaterialPurchase {
 }
 
 model OrgSubject {
-  id              String   @id @default(uuid()) @map("org_subject_id")
-  name            String
-  gradeFrom       Int      @map("grade_from")
-  gradeTo         Int      @map("grade_to")
-  organizationId  String   @map("organization_id")
-  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  id              String             @id @default(uuid()) @map("org_subject_id")
+  organizationId  String             @map("organization_id")
+  subjectId       String             @map("subject_id")
+  isEnabled       Boolean            @default(true) @map("is_enabled")
+  isCustom        Boolean            @default(false) @map("is_custom")
+  organization    Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  subject         Subject            @relation(fields: [subjectId], references: [id], onDelete: Cascade)
   classSections   ClassSectionOrgSubject[]
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @updatedAt @map("updated_at")
 
   @@index([organizationId])
-  @@unique([organizationId, name, gradeFrom, gradeTo])
+  @@index([subjectId])
+  @@unique([organizationId, subjectId])
   @@map("org_subjects")
 }
 
@@ -731,6 +735,7 @@ model Test {
   organizationId       String           @map("organization_id")
   subjectId            String?          @map("subject_id")
   academicYearId       String?          @map("academic_year_id")
+  allowedGrades        SchoolGrade[]    @default([]) @map("allowed_grades")
   title                String
   description          String?
   version              Int              @default(1)

@@ -24,6 +24,7 @@ import { BulkEnrollmentDto } from './dto/bulk-enrollment.dto';
 import { TransferEnrollmentDto } from './dto/transfer-enrollment.dto';
 import { QueryEnrollmentsDto } from './dto/query-enrollments.dto';
 import { RequireCurrentAcademicYearGuard } from '@/academic-years/require-current-academic-year.guard';
+import { AcademicYearExpiredGuard } from '@/academic-years/academic-year-expired.guard';
 import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
 import { OrgContextService } from '@/common/org-context/org-context.service';
 
@@ -32,7 +33,7 @@ import { OrgContextService } from '@/common/org-context/org-context.service';
 @ApiBearerAuth()
 @Controller('enrollments')
 @OrgOperation(OrgOperationType.EXECUTION)
-@UseGuards(RequireCurrentAcademicYearGuard)
+@UseGuards(RequireCurrentAcademicYearGuard, AcademicYearExpiredGuard)
 export class EnrollmentsController {
   constructor(
     private readonly service: EnrollmentsService,

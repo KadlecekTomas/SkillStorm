@@ -392,6 +392,261 @@ describe('Promotion (e2e)', () => {
     await prisma.organization.deleteMany({ where: { id: orgSkip.id } }).catch(() => {});
   });
 
+  it('GRADE_9 students are graduated (not promoted) and counted in skippedClassesCount', async () => {
+    const orgGrad = await prisma.organization.create({
+      data: { name: `Promo Grad Org ${Date.now()}`, status: OrganizationStatus.ACTIVE },
+      select: { id: true },
+    });
+    const pastEnd = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
+    const fromStart = new Date(pastEnd.getTime() - 365 * 24 * 60 * 60 * 1000);
+    const fromY = await prisma.academicYear.create({
+      data: { orgId: orgGrad.id, label: 'GradFrom', startsAt: fromStart, endsAt: pastEnd, isCurrent: false },
+      select: { id: true },
+    });
+    const toStart = new Date(pastEnd.getTime() + 86400000);
+    const toY = await prisma.academicYear.create({
+      data: {
+        orgId: orgGrad.id,
+        label: 'GradTo',
+        startsAt: toStart,
+        endsAt: new Date(toStart.getTime() + 365 * 86400000),
+        isCurrent: true,
+      },
+      select: { id: true },
+    });
+
+    // GRADE_9 class — should be treated as graduates, not promoted.
+    const grade9Section = await prisma.classSection.create({
+      data: { orgId: orgGrad.id, yearId: fromY.id, grade: 'GRADE_9', section: 'A', label: '9.A' },
+      select: { id: true },
+    });
+    // GRADE_5 class — should be promoted to GRADE_6.
+    const grade5Section = await prisma.classSection.create({
+      data: { orgId: orgGrad.id, yearId: fromY.id, grade: 'GRADE_5', section: 'B', label: '5.B' },
+      select: { id: true },
+    });
+
+    const pwHash = await bcrypt.hash(TEST_PASSWORD, 10);
+    const userGrad = await prisma.user.create({
+      data: { email: `promo_grad_dir_${Date.now()}@example.com`, name: 'Grad Director', passwordHash: pwHash },
+      select: { id: true, email: true },
+    });
+    const memGrad = await prisma.membership.create({
+      data: { userId: userGrad.id, organizationId: orgGrad.id, role: OrganizationRole.DIRECTOR },
+      select: { id: true },
+    });
+    await prisma.user.update({ where: { id: userGrad.id }, data: { lastActiveMembershipId: memGrad.id } });
+
+    // Student in GRADE_9 — should NOT get a new enrollment in toYear.
+    const grad9User = await prisma.user.create({
+      data: { email: `promo_grad9_stu_${Date.now()}@example.com`, name: 'Grade9 Student', passwordHash: 'x' },
+      select: { id: true },
+    });
+    const grad9Mem = await prisma.membership.create({
+      data: { userId: grad9User.id, organizationId: orgGrad.id, role: OrganizationRole.STUDENT },
+      select: { id: true },
+    });
+    const grad9Student = await prisma.student.create({
+      data: { membershipId: grad9Mem.id, orgId: orgGrad.id },
+      select: { id: true },
+    });
+    await prisma.enrollment.create({
+      data: { studentId: grad9Student.id, classSectionId: grade9Section.id, yearId: fromY.id, orgId: orgGrad.id },
+    });
+
+    const loginRes = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ email: userGrad.email, password: TEST_PASSWORD })
+      .expect(201);
+    const tokenGrad = (unwrap(loginRes) ?? loginRes.body)?.sessionToken;
+    if (!tokenGrad) throw new Error('Missing token');
+
+    const res = await request(app.getHttpServer())
+      .post(`/academic-years/${fromY.id}/promote`)
+      .set('Authorization', `Bearer ${tokenGrad}`)
+      .send({ toYearId: toY.id })
+      .expect(201);
+
+    const data = unwrap(res);
+    // GRADE_9 section skipped (graduated), GRADE_5 section promoted.
+    expect(data.skippedClassesCount ?? data.data?.skippedClassesCount).toBeGreaterThanOrEqual(1);
+
+    // GRADE_9 student must have no enrollment in toYear.
+    const grad9NewEnrollment = await prisma.enrollment.findFirst({
+      where: { studentId: grad9Student.id, yearId: toY.id },
+    });
+    expect(grad9NewEnrollment).toBeNull();
+
+    // GRADE_6 class must exist in toYear (promoted from GRADE_5).
+    const grade6 = await prisma.classSection.findFirst({
+      where: { orgId: orgGrad.id, yearId: toY.id, grade: 'GRADE_6', section: 'B' },
+    });
+    expect(grade6).not.toBeNull();
+
+    // Cleanup
+    await prisma.promotionLog.deleteMany({ where: { organizationId: orgGrad.id } }).catch(() => {});
+    await prisma.enrollment.deleteMany({ where: { orgId: orgGrad.id } }).catch(() => {});
+    await prisma.classSection.deleteMany({ where: { orgId: orgGrad.id } }).catch(() => {});
+    await prisma.student.deleteMany({ where: { orgId: orgGrad.id } }).catch(() => {});
+    await prisma.membership.deleteMany({ where: { organizationId: orgGrad.id } }).catch(() => {});
+    await prisma.academicYear.deleteMany({ where: { orgId: orgGrad.id } }).catch(() => {});
+    await prisma.user.deleteMany({ where: { id: { in: [userGrad.id, grad9User.id] } } }).catch(() => {});
+    await prisma.organization.deleteMany({ where: { id: orgGrad.id } }).catch(() => {});
+  });
+
+  it('soft-deleted student is NOT promoted to target year', async () => {
+    const orgDel = await prisma.organization.create({
+      data: { name: `Promo Del Org ${Date.now()}`, status: OrganizationStatus.ACTIVE },
+      select: { id: true },
+    });
+    const pastEnd = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
+    const fromStart = new Date(pastEnd.getTime() - 365 * 24 * 60 * 60 * 1000);
+    const fromY = await prisma.academicYear.create({
+      data: { orgId: orgDel.id, label: 'DelFrom', startsAt: fromStart, endsAt: pastEnd, isCurrent: false },
+      select: { id: true },
+    });
+    const toStart = new Date(pastEnd.getTime() + 86400000);
+    const toY = await prisma.academicYear.create({
+      data: {
+        orgId: orgDel.id,
+        label: 'DelTo',
+        startsAt: toStart,
+        endsAt: new Date(toStart.getTime() + 365 * 86400000),
+        isCurrent: true,
+      },
+      select: { id: true },
+    });
+    const section = await prisma.classSection.create({
+      data: { orgId: orgDel.id, yearId: fromY.id, grade: 'GRADE_4', section: 'A', label: '4.A' },
+      select: { id: true },
+    });
+
+    const pwHash = await bcrypt.hash(TEST_PASSWORD, 10);
+    const userDel = await prisma.user.create({
+      data: { email: `promo_del_dir_${Date.now()}@example.com`, name: 'Del Director', passwordHash: pwHash },
+      select: { id: true, email: true },
+    });
+    const memDel = await prisma.membership.create({
+      data: { userId: userDel.id, organizationId: orgDel.id, role: OrganizationRole.DIRECTOR },
+      select: { id: true },
+    });
+    await prisma.user.update({ where: { id: userDel.id }, data: { lastActiveMembershipId: memDel.id } });
+
+    const deletedStuUser = await prisma.user.create({
+      data: { email: `promo_del_stu_${Date.now()}@example.com`, name: 'Deleted Student', passwordHash: 'x' },
+      select: { id: true },
+    });
+    const deletedStuMem = await prisma.membership.create({
+      data: { userId: deletedStuUser.id, organizationId: orgDel.id, role: OrganizationRole.STUDENT },
+      select: { id: true },
+    });
+    // Create student then soft-delete them.
+    const deletedStudent = await prisma.student.create({
+      data: { membershipId: deletedStuMem.id, orgId: orgDel.id, deletedAt: new Date() },
+      select: { id: true },
+    });
+    await prisma.enrollment.create({
+      data: { studentId: deletedStudent.id, classSectionId: section.id, yearId: fromY.id, orgId: orgDel.id },
+    });
+
+    const loginRes = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ email: userDel.email, password: TEST_PASSWORD })
+      .expect(201);
+    const tokenDel = (unwrap(loginRes) ?? loginRes.body)?.sessionToken;
+    if (!tokenDel) throw new Error('Missing token');
+
+    await request(app.getHttpServer())
+      .post(`/academic-years/${fromY.id}/promote`)
+      .set('Authorization', `Bearer ${tokenDel}`)
+      .send({ toYearId: toY.id })
+      .expect(201);
+
+    // Soft-deleted student must NOT appear in the target year.
+    const newEnrollment = await prisma.enrollment.findFirst({
+      where: { studentId: deletedStudent.id, yearId: toY.id },
+    });
+    expect(newEnrollment).toBeNull();
+
+    // Cleanup
+    await prisma.promotionLog.deleteMany({ where: { organizationId: orgDel.id } }).catch(() => {});
+    await prisma.enrollment.deleteMany({ where: { orgId: orgDel.id } }).catch(() => {});
+    await prisma.classSection.deleteMany({ where: { orgId: orgDel.id } }).catch(() => {});
+    await prisma.student.deleteMany({ where: { orgId: orgDel.id } }).catch(() => {});
+    await prisma.membership.deleteMany({ where: { organizationId: orgDel.id } }).catch(() => {});
+    await prisma.academicYear.deleteMany({ where: { orgId: orgDel.id } }).catch(() => {});
+    await prisma.user.deleteMany({ where: { id: { in: [userDel.id, deletedStuUser.id] } } }).catch(() => {});
+    await prisma.organization.deleteMany({ where: { id: orgDel.id } }).catch(() => {});
+  });
+
+  it('HIGH_SCHOOL_YEAR classes cause an explicit 409 with a director-facing message', async () => {
+    const orgHs = await prisma.organization.create({
+      data: { name: `Promo HS Org ${Date.now()}`, status: OrganizationStatus.ACTIVE },
+      select: { id: true },
+    });
+    const pastEnd = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
+    const fromStart = new Date(pastEnd.getTime() - 365 * 24 * 60 * 60 * 1000);
+    const fromY = await prisma.academicYear.create({
+      data: { orgId: orgHs.id, label: 'HsFrom', startsAt: fromStart, endsAt: pastEnd, isCurrent: false },
+      select: { id: true },
+    });
+    const toStart = new Date(pastEnd.getTime() + 86400000);
+    const toY = await prisma.academicYear.create({
+      data: {
+        orgId: orgHs.id,
+        label: 'HsTo',
+        startsAt: toStart,
+        endsAt: new Date(toStart.getTime() + 365 * 86400000),
+        isCurrent: true,
+      },
+      select: { id: true },
+    });
+    // Create a HIGH_SCHOOL_YEAR_2 class — unsupported grade.
+    await prisma.classSection.create({
+      data: { orgId: orgHs.id, yearId: fromY.id, grade: 'HIGH_SCHOOL_YEAR_2', section: 'A', label: 'HS2.A' },
+    });
+
+    const pwHash = await bcrypt.hash(TEST_PASSWORD, 10);
+    const userHs = await prisma.user.create({
+      data: { email: `promo_hs_dir_${Date.now()}@example.com`, name: 'HS Director', passwordHash: pwHash },
+      select: { id: true, email: true },
+    });
+    const memHs = await prisma.membership.create({
+      data: { userId: userHs.id, organizationId: orgHs.id, role: OrganizationRole.DIRECTOR },
+      select: { id: true },
+    });
+    await prisma.user.update({ where: { id: userHs.id }, data: { lastActiveMembershipId: memHs.id } });
+
+    const loginRes = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ email: userHs.email, password: TEST_PASSWORD })
+      .expect(201);
+    const tokenHs = (unwrap(loginRes) ?? loginRes.body)?.sessionToken;
+    if (!tokenHs) throw new Error('Missing token');
+
+    const res = await request(app.getHttpServer())
+      .post(`/academic-years/${fromY.id}/promote`)
+      .set('Authorization', `Bearer ${tokenHs}`)
+      .send({ toYearId: toY.id })
+      .expect(409);
+
+    // Response must include an explicit message naming the unsupported grades.
+    const message: string = res.body?.message ?? '';
+    expect(message).toMatch(/HIGH_SCHOOL_YEAR_2/);
+    expect(message).toMatch(/GRADE_1 až GRADE_9/);
+
+    // No promotion log must exist — transaction must have been rolled back.
+    const log = await prisma.promotionLog.findFirst({ where: { organizationId: orgHs.id } });
+    expect(log).toBeNull();
+
+    // Cleanup
+    await prisma.classSection.deleteMany({ where: { orgId: orgHs.id } }).catch(() => {});
+    await prisma.membership.deleteMany({ where: { organizationId: orgHs.id } }).catch(() => {});
+    await prisma.academicYear.deleteMany({ where: { orgId: orgHs.id } }).catch(() => {});
+    await prisma.user.deleteMany({ where: { id: userHs.id } }).catch(() => {});
+    await prisma.organization.deleteMany({ where: { id: orgHs.id } }).catch(() => {});
+  });
+
   it('concurrency: two parallel promote calls — one succeeds, one returns 409', async () => {
     const orgConcur = await prisma.organization.create({
       data: {

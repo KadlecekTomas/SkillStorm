@@ -2,11 +2,11 @@
 
 import { Button } from "@/components/ui/button";
 import { Bell, Plus } from "lucide-react";
-import { motion } from "framer-motion";
 import { usePathname } from "next/navigation";
 import { DASHBOARD_NAV_ITEMS } from "@/config/dashboard-navigation";
 import { PermissionGate } from "@/components/access/permission-gate";
 import { PermissionKey } from "@/types";
+import Link from "next/link";
 
 function isActive(pathname: string, route: string): boolean {
   if (route === "/app") {
@@ -22,36 +22,31 @@ export const AppHeader = (): React.JSX.Element => {
   );
 
   return (
-    <motion.header
-      initial={{ opacity: 0, y: -10 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-slate-100 bg-white px-6 py-4 shadow-soft"
-    >
-      <div>
-        <p className="text-xs uppercase tracking-wide text-slate-400">Current module</p>
-        <h1 className="text-xl font-semibold text-slate-900">
-          {activeItem?.label ?? "Dashboard"}
-        </h1>
-      </div>
-      <div className="flex items-center gap-3">
-        <Button variant="outline" size="icon" className="rounded-2xl">
+    <header className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-100 bg-white px-5 py-3 shadow-sm">
+      <h1 className="text-lg font-semibold text-slate-900">
+        {activeItem?.label ?? "Přehled"}
+      </h1>
+      <div className="flex items-center gap-2">
+        <Button variant="outline" size="icon" className="rounded-lg h-8 w-8">
           <Bell className="h-4 w-4" />
         </Button>
         <PermissionGate
           permission={PermissionKey.CREATE_TEST}
           fallback={
-            <Button className="rounded-2xl opacity-60" variant="outline" disabled>
+            <Button className="rounded-lg h-8" variant="outline" disabled>
               <Plus className="h-4 w-4" />
-              <span className="hidden sm:inline">Limited</span>
+              <span className="hidden sm:inline">Omezeno</span>
             </Button>
           }
         >
-          <Button className="rounded-2xl">
-            <Plus className="h-4 w-4" />
-            <span className="hidden sm:inline">Create</span>
+          <Button className="rounded-lg h-8" asChild>
+            <Link href="/app/tests">
+              <Plus className="h-4 w-4" />
+              <span className="hidden sm:inline">Vytvořit</span>
+            </Link>
           </Button>
         </PermissionGate>
       </div>
-    </motion.header>
+    </header>
   );
 };

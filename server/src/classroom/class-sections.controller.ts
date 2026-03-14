@@ -30,6 +30,7 @@ import { Permission } from '@/modules/rbac/permission.decorator';
 import { ok } from '@/common/http/envelope';
 import { ApiStandardResponses } from '@/common/http/api-standard-responses.decorator';
 import { RequireCurrentAcademicYearGuard } from '@/academic-years/require-current-academic-year.guard';
+import { AcademicYearExpiredGuard } from '@/academic-years/academic-year-expired.guard';
 import { AllowPendingOrg } from '@/common/decorators/allow-pending-org.decorator';
 import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
 import { OrgContextService } from '@/common/org-context/org-context.service';
@@ -40,7 +41,7 @@ import { OrgContextService } from '@/common/org-context/org-context.service';
 @Controller('class-sections')
 @OrgOperation(OrgOperationType.AUTHORING)
 @AllowPendingOrg()
-@UseGuards(RequireCurrentAcademicYearGuard)
+@UseGuards(RequireCurrentAcademicYearGuard, AcademicYearExpiredGuard)
 export class ClassSectionsController {
   constructor(
     private readonly service: ClassSectionsService,
@@ -79,6 +80,7 @@ export class ClassSectionsController {
   @Get()
   @Permission(PermissionKey.MANAGE_STUDENTS, PermissionKey.VIEW_RESULTS)
   @ApiOperation({ summary: 'List class sections' })
+  @CacheTTL(0) // vypnout HTTP response cache – používáme verzovanou cache v service
   async findAll(@Req() req: RequestWithUser, @Query() q: QueryClassSectionsDto) {
     const ctx = await this.orgContext.get(req);
     if (!ctx.activeAcademicYearId) {
@@ -116,6 +118,7 @@ export class ClassSectionsController {
   @Get(':id/org-subjects')
   @ApiOperation({ summary: 'List subjects assigned to class section' })
   @Permission(PermissionKey.MANAGE_TEACHERS, PermissionKey.VIEW_RESULTS)
+  @CacheTTL(0)
   listOrgSubjects(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Req() req: RequestWithUser,

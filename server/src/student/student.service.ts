@@ -27,9 +27,11 @@ import type {
 import type {
   StudentDetailResponse,
   StudentDetailPerformanceSummary,
-  StudentDetailProgressByTopic,
-  StudentDetailRecentTest,
 } from './dto/student-detail.dto';
+import {
+  computeStudentPerformance,
+  type SubmissionForPerformance,
+} from './student-performance.util';
 import { AuditService } from '@/audit/audit.service';
 
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
@@ -543,7 +545,7 @@ export class StudentsService {
    * GDPR-minimal student detail. Called after StudentAccessGuard.
    * Returns only: id, displayName, classroomLabel, performanceSummary, progressByTopic, recentTests.
    */
-  async getDetail(id: string, user: JwtPayload): Promise<StudentDetailResponse> {
+  async getDetail(id: string, user: JwtPayload, yearId?: string): Promise<StudentDetailResponse> {
     const student = await this.prisma.student.findUnique({
       where: { id },
       select: {
@@ -557,9 +559,13 @@ export class StudentsService {
           },
         },
         enrollments: {
-          where: { status: EnrollmentStatus.ACTIVE },
+          where: {
+            status: EnrollmentStatus.ACTIVE,
+            ...(yearId ? { yearId } : {}),
+          },
           select: {
-            academicYear: { select: { isCurrent: true } },
+            yearId: true,
+            academicYear: { select: { isCurrent: true, label: true } },
             classSection: { select: { label: true, grade: true, section: true } },
           },
           orderBy: { academicYear: { isCurrent: 'desc' } },
@@ -578,11 +584,26 @@ export class StudentsService {
       throw new ForbiddenException('Nemáš oprávnění zobrazit detail tohoto žáka.');
     }
 
+    // Guard: yearId must belong to this student's org — prevents cross-org year enumeration.
+    if (yearId) {
+      const yearRecord = await this.prisma.academicYear.findFirst({
+        where: { id: yearId, orgId: student.orgId, deletedAt: null },
+        select: { id: true },
+      });
+      if (!yearRecord) {
+        throw new BadRequestException({
+          code: 'INVALID_YEAR',
+          message: 'Zadaný školní rok nebyl nalezen v této organizaci.',
+        });
+      }
+    }
+
     const displayName =
       student.membership?.user?.name?.trim() || 'Žák';
-    const currentEnrollment = student.enrollments?.find(
-      (e) => e.academicYear?.isCurrent,
-    );
+    // When yearId is provided, find that year's enrollment; otherwise prefer current year
+    const currentEnrollment = yearId
+      ? student.enrollments?.find((e) => e.yearId === yearId) ?? student.enrollments?.[0]
+      : student.enrollments?.find((e) => e.academicYear?.isCurrent) ?? student.enrollments?.[0];
     const classroomLabel =
       currentEnrollment?.classSection?.label ||
       [currentEnrollment?.classSection?.grade, currentEnrollment?.classSection?.section]
@@ -594,6 +615,7 @@ export class StudentsService {
       where: {
         studentId: student.membershipId,
         deletedAt: null,
+        ...(yearId ? { assignment: { yearId } } : {}),
       },
       select: {
         score: true,
@@ -622,54 +644,31 @@ export class StudentsService {
       take: 100,
     });
 
-    const withScore = submissions.filter((s) => s.score != null);
-    const completedTests = withScore.length;
-    const averageScore =
-      completedTests > 0
-        ? withScore.reduce((a, s) => a + (s.score ?? 0), 0) / completedTests
-        : 0;
-    const lastSubmission = submissions.find((s) => s.submittedAt);
-    const lastActivityAt = lastSubmission?.submittedAt?.toISOString() ?? null;
-
-    const topicScores = new Map<
-      string,
-      { name: string; sum: number; count: number }
-    >();
-    for (const s of submissions) {
-      const tl = s.assignment?.topicLevel;
-      if (!tl || s.score == null) continue;
-      const topicId = tl.id;
-      const topicName = tl.catalogTopic?.name ?? '—';
-      const prev = topicScores.get(topicId);
-      if (!prev) {
-        topicScores.set(topicId, { name: topicName, sum: s.score, count: 1 });
-      } else {
-        prev.sum += s.score;
-        prev.count += 1;
-      }
-    }
-    const progressByTopic: StudentDetailProgressByTopic[] = Array.from(
-      topicScores.entries(),
-    ).map(([topicId, v]) => ({
-      topicId,
-      topicName: v.name,
-      averageScore: v.count > 0 ? v.sum / v.count : 0,
-    }));
-
-    const recentTests: StudentDetailRecentTest[] = submissions
-      .slice(0, 10)
-      .map((s) => {
+    // ── Map to SubmissionForPerformance and delegate to shared util ──────────
+    const submissionsForPerf: SubmissionForPerformance[] = submissions.map(
+      (s) => {
         const test = s.assignment?.test;
-        const maxScore =
-          test?.questions?.reduce((sum, q) => sum + (q.score ?? 0), 0) ?? null;
+        const tl = s.assignment?.topicLevel;
         return {
-          testId: test?.id ?? s.testId,
+          testId: s.testId,
           title: test?.title ?? '—',
-          score: s.score ?? null,
-          maxScore: maxScore ?? null,
-          submittedAt: s.submittedAt?.toISOString() ?? null,
+          score: s.score,
+          maxScore:
+            test?.questions?.reduce((sum, q) => sum + (q.score ?? 0), 0) ?? 0,
+          submittedAt: s.submittedAt,
+          topicLevelId: tl?.id ?? null,
+          topicName: tl?.catalogTopic?.name ?? null,
         };
-      });
+      },
+    );
+
+    const {
+      completedTests,
+      averageScore,
+      progressByTopic,
+      recentTests,
+      lastActivityAt,
+    } = computeStudentPerformance(submissionsForPerf);
 
     await this.auditService.log({
       action: 'VIEW_DETAIL',
@@ -680,7 +679,7 @@ export class StudentsService {
     });
 
     const performanceSummary: StudentDetailPerformanceSummary = {
-      averageScore: Math.round(averageScore * 100) / 100,
+      averageScore,
       completedTests,
       lastActivityAt,
     };

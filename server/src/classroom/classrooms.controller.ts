@@ -9,8 +9,10 @@ import {
   Post,
   Query,
   Req,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { CacheTTL } from '@nestjs/cache-manager';
 import { Throttle } from '@nestjs/throttler';
 import { PermissionKey } from '@prisma/client';
 import { Permission } from '@/modules/rbac/permission.decorator';
@@ -23,6 +25,7 @@ import { QueryClassSectionsDto } from './dto/query-class-sections.dto';
 import { AllowPendingOrg } from '@/common/decorators/allow-pending-org.decorator';
 import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
 import { OrgContextService } from '@/common/org-context/org-context.service';
+import { AcademicYearExpiredGuard } from '@/academic-years/academic-year-expired.guard';
 
 @ApiTags('Classrooms')
 @ApiStandardResponses()
@@ -39,6 +42,7 @@ export class ClassroomsController {
   @Get()
   @Permission(PermissionKey.MANAGE_STUDENTS, PermissionKey.VIEW_RESULTS)
   @ApiOperation({ summary: 'List classrooms by academic year' })
+  @CacheTTL(0) // vypnout HTTP response cache – používáme verzovanou cache v service
   async list(@Req() req: RequestWithUser, @Query() q: QueryClassSectionsDto) {
     const ctx = await this.orgContext.get(req);
     if (!ctx.activeAcademicYearId) {
@@ -62,9 +66,22 @@ export class ClassroomsController {
     );
   }
 
+  @Get('my-structure')
+  @Permission(PermissionKey.MANAGE_STUDENTS, PermissionKey.VIEW_RESULTS)
+  @CacheTTL(0)
+  @ApiOperation({ summary: 'Get structured classroom view for current user (homeroom / teaching / other)' })
+  async myStructure(@Req() req: RequestWithUser) {
+    const ctx = await this.orgContext.get(req);
+    if (!ctx.activeAcademicYearId) {
+      throw new BadRequestException('Missing active academic year');
+    }
+    return ok(this.service.getMyStructure(req.user, ctx.activeAcademicYearId));
+  }
+
   @Get(':id/risk-overview')
   @Permission(PermissionKey.MANAGE_STUDENTS, PermissionKey.VIEW_RESULTS)
   @Throttle({ default: { limit: 30, ttl: 60000 } })
+  @CacheTTL(0)
   @ApiOperation({ summary: 'Classroom risk overview (Early Warning Panel)' })
   riskOverview(
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -79,6 +96,7 @@ export class ClassroomsController {
 
   @Get(':id/subject-performance')
   @Permission(PermissionKey.MANAGE_STUDENTS, PermissionKey.VIEW_RESULTS)
+  @CacheTTL(0)
   @ApiOperation({ summary: 'Subject performance summary for classroom' })
   async subjectPerformance(
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -100,6 +118,7 @@ export class ClassroomsController {
 
   @Get(':id')
   @Permission(PermissionKey.MANAGE_STUDENTS, PermissionKey.VIEW_RESULTS)
+  @CacheTTL(0)
   @ApiOperation({ summary: 'Classroom detail' })
   detail(
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -109,6 +128,7 @@ export class ClassroomsController {
   }
 
   @Post()
+  @UseGuards(AcademicYearExpiredGuard)
   @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'Create classroom for academic year' })
   async create(@Body() dto: CreateClassSectionDto, @Req() req: RequestWithUser) {

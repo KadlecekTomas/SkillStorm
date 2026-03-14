@@ -13,8 +13,9 @@ export interface CatalogSyncResult {
  * Synchronises the current CatalogSubject catalog into every non-deleted organization.
  *
  * For each org:
- *   - upsert Subject per CatalogSubject  (organizationId_catalogSubjectId unique)
- *   - upsert SubjectLevel per SchoolGrade  (subjectId_grade unique)
+ *   - upsert global Subject per CatalogSubject
+ *   - upsert OrgSubject activation for the org
+ *   - upsert SubjectLevel per SchoolGrade
  *
  * All operations are idempotent — safe to re-run without side effects.
  */
@@ -44,17 +45,28 @@ export class CatalogSyncService {
       await this.prisma.$transaction(async (tx) => {
         for (const catalog of catalogSubjects) {
           const subject = await tx.subject.upsert({
-            where: {
-              organizationId_catalogSubjectId: {
-                organizationId: org.id,
-                catalogSubjectId: catalog.id,
-              },
-            },
+            where: { catalogSubjectId: catalog.id },
             update: {},
             create: {
-              organizationId: org.id,
               catalogSubjectId: catalog.id,
               name: catalog.name,
+              gradeFrom: 1,
+              gradeTo: 9,
+            },
+          });
+          await tx.orgSubject.upsert({
+            where: {
+              organizationId_subjectId: {
+                organizationId: org.id,
+                subjectId: subject.id,
+              },
+            },
+            update: { isEnabled: true },
+            create: {
+              organizationId: org.id,
+              subjectId: subject.id,
+              isEnabled: true,
+              isCustom: false,
             },
           });
 

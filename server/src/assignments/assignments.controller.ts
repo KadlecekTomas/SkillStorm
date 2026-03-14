@@ -24,6 +24,7 @@ import { ok } from '@/common/http/envelope';
 import { ApiStandardResponses } from '@/common/http/api-standard-responses.decorator';
 import { MyAssignmentDto } from './my-assignments.dto';
 import { RequireCurrentAcademicYearGuard } from '@/academic-years/require-current-academic-year.guard';
+import { AcademicYearExpiredGuard } from '@/academic-years/academic-year-expired.guard';
 import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
 import { OrgContextService } from '@/common/org-context/org-context.service';
 import { NoHttpCache } from '@/common/cache/no-http-cache.decorator';
@@ -33,7 +34,7 @@ import { NoHttpCache } from '@/common/cache/no-http-cache.decorator';
 @ApiBearerAuth()
 @Controller('assignments')
 @OrgOperation(OrgOperationType.EXECUTION)
-@UseGuards(RequireCurrentAcademicYearGuard)
+@UseGuards(RequireCurrentAcademicYearGuard, AcademicYearExpiredGuard)
 export class AssignmentsController {
   private readonly logger = new Logger(AssignmentsController.name);
   constructor(
@@ -93,6 +94,7 @@ export class AssignmentsController {
     PermissionKey.VIEW_CLASS_ASSIGNMENTS,
     PermissionKey.VIEW_ORG_ASSIGNMENTS,
   )
+  @NoHttpCache()
   @ApiOperation({ summary: 'List assignments for current user (permission-scoped)' })
   async myAssignments(
     @Req() req: RequestWithUser,
@@ -122,6 +124,7 @@ export class AssignmentsController {
     PermissionKey.VIEW_CLASS_ASSIGNMENTS,
     PermissionKey.VIEW_ORG_ASSIGNMENTS,
   )
+  @NoHttpCache()
   @ApiOperation({ summary: 'Get assignment detail (permission-scoped)' })
   async findOne(
     @Param('id') id: string,

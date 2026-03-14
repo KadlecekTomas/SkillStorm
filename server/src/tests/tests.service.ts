@@ -14,6 +14,7 @@ import { Cache } from 'cache-manager';
 import {
   Prisma,
   AuditEntityType,
+  SchoolGrade,
   SystemRole,
   OrganizationRole,
   PublishStatus,
@@ -148,6 +149,7 @@ export class TestsService {
       organizationId: true,
       title: true,
       description: true,
+      allowedGrades: true,
       status: true,
       createdAt: true,
       updatedAt: true,
@@ -179,6 +181,7 @@ export class TestsService {
       organizationId: true,
       title: true,
       description: true,
+      allowedGrades: true,
       status: true,
       createdAt: true,
       updatedAt: true,
@@ -211,6 +214,7 @@ export class TestsService {
       organizationId: true,
       title: true,
       description: true,
+      allowedGrades: true,
       status: true,
       createdAt: true,
       updatedAt: true,
@@ -338,26 +342,28 @@ export class TestsService {
     }
   }
 
-  /** Validate that subjectId belongs to the org, has not been soft-deleted, and is active. */
+  /** Validate that subjectId is enabled for the organization through OrgSubject. */
   private async validateSubject(
     subjectId: string,
     organizationId: string,
     db: Prisma.TransactionClient = this.prisma,
   ): Promise<void> {
-    const subject = await db.subject.findFirst({
-      where: { id: subjectId, organizationId, deletedAt: null },
-      select: { id: true, isActive: true },
+    const orgSubject = await db.orgSubject.findFirst({
+      where: {
+        organizationId,
+        subjectId,
+        isEnabled: true,
+        subject: {
+          deletedAt: null,
+        },
+      },
+      select: { id: true },
     });
-    if (!subject) {
+    if (!orgSubject) {
       throw new BadRequestException({
-        code: 'SUBJECT_NOT_FOUND',
-        message: 'Předmět neexistuje nebo byl smazán.',
-      });
-    }
-    if (!subject.isActive) {
-      throw new BadRequestException({
-        code: 'SUBJECT_INACTIVE',
-        message: 'Předmět je deaktivován. Aktivujte jej před vytvořením testu.',
+        code: 'SUBJECT_NOT_ENABLED_FOR_ORGANIZATION',
+        message:
+          'Předmět není pro tuto organizaci povolen. Aktivujte jej v nastavení školy.',
       });
     }
   }
@@ -595,20 +601,25 @@ export class TestsService {
   private async computeTestAssignability(
     testId: string,
   ): Promise<AssignabilityReport> {
-    const questions = await this.prisma.question.findMany({
-      where: { testId },
+    const test = await this.prisma.test.findUnique({
+      where: { id: testId },
       select: {
-        id: true,
-        type: true,
-        correctAnswer: true,
-        correctAnswers: true,
-        score: true,
-        options: {
-          select: { text: true },
+        allowedGrades: true,
+        questions: {
+          select: {
+            id: true,
+            type: true,
+            correctAnswer: true,
+            correctAnswers: true,
+            score: true,
+            options: {
+              select: { text: true },
+            },
+          },
         },
       },
     });
-    return computeAssignability(questions);
+    return computeAssignability(test?.questions ?? [], test?.allowedGrades ?? []);
   }
 
   private throwIfNotAssignable(report: AssignabilityReport): void {
@@ -657,6 +668,7 @@ export class TestsService {
           organizationId: orgId,
           subjectId: dto.subjectId,
           academicYearId: yearId,
+          allowedGrades: dto.allowedGrades ?? [],
           status: dto.status ?? PublishStatus.DRAFT,
           creatorId: author.id,
         },
@@ -766,6 +778,7 @@ export class TestsService {
         status: PublishStatus.PUBLISHED,
         scheduledAssignments: { some: assignmentWhere },
         ...(activeYearId ? { academicYearId: activeYearId } : {}),
+        ...(q.grade ? { allowedGrades: { has: q.grade } } : {}),
         ...(searchExpr(q.search) ?? {}),
       };
       const select = this.buildTestProjection(OrganizationRole.STUDENT, 'list');
@@ -796,6 +809,7 @@ export class TestsService {
       ...(q.status ? { status: q.status } : {}),
       ...(q.subjectId ? { subjectId: q.subjectId } : {}),
       ...(q.academicYearId ? { academicYearId: q.academicYearId } : {}),
+      ...(q.grade ? { allowedGrades: { has: q.grade } } : {}),
       ...(searchExpr(q.search) ?? {}),
     };
     if (effectiveOrgId) {
@@ -820,6 +834,7 @@ export class TestsService {
         organizationId: effectiveOrgId,
         subjectId: q.subjectId ?? null,
         academicYearId: q.academicYearId ?? null,
+        grade: q.grade ?? null,
       },
     });
 
@@ -874,8 +889,6 @@ export class TestsService {
    * especially with soft-delete or multi-tenant scenarios.
    */
   async findOne(id: string, user: JwtPayload): Promise<unknown> {
-    // eslint-disable-next-line no-console
-    console.log('FINDONE ENTRY testId=', id, 'role=', user.organizationRole ?? 'null');
     if (user.organizationId) {
       const scopedBaseWhere = withOrg(
         { id, deletedAt: null },
@@ -941,44 +954,11 @@ export class TestsService {
       return this.mapStudentView(studentView);
     }
 
-    // PHASE 1: raw count via direct query — bypasses Prisma relation resolution entirely.
-    // If rawCount > 0 but questions.length = 0 → problem is in relation select, not data.
-    // If rawCount = 0 → insert used a different testId than this GET.
-    const rawCount = await this.prisma.question.count({
-      where: { testId: id },
-    });
-    // eslint-disable-next-line no-console
-    console.log('RAW QUESTION COUNT (DIRECT QUERY)', rawCount);
-    // PHASE RAW-SQL: bypass ORM entirely — check DB state with raw SQL.
-    const rawSql = await this.prisma.$queryRaw<{ qid: string; tid: string }[]>`
-      SELECT question_id AS qid, test_id AS tid FROM questions WHERE test_id = ${id}
-    `;
-    // eslint-disable-next-line no-console
-    console.log('RAW SQL QUESTIONS', rawSql.length, rawSql.map((r) => r.qid));
-
-    // PHASE 7: absolute isolation — include instead of select, bypasses buildTestProjection.
-    // Uncomment this block and comment out the teacherView below to test.
-    // const teacherView = await this.prisma.test.findUnique({
-    //   where: { id },
-    //   include: { questions: true },
-    // });
-
     const teacherView = await this.prisma.test.findUnique({
       where: { id },
       select: this.buildTestProjection(user.organizationRole ?? null, 'detail'),
     });
     if (!teacherView) throw new NotFoundException('Test nenalezen');
-    // eslint-disable-next-line no-console
-    console.log('VERIFY FIND UNIQUE TEST ID', teacherView.id);
-    // eslint-disable-next-line no-console
-    console.log('FINDONE QUESTIONS COUNT', teacherView.questions?.length ?? 0);
-    const findOneTrace = `[TRACE][findOne] testId=${id} orgId=${base.organizationId} role=${String(
-      user.organizationRole ?? 'null',
-    )} questions=${teacherView.questions?.length ?? 0}`;
-    this.logger.log(findOneTrace);
-    // Temporary trace for debugging flow visibility in tests/local runs.
-    // eslint-disable-next-line no-console
-    console.log(findOneTrace);
     return this.mapTeacherView(teacherView, assignability);
   }
   async update(
@@ -1029,19 +1009,22 @@ export class TestsService {
         }
       }
 
-      // Verify subject is active and academic year is not soft-deleted.
+      // Verify subject is enabled for the organization and academic year is not soft-deleted.
       const testMeta = await this.prisma.test.findUnique({
         where: { id },
         select: {
-          subject: { select: { isActive: true } },
+          subjectId: true,
+          organizationId: true,
           academicYear: { select: { deletedAt: true } },
         },
       });
-      if (testMeta?.subject && !testMeta.subject.isActive) {
+      if (testMeta?.subjectId) {
+        await this.validateSubject(testMeta.subjectId, testMeta.organizationId);
+      } else {
         throw new BadRequestException({
           code: 'TEST_NOT_ASSIGNABLE',
-          message: 'Předmět testu je deaktivován. Aktivujte předmět před publikací.',
-          reasons: ['subject_inactive'],
+          message: 'Test nemá platný školní předmět.',
+          reasons: ['subject_not_enabled'],
         });
       }
       if (testMeta?.academicYear?.deletedAt !== null && testMeta?.academicYear?.deletedAt !== undefined) {
@@ -1072,6 +1055,30 @@ export class TestsService {
     if (dto.subjectId !== undefined) {
       await this.validateSubject(dto.subjectId, current.organizationId);
       updateData.subjectId = dto.subjectId;
+    }
+
+    if (dto.allowedGrades !== undefined) {
+      const assignedGrades = await this.prisma.assignment.findMany({
+        where: { testId: id },
+        select: { classSection: { select: { grade: true } } },
+      });
+      const gradesInUse = [
+        ...new Set(
+          assignedGrades
+            .map((a) => a.classSection?.grade)
+            .filter((g): g is SchoolGrade => !!g),
+        ),
+      ];
+      const missingAssignedGrades = gradesInUse.filter(
+        (grade) => !(dto.allowedGrades ?? []).includes(grade),
+      );
+      if (missingAssignedGrades.length > 0) {
+        throw new BadRequestException({
+          code: 'TEST_ALLOWED_GRADES_CONFLICT',
+          message: `Test je už přiřazen do ročníků ${missingAssignedGrades.join(', ')}, které by po úpravě vypadly z allowedGrades.`,
+        });
+      }
+      updateData.allowedGrades = dto.allowedGrades;
     }
 
     let updated: unknown;
@@ -1193,6 +1200,8 @@ export class TestsService {
         organizationId: true,
         status: true,
         academicYearId: true,
+        subjectId: true,
+        allowedGrades: true,
         questions: {
           select: {
             id: true,
@@ -1240,6 +1249,29 @@ export class TestsService {
       throw new BadRequestException({
         code: 'YEAR_MISMATCH',
         message: 'Test patří do jiného školního roku než třída.',
+      });
+    }
+
+    if (!test.allowedGrades.includes(classSection.grade)) {
+      throw new BadRequestException({
+        code: 'TEST_NOT_ALLOWED_FOR_GRADE',
+        message: 'Test není určen pro daný ročník.',
+      });
+    }
+
+    // Validate time window: openAt must be strictly before closeAt.
+    const openAtDate = new Date(dto.openAt);
+    const closeAtDate = new Date(dto.closeAt);
+    if (isNaN(openAtDate.getTime()) || isNaN(closeAtDate.getTime())) {
+      throw new BadRequestException({
+        code: 'INVALID_TIME_WINDOW',
+        message: 'Datum otevření nebo uzavření testu je neplatné.',
+      });
+    }
+    if (openAtDate >= closeAtDate) {
+      throw new BadRequestException({
+        code: 'INVALID_TIME_WINDOW',
+        message: 'Datum otevření testu musí být před datem uzavření.',
       });
     }
 
@@ -1559,178 +1591,6 @@ export class TestsService {
         explanationSnapshot: r.explanation,
       })),
     };
-  }
-
-  // ====== TEMPORARY DEBUG — remove before release ====================
-  /**
-   * [TEMP DEBUG] Full visibility trace for a given student.
-   * Returns structured JSON explaining why each assignment is or isn't visible.
-   * DO NOT ship to production — no pagination, no rate-limit, scans all org assignments.
-   */
-  async debugStudentVisibility(
-    membershipId: string,
-    organizationId: string,
-  ): Promise<unknown> {
-    const now = new Date();
-    // eslint-disable-next-line no-console
-    console.log('[DEBUG] debugStudentVisibility', { membershipId, organizationId, now: now.toISOString() });
-
-    // 1. Current academic year for this org
-    const currentYear = await this.prisma.academicYear.findFirst({
-      where: { orgId: organizationId, isCurrent: true },
-      select: { id: true, label: true, startsAt: true, endsAt: true },
-    });
-    // eslint-disable-next-line no-console
-    console.log('[DEBUG] currentAcademicYear', currentYear);
-
-    // 2. Student record (via membershipId)
-    const student = await this.prisma.student.findFirst({
-      where: { membershipId, orgId: organizationId, deletedAt: null },
-      select: { id: true, membershipId: true, orgId: true, studentNumber: true },
-    });
-    // eslint-disable-next-line no-console
-    console.log('[DEBUG] student', student);
-
-    // 3. ALL enrollments for this student (all statuses — full debug)
-    const enrollments = student
-      ? await this.prisma.enrollment.findMany({
-          where: { studentId: student.id, orgId: organizationId },
-          select: {
-            id: true,
-            classSectionId: true,
-            yearId: true,
-            status: true,
-          },
-        })
-      : [];
-    const classSectionIds = enrollments.map((e) => e.classSectionId);
-    // eslint-disable-next-line no-console
-    console.log('[DEBUG] enrollments', enrollments);
-    // eslint-disable-next-line no-console
-    console.log('[DEBUG] classSectionIds', classSectionIds);
-
-    // 4. ALL assignments in this org — no pre-filter, we analyse every one
-    const assignments = await this.prisma.assignment.findMany({
-      where: { organizationId },
-      select: {
-        id: true,
-        testId: true,
-        targetType: true,
-        classSectionId: true,
-        yearId: true,
-        openAt: true,
-        closeAt: true,
-        maxAttempts: true,
-        students: { select: { studentId: true } },
-      },
-    });
-    // eslint-disable-next-line no-console
-    console.log('[DEBUG] totalAssignmentsInOrg', assignments.length);
-
-    // 5. Per-assignment visibility computation
-    const assignmentAnalysis = await Promise.all(
-      assignments.map(async (a) => {
-        // Targeting check
-        const isTargetedByClass =
-          a.targetType === 'CLASS' &&
-          a.classSectionId !== null &&
-          classSectionIds.includes(a.classSectionId as string);
-
-        const isTargetedByStudent =
-          a.targetType === 'STUDENTS' &&
-          a.students.some((s) => s.studentId === membershipId);
-
-        const isTargetedToStudent = isTargetedByClass || isTargetedByStudent;
-
-        // Time window check
-        const isWithinTimeWindow = a.openAt <= now && a.closeAt >= now;
-
-        // Submission / attempt check
-        const submissions = await this.prisma.submission.findMany({
-          where: {
-            assignmentId: a.id,
-            studentId: membershipId,
-            deletedAt: null,
-          },
-          select: { id: true, attemptNo: true },
-        });
-        const attemptsUsed = submissions.length;
-        const hasSubmission = attemptsUsed > 0;
-        const remainingAttempts = a.maxAttempts - attemptsUsed;
-
-        // Final visibility
-        const visible =
-          isTargetedToStudent && isWithinTimeWindow && remainingAttempts > 0;
-
-        // Human-readable reasons for being hidden
-        const hiddenReasons: string[] = [];
-        if (!isTargetedToStudent) {
-          hiddenReasons.push(
-            `not_targeted (targetType=${a.targetType}, assignmentClassSection=${String(a.classSectionId)}, studentSections=${JSON.stringify(classSectionIds)})`,
-          );
-        }
-        if (!isWithinTimeWindow) {
-          if (a.openAt > now) {
-            hiddenReasons.push(`not_open_yet (opens=${a.openAt.toISOString()})`);
-          } else {
-            hiddenReasons.push(`already_closed (closedAt=${a.closeAt.toISOString()})`);
-          }
-        }
-        if (remainingAttempts <= 0) {
-          hiddenReasons.push(`no_remaining_attempts (used=${attemptsUsed}, max=${a.maxAttempts})`);
-        }
-
-        // eslint-disable-next-line no-console
-        console.log('[DEBUG] assignment', a.id, {
-          visible,
-          isTargetedToStudent,
-          isTargetedByClass,
-          isTargetedByStudent,
-          isWithinTimeWindow,
-          attemptsUsed,
-          remainingAttempts,
-          hiddenReasons,
-        });
-
-        return {
-          id: a.id,
-          testId: a.testId,
-          targetType: a.targetType,
-          classSectionId: a.classSectionId,
-          yearId: a.yearId,
-          openAt: a.openAt,
-          closeAt: a.closeAt,
-          maxAttempts: a.maxAttempts,
-          isTargetedByClass,
-          isTargetedByStudent,
-          isTargetedToStudent,
-          isWithinTimeWindow,
-          hasSubmission,
-          attemptsUsed,
-          remainingAttempts,
-          visible,
-          hiddenReasons,
-        };
-      }),
-    );
-
-    const result = {
-      now: now.toISOString(),
-      student: student ?? null,
-      currentAcademicYear: currentYear ?? null,
-      enrollments,
-      classSectionIds,
-      assignments: assignmentAnalysis,
-      summary: {
-        totalAssignments: assignments.length,
-        visibleToStudent: assignmentAnalysis.filter((a) => a.visible).length,
-        hiddenAssignments: assignmentAnalysis.filter((a) => !a.visible).length,
-      },
-    };
-
-    // eslint-disable-next-line no-console
-    console.log('[DEBUG] debugStudentVisibility SUMMARY', result.summary);
-    return result;
   }
 
   // ====== QUESTIONS / OPTIONS / ANSWERS ===========================

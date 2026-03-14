@@ -8,7 +8,7 @@ import {
   IsUUID,
   Min,
 } from 'class-validator';
-import { PublishStatus } from '@prisma/client';
+import { PublishStatus, SchoolGrade } from '@prisma/client';
 import { Type, Transform } from 'class-transformer';
 
 export class QueryTestsDto {
@@ -51,4 +51,9 @@ export class QueryTestsDto {
   @IsOptional()
   @IsUUID()
   academicYearId?: string;
+
+  @ApiPropertyOptional({ description: 'Filter by pedagogical grade', enum: SchoolGrade })
+  @IsOptional()
+  @IsEnum(SchoolGrade)
+  grade?: SchoolGrade;
 }

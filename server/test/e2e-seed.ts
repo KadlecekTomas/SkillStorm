@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, SchoolGrade } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
@@ -52,6 +52,7 @@ async function main() {
     data: {
       organizationId: org.id,
       title: 'Testovací test',
+      allowedGrades: [SchoolGrade.GRADE_7],
       creatorId: teacherMembership.id,
       questions: {
         create: [

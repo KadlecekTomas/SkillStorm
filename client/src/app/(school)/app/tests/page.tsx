@@ -19,9 +19,14 @@ import { useTestAssignments } from "@/hooks/use-test-assignments";
 import { useSubjects, subjectLabel } from "@/hooks/use-subjects";
 import type { Subject } from "@/types";
 import { formatPercent, formatInt } from "@/utils/format";
+import { ALL_SCHOOL_GRADES, gradeLabel, normalizeAllowedGrades } from "@/lib/grades";
 
 /** API can return items with creator for director filter */
 type TestListItem = TestSummary & { creator?: { user?: { name?: string | null } } };
+
+function allowedGradesText(row: TestSummary): string {
+  return normalizeAllowedGrades(row.allowedGrades).map(gradeLabel).join(", ");
+}
 
 type EffectiveAssignmentStatus = "UPCOMING" | "OPEN" | "IN_PROGRESS" | "SUBMITTED" | "CLOSED" | "NO_ATTEMPTS_LEFT";
 
@@ -49,12 +54,17 @@ const STATUS_CONFIG: Record<EffectiveAssignmentStatus, { label: string; classNam
 function subjectColumnRender(row: TestSummary): string {
   const sub = row.subject;
   if (!sub || typeof sub !== "object") return "—";
-  return subjectLabel(sub as Subject);
+  return sub.name;
 }
 
 const baseColumns: Column<TestSummary>[] = [
   { key: "title", label: "Test" },
   { key: "subject", label: "Předmět", render: subjectColumnRender },
+  {
+    key: "allowedGrades",
+    label: "Ročníky",
+    render: (row) => allowedGradesText(row),
+  },
   {
     key: "avgScore",
     label: "Průměr",
@@ -80,6 +90,8 @@ function TestsPage(): React.JSX.Element {
   const [assignTestId, setAssignTestId] = useState<string | null>(null);
   const [teacherFilter, setTeacherFilter] = useState<string>("");
   const [subjectFilterId, setSubjectFilterId] = useState<string>("");
+  const [gradeFilter, setGradeFilter] = useState<string>("");
+  const [statusFilter, setStatusFilter] = useState<string>("");
   const [studentAssignments, setStudentAssignments] = useState<MyAssignment[]>([]);
   const router = useRouter();
   const { org, context, user } = useAuth();
@@ -92,11 +104,23 @@ function TestsPage(): React.JSX.Element {
 
   const fetchTests = useCallback(async () => {
     try {
-      const data = await fetchWithAuth<{ items?: TestListItem[] } | TestListItem[]>("GET", "/tests");
+      const data = await fetchWithAuth<{ items?: TestListItem[] } | TestListItem[]>("GET", "/tests", {
+        query: {
+          ...(subjectFilterId ? { subjectId: subjectFilterId } : {}),
+          ...(gradeFilter ? { grade: gradeFilter } : {}),
+          ...(statusFilter ? { status: statusFilter } : {}),
+          ...(selectedYearId ? { academicYearId: selectedYearId } : {}),
+        },
+      });
       const list = data && typeof data === "object" && "items" in data
         ? (data as { items: TestListItem[] }).items ?? []
         : Array.isArray(data) ? data : [];
-      setTests(Array.isArray(list) ? list : []);
+      setTests(
+        (Array.isArray(list) ? list : []).map((item) => ({
+          ...item,
+          allowedGrades: normalizeAllowedGrades(item.allowedGrades),
+        })),
+      );
       setFetchError(false);
     } catch {
       setTests([]);
@@ -104,7 +128,7 @@ function TestsPage(): React.JSX.Element {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [gradeFilter, selectedYearId, statusFilter, subjectFilterId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -146,8 +170,14 @@ function TestsPage(): React.JSX.Element {
     if (subjectFilterId) {
       list = list.filter((t) => (t.subject && typeof t.subject === "object" && (t.subject as Subject).id === subjectFilterId));
     }
+    if (gradeFilter) {
+      list = list.filter((t) => normalizeAllowedGrades(t.allowedGrades).includes(gradeFilter));
+    }
+    if (statusFilter) {
+      list = list.filter((t) => t.status === statusFilter);
+    }
     return list;
-  }, [tests, teacherFilter, subjectFilterId]);
+  }, [gradeFilter, statusFilter, subjectFilterId, teacherFilter, tests]);
 
   const studentAssignmentsByTestId = useMemo(() => {
     const map: Record<string, MyAssignment> = {};
@@ -174,6 +204,11 @@ function TestsPage(): React.JSX.Element {
         { key: "title", label: "Test" },
         { key: "subject", label: "Předmět", render: subjectColumnRender },
         {
+          key: "allowedGrades",
+          label: "Ročníky",
+          render: (row) => allowedGradesText(row),
+        },
+        {
           key: "studentStatus",
           label: "Stav",
           render: (row) => {
@@ -194,6 +229,11 @@ function TestsPage(): React.JSX.Element {
     return [
       { key: "title", label: "Test" },
       { key: "subject", label: "Předmět", render: subjectColumnRender },
+      {
+        key: "allowedGrades",
+        label: "Ročníky",
+        render: (row) => allowedGradesText(row),
+      },
       {
         key: "creator",
         label: "Vytvořil",
@@ -298,8 +338,38 @@ function TestsPage(): React.JSX.Element {
             >
               <option value="">Všechny</option>
               {orgSubjects.map((s) => (
-                <option key={s.id} value={s.id}>{subjectLabel(s as Subject)}</option>
+                <option key={s.id} value={s.subject.id}>{subjectLabel(s)}</option>
               ))}
+            </select>
+          </div>
+        )}
+        <div className="flex items-center gap-2">
+          <label htmlFor="grade-filter" className="text-sm font-medium text-slate-700">Ročník:</label>
+          <select
+            id="grade-filter"
+            className="rounded-md border border-slate-200 px-3 py-2 text-sm"
+            value={gradeFilter}
+            onChange={(e) => setGradeFilter(e.target.value)}
+          >
+            <option value="">Všechny</option>
+            {ALL_SCHOOL_GRADES.map((grade) => (
+              <option key={grade} value={grade}>{gradeLabel(grade)}</option>
+            ))}
+          </select>
+        </div>
+        {!isStudent && (
+          <div className="flex items-center gap-2">
+            <label htmlFor="status-filter" className="text-sm font-medium text-slate-700">Stav:</label>
+            <select
+              id="status-filter"
+              className="rounded-md border border-slate-200 px-3 py-2 text-sm"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+            >
+              <option value="">Všechny</option>
+              <option value="DRAFT">Koncept</option>
+              <option value="PUBLISHED">Publikováno</option>
+              <option value="ARCHIVED">Archivováno</option>
             </select>
           </div>
         )}
@@ -377,6 +447,7 @@ function TestsPage(): React.JSX.Element {
         open={assignModalOpen}
         onOpenChange={setAssignModalOpen}
         testId={assignTestId}
+        allowedGrades={normalizeAllowedGrades(tests.find((item) => item.id === assignTestId)?.allowedGrades)}
         yearId={selectedYearId}
         onSuccess={fetchTests}
       />

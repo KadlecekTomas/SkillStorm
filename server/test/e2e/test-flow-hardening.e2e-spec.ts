@@ -9,6 +9,11 @@
  * C — Submission snapshot: finish() stores correctAnswerSnapshot,
  *     awardedPoints, maxPoints in Response rows
  * D — Tenant isolation: student in org1 does not see tests from org2
+ * H — Assignment time window: openAt >= closeAt → 400 INVALID_TIME_WINDOW
+ * I — Allowed grade guard: changing allowedGrades on a published+assigned test to
+ *     exclude an already assigned class grade → 400 TEST_ALLOWED_GRADES_CONFLICT
+ * J — Assignment grade guard: assigning to a class outside test.allowedGrades →
+ *     400 TEST_NOT_ALLOWED_FOR_GRADE
  * L — Student enrolled in classA sees test assigned to classA in GET /tests
  * M — Student enrolled in classB (not classA) does NOT see test assigned to classA
  */
@@ -1499,6 +1504,279 @@ describe('Test Flow Hardening (e2e)', () => {
       const items: any[] = body?.items ?? body ?? [];
       const found = items.find((t: any) => t.id === testId);
       expect(found).toBeUndefined();
+    });
+  });
+
+  // ── Test H — Assignment time window validation ────────────────────────────
+  describe('H — assignment time window: openAt >= closeAt → 400', () => {
+    let directorToken: string;
+    let orgId: string;
+    let publishedTestId: string;
+    let classSectionId: string;
+
+    beforeAll(async () => {
+      const ts = Date.now();
+      const ctx = await setupOrgContext(app, prisma, {
+        role: 'DIRECTOR',
+        seed: `flw_h_${ts}`,
+      });
+      orgId = ctx.organization.id;
+      directorToken = ctx.owner.accessToken;
+      allOrgIds.push(orgId);
+      allUserIds.push(ctx.owner.user.id);
+
+      await activateOrg(prisma, orgId);
+      const yearId = await getActiveYear(prisma, orgId);
+      const subjectId = await getSubject(prisma, orgId);
+      classSectionId = await createClassSection(prisma, orgId, yearId);
+
+      const testRes = await request(app.getHttpServer())
+        .post('/tests')
+        .set('Authorization', `Bearer ${directorToken}`)
+        .send({ title: 'Time Window Test H', subjectId, academicYearId: yearId })
+        .expect(201);
+      publishedTestId = unwrap(testRes).id as string;
+
+      await request(app.getHttpServer())
+        .post(`/tests/${publishedTestId}/questions`)
+        .set('Authorization', `Bearer ${directorToken}`)
+        .send({ text: 'Q?', type: QuestionType.FILL_IN_THE_BLANK, score: 1, correctAnswer: 'a' })
+        .expect(201);
+
+      await request(app.getHttpServer())
+        .patch(`/tests/${publishedTestId}`)
+        .set('Authorization', `Bearer ${directorToken}`)
+        .send({ status: PublishStatus.PUBLISHED })
+        .expect(200);
+    });
+
+    it('H1 — openAt > closeAt → 400 INVALID_TIME_WINDOW', async () => {
+      const future = new Date(Date.now() + 86_400_000).toISOString();
+      const past = new Date(Date.now() - 60_000).toISOString();
+      const res = await request(app.getHttpServer())
+        .post(`/tests/${publishedTestId}/assign`)
+        .set('Authorization', `Bearer ${directorToken}`)
+        .send({
+          classSectionId,
+          openAt: future,
+          closeAt: past, // closeAt BEFORE openAt
+          maxAttempts: 1,
+          shuffle: false,
+          showExplain: 'after_close',
+        })
+        .expect(400);
+
+      expect(res.body.code ?? res.body.message).toMatch(/INVALID_TIME_WINDOW/);
+    });
+
+    it('H2 — openAt === closeAt → 400 INVALID_TIME_WINDOW', async () => {
+      const sameTime = new Date(Date.now() + 3_600_000).toISOString();
+      const res = await request(app.getHttpServer())
+        .post(`/tests/${publishedTestId}/assign`)
+        .set('Authorization', `Bearer ${directorToken}`)
+        .send({
+          classSectionId,
+          openAt: sameTime,
+          closeAt: sameTime, // same instant = zero-length window
+          maxAttempts: 1,
+          shuffle: false,
+          showExplain: 'after_close',
+        })
+        .expect(400);
+
+      expect(res.body.code ?? res.body.message).toMatch(/INVALID_TIME_WINDOW/);
+    });
+
+    it('H3 — valid window → 201', async () => {
+      await request(app.getHttpServer())
+        .post(`/tests/${publishedTestId}/assign`)
+        .set('Authorization', `Bearer ${directorToken}`)
+        .send({
+          classSectionId,
+          openAt: new Date(Date.now() - 60_000).toISOString(),
+          closeAt: new Date(Date.now() + 86_400_000).toISOString(),
+          maxAttempts: 1,
+          shuffle: false,
+          showExplain: 'after_close',
+        })
+        .expect(201);
+    });
+  });
+
+  // ── Test I — subjectId change guard on published+assigned test ───────────
+  describe('I — subjectId change blocked when incompatible with assigned class grade', () => {
+    let directorToken: string;
+    let orgId: string;
+    let publishedTestId: string;
+    let incompatibleSubjectId: string;
+
+    beforeAll(async () => {
+      const ts = Date.now();
+      const ctx = await setupOrgContext(app, prisma, {
+        role: 'DIRECTOR',
+        seed: `flw_i_${ts}`,
+      });
+      orgId = ctx.organization.id;
+      directorToken = ctx.owner.accessToken;
+      allOrgIds.push(orgId);
+      allUserIds.push(ctx.owner.user.id);
+
+      await activateOrg(prisma, orgId);
+      const yearId = await getActiveYear(prisma, orgId);
+      const subjectId = await getSubject(prisma, orgId);
+      const classSectionId = await createClassSection(prisma, orgId, yearId); // GRADE_5
+
+      // Create + publish a test
+      const testRes = await request(app.getHttpServer())
+        .post('/tests')
+        .set('Authorization', `Bearer ${directorToken}`)
+        .send({ title: 'Subject Change Test I', subjectId, academicYearId: yearId })
+        .expect(201);
+      publishedTestId = unwrap(testRes).id as string;
+
+      await request(app.getHttpServer())
+        .post(`/tests/${publishedTestId}/questions`)
+        .set('Authorization', `Bearer ${directorToken}`)
+        .send({ text: 'Q?', type: QuestionType.FILL_IN_THE_BLANK, score: 1, correctAnswer: 'a' })
+        .expect(201);
+
+      await request(app.getHttpServer())
+        .patch(`/tests/${publishedTestId}`)
+        .set('Authorization', `Bearer ${directorToken}`)
+        .send({ status: PublishStatus.PUBLISHED })
+        .expect(200);
+
+      // Assign to GRADE_5 class
+      await request(app.getHttpServer())
+        .post(`/tests/${publishedTestId}/assign`)
+        .set('Authorization', `Bearer ${directorToken}`)
+        .send({
+          classSectionId,
+          openAt: new Date(Date.now() - 60_000).toISOString(),
+          closeAt: new Date(Date.now() + 86_400_000).toISOString(),
+          maxAttempts: 1,
+          shuffle: false,
+          showExplain: 'after_close',
+        })
+        .expect(201);
+
+      // Create a NEW subject to prove subject-level settings no longer govern test assignment.
+      const newSubjectRes = await request(app.getHttpServer())
+        .post('/subjects')
+        .set('Authorization', `Bearer ${directorToken}`)
+        .send({ name: `Incompatible Subject I ${ts}`, organizationId: orgId })
+        .expect(201);
+      incompatibleSubjectId = (unwrap(newSubjectRes).id ?? unwrap(newSubjectRes)?.data?.id) as string;
+    });
+
+    it('I1 — removing an already assigned grade from allowedGrades → 400', async () => {
+      const res = await request(app.getHttpServer())
+        .patch(`/tests/${publishedTestId}`)
+        .set('Authorization', `Bearer ${directorToken}`)
+        .send({ allowedGrades: [SchoolGrade.GRADE_6] })
+        .expect(400);
+
+      expect(res.body.code ?? res.body.message).toMatch(/TEST_ALLOWED_GRADES_CONFLICT/);
+    });
+
+    it('I2 — changing subjectId on DRAFT test (no assignment) → 200', async () => {
+      // Create a fresh DRAFT test in the same org/year
+      const yearId = await getActiveYear(prisma, orgId);
+      const subjectId = await getSubject(prisma, orgId);
+      const draftRes = await request(app.getHttpServer())
+        .post('/tests')
+        .set('Authorization', `Bearer ${directorToken}`)
+        .send({
+          title: 'Draft Subject Change I2',
+          subjectId,
+          academicYearId: yearId,
+          allowedGrades: [SchoolGrade.GRADE_5],
+        })
+        .expect(201);
+      const draftId = unwrap(draftRes).id as string;
+
+      // Change subjectId to incompatibleSubjectId — allowed on DRAFT (no assignments exist)
+      await request(app.getHttpServer())
+        .patch(`/tests/${draftId}`)
+        .set('Authorization', `Bearer ${directorToken}`)
+        .send({ subjectId: incompatibleSubjectId })
+        .expect(200);
+    });
+  });
+
+  // ── Test J — Test.allowedGrades guard at assignment time ──────────────────
+  describe('J — assigning to class outside test.allowedGrades → 400', () => {
+    let directorToken: string;
+    let orgId: string;
+    let publishedTestId: string;
+    let disabledGradeClassId: string;
+
+    beforeAll(async () => {
+      const ts = Date.now();
+      const ctx = await setupOrgContext(app, prisma, {
+        role: 'DIRECTOR',
+        seed: `flw_j_${ts}`,
+      });
+      orgId = ctx.organization.id;
+      directorToken = ctx.owner.accessToken;
+      allOrgIds.push(orgId);
+      allUserIds.push(ctx.owner.user.id);
+
+      await activateOrg(prisma, orgId);
+      const yearId = await getActiveYear(prisma, orgId);
+      const subjectId = await getSubject(prisma, orgId);
+
+      // Create a GRADE_5 class for publish readiness
+      await createClassSection(prisma, orgId, yearId);
+
+      // Create a GRADE_7 class that will be outside test.allowedGrades
+      const grade7Class = await prisma.classSection.create({
+        data: { orgId, yearId, grade: SchoolGrade.GRADE_7, section: `J${ts}`, label: `7.J${ts}` },
+        select: { id: true },
+      });
+      disabledGradeClassId = grade7Class.id;
+
+      // Create + publish a test
+      const testRes = await request(app.getHttpServer())
+        .post('/tests')
+        .set('Authorization', `Bearer ${directorToken}`)
+        .send({
+          title: 'Grade Guard Test J',
+          subjectId,
+          academicYearId: yearId,
+          allowedGrades: [SchoolGrade.GRADE_5, SchoolGrade.GRADE_6],
+        })
+        .expect(201);
+      publishedTestId = unwrap(testRes).id as string;
+
+      await request(app.getHttpServer())
+        .post(`/tests/${publishedTestId}/questions`)
+        .set('Authorization', `Bearer ${directorToken}`)
+        .send({ text: 'Q?', type: QuestionType.FILL_IN_THE_BLANK, score: 1, correctAnswer: 'a' })
+        .expect(201);
+
+      await request(app.getHttpServer())
+        .patch(`/tests/${publishedTestId}`)
+        .set('Authorization', `Bearer ${directorToken}`)
+        .send({ status: PublishStatus.PUBLISHED })
+        .expect(200);
+    });
+
+    it('J1 — assign to class whose grade is outside test.allowedGrades → 400 TEST_NOT_ALLOWED_FOR_GRADE', async () => {
+      const res = await request(app.getHttpServer())
+        .post(`/tests/${publishedTestId}/assign`)
+        .set('Authorization', `Bearer ${directorToken}`)
+        .send({
+          classSectionId: disabledGradeClassId,
+          openAt: new Date(Date.now() - 60_000).toISOString(),
+          closeAt: new Date(Date.now() + 86_400_000).toISOString(),
+          maxAttempts: 1,
+          shuffle: false,
+          showExplain: 'after_close',
+        })
+        .expect(400);
+
+      expect(res.body.code ?? res.body.message).toMatch(/TEST_NOT_ALLOWED_FOR_GRADE/);
     });
   });
 });

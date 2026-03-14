@@ -424,22 +424,20 @@ export class TeachersService {
 
     // 4) Validace subjectů + org scoping
     if (uniqueIds.length > 0) {
-      const subjectsAll = await this.prisma.subject.findMany({
-        where: { id: { in: uniqueIds }, deletedAt: null },
-        select: { id: true, organizationId: true },
+      const subjectsAll = await this.prisma.orgSubject.findMany({
+        where: {
+          organizationId: teacher.organizationId,
+          subjectId: { in: uniqueIds },
+          isEnabled: true,
+          subject: { deletedAt: null },
+        },
+        select: { subjectId: true },
       });
 
       if (subjectsAll.length !== uniqueIds.length) {
-        // někdo neexistuje / smazán → 404
-        throw new NotFoundException('Některé zadané předměty neexistují.');
-      }
-
-      const foreign = subjectsAll.find(
-        (s) => s.organizationId !== teacher.organizationId,
-      );
-      if (foreign) {
-        // cross‑org pokus → 403 (pokud chceš maskovat, dej raději NotFound)
-        throw new ForbiddenException('Předmět patří do jiné organizace.');
+        throw new NotFoundException(
+          'Některé zadané předměty neexistují nebo nejsou pro školu povolené.',
+        );
       }
     }
 
@@ -515,18 +513,18 @@ export class TeachersService {
       );
     }
 
-    // ověř, že subject patří do stejné org
-    const subject = await this.prisma.subject.findFirst({
+    const subject = await this.prisma.orgSubject.findFirst({
       where: {
-        id: subjectId,
         organizationId: teacher.organizationId,
-        deletedAt: null,
+        subjectId,
+        isEnabled: true,
+        subject: { deletedAt: null },
       },
       select: { id: true },
     });
     if (!subject)
       throw new NotFoundException(
-        'Předmět neexistuje nebo nepatří do stejné organizace.',
+        'Předmět neexistuje nebo není pro školu povolený.',
       );
 
     await this.prisma.teacherSubject.deleteMany({

@@ -9,6 +9,7 @@ import {
   Req,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { CacheTTL } from '@nestjs/cache-manager';
 import { Permission } from '@/modules/rbac/permission.decorator';
 import { OrganizationRole, PermissionKey } from '@prisma/client';
 import { RequestWithUser } from '@/types/request-with-user';
@@ -35,6 +36,7 @@ export class AcademicYearsController {
   @Get()
   @AllowPendingOrg()
   @Permission(PermissionKey.VIEW_RESULTS, PermissionKey.MANAGE_STUDENTS)
+  @CacheTTL(0) // vypnout HTTP response cache – používáme verzovanou cache v service
   @ApiOperation({
     summary: 'List academic years for organization',
     description:
@@ -46,6 +48,7 @@ export class AcademicYearsController {
 
   @Get('active')
   @AllowPendingOrg()
+  @CacheTTL(0)
   @ApiOperation({
     summary: 'Get current academic year (deprecated)',
     description:
@@ -58,6 +61,7 @@ export class AcademicYearsController {
 
   @Get('current')
   @AllowPendingOrg()
+  @CacheTTL(0)
   @ApiOperation({ summary: 'Get current academic year (id + name only, single source of truth)' })
   async getCurrent(@Req() req: RequestWithUser) {
     const year = await this.service.getCurrentForOrgOrFail(req.user.organizationId ?? null);
@@ -107,6 +111,7 @@ export class AcademicYearsController {
   @Get(':fromYearId/promotion-status')
   @AllowPendingOrg()
   @Permission(PermissionKey.VIEW_RESULTS, PermissionKey.MANAGE_STUDENTS)
+  @CacheTTL(0)
   @ApiOperation({ summary: 'Check if year was already promoted' })
   getPromotionStatus(
     @Param('fromYearId', new ParseUUIDPipe()) fromYearId: string,
@@ -121,6 +126,7 @@ export class AcademicYearsController {
   @Get(':fromYearId/next-year')
   @AllowPendingOrg()
   @Permission(PermissionKey.VIEW_RESULTS, PermissionKey.MANAGE_STUDENTS)
+  @CacheTTL(0)
   @ApiOperation({ summary: 'Get immediate next academic year (for promotion UI)' })
   getNextYear(
     @Param('fromYearId', new ParseUUIDPipe()) fromYearId: string,

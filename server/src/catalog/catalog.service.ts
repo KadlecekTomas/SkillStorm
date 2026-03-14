@@ -408,31 +408,39 @@ export class CatalogService {
     });
     if (!cat) throw new NotFoundException('CatalogSubject nenalezen.');
 
-    // unikát [organizationId, catalogSubjectId]
+    // globální Subject + org-level activation přes OrgSubject
     const name = (dto.nameOverride ?? cat.name).trim();
 
-    const created = await this.prisma.subject
-      .create({
-        data: {
+    const created = await this.prisma.subject.upsert({
+      where: { catalogSubjectId: cat.id },
+      update: { name },
+      create: {
+        catalogSubjectId: cat.id,
+        name,
+        gradeFrom: 1,
+        gradeTo: 9,
+      },
+      select: {
+        id: true,
+        catalogSubjectId: true,
+        name: true,
+      },
+    });
+    await this.prisma.orgSubject.upsert({
+      where: {
+        organizationId_subjectId: {
           organizationId: dto.organizationId,
-          catalogSubjectId: cat.id,
-          name,
+          subjectId: created.id,
         },
-        select: {
-          id: true,
-          organizationId: true,
-          catalogSubjectId: true,
-          name: true,
-        },
-      })
-      .catch((e) => {
-        if ((e as PrismaClientKnownRequestError).code === 'P2002') {
-          throw new ConflictException(
-            'Tento katalogový předmět už je v organizaci přidán.',
-          );
-        }
-        throw e;
-      });
+      },
+      update: { isEnabled: true },
+      create: {
+        organizationId: dto.organizationId,
+        subjectId: created.id,
+        isEnabled: true,
+        isCustom: false,
+      },
+    });
 
     // volitelně vytvoř SubjectLevel pro vybrané ročníky
     if (
@@ -471,13 +479,28 @@ export class CatalogService {
     dto: MaterializeTopicDto,
     user: JwtPayload,
   ) {
-    // vezmi org přes SubjectLevel → Subject
+    const orgSubjectsArgs = {
+      ...(user.organizationId
+        ? { where: { organizationId: user.organizationId } }
+        : {}),
+      select: { organizationId: true },
+      take: 1,
+      orderBy: { createdAt: 'asc' as const },
+    };
+    // vezmi org přes OrgSubject navázaný na Subject
     const sl = await this.prisma.subjectLevel.findUnique({
       where: { id: dto.subjectLevelId },
-      select: { subject: { select: { organizationId: true, id: true } } },
+      include: {
+        subject: {
+          include: {
+            orgSubjects: orgSubjectsArgs,
+          },
+        },
+      },
     });
     if (!sl) throw new NotFoundException('SubjectLevel nenalezen.');
-    const orgId = sl.subject.organizationId;
+    const orgId = sl.subject.orgSubjects[0]?.organizationId ?? null;
+    if (!orgId) throw new NotFoundException('Předmět není přiřazen žádné organizaci.');
 
     if (user.systemRole !== SystemRole.SUPERADMIN) {
       assertSameOrganization(orgId, user, 'organizace');
@@ -538,13 +561,28 @@ export class CatalogService {
     dto: MaterializeTopicsBulkDto,
     user: JwtPayload,
   ) {
+    const orgSubjectsArgs = {
+      ...(user.organizationId
+        ? { where: { organizationId: user.organizationId } }
+        : {}),
+      select: { organizationId: true },
+      take: 1,
+      orderBy: { createdAt: 'asc' as const },
+    };
     // validace subjectLevel + org
     const sl = await this.prisma.subjectLevel.findUnique({
       where: { id: dto.subjectLevelId },
-      select: { subject: { select: { organizationId: true, id: true } } },
+      include: {
+        subject: {
+          include: {
+            orgSubjects: orgSubjectsArgs,
+          },
+        },
+      },
     });
     if (!sl) throw new NotFoundException('SubjectLevel nenalezen.');
-    const orgId = sl.subject.organizationId;
+    const orgId = sl.subject.orgSubjects[0]?.organizationId ?? null;
+    if (!orgId) throw new NotFoundException('Předmět není přiřazen žádné organizaci.');
     if (user.systemRole !== SystemRole.SUPERADMIN) {
       assertSameOrganization(orgId, user, 'organizace');
     }

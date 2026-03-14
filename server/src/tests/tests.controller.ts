@@ -11,7 +11,6 @@ import {
   Req,
   Header,
   ParseUUIDPipe,
-  BadRequestException,
   ForbiddenException,
   UseGuards,
 } from '@nestjs/common';
@@ -42,6 +41,7 @@ import { ok } from '@/common/http/envelope';
 import { AssignTestDto } from './dto/assign-test.dto';
 import { ApiStandardResponses } from '@/common/http/api-standard-responses.decorator';
 import { RequireCurrentAcademicYearGuard } from '@/academic-years/require-current-academic-year.guard';
+import { AcademicYearExpiredGuard } from '@/academic-years/academic-year-expired.guard';
 import {
   OrgOperation,
   OrgOperationType,
@@ -52,7 +52,7 @@ import { OrgContextService } from '@/common/org-context/org-context.service';
 @ApiStandardResponses()
 @ApiBearerAuth()
 @Controller('tests')
-@UseGuards(RequireCurrentAcademicYearGuard)
+@UseGuards(RequireCurrentAcademicYearGuard, AcademicYearExpiredGuard)
 @OrgOperation(OrgOperationType.AUTHORING)
 export class TestsController {
   constructor(
@@ -74,6 +74,7 @@ export class TestsController {
   @Permission(PermissionKey.VIEW_RESULTS)
   @ApiOperation({ summary: 'List tests' })
   @ApiQuery({ name: 'organizationId', required: false, type: String })
+  @ApiQuery({ name: 'grade', required: false, type: String })
   @NoHttpCache()
   async findAll(@Req() req: RequestWithUser, @Query() q: QueryTestsDto) {
     const ctx = await this.orgContext.get(req);
@@ -96,31 +97,6 @@ export class TestsController {
       );
     }
     return ok(this.service.findAll(req.user, q, ctx));
-  }
-
-  // [TEMP DEBUG] — remove before release
-  // Requires VIEW_RESULTS permission (teacher/admin).
-  // RequireCurrentAcademicYearGuard still applies (class-level).
-  @Get('debug/student-visibility')
-  @Permission(PermissionKey.VIEW_RESULTS)
-  @ApiOperation({ summary: '[DEBUG TEMP] Student test visibility analysis' })
-  @NoHttpCache()
-  debugStudentVisibility(
-    @Query('membershipId') membershipId: string,
-    @Query('organizationId') orgIdOverride: string | undefined,
-    @Req() req: RequestWithUser,
-  ) {
-    if (!membershipId) {
-      throw new BadRequestException('membershipId query param is required');
-    }
-    const organizationId =
-      req.user.systemRole === 'SUPERADMIN' && orgIdOverride
-        ? orgIdOverride
-        : (req.user.organizationId ?? orgIdOverride ?? '');
-    if (!organizationId) {
-      throw new ForbiddenException('Cannot determine organization context');
-    }
-    return ok(this.service.debugStudentVisibility(membershipId, organizationId));
   }
 
   @Get(':id')

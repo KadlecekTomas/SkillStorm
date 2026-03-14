@@ -2,9 +2,9 @@
 
 ## Demo Credentials
 
-- Director: `director.demo@skillstorm.local` / `Password123!`
-- Teacher: `teacher.demo@skillstorm.local` / `Password123!`
-- Student: `student.demo@skillstorm.local` / `Password123!`
+- Director: `director@zs.demo.local` / `Password123!`
+- Teacher: `teacher1@zs.demo.local` / `Password123!`
+- Student: `student-d@zs.demo.local` / `Password123!`
 
 ## Demo Invite Codes
 
@@ -33,7 +33,7 @@
 ### 1. Director / teacher view (about 45 seconds)
 
 1. Open `http://localhost:3000/login`.
-2. Log in as `director.demo@skillstorm.local` if you want to show settings + invites, or as `teacher.demo@skillstorm.local` if you want to go straight to tests.
+2. Log in as `director@zs.demo.local` if you want to show settings + invites, or as `teacher1@zs.demo.local` if you want to go straight to tests.
 3. You should land in the school workspace.
 4. Optional director step:
    - open `http://localhost:3000/app/settings`
@@ -54,7 +54,7 @@
 ### 2. Student view (about 75 seconds)
 
 1. Log out.
-2. Log in as `student.demo@skillstorm.local`.
+2. Log in as `student-d@zs.demo.local`.
 3. Open `http://localhost:3000/app/assignments`.
 4. Expected output:
    - one assignment card is visible
@@ -79,3 +79,7 @@ Run the demo seed again. It is idempotent and resets the demo student's submissi
 cd /Users/tomaskadlecek/Documents/GitHub/SkillStorm/server
 DEMO_SEED=1 npm run db:seed
 ```
+
+
+docker compose --profile dev up --build
+docker compose --profile down

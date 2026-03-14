@@ -1,5 +1,6 @@
 /**
- * Backfill: provision default Subject + SubjectLevel records for every existing organization.
+ * Backfill: provision global Subject + SubjectLevel records and enable OrgSubject
+ * records for every existing organization.
  *
  * Run once after deploying the auto-provisioning feature to cover orgs created before it.
  * Idempotent: uses upsert; safe to re-run.
@@ -13,7 +14,7 @@ const prisma = new PrismaClient();
 const GRADES = Object.values(SchoolGrade);
 
 async function main() {
-  console.log('📚 Backfill: Subject + SubjectLevel records per organization');
+  console.log('📚 Backfill: Subject catalog + OrgSubject records per organization');
 
   const catalogSubjects = await prisma.catalogSubject.findMany({ orderBy: { name: 'asc' } });
   if (!catalogSubjects.length) {
@@ -35,17 +36,28 @@ async function main() {
     await prisma.$transaction(async (tx) => {
       for (const catalog of catalogSubjects) {
         const subject = await tx.subject.upsert({
-          where: {
-            organizationId_catalogSubjectId: {
-              organizationId: org.id,
-              catalogSubjectId: catalog.id,
-            },
-          },
+          where: { catalogSubjectId: catalog.id },
           update: {},
           create: {
-            organizationId: org.id,
             catalogSubjectId: catalog.id,
             name: catalog.name,
+            gradeFrom: 1,
+            gradeTo: 9,
+          },
+        });
+        await tx.orgSubject.upsert({
+          where: {
+            organizationId_subjectId: {
+              organizationId: org.id,
+              subjectId: subject.id,
+            },
+          },
+          update: { isEnabled: true },
+          create: {
+            organizationId: org.id,
+            subjectId: subject.id,
+            isEnabled: true,
+            isCustom: false,
           },
         });
 

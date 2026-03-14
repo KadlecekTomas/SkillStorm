@@ -18,6 +18,7 @@ type TestDetail = {
   title: string;
   description?: string | null;
   subject?: string | null;
+  allowedGrades: string[];
   status: "DRAFT" | "PUBLISHED" | "ARCHIVED";
 };
 
@@ -127,6 +128,7 @@ function TestDetailPage(): React.JSX.Element {
         open={assignOpen}
         onOpenChange={setAssignOpen}
         testId={testId}
+        allowedGrades={test?.allowedGrades ?? []}
         yearId={selectedYearId}
         onSuccess={fetchTest}
       />

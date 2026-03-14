@@ -7,7 +7,10 @@ import { studentDetailAllowlist } from "@/lib/gdpr/allowlist";
 
 const FORBIDDEN_MESSAGE = "Nemáte oprávnění zobrazit detail žáka.";
 
-export function useStudentDetail(studentId: string | null): {
+export function useStudentDetail(
+  studentId: string | null,
+  yearId?: string | null,
+): {
   detail: StudentDetailResponse | null;
   loading: boolean;
   error: string | null;
@@ -30,9 +33,10 @@ export function useStudentDetail(studentId: string | null): {
     setLoading(true);
     setError(null);
     try {
+      const qs = yearId ? `?yearId=${encodeURIComponent(yearId)}` : "";
       const data = await fetchWithAuth<StudentDetailResponse>(
         "GET",
-        `/students/${studentId}/detail`,
+        `/students/${studentId}/detail${qs}`,
         { signal: ac.signal },
       );
       if (ac.signal.aborted) return false;
@@ -53,7 +57,7 @@ export function useStudentDetail(studentId: string | null): {
         setLoading(false);
       }
     }
-  }, [studentId]);
+  }, [studentId, yearId]);
 
   useEffect(() => {
     void refetch();

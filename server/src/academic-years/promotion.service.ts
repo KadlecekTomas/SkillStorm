@@ -16,8 +16,21 @@ import { Inject } from '@nestjs/common';
 import { bumpOrgVersion, cacheScopeForUser } from '@/shared/cache/org-cache.utils';
 import { assertSameOrganization } from '@/shared/access.utils';
 import { hasAtLeastRole } from '@/shared/access.utils';
+import { AcademicYearCacheRef } from '@/common/year-cache/academic-year-cache.ref';
 
-const GRADE_ORDER: SchoolGrade[] = [
+/**
+ * MVP SUPPORT SCOPE — Primary school only (GRADE_1 through GRADE_9).
+ *
+ * High school grades (HIGH_SCHOOL_YEAR_1..4) are NOT supported by the
+ * automatic promotion flow. Promotion will reject any organization whose
+ * classrooms include high school grades with an explicit 409 error listing
+ * the unsupported sections. High school support is deferred post-MVP.
+ *
+ * Graduation rule: GRADE_9 classes are terminal. Students in GRADE_9 are
+ * not carried forward; they are counted in skippedClassesCount (graduates).
+ */
+
+const PRIMARY_GRADE_ORDER: SchoolGrade[] = [
   'GRADE_1',
   'GRADE_2',
   'GRADE_3',
@@ -29,10 +42,23 @@ const GRADE_ORDER: SchoolGrade[] = [
   'GRADE_9',
 ];
 
-function getNextGrade(grade: SchoolGrade): SchoolGrade | null {
-  const i = GRADE_ORDER.indexOf(grade);
-  if (i < 0 || i >= GRADE_ORDER.length - 1) return null;
-  return GRADE_ORDER[i + 1] ?? null;
+type GradeProgressionResult =
+  | { status: 'promoted'; nextGrade: SchoolGrade }
+  | { status: 'graduated' }
+  | { status: 'unsupported' };
+
+/**
+ * Classify how a grade progresses during academic year promotion.
+ * - promoted:   next grade exists in primary school sequence
+ * - graduated:  terminal grade (GRADE_9) — students finish schooling
+ * - unsupported: grade is outside the supported PRIMARY_GRADE_ORDER
+ *               (e.g. HIGH_SCHOOL_YEAR_1..4) — promotion is rejected
+ */
+function classifyGrade(grade: SchoolGrade): GradeProgressionResult {
+  const i = PRIMARY_GRADE_ORDER.indexOf(grade);
+  if (i < 0) return { status: 'unsupported' };
+  if (i >= PRIMARY_GRADE_ORDER.length - 1) return { status: 'graduated' };
+  return { status: 'promoted', nextGrade: PRIMARY_GRADE_ORDER[i + 1]! };
 }
 
 function sectionKey(grade: string, section: string): string {
@@ -54,6 +80,7 @@ export class PromotionService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
+    private readonly yearCache: AcademicYearCacheRef,
   ) {}
 
   /**
@@ -81,12 +108,12 @@ export class PromotionService {
     }
 
     const [fromYear, toYear] = await Promise.all([
-      this.prisma.academicYear.findUnique({
-        where: { id: fromYearId, orgId: organizationId },
+      this.prisma.academicYear.findFirst({
+        where: { id: fromYearId, orgId: organizationId, deletedAt: null },
         select: { id: true, orgId: true, startsAt: true, endsAt: true, label: true },
       }),
-      this.prisma.academicYear.findUnique({
-        where: { id: toYearId, orgId: organizationId },
+      this.prisma.academicYear.findFirst({
+        where: { id: toYearId, orgId: organizationId, deletedAt: null },
         select: { id: true, orgId: true, startsAt: true, label: true },
       }),
     ]);
@@ -95,6 +122,7 @@ export class PromotionService {
       ? await this.prisma.academicYear.findFirst({
           where: {
             orgId: organizationId,
+            deletedAt: null,
             startsAt: { gt: fromYear.startsAt },
           },
           orderBy: { startsAt: 'asc' },
@@ -149,13 +177,21 @@ export class PromotionService {
         const sectionsData: Prisma.ClassSectionCreateManyInput[] = [];
         const oldSectionToKey = new Map<string, string>();
         let skippedClassesCount = 0;
+        const unsupportedSections: Array<{ grade: string; section: string }> = [];
 
         for (const section of sections) {
-          const nextGrade = getNextGrade(section.grade as SchoolGrade);
-          if (!nextGrade) {
+          const progression = classifyGrade(section.grade as SchoolGrade);
+
+          if (progression.status === 'unsupported') {
+            unsupportedSections.push({ grade: section.grade, section: section.section });
+            continue;
+          }
+          if (progression.status === 'graduated') {
             skippedClassesCount += 1;
             continue;
           }
+
+          const { nextGrade } = progression;
           const gradeNum = nextGrade.replace('GRADE_', '');
           sectionsData.push({
             orgId: organizationId,
@@ -166,6 +202,18 @@ export class PromotionService {
             teacherId: section.teacherId,
           });
           oldSectionToKey.set(section.id, sectionKey(nextGrade, section.section));
+        }
+
+        // Reject explicitly — silent skip is not allowed for unsupported grades.
+        if (unsupportedSections.length > 0) {
+          const list = unsupportedSections
+            .map((s) => `${s.grade} (sekce ${s.section})`)
+            .join(', ');
+          throw new ConflictException(
+            `Postup ročníku není podporován pro tyto třídy: ${list}. ` +
+              'Automatický postup podporuje pouze třídy GRADE_1 až GRADE_9. ' +
+              'Třídy vyšší školy (HIGH_SCHOOL_YEAR_1..4) je nutné zpracovat ručně.',
+          );
         }
 
         const classroomsCreated = sectionsData.length;
@@ -186,6 +234,7 @@ export class PromotionService {
             yearId: fromYearId,
             classSectionId: { in: Array.from(oldSectionToKey.keys()) },
             status: EnrollmentStatus.ACTIVE,
+            student: { deletedAt: null },
           },
           select: { studentId: true, classSectionId: true },
         });
@@ -220,6 +269,33 @@ export class PromotionService {
           }
         }
 
+        // Copy explicit teacher-to-class assignments (TeacherClassSection) for promoted sections.
+        const oldTeacherAssignments = await tx.teacherClassSection.findMany({
+          where: {
+            classSectionId: { in: Array.from(oldSectionToKey.keys()) },
+            deletedAt: null,
+          },
+          select: { teacherId: true, classSectionId: true },
+        });
+
+        const teacherAssignmentRows: Prisma.TeacherClassSectionCreateManyInput[] = [];
+        for (const ta of oldTeacherAssignments) {
+          const key = oldSectionToKey.get(ta.classSectionId);
+          const newSectionId = key ? newSectionByKey.get(key) : undefined;
+          if (!newSectionId) continue;
+          teacherAssignmentRows.push({
+            teacherId: ta.teacherId,
+            classSectionId: newSectionId,
+            yearId: toYearId,
+          });
+        }
+        if (teacherAssignmentRows.length > 0) {
+          await tx.teacherClassSection.createMany({
+            data: teacherAssignmentRows,
+            skipDuplicates: true,
+          });
+        }
+
         const durationMs = Math.round(performance.now() - startPerf);
 
         await tx.promotionLog.create({
@@ -248,11 +324,21 @@ export class PromotionService {
       const scope = cacheScopeForUser(user.systemRole ?? null, organizationId);
       await bumpOrgVersion(this.cache, scope);
 
+      // Invalidate the active-year cache so the next request sees the promoted year immediately.
+      this.yearCache.invalidate(organizationId);
+
       const durationMs = Math.round(performance.now() - startPerf);
       this.logger.log(
-        `Promotion completed: org=${organizationId} from=${fromYearId} to=${toYearId} ` +
-          `classrooms=${result.classroomsCreated} students=${result.studentsMigratedCount} ` +
-          `enrollmentsSkipped=${result.enrollmentsSkippedCount} skippedClasses=${result.skippedClassesCount} durationMs=${durationMs}`,
+        JSON.stringify({
+          action: 'ACADEMIC_YEAR_PROMOTED',
+          actor: user.userId,
+          organizationId,
+          fromYearId,
+          toYearId,
+          classroomsCreated: result.classroomsCreated,
+          studentsMigratedCount: result.studentsMigratedCount,
+          durationMs,
+        }),
       );
 
       return {
@@ -301,8 +387,8 @@ export class PromotionService {
     organizationId: string,
     fromYearId: string,
   ): Promise<{ id: string; label: string } | null> {
-    const fromYear = await this.prisma.academicYear.findUnique({
-      where: { id: fromYearId, orgId: organizationId },
+    const fromYear = await this.prisma.academicYear.findFirst({
+      where: { id: fromYearId, orgId: organizationId, deletedAt: null },
       select: { startsAt: true },
     });
     if (!fromYear) return null;
@@ -310,6 +396,7 @@ export class PromotionService {
     const next = await this.prisma.academicYear.findFirst({
       where: {
         orgId: organizationId,
+        deletedAt: null,
         startsAt: { gt: fromYear.startsAt },
       },
       orderBy: { startsAt: 'asc' },

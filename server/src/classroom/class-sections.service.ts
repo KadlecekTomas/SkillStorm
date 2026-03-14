@@ -97,7 +97,7 @@ export class ClassSectionsService {
 
   private async assertValidAcademicYear(orgId: string, yearId: string) {
     const year = await this.prisma.academicYear.findFirst({
-      where: { id: yearId, orgId },
+      where: { id: yearId, orgId, deletedAt: null },
       select: { id: true, orgId: true, isCurrent: true },
     });
     if (!year) {
@@ -139,18 +139,22 @@ export class ClassSectionsService {
   private async listOrgSubjectsByClassSectionId(classSectionId: string) {
     return this.prisma.orgSubject.findMany({
       where: {
+        isEnabled: true,
         classSections: {
           some: { classSectionId },
         },
       },
-      select: {
-        id: true,
-        name: true,
-        gradeFrom: true,
-        gradeTo: true,
-        organizationId: true,
+      include: {
+        subject: {
+          select: {
+            id: true,
+            name: true,
+            gradeFrom: true,
+            gradeTo: true,
+          },
+        },
       },
-      orderBy: [{ name: 'asc' }, { id: 'asc' }],
+      orderBy: [{ subject: { name: 'asc' } }, { id: 'asc' }],
     });
   }
 
@@ -688,11 +692,13 @@ export class ClassSectionsService {
 
     const subjects = await this.prisma.orgSubject.findMany({
       where: { id: { in: uniqueOrgSubjectIds } },
-      select: {
-        id: true,
-        organizationId: true,
-        gradeFrom: true,
-        gradeTo: true,
+      include: {
+        subject: {
+          select: {
+            gradeFrom: true,
+            gradeTo: true,
+          },
+        },
       },
     });
     if (subjects.length !== uniqueOrgSubjectIds.length) {
@@ -723,14 +729,14 @@ export class ClassSectionsService {
     }
     const invalidByGrade = subjects
       .filter((subject) => {
-        const min = subject.gradeFrom ?? Number.NEGATIVE_INFINITY;
-        const max = subject.gradeTo ?? Number.POSITIVE_INFINITY;
+        const min = subject.subject.gradeFrom ?? Number.NEGATIVE_INFINITY;
+        const max = subject.subject.gradeTo ?? Number.POSITIVE_INFINITY;
         return classGradeNumeric < min || classGradeNumeric > max;
       })
       .map((subject) => ({
         orgSubjectId: subject.id,
-        gradeFrom: subject.gradeFrom,
-        gradeTo: subject.gradeTo,
+        gradeFrom: subject.subject.gradeFrom,
+        gradeTo: subject.subject.gradeTo,
       }));
 
     if (invalidByGrade.length > 0) {
@@ -869,17 +875,42 @@ export class ClassSectionsService {
         studentId: { in: membershipIds },
         deletedAt: null,
         submittedAt: { not: null },
-        ...(subjectId && { test: { subjectId: subjectId } }),
+        // Scope to this class's academic year — prevents cross-year score pollution
+        assignment: {
+          yearId: classSection.yearId,
+          ...(subjectId ? { test: { subjectId } } : {}),
+        },
       },
-      select: { studentId: true, score: true, submittedAt: true },
+      select: {
+        studentId: true,
+        score: true,
+        submittedAt: true,
+        // Needed for weighted avg: SUM(score) / SUM(maxScore) * 100
+        assignment: {
+          select: {
+            test: { select: { questions: { select: { score: true } } } },
+          },
+        },
+      },
       orderBy: { submittedAt: 'desc' },
       take: Math.min(5000, safeLimit * 50),
     });
 
-    const byMembershipId = new Map<string, { score: number | null; submittedAt: Date | null }[]>();
+    const byMembershipId = new Map<
+      string,
+      { score: number | null; submittedAt: Date | null; maxScore: number }[]
+    >();
     for (const s of submissions) {
+      const maxScore =
+        s.assignment?.test?.questions?.reduce(
+          (sum, q) => sum + (q.score ?? 0),
+          0,
+        ) ?? 0;
       const list = byMembershipId.get(s.studentId) ?? [];
-      list.push({ score: s.score, submittedAt: s.submittedAt });
+      // computeStudentRisk expects raw earned points (e.g. 1.95 out of 3.0),
+      // not the normalized 0–1 ratio stored in Submission.score.
+      const rawEarned = s.score != null ? s.score * maxScore : null;
+      list.push({ score: rawEarned, submittedAt: s.submittedAt, maxScore });
       byMembershipId.set(s.studentId, list);
     }
 
@@ -927,6 +958,7 @@ export class ClassSectionsService {
     academicYearId?: string,
     limit?: number,
   ): Promise<SubjectPerformanceResponseDto> {
+    // limit controls the max number of subjects returned in the response (not assignment fetch)
     const safeLimit = Math.min(100, Math.max(1, limit ?? 20));
     const classSection = await this.prisma.classSection.findUnique({
       where: { id: classroomId },
@@ -979,9 +1011,10 @@ export class ClassSectionsService {
       where: {
         classSectionId: classroomId,
         yearId: academicYearId ?? classSection.yearId,
+        // Exclude assignments for soft-deleted tests so analytics stay clean
+        test: { deletedAt: null },
       },
-      orderBy: { openAt: 'desc' },
-      take: safeLimit,
+      // No take limit — fetch all assignments for the year so subject averages are not truncated
       include: {
         test: {
           include: {
@@ -1045,9 +1078,11 @@ export class ClassSectionsService {
       const submissionCount = subs.length;
       if (submissionCount === 0) continue;
 
+      // Weighted average: SUM(points) / SUM(maxPoints) * 100
+      const totalPoints = subs.reduce((acc, s) => acc + s.score, 0);
+      const totalMaxPoints = subs.reduce((acc, s) => acc + s.maxScore, 0);
       const averageScorePercent =
-        subs.reduce((acc, s) => acc + (s.score / s.maxScore) * 100, 0) /
-        submissionCount;
+        totalMaxPoints > 0 ? (totalPoints / totalMaxPoints) * 100 : 0;
       const testCount = entry.testIds.size;
 
       const withDate = subs.filter(
@@ -1085,6 +1120,7 @@ export class ClassSectionsService {
     }
 
     subjects.sort((a, b) => a.averageScorePercent - b.averageScorePercent);
+    const pagedSubjects = subjects.slice(0, safeLimit);
 
     await this.auditService.log({
       action: 'VIEW_SUBJECT_PERFORMANCE',
@@ -1094,7 +1130,7 @@ export class ClassSectionsService {
       organizationId: classSection.orgId,
     });
 
-    return { classroomId, subjects };
+    return { classroomId, subjects: pagedSubjects };
   }
 
   // -------------------------
@@ -1199,7 +1235,7 @@ export class ClassSectionsService {
   ) {
     const cls = await this.prisma.classSection.findUnique({
       where: { id: classSectionId },
-      select: { id: true, orgId: true, teacherId: true, academicYear: { select: { isCurrent: true } } },
+      select: { id: true, orgId: true, yearId: true, teacherId: true, academicYear: { select: { isCurrent: true } } },
     });
     if (!cls) throw new NotFoundException('Třída nebyla nalezena.');
     if (!cls.academicYear?.isCurrent) {
@@ -1225,7 +1261,12 @@ export class ClassSectionsService {
     if (teacherId) {
       const teacher = await this.prisma.teacher.findUnique({
         where: { id: teacherId },
-        select: { id: true, organizationId: true, deletedAt: true },
+        select: {
+          id: true,
+          organizationId: true,
+          deletedAt: true,
+          membership: { select: { role: true } },
+        },
       });
       if (!teacher || teacher.deletedAt)
         throw new NotFoundException('Učitel nebyl nalezen.');
@@ -1234,17 +1275,45 @@ export class ClassSectionsService {
           'Učitel není ze stejné organizace jako třída.',
         );
       }
+      if (teacher.membership?.role !== OrganizationRole.TEACHER) {
+        throw new BadRequestException(
+          'Jako třídní lze nastavit pouze člena s rolí TEACHER.',
+        );
+      }
+      // A teacher can only be homeroom of one class per academic year.
+      const existingHomeroom = await this.prisma.classSection.findFirst({
+        where: {
+          teacherId,
+          orgId: cls.orgId,
+          yearId: cls.yearId,
+          id: { not: classSectionId },
+        },
+        select: { label: true },
+      });
+      if (existingHomeroom) {
+        throw new ConflictException(
+          `Učitel již je třídní v jiné třídě (${existingHomeroom.label ?? 'neznámá'}).`,
+        );
+      }
     }
 
     const updated = await this.prisma.classSection.update({
       where: { id: classSectionId },
       data: { teacherId },
-      include: {
-        academicYear: true,
+      select: {
+        id: true,
+        label: true,
+        grade: true,
+        section: true,
+        yearId: true,
+        orgId: true,
+        teacherId: true,
+        academicYear: { select: { id: true, label: true, isCurrent: true } },
         teacher: {
-          include: {
+          select: {
+            id: true,
             membership: {
-              include: { user: { select: { id: true, name: true, email: true } } },
+              select: { user: { select: { id: true, name: true } } },
             },
           },
         },
@@ -1268,7 +1337,7 @@ export class ClassSectionsService {
   ) {
     const classSection = await this.prisma.classSection.findUnique({
       where: { id: classSectionId },
-      select: { id: true, orgId: true },
+      select: { id: true, orgId: true, yearId: true },
     });
     if (!classSection || classSection.orgId !== orgId) {
       throw new NotFoundException('Třída nenalezena v organizaci');
@@ -1284,8 +1353,8 @@ export class ClassSectionsService {
 
     const record = await this.prisma.teacherClassSection.upsert({
       where: { teacherId_classSectionId: { teacherId, classSectionId } },
-      update: { deletedAt: null },
-      create: { teacherId, classSectionId },
+      update: { deletedAt: null, yearId: classSection.yearId },
+      create: { teacherId, classSectionId, yearId: classSection.yearId },
       select: { id: true, teacherId: true, classSectionId: true, createdAt: true },
     });
 
@@ -1319,5 +1388,108 @@ export class ClassSectionsService {
     });
 
     return { success: true };
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Teacher structured view
+  // ──────────────────────────────────────────────────────────────────────────
+
+  async getMyStructure(user: JwtPayload, yearId: string) {
+    if (!user.organizationId) {
+      throw new ForbiddenException('Missing organization context.');
+    }
+    const orgId = user.organizationId;
+    await this.assertValidAcademicYear(orgId, yearId);
+
+    const membership = await this.prisma.membership.findFirst({
+      where: { userId: user.userId, organizationId: orgId, deletedAt: null },
+      select: { id: true },
+    });
+
+    // Single include used for both teacher and non-teacher paths — no N+1.
+    const classInclude = {
+      teacher: {
+        select: {
+          id: true,
+          membership: {
+            select: { user: { select: { name: true } } },
+          },
+        },
+      },
+      _count: {
+        select: {
+          enrollments: {
+            where: { status: { not: EnrollmentStatus.LEFT } },
+          },
+        },
+      },
+      academicYear: { select: { id: true, label: true, isCurrent: true } },
+    } as const;
+
+    // Membership + teacher resolved via 2 sequential DB hits (not N+1).
+    const teacher = membership
+      ? await this.prisma.teacher.findFirst({
+          where: { membershipId: membership.id, deletedAt: null },
+          select: { id: true },
+        })
+      : null;
+
+    // Helper: strip internal `teachers` field and add top-level convenience fields.
+    type WithTeachers = {
+      teachers?: unknown;
+      _count: { enrollments: number };
+      teacher: { id: string; membership: { user: { name: string | null } } | null } | null;
+    };
+    const mapClass = <T extends WithTeachers>(cls: T) => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { teachers: _t, ...rest } = cls as T & { teachers?: unknown };
+      return {
+        ...rest,
+        studentCount: cls._count.enrollments,
+        homeroomTeacherName: cls.teacher?.membership?.user?.name ?? null,
+      };
+    };
+
+    if (!teacher) {
+      const allClasses = await this.prisma.classSection.findMany({
+        where: { orgId, yearId },
+        include: classInclude,
+        orderBy: [{ grade: 'asc' }, { section: 'asc' }, { id: 'asc' }],
+      });
+      return {
+        homeroom: null,
+        teachingClasses: [],
+        otherClasses: allClasses.map(mapClass),
+      };
+    }
+
+    // Single query for all classes with this teacher's TeacherClassSection assignments.
+    const allClasses = await this.prisma.classSection.findMany({
+      where: { orgId, yearId },
+      include: {
+        ...classInclude,
+        teachers: {
+          where: { teacherId: teacher.id, deletedAt: null, yearId },
+          select: { teacherId: true },
+        },
+      },
+      orderBy: [{ grade: 'asc' }, { section: 'asc' }, { id: 'asc' }],
+    });
+
+    // Bucket by ID to guarantee no class appears in more than one bucket.
+    const homeroom = allClasses.find((cls) => cls.teacherId === teacher.id) ?? null;
+    const homeroomId = homeroom?.id ?? null;
+
+    const teachingIds = new Set(
+      allClasses
+        .filter((cls) => cls.id !== homeroomId && cls.teachers.length > 0)
+        .map((cls) => cls.id),
+    );
+
+    return {
+      homeroom: homeroom ? mapClass(homeroom) : null,
+      teachingClasses: allClasses.filter((cls) => teachingIds.has(cls.id)).map(mapClass),
+      otherClasses: allClasses.filter((cls) => cls.id !== homeroomId && !teachingIds.has(cls.id)).map(mapClass),
+    };
   }
 }

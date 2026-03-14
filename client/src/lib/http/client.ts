@@ -44,6 +44,34 @@ export class ForbiddenError extends HttpError {
   }
 }
 
+const extractErrorMessage = (data: unknown, fallback: string): string => {
+  const normalizeMessageValue = (value: unknown): string | null => {
+    if (typeof value === "string" && value.length > 0) {
+      return value;
+    }
+    if (Array.isArray(value)) {
+      const messages = value.filter((item): item is string => typeof item === "string" && item.length > 0);
+      if (messages.length > 0) {
+        return messages.join("\n");
+      }
+    }
+    return null;
+  };
+
+  if (data && typeof data === "object") {
+    const record = data as Record<string, unknown>;
+    const message = normalizeMessageValue(record.message);
+    if (message) {
+      return message;
+    }
+    const error = normalizeMessageValue(record.error);
+    if (error) {
+      return error;
+    }
+  }
+  return fallback;
+};
+
 const LOGIN_REDIRECT = "/login?reason=expired";
 const PUBLIC_ROUTES = ["/login", "/register", "/forgot-password", "/reset-password"];
 const isPublicRoutePath = (path: string) =>
@@ -388,7 +416,7 @@ export const request = async <TResponse = unknown, TBody = unknown>(
     if (config.skipAuthRetry) {
       const data = await parseResponse<unknown>(response);
       throw new HttpError(
-        (data as { message?: string })?.message ?? "Unauthorized",
+        extractErrorMessage(data, "Unauthorized"),
         response.status,
         data,
       );
@@ -396,7 +424,7 @@ export const request = async <TResponse = unknown, TBody = unknown>(
     if (shouldBypassAuthRetry(path)) {
       const data = await parseResponse<unknown>(response);
       throw new HttpError(
-        (data as { message?: string })?.message ?? "Unauthorized",
+        extractErrorMessage(data, "Unauthorized"),
         response.status,
         data,
       );
@@ -407,9 +435,7 @@ export const request = async <TResponse = unknown, TBody = unknown>(
   if (response.status === 403) {
     const data = await parseResponse<unknown>(response);
     throw new ForbiddenError(
-      data && typeof data === "object" && "message" in (data as Record<string, unknown>)
-        ? String((data as { message?: string }).message)
-        : "Nedostatečná oprávnění",
+      extractErrorMessage(data, "Nedostatečná oprávnění"),
       data,
     );
   }
@@ -417,7 +443,7 @@ export const request = async <TResponse = unknown, TBody = unknown>(
   if (!response.ok) {
     const data = await parseResponse<unknown>(response);
     throw new HttpError(
-      (data as { message?: string })?.message ?? "HTTP error",
+      extractErrorMessage(data, "HTTP error"),
       response.status,
       data,
     );

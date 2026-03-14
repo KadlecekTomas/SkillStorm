@@ -83,4 +83,13 @@ export class StatsController {
     const organizationId = req.user.organizationId ?? null;
     return this.service.getTeacherDashboard(organizationId, req.user);
   }
+
+  @UseInterceptors(NoHttpCacheInterceptor)
+  @Get('dashboards/director')
+  @Permission(PermissionKey.VIEW_RESULTS)
+  @ApiOperation({ summary: 'Director dashboard (school command center)' })
+  director(@Req() req: RequestWithUser) {
+    const organizationId = req.user.organizationId ?? null;
+    return this.service.getDirectorDashboard(organizationId, req.user);
+  }
 }

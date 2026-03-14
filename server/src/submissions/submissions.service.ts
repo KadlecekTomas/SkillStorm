@@ -220,6 +220,7 @@ export class SubmissionsService {
       include: {
         test: { select: { id: true, organizationId: true } },
         students: { select: { studentId: true } }, // AssignmentStudent[]
+        academicYear: { select: { id: true, startsAt: true, endsAt: true } },
       },
     });
     if (!assignment) throw new NotFoundException('Assignment nenalezen');
@@ -286,8 +287,16 @@ export class SubmissionsService {
       }
     }
 
-    // 5) okno otevření
+    // 5) okno otevření + academic year boundary
     const now = new Date();
+    if (assignment.academicYear) {
+      if (now < assignment.academicYear.startsAt || now > assignment.academicYear.endsAt) {
+        throw new BadRequestException({
+          code: 'YEAR_WINDOW_CLOSED',
+          message: 'Odevzdání není možné mimo rozsah školního roku.',
+        });
+      }
+    }
     if (now < assignment.openAt)
       throw new BadRequestException('Assignment ještě není otevřen');
     if (now > assignment.closeAt)
@@ -441,6 +450,7 @@ export class SubmissionsService {
             organizationId: true,
             closeAt: true,
             openAt: true,
+            academicYear: { select: { id: true, startsAt: true, endsAt: true } },
           },
         },
         student: { select: { id: true, organizationId: true } },
@@ -477,7 +487,10 @@ export class SubmissionsService {
       return submission;
     }
 
-    // okno – po deadline zakázat
+    // Year-boundary check is intentionally absent here: AcademicYearExpiredGuard is
+    // not applied to submissions so students can finish a test they already started
+    // even if the year expired between create() and finish(). The assignment closeAt
+    // is the only hard deadline for submissions in progress.
     const now = new Date();
     if (now < submission.assignment.openAt)
       throw new BadRequestException('Assignment ještě není otevřen');
@@ -768,7 +781,24 @@ export class SubmissionsService {
           },
         },
         assignment: {
-          select: { organizationId: true, createdById: true, classSectionId: true },
+          select: {
+            organizationId: true,
+            createdById: true,
+            classSectionId: true,
+            test: {
+              select: {
+                questions: {
+                  select: {
+                    id: true,
+                    type: true,
+                    correctAnswer: true,
+                    correctAnswers: true,
+                    score: true,
+                  },
+                },
+              },
+            },
+          },
         },
         student: { select: { user: { select: { name: true } } } },
       },
@@ -777,6 +807,21 @@ export class SubmissionsService {
       throw new NotFoundException('Submission nenalezena');
     if (!submission.assignment) {
       throw new NotFoundException('Submission nemá přiřazený assignment.');
+    }
+
+    // ── Scoring integrity guard (log-only, no stored-value mutation) ──────────
+    if (submission.score != null && submission.assignment.test?.questions?.length) {
+      const recomputed = computeScore(
+        submission.assignment.test.questions,
+        submission.responses,
+      );
+      if (Math.abs(recomputed.normalizedScore - submission.score) > 0.01) {
+        this.logger.warn('Submission score mismatch detected', {
+          submissionId: submission.id,
+          storedScore: submission.score,
+          recomputedScore: recomputed.normalizedScore,
+        });
+      }
     }
 
     if (

@@ -8,7 +8,7 @@ trap 'rm -f "$COOKIE_JAR"; rm -rf "$TMP_DIR"' EXIT
 
 FRONTEND_URL="${FRONTEND_URL:-http://localhost:3000}"
 BACKEND_URL="${BACKEND_URL:-http://localhost:4200}"
-STUDENT_EMAIL="${DEMO_STUDENT_EMAIL:-student.demo@skillstorm.local}"
+STUDENT_EMAIL="${DEMO_STUDENT_EMAIL:-student-d@zs.demo.local}"
 STUDENT_PASSWORD="${DEMO_STUDENT_PASSWORD:-Password123!}"
 
 wait_for_health() {

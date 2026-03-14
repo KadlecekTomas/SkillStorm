@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { fetchWithAuth, HttpError } from "@/lib/http/client";
 import { showToastOnce } from "@/utils/toast";
 import type { AssignabilityReport } from "@/types/assignability";
+import { formatAllowedGrades, gradeLabel } from "@/lib/grades";
 
 type ClassSection = { id: string; label?: string | null; grade?: string; section?: string };
 
@@ -21,6 +22,7 @@ export type AssignToClassModalProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   testId: string | null;
+  allowedGrades: string[];
   /** Active academic year id for fetching class sections */
   yearId: string | null;
   onSuccess?: () => void;
@@ -33,6 +35,7 @@ export function AssignToClassModal({
   open,
   onOpenChange,
   testId,
+  allowedGrades,
   yearId,
   onSuccess,
 }: AssignToClassModalProps): React.JSX.Element {
@@ -75,6 +78,21 @@ export function AssignToClassModal({
     e.preventDefault();
     if (!testId || !form.classSectionId) {
       setError("Vyber třídu.");
+      return;
+    }
+    const selectedClass = classes.find((item) => item.id === form.classSectionId);
+    if (selectedClass?.grade && !allowedGrades.includes(selectedClass.grade)) {
+      setError(`Test je určen pro ročníky ${formatAllowedGrades(allowedGrades)}.`);
+      return;
+    }
+    const openDate = new Date(form.openAt);
+    const closeDate = new Date(form.closeAt);
+    if (isNaN(openDate.getTime()) || isNaN(closeDate.getTime())) {
+      setError("Zadejte platné datum otevření a uzavření.");
+      return;
+    }
+    if (openDate >= closeDate) {
+      setError("Datum otevření musí být před datem uzavření.");
       return;
     }
     setError(null);
@@ -156,6 +174,10 @@ export function AssignToClassModal({
               </Link>
             </div>
           )}
+          <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+            <span className="font-medium text-slate-900">Určeno pro ročníky:</span>{" "}
+            {formatAllowedGrades(allowedGrades)}
+          </div>
           <div className="space-y-2">
             <label htmlFor="assign-class" className="text-sm font-medium text-slate-700">Třída</label>
             <select
@@ -166,11 +188,14 @@ export function AssignToClassModal({
               disabled={loading || !yearId}
             >
               <option value="">Vyber třídu</option>
-              {classes.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {labelFor(c)}
-                </option>
-              ))}
+              {classes.map((c) => {
+                const eligible = !c.grade || allowedGrades.includes(c.grade);
+                return (
+                  <option key={c.id} value={c.id} disabled={!eligible}>
+                    {eligible ? labelFor(c) : `${labelFor(c)} · mimo allowedGrades (${gradeLabel(c.grade ?? "")})`}
+                  </option>
+                );
+              })}
             </select>
           </div>
           <div className="space-y-2">

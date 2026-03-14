@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
@@ -10,6 +11,7 @@ import type { JwtPayload } from '@/auth/types/jwt-payload';
 import type { CreateAcademicYearDto } from './dto/create-academic-year.dto';
 import { deriveCzechSchoolYearFromStartYear } from '@/shared/czech-school-year';
 import { Prisma, SystemRole } from '@prisma/client';
+import { AcademicYearCacheRef } from '@/common/year-cache/academic-year-cache.ref';
 
 /** Thrown when DB unique constraint prevents multiple current years (race or concurrent activate). */
 export const MULTIPLE_CURRENT_YEARS_FOR_ORG = 'MULTIPLE_CURRENT_YEARS_FOR_ORG';
@@ -36,7 +38,12 @@ type AcademicYearResponse = {
 
 @Injectable()
 export class AcademicYearsService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(AcademicYearsService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly yearCache: AcademicYearCacheRef,
+  ) {}
 
   private resolveOrgId(user: JwtPayload): string {
     if (user.systemRole === SystemRole.SUPERADMIN && user.organizationId) {
@@ -135,6 +142,20 @@ export class AcademicYearsService {
       throw err;
     }
 
+    // Invalidate cache so the next request sees the new year immediately.
+    this.yearCache.invalidate(orgId);
+
+    this.logger.log(
+      JSON.stringify({
+        action: 'ACADEMIC_YEAR_CREATED',
+        actor: user.userId,
+        organizationId: orgId,
+        yearId: created.id,
+        label: created.label,
+        isCurrent: created.isCurrent,
+      }),
+    );
+
     return this.mapYear(created);
   }
 
@@ -172,6 +193,19 @@ export class AcademicYearsService {
       }
       throw err;
     }
+
+    // Invalidate cache so the next request reflects the newly activated year.
+    this.yearCache.invalidate(orgId);
+
+    this.logger.log(
+      JSON.stringify({
+        action: 'ACADEMIC_YEAR_ACTIVATED',
+        actor: user.userId,
+        organizationId: orgId,
+        yearId: updated.id,
+        label: updated.label,
+      }),
+    );
 
     return this.mapYear(updated);
   }
@@ -301,5 +335,8 @@ export class AcademicYearsService {
         },
       });
     });
+
+    // Invalidate so new default year is picked up immediately.
+    this.yearCache.invalidate(orgId);
   }
 }

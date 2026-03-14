@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsInt, IsOptional, Min, Max } from 'class-validator';
+import { IsBoolean, IsInt, IsOptional, Min, Max } from 'class-validator';
 import { Transform } from 'class-transformer';
 
 export class QueryOrgSubjectsDto {
@@ -10,4 +10,17 @@ export class QueryOrgSubjectsDto {
   @Max(9)
   @Transform(({ value }) => (value !== undefined && value !== '' ? Number(value) : undefined))
   grade?: number;
+
+  @ApiPropertyOptional({
+    example: true,
+    description: 'Include disabled org subjects. Default returns enabled only.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  @Transform(({ value }) => {
+    if (value === undefined || value === '') return undefined;
+    if (typeof value === 'boolean') return value;
+    return String(value).toLowerCase() === 'true';
+  })
+  includeDisabled?: boolean;
 }

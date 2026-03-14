@@ -12,19 +12,24 @@ import {
   OrganizationRole,
   SystemRole,
   Prisma,
+  AuditEntityType,
 } from '@prisma/client';
 import type { JwtPayload } from '@/auth/types/jwt-payload';
 import { hasAtLeastRole } from '@/shared/access.utils';
+import { AuditService } from '@/audit/audit.service';
 
 @Injectable()
 export class EnrollmentsService {
   private readonly logger = new Logger(EnrollmentsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditService: AuditService,
+  ) {}
 
   private async assertValidAcademicYear(orgId: string, yearId: string) {
     const year = await this.prisma.academicYear.findFirst({
-      where: { id: yearId, orgId },
+      where: { id: yearId, orgId, deletedAt: null },
       select: { id: true, orgId: true },
     });
     if (!year) {
@@ -123,7 +128,7 @@ export class EnrollmentsService {
     }
 
     try {
-      return await this.prisma.enrollment.create({
+      const enrollment = await this.prisma.enrollment.create({
         data: {
           studentId: student.id,
           classSectionId: classSection.id,
@@ -132,16 +137,39 @@ export class EnrollmentsService {
           status: EnrollmentStatus.ACTIVE,
         },
       });
+      void this.auditService.log({
+        action: 'ENROLLMENT_CREATE',
+        entityType: AuditEntityType.STUDENT,
+        entityId: student.id,
+        userId: user.userId,
+        organizationId: classSection.orgId,
+        metadata: { enrollmentId: enrollment.id, classSectionId: classSection.id, yearId: classSection.yearId },
+      });
+      return enrollment;
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-        const current = await this.prisma.enrollment.findFirst({
-          where: {
-            studentId: student.id,
-            yearId: classSection.yearId,
-            status: { not: EnrollmentStatus.LEFT },
-          },
+        // @@unique([studentId, yearId]) — exactly one enrollment exists for this student+year.
+        const existing = await this.prisma.enrollment.findFirst({
+          where: { studentId: student.id, yearId: classSection.yearId },
         });
-        if (current?.classSectionId === classSection.id) return current;
+        if (!existing) throw err;
+        if (existing.status === EnrollmentStatus.LEFT) {
+          // Student previously left; re-enroll them (possibly in a different class).
+          const reactivated = await this.prisma.enrollment.update({
+            where: { id: existing.id },
+            data: { classSectionId: classSection.id, status: EnrollmentStatus.ACTIVE },
+          });
+          void this.auditService.log({
+            action: 'ENROLLMENT_REACTIVATED',
+            entityType: AuditEntityType.STUDENT,
+            entityId: student.id,
+            userId: user.userId,
+            organizationId: classSection.orgId,
+            metadata: { enrollmentId: existing.id, classSectionId: classSection.id, yearId: classSection.yearId },
+          });
+          return reactivated;
+        }
+        if (existing.classSectionId === classSection.id) return existing;
         throw new ConflictException(
           'Student už je zapsán v jiné třídě v tomto školním roce.',
         );
@@ -309,28 +337,41 @@ export class EnrollmentsService {
               select: { id: true },
             });
 
-              return {
-                enrollmentId: enrollment.id,
-                studentId: student.id,
-                createdUser,
-                name: userRecord.name,
-                status: 'CREATED' as const,
-              };
+            return {
+              enrollmentId: enrollment.id,
+              studentId: student.id,
+              createdUser,
+              name: userRecord.name,
+              status: 'CREATED' as const,
+            };
           } catch (err) {
             if (
               err instanceof Prisma.PrismaClientKnownRequestError &&
               err.code === 'P2002'
             ) {
-              const current = await tx.enrollment.findFirst({
-                where: {
-                  studentId: student.id,
-                  yearId: classSection.yearId,
-                  status: { not: EnrollmentStatus.LEFT },
-                },
+              // @@unique([studentId, yearId]) — check for LEFT enrollment to reactivate.
+              const existing = await tx.enrollment.findFirst({
+                where: { studentId: student.id, yearId: classSection.yearId },
               });
-              if (current?.classSectionId === classSection.id) {
+              if (!existing) throw err;
+              if (existing.status === EnrollmentStatus.LEFT) {
+                // Re-enroll returning student (possibly to a different class).
+                const reactivated = await tx.enrollment.update({
+                  where: { id: existing.id },
+                  data: { classSectionId: classSection.id, status: EnrollmentStatus.ACTIVE },
+                  select: { id: true },
+                });
                 return {
-                  enrollmentId: current.id,
+                  enrollmentId: reactivated.id,
+                  studentId: student.id,
+                  createdUser,
+                  name: userRecord.name,
+                  status: 'CREATED' as const,
+                };
+              }
+              if (existing.classSectionId === classSection.id) {
+                return {
+                  enrollmentId: existing.id,
                   studentId: student.id,
                   createdUser,
                   name: userRecord.name,
@@ -526,10 +567,24 @@ export class EnrollmentsService {
       return this.prisma.enrollment.findUniqueOrThrow({ where: { id } });
     }
 
-    return this.prisma.enrollment.update({
+    const updated = await this.prisma.enrollment.update({
       where: { id },
       data: { classSectionId: dto.newClassSectionId },
     });
+    void this.auditService.log({
+      action: 'ENROLLMENT_TRANSFER',
+      entityType: AuditEntityType.STUDENT,
+      entityId: enrollment.studentId,
+      userId: user.userId,
+      organizationId: enrollment.classSection.orgId,
+      metadata: {
+        enrollmentId: id,
+        fromClassSectionId: enrollment.classSectionId,
+        toClassSectionId: dto.newClassSectionId,
+        yearId: enrollment.classSection.yearId,
+      },
+    });
+    return updated;
   }
 
   async softDelete(id: string, user: JwtPayload) {
@@ -537,7 +592,7 @@ export class EnrollmentsService {
       where: { id },
       include: {
         classSection: {
-          select: { orgId: true, academicYear: { select: { isCurrent: true } } },
+          select: { orgId: true, yearId: true, academicYear: { select: { isCurrent: true } } },
         },
       },
     });
@@ -553,9 +608,22 @@ export class EnrollmentsService {
       throw new ForbiddenException('Nelze upravovat uzavřený školní rok.');
     }
 
-    return this.prisma.enrollment.update({
+    const updated = await this.prisma.enrollment.update({
       where: { id },
       data: { status: EnrollmentStatus.LEFT },
     });
+    void this.auditService.log({
+      action: 'ENROLLMENT_LEFT',
+      entityType: AuditEntityType.STUDENT,
+      entityId: enrollment.studentId,
+      userId: user.userId,
+      organizationId: enrollment.classSection.orgId,
+      metadata: {
+        enrollmentId: id,
+        classSectionId: enrollment.classSectionId,
+        yearId: enrollment.classSection.yearId,
+      },
+    });
+    return updated;
   }
 }

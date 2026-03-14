@@ -1,7 +1,16 @@
 // src/tests/dto/update-test.dto.ts
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsString, IsUUID, Length } from 'class-validator';
-import { PublishStatus } from '@prisma/client';
+import {
+  ArrayNotEmpty,
+  ArrayUnique,
+  IsArray,
+  IsEnum,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Length,
+} from 'class-validator';
+import { PublishStatus, SchoolGrade } from '@prisma/client';
 
 export class UpdateTestDto {
   @ApiPropertyOptional()
@@ -24,4 +33,16 @@ export class UpdateTestDto {
   @IsOptional()
   @IsUUID()
   subjectId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Pedagogical grades the test is intended for',
+    enum: SchoolGrade,
+    isArray: true,
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayNotEmpty()
+  @ArrayUnique()
+  @IsEnum(SchoolGrade, { each: true })
+  allowedGrades?: SchoolGrade[];
 }

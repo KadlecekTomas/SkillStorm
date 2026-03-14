@@ -4,6 +4,7 @@ import { seed as seedOrgs } from './orgs.seed';
 import { seed as seedAcademicYears } from './academic-years.seed';
 import { seed as seedUsers } from './users.seed';
 import { seed as seedSubjects } from './subjects.seed';
+import { seed as seedOrgSubjects } from './org-subjects.seed';
 import { seed as seedMaterials } from './materials.seed';
 import { seed as seedTests } from './tests.seed';
 import { seed as seedAssignments } from './assignments.seed';
@@ -19,6 +20,7 @@ export async function runSeedPipeline(prisma: PrismaClient) {
   await seedPlatformAdmin(prisma);
   await ensureTeachersSeeded(prisma);
   await seedSubjects(prisma);
+  await seedOrgSubjects(prisma);
   await seedMaterials(prisma);
   await seedTests(prisma);
   await seedAssignments(prisma);

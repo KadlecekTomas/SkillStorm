@@ -61,6 +61,21 @@ const DEMO = {
   },
 };
 
+const DEFAULT_SUBJECTS = [
+  { name: 'Matematika', gradeFrom: 1, gradeTo: 9 },
+  { name: 'Český jazyk', gradeFrom: 1, gradeTo: 9 },
+  { name: 'Anglický jazyk', gradeFrom: 1, gradeTo: 9 },
+  { name: 'Prvouka', gradeFrom: 1, gradeTo: 3 },
+  { name: 'Přírodověda', gradeFrom: 4, gradeTo: 5 },
+  { name: 'Vlastivěda', gradeFrom: 4, gradeTo: 5 },
+  { name: 'Přírodopis', gradeFrom: 6, gradeTo: 9 },
+  { name: 'Fyzika', gradeFrom: 6, gradeTo: 9 },
+  { name: 'Chemie', gradeFrom: 8, gradeTo: 9 },
+  { name: 'Dějepis', gradeFrom: 6, gradeTo: 9 },
+  { name: 'Zeměpis', gradeFrom: 6, gradeTo: 9 },
+  { name: 'Informatika', gradeFrom: 1, gradeTo: 9 },
+];
+
 function getCurrentAcademicYear() {
   const now = new Date();
   const currentYear = now.getUTCFullYear();
@@ -131,6 +146,36 @@ async function ensureAcademicYear(orgId) {
       endsAt: current.endsAt,
       isCurrent: true,
     },
+  });
+}
+
+async function ensureDefaultSubjects(organizationId) {
+  await prisma.subject.createMany({
+    data: DEFAULT_SUBJECTS.map((subject) => ({
+      name: subject.name,
+      gradeFrom: subject.gradeFrom,
+      gradeTo: subject.gradeTo,
+    })),
+    skipDuplicates: true,
+  });
+}
+
+async function ensureDefaultOrgSubjects(organizationId) {
+  const subjects = await prisma.subject.findMany({
+    where: {
+      deletedAt: null,
+    },
+    select: { id: true },
+  });
+
+  await prisma.orgSubject.createMany({
+    data: subjects.map((subject) => ({
+      organizationId,
+      subjectId: subject.id,
+      isEnabled: true,
+      isCustom: false,
+    })),
+    skipDuplicates: true,
   });
 }
 
@@ -518,6 +563,8 @@ async function resetDemoSubmission(assignmentId, studentMembershipId) {
 
 async function runDemoSeed() {
   const organization = await ensureOrganization();
+  await ensureDefaultSubjects(organization.id);
+  await ensureDefaultOrgSubjects(organization.id);
   const academicYear = await ensureAcademicYear(organization.id);
 
   const directorUser = await ensureUser(DEMO.director);

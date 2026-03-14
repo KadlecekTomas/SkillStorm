@@ -29,6 +29,7 @@ import { RequestWithUser } from '@/types/request-with-user';
 import { InvalidateScopes } from '@/common/cache/invalidate.decorator';
 import { Permission } from '@/modules/rbac/permission.decorator';
 import { RequireCurrentAcademicYearGuard } from '@/academic-years/require-current-academic-year.guard';
+import { AcademicYearExpiredGuard } from '@/academic-years/academic-year-expired.guard';
 import { StudentAccessGuard } from './guards/student-access.guard';
 import { Throttle } from '@nestjs/throttler';
 import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
@@ -37,7 +38,7 @@ import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operatio
 @ApiBearerAuth()
 @Controller('students')
 @OrgOperation(OrgOperationType.EXECUTION)
-@UseGuards(RequireCurrentAcademicYearGuard)
+@UseGuards(RequireCurrentAcademicYearGuard, AcademicYearExpiredGuard)
 export class StudentsController {
   constructor(private readonly service: StudentsService) {}
 
@@ -99,8 +100,9 @@ export class StudentsController {
   getDetail(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Req() req: RequestWithUser,
+    @Query('yearId') yearId?: string,
   ) {
-    return this.service.getDetail(id, req.user);
+    return this.service.getDetail(id, req.user, yearId);
   }
 
   // ---------- DETAIL ----------

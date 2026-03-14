@@ -10,6 +10,7 @@ import { ErrorAlert, InfoAlert } from "@/components/ui/alert";
 import { fetchWithAuth } from "@/lib/http/client";
 import { useSubjects, subjectLabel } from "@/hooks/use-subjects";
 import { withGuard } from "@/lib/guard/withGuard";
+import { ALL_SCHOOL_GRADES, gradeLabel, type SchoolGradeValue } from "@/lib/grades";
 import { PermissionKey } from "@/types";
 
 function CreateTestPage(): React.JSX.Element {
@@ -18,6 +19,7 @@ function CreateTestPage(): React.JSX.Element {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [subjectId, setSubjectId] = useState<string>("");
+  const [allowedGrades, setAllowedGrades] = useState<SchoolGradeValue[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -31,6 +33,10 @@ function CreateTestPage(): React.JSX.Element {
       setError("Vyberte předmět.");
       return;
     }
+    if (allowedGrades.length === 0) {
+      setError("Vyberte alespoň jeden ročník, pro který je test určen.");
+      return;
+    }
     setError(null);
     setLoading(true);
     try {
@@ -40,6 +46,7 @@ function CreateTestPage(): React.JSX.Element {
           description: description.trim() || undefined,
           status: "DRAFT",
           subjectId,
+          allowedGrades,
         },
       });
       const id = created && typeof created === "object" && "id" in created ? (created as { id: string }).id : null;
@@ -105,12 +112,42 @@ function CreateTestPage(): React.JSX.Element {
             >
               <option value="">{subjectsLoading ? "Načítám předměty…" : "Vyberte předmět"}</option>
               {subjects.map((s) => (
-                <option key={s.id} value={s.id}>
+                <option key={s.id} value={s.subject.id}>
                   {subjectLabel(s)}
                 </option>
               ))}
             </select>
           </label>
+          <fieldset className="space-y-2">
+            <legend className="text-sm font-medium text-slate-700">Určeno pro ročníky *</legend>
+            <p className="text-sm text-slate-500">Vyberte, pro které ročníky je test pedagogicky určen.</p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {ALL_SCHOOL_GRADES.map((grade) => {
+                const checked = allowedGrades.includes(grade);
+                return (
+                  <label
+                    key={grade}
+                    className={`flex items-center gap-3 rounded-md border px-3 py-2 text-sm ${
+                      checked ? "border-slate-900 bg-slate-50 text-slate-900" : "border-slate-200 text-slate-700"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(e) =>
+                        setAllowedGrades((prev) =>
+                          e.target.checked
+                            ? [...prev, grade]
+                            : prev.filter((item) => item !== grade),
+                        )
+                      }
+                    />
+                    <span>{gradeLabel(grade)}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </fieldset>
           {error && (
             <ErrorAlert title="Chyba" description={error} />
           )}

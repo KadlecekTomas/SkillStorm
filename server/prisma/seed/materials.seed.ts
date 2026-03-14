@@ -29,7 +29,9 @@ export async function seed(prisma: PrismaClient) {
   const mathTopic = await prisma.topicLevel.findFirst({
     where: {
       catalogTopicId: CATALOG_TOPIC_IDS.mathFractions,
-      subjectLevel: { subject: { organizationId: ORG_IDS.chodovicka } },
+      subjectLevel: {
+        subject: { orgSubjects: { some: { organizationId: ORG_IDS.chodovicka } } },
+      },
     },
     select: { id: true },
   });
@@ -37,7 +39,9 @@ export async function seed(prisma: PrismaClient) {
   const englishTopic = await prisma.topicLevel.findFirst({
     where: {
       catalogTopicId: CATALOG_TOPIC_IDS.englishVocabulary,
-      subjectLevel: { subject: { organizationId: ORG_IDS.chodovicka } },
+      subjectLevel: {
+        subject: { orgSubjects: { some: { organizationId: ORG_IDS.chodovicka } } },
+      },
     },
     select: { id: true },
   });

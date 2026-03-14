@@ -2,7 +2,6 @@
 
 import { Card } from "@/components/ui/card";
 import { cn } from "@/utils/cn";
-import { motion } from "framer-motion";
 import type { ReactNode } from "react";
 
 type OverviewCardProps = {
@@ -20,16 +19,14 @@ export const OverviewCard = ({
   icon,
   accent = "bg-emerald-50 text-emerald-600",
 }: OverviewCardProps): React.JSX.Element => (
-  <motion.div whileHover={{ y: -4 }} transition={{ type: "spring", stiffness: 300 }}>
-    <Card className="space-y-4">
-      <div className={cn("flex h-12 w-12 items-center justify-center rounded-2xl", accent)}>
-        {icon}
-      </div>
-      <div>
-        <p className="text-sm text-slate-500">{title}</p>
-        <p className="text-2xl font-semibold text-slate-900">{value}</p>
-        {delta && <p className="text-sm text-emerald-600">{delta}</p>}
-      </div>
-    </Card>
-  </motion.div>
+  <Card className="space-y-3 rounded-xl border bg-white shadow-sm">
+    <div className={cn("flex h-10 w-10 items-center justify-center rounded-lg", accent)}>
+      {icon}
+    </div>
+    <div>
+      <p className="text-sm text-slate-500">{title}</p>
+      <p className="text-2xl font-semibold text-slate-900">{value}</p>
+      {delta && <p className="mt-0.5 text-sm text-slate-500">{delta}</p>}
+    </div>
+  </Card>
 );

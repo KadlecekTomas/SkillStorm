@@ -246,8 +246,8 @@ export class OrganizationsService {
   }
 
   /**
-   * Idempotently creates one Subject + one SubjectLevel per SchoolGrade per CatalogSubject for the org.
-   * Safe to call multiple times — all operations are upserts (update: {} → no-op when already exists).
+   * Idempotently enables catalog subjects for the org and ensures shared
+   * SubjectLevel rows exist on the global Subject catalog.
    */
   private async provisionDefaultSubjects(orgId: string): Promise<void> {
     const grades = Object.values(SchoolGrade);
@@ -255,17 +255,28 @@ export class OrganizationsService {
       const catalogSubjects = await tx.catalogSubject.findMany({ orderBy: { name: 'asc' } });
       for (const catalog of catalogSubjects) {
         const subject = await tx.subject.upsert({
-          where: {
-            organizationId_catalogSubjectId: {
-              organizationId: orgId,
-              catalogSubjectId: catalog.id,
-            },
-          },
+          where: { catalogSubjectId: catalog.id },
           update: {},
           create: {
-            organizationId: orgId,
             catalogSubjectId: catalog.id,
             name: catalog.name,
+            gradeFrom: 1,
+            gradeTo: 9,
+          },
+        });
+        await tx.orgSubject.upsert({
+          where: {
+            organizationId_subjectId: {
+              organizationId: orgId,
+              subjectId: subject.id,
+            },
+          },
+          update: { isEnabled: true },
+          create: {
+            organizationId: orgId,
+            subjectId: subject.id,
+            isEnabled: true,
+            isCustom: false,
           },
         });
         for (const grade of grades) {

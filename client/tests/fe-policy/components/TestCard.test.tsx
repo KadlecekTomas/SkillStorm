@@ -25,6 +25,7 @@ describe("TestCard", () => {
     title: "Math Test",
     description: "Test description",
     subject: createMockSubject({ id: "subj-1", name: "Mathematics" }),
+    allowedGrades: ["GRADE_7", "GRADE_8"],
     status: "PUBLISHED",
     version: 1,
     completionRate: 80,

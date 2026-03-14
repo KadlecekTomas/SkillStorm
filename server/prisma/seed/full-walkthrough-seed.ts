@@ -29,6 +29,10 @@ import {
   UserStatus,
 } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
+import {
+  computeScore,
+  type QuestionForScoring,
+} from '../../src/submissions/submission-scoring';
 
 const prisma = new PrismaClient();
 const DEMO_PASSWORD = 'Password123!';
@@ -40,9 +44,21 @@ const ORG_NAMES = {
   KOMUNITA: 'Komunitní vzdělávací centrum',
 } as const;
 
-const YEAR_LABEL = '2024/2025';
-const STARTS_AT = new Date('2024-09-01T00:00:00.000Z');
-const ENDS_AT = new Date('2025-08-31T23:59:59.999Z');
+const YEAR_LABEL = '2025/2026';
+const STARTS_AT = new Date('2025-09-01T00:00:00.000Z');
+const ENDS_AT = new Date('2026-08-31T23:59:59.999Z');
+
+/** Returns a random Date within [startsAt, endsAt], clamped to endsAt. */
+function randomDateWithinYear(
+  startsAt: Date,
+  endsAt: Date,
+  offsetMs = 0,
+): Date {
+  const range = endsAt.getTime() - startsAt.getTime();
+  const random = Math.floor(Math.random() * range);
+  const result = new Date(startsAt.getTime() + random + offsetMs);
+  return result > endsAt ? endsAt : result;
+}
 
 function logStep(msg: string) {
   console.log(`🌱 ${msg}`);
@@ -450,7 +466,7 @@ async function setHomeroomTeachers(
 // Demonstrates the “teaches” model: teacher2 is homeroom of none, but can see 8.C results.
 async function createTeacherClassSections(
   orgUsers: OrgUserIds[],
-  sections: { id: string; orgId: string; label: string }[],
+  sections: { id: string; orgId: string; yearId: string; label: string }[],
 ) {
   logStep('TeacherClassSection: teacher2 explicitly assigned to 8.C');
   for (const org of orgUsers) {
@@ -466,7 +482,7 @@ async function createTeacherClassSections(
     await prisma.teacherClassSection.upsert({
       where: { teacherId_classSectionId: { teacherId: teacher.id, classSectionId: class8C.id } },
       update: { deletedAt: null },
-      create: { teacherId: teacher.id, classSectionId: class8C.id },
+      create: { teacherId: teacher.id, classSectionId: class8C.id, yearId: class8C.yearId },
     });
   }
   logDone('TeacherClassSection set');
@@ -593,6 +609,8 @@ async function ensureCatalogAndSubjects(
     catalogMap.set(def.code, cat.id);
   }
 
+  const grades = Object.values(SchoolGrade);
+
   // Provision all catalog subjects for every org (all codes, not a subset)
   const result = new Map<string, Map<string, string>>();
 
@@ -603,21 +621,26 @@ async function ensureCatalogAndSubjects(
       const catalogId = catalogMap.get(def.code)!;
 
       const subject = await prisma.subject.upsert({
-        where: {
-          organizationId_catalogSubjectId: {
-            organizationId: org.id,
-            catalogSubjectId: catalogId,
-          },
-        },
+        where: { catalogSubjectId: catalogId },
         update: {},
-        create: { organizationId: org.id, catalogSubjectId: catalogId, name: def.name },
+        create: { catalogSubjectId: catalogId, name: def.name, gradeFrom: 1, gradeTo: 9 },
       });
 
-      // Ensure at least one SubjectLevel
-      const hasLevel = await prisma.subjectLevel.findFirst({ where: { subjectId: subject.id } });
-      if (!hasLevel) {
-        await prisma.subjectLevel.create({
-          data: { subjectId: subject.id, grade: SchoolGrade.GRADE_7, order: 1 },
+      for (const grade of grades) {
+        await prisma.subjectLevel.upsert({
+          where: {
+            subjectId_grade: {
+              subjectId: subject.id,
+              grade,
+            },
+          },
+          update: {},
+          create: {
+            subjectId: subject.id,
+            grade,
+            order: null,
+            label: null,
+          },
         });
       }
 
@@ -675,6 +698,7 @@ async function createTests(
     orgId: string;
     testId: string;
     questionIds: string[];
+    questions: QuestionForScoring[];
   }[] = [];
 
   for (const org of orgs) {
@@ -701,6 +725,7 @@ async function createTests(
             organizationId: org.id,
             title,
             description: `Test: ${title}`,
+            allowedGrades: [SchoolGrade.GRADE_6, SchoolGrade.GRADE_7, SchoolGrade.GRADE_8],
             status: PublishStatus.PUBLISHED,
             creatorId,
             ...(subjectId && { subjectId }),
@@ -711,6 +736,7 @@ async function createTests(
         await prisma.test.update({
           where: { id: test.id },
           data: {
+            allowedGrades: [SchoolGrade.GRADE_6, SchoolGrade.GRADE_7, SchoolGrade.GRADE_8],
             status: PublishStatus.PUBLISHED,
             creatorId,
             ...(subjectId && { subjectId }),
@@ -721,7 +747,7 @@ async function createTests(
 
       let questions = await prisma.question.findMany({
         where: { testId: test.id },
-        select: { id: true },
+        select: { id: true, type: true, correctAnswer: true, correctAnswers: true, score: true },
         orderBy: { order: 'asc' },
       });
       if (questions.length === 0) {
@@ -763,13 +789,24 @@ async function createTests(
             { questionId: q3.id, text: 'C' },
           ],
         });
-        questions = [{ id: q1.id }, { id: q2.id }, { id: q3.id }];
+        questions = [
+          { id: q1.id, type: QuestionType.TRUE_FALSE,       correctAnswer: 'true',     correctAnswers: [],    score: 1 },
+          { id: q2.id, type: QuestionType.FILL_IN_THE_BLANK, correctAnswer: 'správně',  correctAnswers: [],    score: 1 },
+          { id: q3.id, type: QuestionType.MULTIPLE_CHOICE,   correctAnswer: 'A',        correctAnswers: ['A'], score: 1 },
+        ];
       }
       allTests.push({
         id: test.id,
         orgId: org.id,
         testId: test.id,
         questionIds: questions.map((q) => q.id),
+        questions: questions.map((q) => ({
+          id: q.id,
+          type: q.type,
+          correctAnswer: q.correctAnswer ?? null,
+          correctAnswers: q.correctAnswers ?? [],
+          score: q.score ?? 1,
+        })),
       });
     }
   }
@@ -784,8 +821,8 @@ async function createAssignments(
   tests: { id: string; orgId: string; testId: string }[],
 ) {
   logStep('Assignments: per test, sensible open/close, maxAttempts 1 or 2–3');
-  const openAt = new Date('2024-10-01T08:00:00.000Z');
-  const closeAt = new Date('2025-06-30T18:00:00.000Z');
+  const openAt = new Date('2025-10-01T08:00:00.000Z');
+  const closeAt = new Date('2026-06-30T18:00:00.000Z');
   const assignments: {
     id: string;
     testId: string;
@@ -853,10 +890,38 @@ async function createAssignments(
 }
 
 // --- 7) SUBMISSIONS (scénáře A–F) ---
+// ---------------------------------------------------------------------------
+// Seed scoring helpers
+// ---------------------------------------------------------------------------
+
+/** The givenText that will score as CORRECT for each question type. */
+function correctGivenText(q: QuestionForScoring): string {
+  if (q.type === QuestionType.MULTIPLE_CHOICE) {
+    const answers = Array.isArray(q.correctAnswers) && (q.correctAnswers as unknown[]).length > 0
+      ? (q.correctAnswers as string[])
+      : q.correctAnswer
+        ? [q.correctAnswer]
+        : [];
+    return answers.length > 1 ? JSON.stringify(answers) : (answers[0] ?? '');
+  }
+  return q.correctAnswer ?? '';
+}
+
+/** The givenText that will score as INCORRECT for each question type. */
+function wrongGivenText(q: QuestionForScoring): string {
+  if (q.type === QuestionType.TRUE_FALSE) {
+    return q.correctAnswer === 'true' ? 'false' : 'true';
+  }
+  if (q.type === QuestionType.MULTIPLE_CHOICE) {
+    return '["WRONG_SEED_ANSWER"]';
+  }
+  return 'nesprávně'; // FILL_IN_THE_BLANK
+}
+
 async function createSubmissions(
   orgUsers: OrgUserIds[],
   sections: { id: string; orgId: string; label: string }[],
-  tests: { testId: string; orgId: string; questionIds: string[] }[],
+  tests: { testId: string; orgId: string; questionIds: string[]; questions: QuestionForScoring[] }[],
   assignments: {
     id: string;
     testId: string;
@@ -868,21 +933,38 @@ async function createSubmissions(
   logStep(
     'Submissions: Student A–F scenarios (1 attempt, 2 attempts, 3 attempts, none, decline, 1 test only)',
   );
+
+  // Reset all submissions for seeded assignments so repeated seed runs produce a
+  // clean slate (tests consume attempts and make the seed non-idempotent otherwise).
+  const assignmentIds = assignments.map((a) => a.id);
+  const deleted = await prisma.submission.deleteMany({
+    where: { assignmentId: { in: assignmentIds } },
+  });
+  if (deleted.count > 0) logStep(`Cleared ${deleted.count} stale submissions`);
+
   let created = 0;
 
+  /**
+   * Create one submission attempt and derive EVERY score-related field from
+   * computeScore() — never from a hardcoded ratio.
+   *
+   * @param targetRatio  Desired outcome as a 0–1 ratio used ONLY to decide
+   *                     how many questions to answer correctly.  The actual
+   *                     stored score always comes from the engine.
+   */
   const createSubmissionAttempt = async ({
     assignment,
-    test,
+    questions,
     studentId,
     attemptNo,
-    score,
+    targetRatio,
     submittedAt,
   }: {
     assignment: { id: string; testId: string; organizationId: string };
-    test: { questionIds: string[] };
+    questions: QuestionForScoring[];
     studentId: string;
     attemptNo: number;
-    score: number;
+    targetRatio: number;
     submittedAt: Date;
   }) => {
     const existing = await prisma.submission.findFirst({
@@ -895,6 +977,19 @@ async function createSubmissions(
     });
     if (existing) return false;
 
+    // Build response data: first `correctCount` questions use the correct
+    // answer text; the rest use a clearly wrong answer.
+    const n = questions.length;
+    const correctCount = Math.round(targetRatio * n);
+    const responseInputs = questions.map((q, idx) => ({
+      id: `seed-resp-${idx}`,
+      questionId: q.id,
+      givenText: idx < correctCount ? correctGivenText(q) : wrongGivenText(q),
+    }));
+
+    // Run through the real scoring engine — this is the single source of truth.
+    const scoreResult = computeScore(questions, responseInputs);
+
     const submission = await prisma.submission.create({
       data: {
         organizationId: assignment.organizationId,
@@ -906,20 +1001,27 @@ async function createSubmissions(
       },
     });
 
+    // Write responses with engine-derived isCorrect / awardedPoints / maxPoints.
     await prisma.response.createMany({
-      data: test.questionIds.map((qid) => ({
-        submissionId: submission.id,
-        questionId: qid,
-        givenText: 'x',
-        isCorrect: false,
-      })),
+      data: scoreResult.results.map((item) => {
+        const q = questions.find((q) => q.id === item.questionId);
+        return {
+          submissionId: submission.id,
+          questionId: item.questionId,
+          givenText: responseInputs.find((r) => r.questionId === item.questionId)?.givenText ?? '',
+          isCorrect: item.correct ?? false,
+          awardedPoints: item.gained,
+          maxPoints: q?.score ?? 1,
+        };
+      }),
     });
 
+    // Finalise the submission with the engine-derived normalizedScore.
     await prisma.submission.update({
       where: { id: submission.id },
       data: {
         status: SubmissionStatus.APPROVED,
-        score,
+        score: scoreResult.normalizedScore,
         submittedAt,
       },
     });
@@ -963,63 +1065,53 @@ async function createSubmissions(
       const t1 = test1;
       const t2 = test2;
       const t3 = test3;
-      if (!asg1 || !t1?.questionIds.length) continue;
+      if (!asg1 || !t1?.questions.length) continue;
 
-      const baseDate = new Date('2024-11-01T10:00:00.000Z');
+      const baseDate = new Date('2025-11-01T10:00:00.000Z');
 
       if (key === 'studentA') {
         const didCreate = await createSubmissionAttempt({
           assignment: asg1,
-          test: t1,
+          questions: t1.questions,
           studentId: studentMembershipId,
           attemptNo: 1,
-          score: 0.45,
+          targetRatio: 0.45,
           submittedAt: new Date(baseDate.getTime() + 60000),
         });
-        if (didCreate) {
-          created++;
-        }
+        if (didCreate) created++;
       }
 
       if (key === 'studentB' && asg1.maxAttempts >= 2) {
-        const scoresB: number[] = [0.4, 0.75];
-        for (let attempt = 0; attempt < scoresB.length; attempt++) {
-          const scoreVal = scoresB[attempt];
-          if (scoreVal === undefined) continue;
+        const ratios: number[] = [0.4, 0.75];
+        for (let attempt = 0; attempt < ratios.length; attempt++) {
+          const targetRatio = ratios[attempt];
+          if (targetRatio === undefined) continue;
           const didCreate = await createSubmissionAttempt({
             assignment: asg1,
-            test: t1,
+            questions: t1.questions,
             studentId: studentMembershipId,
             attemptNo: attempt + 1,
-            score: scoreVal,
-            submittedAt: new Date(
-              baseDate.getTime() + (attempt + 1) * 86400000,
-            ),
+            targetRatio,
+            submittedAt: new Date(baseDate.getTime() + (attempt + 1) * 86400000),
           });
-          if (didCreate) {
-            created++;
-          }
+          if (didCreate) created++;
         }
       }
 
       if (key === 'studentC' && asg1.maxAttempts >= 3) {
-        const scores: number[] = [0.3, 0.5, 0.65];
+        const ratios: number[] = [0.3, 0.5, 0.65];
         for (let attempt = 0; attempt < 3; attempt++) {
-          const scoreVal = scores[attempt];
-          if (scoreVal === undefined) continue;
+          const targetRatio = ratios[attempt];
+          if (targetRatio === undefined) continue;
           const didCreate = await createSubmissionAttempt({
             assignment: asg1,
-            test: t1,
+            questions: t1.questions,
             studentId: studentMembershipId,
             attemptNo: attempt + 1,
-            score: scoreVal,
-            submittedAt: new Date(
-              baseDate.getTime() + (attempt + 1) * 86400000,
-            ),
+            targetRatio,
+            submittedAt: new Date(baseDate.getTime() + (attempt + 1) * 86400000),
           });
-          if (didCreate) {
-            created++;
-          }
+          if (didCreate) created++;
         }
       }
 
@@ -1028,38 +1120,32 @@ async function createSubmissions(
       }
 
       if (key === 'studentE' && asg1.maxAttempts >= 2) {
-        const scoresE: number[] = [0.8, 0.6];
-        for (let attempt = 0; attempt < scoresE.length; attempt++) {
-          const scoreVal = scoresE[attempt];
-          if (scoreVal === undefined) continue;
+        const ratios: number[] = [0.8, 0.6];
+        for (let attempt = 0; attempt < ratios.length; attempt++) {
+          const targetRatio = ratios[attempt];
+          if (targetRatio === undefined) continue;
           const didCreate = await createSubmissionAttempt({
             assignment: asg1,
-            test: t1,
+            questions: t1.questions,
             studentId: studentMembershipId,
             attemptNo: attempt + 1,
-            score: scoreVal,
-            submittedAt: new Date(
-              baseDate.getTime() + (attempt + 1) * 86400000,
-            ),
+            targetRatio,
+            submittedAt: new Date(baseDate.getTime() + (attempt + 1) * 86400000),
           });
-          if (didCreate) {
-            created++;
-          }
+          if (didCreate) created++;
         }
       }
 
       if (key === 'studentF') {
         const didCreate = await createSubmissionAttempt({
           assignment: asg1,
-          test: t1,
+          questions: t1.questions,
           studentId: studentMembershipId,
           attemptNo: 1,
-          score: 0.7,
+          targetRatio: 0.67,
           submittedAt: new Date(baseDate.getTime() + 60000),
         });
-        if (didCreate) {
-          created++;
-        }
+        if (didCreate) created++;
       }
     }
   }

@@ -52,6 +52,7 @@ describe("TestsPage", () => {
         id: "1",
         title: "Math Test",
         description: "Test description",
+        allowedGrades: ["GRADE_7", "GRADE_8"],
         status: "PUBLISHED",
         version: 1,
         completionRate: 75,
@@ -117,6 +118,7 @@ describe("TestsPage", () => {
       {
         id: "1",
         title: "Empty Test",
+        allowedGrades: ["GRADE_7"],
         status: "PUBLISHED",
         version: 1,
         completionRate: null,
@@ -148,6 +150,7 @@ describe("TestsPage", () => {
       {
         id: "1",
         title: "Test",
+        allowedGrades: ["GRADE_7"],
         status: "PUBLISHED",
         version: 1,
         completionRate: 50,

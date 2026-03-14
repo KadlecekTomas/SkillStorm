@@ -1,0 +1,32 @@
+seed-full-1  | Demo users (email | org | role):
+seed-full-1  |   director@zs.demo.local | Základní škola Demo | DIRECTOR
+seed-full-1  |   teacher1@zs.demo.local | Základní škola Demo | TEACHER
+seed-full-1  |   teacher2@zs.demo.local | Základní škola Demo | TEACHER
+seed-full-1  |   student-a@zs.demo.local | Základní škola Demo | STUDENT
+seed-full-1  |   student-b@zs.demo.local | Základní škola Demo | STUDENT
+seed-full-1  |   student-c@zs.demo.local | Základní škola Demo | STUDENT
+seed-full-1  |   student-d@zs.demo.local | Základní škola Demo | STUDENT
+seed-full-1  |   student-e@zs.demo.local | Základní škola Demo | STUDENT
+seed-full-1  |   student-f@zs.demo.local | Základní škola Demo | STUDENT
+seed-full-1  |   director@gym.demo.local | Gymnázium Demo | DIRECTOR
+seed-full-1  |   teacher1@gym.demo.local | Gymnázium Demo | TEACHER
+seed-full-1  |   teacher2@gym.demo.local | Gymnázium Demo | TEACHER
+seed-full-1  |   student-a@gym.demo.local | Gymnázium Demo | STUDENT
+seed-full-1  |   student-b@gym.demo.local | Gymnázium Demo | STUDENT
+seed-full-1  |   student-c@gym.demo.local | Gymnázium Demo | STUDENT
+seed-full-1  |   student-d@gym.demo.local | Gymnázium Demo | STUDENT
+seed-full-1  |   student-e@gym.demo.local | Gymnázium Demo | STUDENT
+seed-full-1  |   student-f@gym.demo.local | Gymnázium Demo | STUDENT
+seed-full-1  |   director@kom.demo.local | Komunitní vzdělávací centrum | DIRECTOR
+seed-full-1  |   teacher1@kom.demo.local | Komunitní vzdělávací centrum | TEACHER
+seed-full-1  |   teacher2@kom.demo.local | Komunitní vzdělávací centrum | TEACHER
+seed-full-1  |   student-a@kom.demo.local | Komunitní vzdělávací centrum | STUDENT
+seed-full-1  |   student-b@kom.demo.local | Komunitní vzdělávací centrum | STUDENT
+seed-full-1  |   student-c@kom.demo.local | Komunitní vzdělávací centrum | STUDENT
+seed-full-1  |   student-d@kom.demo.local | Komunitní vzdělávací centrum | STUDENT
+seed-full-1  |   student-e@kom.demo.local | Komunitní vzdělávací centrum | STUDENT
+seed-full-1  |   student-f@kom.demo.local | Komunitní vzdělávací centrum | STUDENT
+seed-full-1  | --- END DEMO BANNER ---
+Superadmin	superadmin@skillstorm.io SkillStorm123!
+
+Password123!

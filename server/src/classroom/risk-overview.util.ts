@@ -1,6 +1,14 @@
 /**
  * Deterministic Early Warning risk logic. No AI/ML, no new DB.
- * Uses only submission scores and dates.
+ * Uses submission scores and dates to compute risk level per student.
+ *
+ * SCORE CONTRACT:
+ *   - score (raw): points earned for a submission (e.g. 0.65 out of 3.0)
+ *   - maxScore: sum of question scores for that test (e.g. 3.0)
+ *   - averageScorePercent: SUM(score) / SUM(maxScore) * 100 (weighted, 0–100)
+ *
+ * Callers must pass maxScore per submission. Submissions with maxScore=0
+ * are excluded from averageScorePercent (treated as unscored).
  */
 
 export type RiskTrend = 'UP' | 'DOWN' | 'STABLE';
@@ -10,11 +18,13 @@ export type RiskFlag = 'LOW_AVERAGE' | 'INACTIVE' | 'DECLINING';
 export type SubmissionInput = {
   score: number | null;
   submittedAt: Date | null;
+  /** Sum of question scores for this test. 0 if the test has no scored questions. */
+  maxScore: number;
 };
 
-const LOW_AVERAGE_THRESHOLD_PERCENT = 60;
-const INACTIVE_DAYS_THRESHOLD = 14;
-const DECLINE_THRESHOLD = 0.1; // 10% in normalized 0–1 score
+const LOW_AVERAGE_THRESHOLD_PERCENT = 60; // < 60% → LOW_AVERAGE flag
+const INACTIVE_DAYS_THRESHOLD = 14; // > 14 days without activity → INACTIVE flag
+const DECLINE_THRESHOLD_PCT = 10; // 10 percentage-point drop → DECLINING flag
 
 export type StudentRiskInput = {
   displayName: string;
@@ -35,43 +45,63 @@ function daysBetween(a: Date, b: Date): number {
   return Math.floor(ms / (24 * 60 * 60 * 1000));
 }
 
+/** Convert a submission to its percentage score. Returns null if unscored or maxScore=0. */
+function toPercent(s: SubmissionInput): number | null {
+  if (s.score == null || s.maxScore <= 0) return null;
+  return (s.score / s.maxScore) * 100;
+}
+
 /**
  * Pure function: compute risk for one student from their submissions.
+ * All submissions must already be scoped to the relevant academic year.
  */
 export function computeStudentRisk(input: StudentRiskInput): StudentRiskResult {
   const now = input.now ?? new Date();
-  const withScore = input.submissions.filter(
+
+  // Only submissions with valid score and maxScore contribute to statistics
+  const scored = input.submissions.filter(
     (s): s is SubmissionInput & { score: number } =>
-      s.score != null && s.submittedAt != null,
-  );
-  const sorted = [...withScore].sort(
-    (a, b) =>
-      (b.submittedAt!.getTime() ?? 0) - (a.submittedAt!.getTime() ?? 0),
+      s.score != null && s.submittedAt != null && s.maxScore > 0,
   );
 
-  const totalScore = withScore.reduce((sum, s) => sum + s.score, 0);
-  const count = withScore.length;
+  // Sorted newest-first for trend detection
+  const sorted = [...scored].sort(
+    (a, b) => b.submittedAt!.getTime() - a.submittedAt!.getTime(),
+  );
+
+  // Weighted average: SUM(score) / SUM(maxScore) * 100
+  const totalPoints = scored.reduce((sum, s) => sum + s.score, 0);
+  const totalMaxPoints = scored.reduce((sum, s) => sum + s.maxScore, 0);
   const averageScorePercent =
-    count > 0 ? (totalScore / count) * 100 : 0;
+    totalMaxPoints > 0 ? (totalPoints / totalMaxPoints) * 100 : 0;
 
+  // lastActivityAt — most recent submitted submission
   const lastSubmission = sorted[0];
   const lastActivityAt = lastSubmission?.submittedAt?.toISOString() ?? null;
   const lastActivityDays = lastActivityAt
     ? daysBetween(now, new Date(lastActivityAt))
     : Infinity;
 
+  // Trend: compare newest 2 vs all prior, in percentage space (not raw points)
   let trend: RiskTrend = 'STABLE';
   if (sorted.length >= 3) {
     const last2 = sorted.slice(0, 2);
     const previous = sorted.slice(2);
-    const last2Avg =
-      last2.reduce((s, x) => s + x.score, 0) / last2.length;
-    const previousAvg =
-      previous.reduce((s, x) => s + x.score, 0) / previous.length;
-    if (last2Avg < previousAvg - DECLINE_THRESHOLD) {
-      trend = 'DOWN';
-    } else if (last2Avg > previousAvg + DECLINE_THRESHOLD) {
-      trend = 'UP';
+    const last2Pcts = last2
+      .map(toPercent)
+      .filter((p): p is number => p != null);
+    const prevPcts = previous
+      .map(toPercent)
+      .filter((p): p is number => p != null);
+    if (last2Pcts.length > 0 && prevPcts.length > 0) {
+      const last2Avg =
+        last2Pcts.reduce((s, x) => s + x, 0) / last2Pcts.length;
+      const prevAvg = prevPcts.reduce((s, x) => s + x, 0) / prevPcts.length;
+      if (last2Avg < prevAvg - DECLINE_THRESHOLD_PCT) {
+        trend = 'DOWN';
+      } else if (last2Avg > prevAvg + DECLINE_THRESHOLD_PCT) {
+        trend = 'UP';
+      }
     }
   }
 

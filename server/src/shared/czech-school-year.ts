@@ -15,8 +15,10 @@ export function deriveCzechSchoolYearFromStartYear(startYear: number): {
     throw new BadRequestException('Neplatný rok školního roku (2000–2100).');
   }
   const endYear = startYear + 1;
-  const startDate = new Date(Date.UTC(startYear, 8, 1)); // 1 Sept
-  const endDate = new Date(Date.UTC(endYear, 7, 31)); // 31 Aug
+  const startDate = new Date(Date.UTC(startYear, 8, 1)); // 1 Sept 00:00:00 UTC
+  // End-of-day on Aug 31 (23:59:59.999 UTC) so the year remains valid through its last day
+  // in every timezone. Consistent with createDefaultAcademicYearIfMissing.
+  const endDate = new Date(Date.UTC(endYear, 7, 31, 23, 59, 59, 999)); // 31 Aug 23:59:59.999 UTC
   const label = `${startYear}/${endYear}`;
   return { startDate, endDate, label };
 }

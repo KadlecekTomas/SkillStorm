@@ -17,6 +17,7 @@ import {
   ApiQuery,
   ApiTags,
 } from '@nestjs/swagger';
+import { CacheTTL } from '@nestjs/cache-manager';
 import { SystemRole, PermissionKey } from '@prisma/client';
 import { Permission } from '@/modules/rbac/permission.decorator';
 
@@ -39,6 +40,7 @@ export class CatalogController {
   // ---------- READ (teacher/director/superadmin) ----------
   @Get('subjects')
   @Permission(PermissionKey.MANAGE_TEACHERS)
+  @CacheTTL(0) // vypnout HTTP response cache – používáme verzovanou cache v service
   @ApiOperation({
     summary: 'CatalogSubject list (search + pagination, cached)',
   })
@@ -51,6 +53,7 @@ export class CatalogController {
 
   @Get('subjects/:id')
   @Permission(PermissionKey.MANAGE_TEACHERS)
+  @CacheTTL(0)
   @ApiOperation({ summary: 'CatalogSubject detail (cached)' })
   getSubject(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.getSubject(id);
@@ -58,6 +61,7 @@ export class CatalogController {
 
   @Get('subjects/:id/topics')
   @Permission(PermissionKey.MANAGE_TEACHERS)
+  @CacheTTL(0)
   @ApiOperation({ summary: 'CatalogTopic list by CatalogSubject (cached)' })
   @ApiQuery({ name: 'search', required: false, type: String })
   @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
@@ -71,6 +75,7 @@ export class CatalogController {
 
   @Get('topics/:id')
   @Permission(PermissionKey.MANAGE_TEACHERS)
+  @CacheTTL(0)
   @ApiOperation({ summary: 'CatalogTopic detail (cached)' })
   getTopic(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.getTopic(id);

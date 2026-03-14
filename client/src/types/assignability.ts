@@ -4,9 +4,11 @@
  */
 
 export type AssignabilityIssueReason =
+  | "NO_ALLOWED_GRADES"
   | "NO_QUESTIONS"
   | "NO_SCORE"
-  | "NO_CORRECT_ANSWER";
+  | "NO_CORRECT_ANSWER"
+  | "INVALID_OPTIONS";
 
 export type AssignabilityIssue = {
   questionId?: string;

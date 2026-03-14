@@ -2,11 +2,9 @@
 import {
   Controller,
   Get,
-  Post,
   Body,
   Patch,
   Param,
-  Delete,
   Req,
   ParseUUIDPipe,
   Query,
@@ -20,13 +18,10 @@ import {
 } from '@nestjs/swagger';
 import { CacheTTL } from '@nestjs/cache-manager';
 
-import { SystemRole, OrganizationRole, PermissionKey } from '@prisma/client';
+import { PermissionKey } from '@prisma/client';
 import { Permission } from '@/modules/rbac/permission.decorator';
 
-import { CreateSubjectDto } from './dto/create-subject.dto';
-import { UpdateSubjectDto } from './dto/update-subject.dto';
 import { QuerySubjectsDto } from './dto/query-subjects.dto';
-import { SetActiveSubjectDto } from './dto/set-active-subject.dto';
 import { ToggleSubjectLevelDto } from './dto/toggle-subject-level.dto';
 import { SubjectsService } from './subject.service';
 
@@ -37,15 +32,6 @@ import { InvalidateScopes } from '@/common/cache/invalidate.decorator';
 @Controller('subjects')
 export class SubjectsController {
   constructor(private readonly service: SubjectsService) {}
-
-  // ---------- CREATE ----------
-  @Post()
-  @Permission(PermissionKey.MANAGE_TEACHERS)
-  @ApiOperation({ summary: 'Vytvoření předmětu' })
-  @InvalidateScopes(({ req }) => [req.body?.organizationId].filter(Boolean))
-  create(@Body() dto: CreateSubjectDto, @Req() req: RequestWithUser) {
-    return this.service.create(dto, req.user);
-  }
 
   // ---------- LIST ----------
   @Get()
@@ -75,54 +61,6 @@ export class SubjectsController {
     return this.service.findOne(id, req.user);
   }
 
-  // ---------- UPDATE ----------
-  @Patch(':id')
-  @Permission(PermissionKey.MANAGE_TEACHERS)
-  @ApiOperation({ summary: 'Úprava předmětu' })
-  @InvalidateScopes(({ result }) =>
-    result?.organizationId ? [result.organizationId] : [],
-  )
-  update(
-    @Param('id', new ParseUUIDPipe()) id: string,
-    @Body() dto: UpdateSubjectDto,
-    @Req() req: RequestWithUser,
-  ) {
-    return this.service.update(id, dto, req.user);
-  }
-
-  // ---------- ACTIVATE / DEACTIVATE ----------
-  @Patch(':id/activation')
-  @Permission(PermissionKey.MANAGE_TEACHERS)
-  @ApiOperation({
-    summary: 'Activate or deactivate a subject',
-    description:
-      'Deactivating blocks new test creation for this subject. Existing tests remain untouched. Fully reversible.',
-  })
-  @InvalidateScopes(({ result }) =>
-    result?.organizationId ? [result.organizationId] : [],
-  )
-  setActive(
-    @Param('id', new ParseUUIDPipe()) id: string,
-    @Body() dto: SetActiveSubjectDto,
-    @Req() req: RequestWithUser,
-  ) {
-    return this.service.setActive(id, dto.isActive, req.user);
-  }
-
-  // ---------- DELETE (soft) ----------
-  @Delete(':id')
-  @Permission(SystemRole.SUPERADMIN, OrganizationRole.OWNER, OrganizationRole.DIRECTOR)
-  @ApiOperation({ summary: 'Soft smazání předmětu' })
-  @InvalidateScopes(({ result }) =>
-    result?.organizationId ? [result.organizationId] : [],
-  )
-  remove(
-    @Param('id', new ParseUUIDPipe()) id: string,
-    @Req() req: RequestWithUser,
-  ) {
-    return this.service.remove(id, req.user);
-  }
-
   // ---------- Subject → Levels ----------
   @Get(':id/levels')
   @Permission(PermissionKey.MANAGE_TEACHERS)
@@ -139,9 +77,7 @@ export class SubjectsController {
   @Patch(':id/levels/:grade')
   @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'Enable or disable a subject grade level' })
-  @InvalidateScopes(({ result }) =>
-    result?.subject?.organizationId ? [result.subject.organizationId] : [],
-  )
+  @InvalidateScopes(({ req }) => [req.user?.organizationId].filter(Boolean))
   toggleSubjectLevel(
     @Param('id', new ParseUUIDPipe()) subjectId: string,
     @Param('grade') grade: string,

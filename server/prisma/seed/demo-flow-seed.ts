@@ -295,12 +295,13 @@ async function ensureEnrollment(
 }
 
 async function ensureSubject(orgId: string, name: string) {
+  void orgId;
   const existing = await prisma.subject.findFirst({
-    where: { organizationId: orgId, name, deletedAt: null },
+    where: { name, deletedAt: null },
   });
   if (existing) return existing;
   return prisma.subject.create({
-    data: { organizationId: orgId, name },
+    data: { name },
   });
 }
 
@@ -329,6 +330,7 @@ async function ensureTest(
       where: { id: existing.id },
       data: {
         description: description ?? null,
+        allowedGrades: [SchoolGrade.GRADE_7, SchoolGrade.GRADE_8],
         status,
         creatorId,
       },
@@ -339,6 +341,7 @@ async function ensureTest(
       organizationId: orgId,
       title,
       description: description ?? null,
+      allowedGrades: [SchoolGrade.GRADE_7, SchoolGrade.GRADE_8],
       status,
       creatorId,
     },

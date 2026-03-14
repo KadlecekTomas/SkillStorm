@@ -8,22 +8,17 @@ import type { RequestWithUser } from '@/types/request-with-user';
 import type { JwtPayload } from '@/auth/types/jwt-payload';
 import { PrismaService } from '@/prisma/prisma.service';
 import { AcademicYearsService } from '@/academic-years/academic-years.service';
+import { AcademicYearCacheRef } from '@/common/year-cache/academic-year-cache.ref';
 import type { OrgContext } from './org-context.types';
-
-type CachedYear = {
-  yearId: string | null;
-  expiresAt: number;
-};
 
 const YEAR_CACHE_TTL_MS = 45_000;
 
 @Injectable()
 export class OrgContextService {
-  private readonly activeYearCache = new Map<string, CachedYear>();
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly academicYears: AcademicYearsService,
+    private readonly yearCache: AcademicYearCacheRef,
   ) {}
 
   async get(req: RequestWithUser): Promise<OrgContext> {
@@ -37,13 +32,15 @@ export class OrgContextService {
     }
 
     const membership = await this.resolveMembership(user, organizationId);
-    const activeAcademicYearId = await this.getActiveAcademicYearId(organizationId);
+    const { yearId, endsAt } = await this.getActiveYearData(organizationId);
+    const isAcademicYearExpired = endsAt ? Date.now() > endsAt.getTime() : false;
 
     return {
       organizationId,
       membershipId: membership.id,
       role: membership.role,
-      activeAcademicYearId,
+      activeAcademicYearId: yearId,
+      isAcademicYearExpired,
     };
   }
 
@@ -75,36 +72,44 @@ export class OrgContextService {
     return fallback;
   }
 
-  private async getActiveAcademicYearId(
+  private async getActiveYearData(
     organizationId: string,
-  ): Promise<string | null> {
+  ): Promise<{ yearId: string | null; endsAt: Date | null }> {
     const now = Date.now();
-    const cached = this.activeYearCache.get(organizationId);
+    const cached = this.yearCache.get(organizationId);
     if (cached && cached.expiresAt > now) {
-      return cached.yearId;
+      return { yearId: cached.yearId, endsAt: cached.endsAt };
     }
 
     try {
       const year = await this.academicYears.getCurrentForOrgOrFail(organizationId);
-      this.activeYearCache.set(organizationId, {
+      this.yearCache.set(organizationId, {
         yearId: year.id,
+        endsAt: year.endDate,
         expiresAt: now + YEAR_CACHE_TTL_MS,
       });
-      return year.id;
+      return { yearId: year.id, endsAt: year.endDate };
     } catch (error) {
       if (error instanceof NotFoundException || error instanceof ForbiddenException) {
         throw error;
       }
-      this.activeYearCache.set(organizationId, {
+      this.yearCache.set(organizationId, {
         yearId: null,
+        endsAt: null,
         expiresAt: now + YEAR_CACHE_TTL_MS,
       });
-      return null;
+      return { yearId: null, endsAt: null };
     }
   }
 
+  /** @deprecated Use getActiveYearData internally; kept for any external callers. */
+  async getActiveAcademicYearId(organizationId: string): Promise<string | null> {
+    const { yearId } = await this.getActiveYearData(organizationId);
+    return yearId;
+  }
+
   invalidateOrgYearCache(organizationId: string): void {
-    this.activeYearCache.delete(organizationId);
+    this.yearCache.invalidate(organizationId);
   }
 
   hasTeacherLevelRole(ctx: OrgContext): boolean {

@@ -20,6 +20,7 @@ import { useClassroomDetail } from "@/hooks/use-classroom-detail";
 import { useClassroomRiskOverview } from "@/hooks/use-classroom-risk-overview";
 import { useClassroomSubjectPerformance } from "@/hooks/use-classroom-subject-performance";
 import { useClassrooms } from "@/hooks/use-classrooms";
+import { useClassroomStructure } from "@/hooks/use-classroom-structure";
 import { useClassSectionOrgSubjects } from "@/hooks/use-class-section-org-subjects";
 import { useOrgSubjects, subjectLabel } from "@/hooks/use-org-subjects";
 import { useTeachers } from "@/hooks/use-teachers";
@@ -27,7 +28,8 @@ import { usePermissions } from "@/hooks/use-permissions";
 import { PermissionKey } from "@/types";
 import { showToastOnce } from "@/utils/toast";
 import { isRepairStateClassrooms } from "@/lib/app-state/app-state";
-import { ArrowUp, ArrowDown, ChevronDown, ChevronRight, Minus } from "lucide-react";
+import { isYearWriteBlocked } from "@/lib/academic-year/write-gate";
+import { ArrowUp, ArrowDown, ChevronDown, ChevronRight, Minus, Star } from "lucide-react";
 import { cn } from "@/utils/cn";
 
 function getApiErrorMessage(err: unknown): string {
@@ -127,9 +129,12 @@ export function ClassroomsPageContent(): React.JSX.Element {
   // Always load academic years so first class can be created (do not disable when isInitOrg).
   const {
     years,
+    activeYear,
     selectedYearId: currentYearId,
     status: academicYearStatus,
+    bootstrapState: academicYearBootstrapState,
     yearConfigError,
+    isAcademicYearExpired,
     setSelectedYearId,
     refresh: refreshYears,
   } = useAcademicYears({ enabled: true });
@@ -143,15 +148,21 @@ export function ClassroomsPageContent(): React.JSX.Element {
   const gradeFilter = rawGrade && rawGrade !== "ALL" ? rawGrade : null;
   const teacherFilter = rawTeacher && rawTeacher !== "ALL" ? rawTeacher : null;
   const searchTerm = rawSearch.trim();
-  const selectedYear = useMemo(
-    () => (yearFilterId ? years.find((year) => year.id === yearFilterId) ?? null : null),
-    [years, yearFilterId],
-  );
-  const isReadOnly = selectedYear ? !selectedYear.isActive : false;
   const { can } = usePermissions();
   const canManageClasses = can(PermissionKey.MANAGE_TEACHERS);
   const canManageEnrollments = can(PermissionKey.MANAGE_STUDENTS);
   const canCreateYear = can(PermissionKey.MANAGE_TEACHERS);
+  const isTeacherView = !canManageClasses && !roles.includes("STUDENT");
+  /** True when the active year is expired AND the user cannot manage the org (i.e. teacher/student). */
+  const yearWriteBlocked = isYearWriteBlocked(isAcademicYearExpired, canManageClasses);
+
+  // Teachers are locked to the active academic year — they cannot browse historical years.
+  const effectiveYearFilterId = isTeacherView ? (activeYear?.id ?? yearFilterId) : yearFilterId;
+  const selectedYear = useMemo(
+    () => (effectiveYearFilterId ? years.find((year) => year.id === effectiveYearFilterId) ?? null : null),
+    [years, effectiveYearFilterId],
+  );
+  const isReadOnly = selectedYear ? !selectedYear.isActive : false;
 
   const selectedId = highlightId;
   const highlightedCardRef = useRef<HTMLButtonElement | null>(null);
@@ -188,7 +199,15 @@ export function ClassroomsPageContent(): React.JSX.Element {
   const [inviteToken, setInviteToken] = useState("");
   const [inviteLoading, setInviteLoading] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
+  const [homeroomSaving, setHomeroomSaving] = useState(false);
+  const [homeroomSaveError, setHomeroomSaveError] = useState<string | null>(null);
   const { teachers, loading: teachersLoading } = useTeachers();
+  const {
+    data: classroomStructure,
+    loading: structureLoading,
+  } = useClassroomStructure({
+    enabled: isTeacherView && isAuthenticated && !authLoading && !!effectiveYearFilterId,
+  });
 
   const updateQuery = useCallback(
     (updates: Record<string, string | null | undefined>) => {
@@ -268,17 +287,17 @@ export function ClassroomsPageContent(): React.JSX.Element {
   ]);
 
   useEffect(() => {
-    if (yearFilterId) {
-      setSelectedYearId(yearFilterId);
+    if (effectiveYearFilterId) {
+      setSelectedYearId(effectiveYearFilterId);
     }
-  }, [yearFilterId, setSelectedYearId]);
+  }, [effectiveYearFilterId, setSelectedYearId]);
   const classroomsState = useClassrooms({
     isAuthLoading: authLoading,
     isAuthenticated,
     orgStatus: org?.status ?? null,
     orgReadiness: org?.readiness ?? null,
     bootstrap: org?.bootstrap ?? null,
-    selectedYearId: yearFilterId,
+    selectedYearId: effectiveYearFilterId,
     grade: gradeFilter,
     search: searchTerm,
     teacherId: teacherFilter,
@@ -294,7 +313,18 @@ export function ClassroomsPageContent(): React.JSX.Element {
         : [],
     [classroomsState],
   );
-  const selectedInList = selectedId ? classrooms.some((item) => item.id === selectedId) : false;
+  const teacherAllClasses = useMemo(
+    () => [
+      ...(classroomStructure?.homeroom ? [classroomStructure.homeroom] : []),
+      ...(classroomStructure?.teachingClasses ?? []),
+      ...(classroomStructure?.otherClasses ?? []),
+    ],
+    [classroomStructure],
+  );
+
+  const selectedInList = selectedId
+    ? (isTeacherView ? teacherAllClasses : classrooms).some((item) => item.id === selectedId)
+    : false;
   const effectiveSelectedId = selectedInList ? selectedId : null;
   const { detail, loading: detailLoading, refetch: refetchDetail } = useClassroomDetail(effectiveSelectedId);
   const {
@@ -311,13 +341,13 @@ export function ClassroomsPageContent(): React.JSX.Element {
   );
   const { data: subjectPerformance, loading: subjectPerformanceLoading } = useClassroomSubjectPerformance(
     effectiveSelectedId,
-    yearFilterId ?? null,
+    effectiveYearFilterId ?? null,
     !!effectiveSelectedId && canViewStudentDetail,
   );
   const { students: availableStudents, loading: availableStudentsLoading } = useAvailableStudents({
     enabled: addOpen && addMode === "EXISTING",
     classSectionId: effectiveSelectedId,
-    yearId: yearFilterId,
+    yearId: effectiveYearFilterId,
   });
 
   useEffect(() => {
@@ -359,7 +389,7 @@ export function ClassroomsPageContent(): React.JSX.Element {
     const term = subjectSearchInput.trim().toLowerCase();
     if (!term) return orgSubjects;
     return orgSubjects.filter((subject) =>
-      `${subject.name} ${subject.gradeFrom} ${subject.gradeTo}`
+      `${subject.subject.name} ${subject.subject.gradeFrom} ${subject.subject.gradeTo}`
         .toLowerCase()
         .includes(term),
     );
@@ -439,6 +469,25 @@ export function ClassroomsPageContent(): React.JSX.Element {
     });
   };
 
+  const handleSetHomeroom = async (classSectionId: string, teacherId: string | null) => {
+    if (homeroomSaving) return;
+    setHomeroomSaving(true);
+    setHomeroomSaveError(null);
+    try {
+      await fetchWithAuth("PATCH", `/class-sections/${classSectionId}/homeroom`, {
+        body: { teacherId },
+      });
+      await Promise.all([
+        refetchDetail(),
+        refetchClassrooms({ bypassCache: true }),
+      ]);
+    } catch (err) {
+      setHomeroomSaveError(getApiErrorMessage(err));
+    } finally {
+      setHomeroomSaving(false);
+    }
+  };
+
   const toggleGrade = (grade: string) => {
     setCollapsedGrades((prev) => ({
       ...prev,
@@ -447,7 +496,7 @@ export function ClassroomsPageContent(): React.JSX.Element {
   };
 
   const handleCreateClassroom = async () => {
-    if (!yearFilterId) {
+    if (!effectiveYearFilterId) {
       setCreateError("Nejdřív vyber školní rok.");
       showToastOnce("Nejdřív vyber školní rok.", { type: "warning" });
       return;
@@ -466,7 +515,7 @@ export function ClassroomsPageContent(): React.JSX.Element {
         createdAt?: string;
       }>("POST", "/classrooms", {
         body: {
-          yearId: yearFilterId,
+          yearId: effectiveYearFilterId,
           grade: createForm.grade,
           section: createForm.section.trim(),
           label: createForm.label.trim() || undefined,
@@ -476,7 +525,7 @@ export function ClassroomsPageContent(): React.JSX.Element {
         throw new Error("Třídu se nepodařilo vytvořit.");
       }
       const yearId = created.yearId ?? created.academicYearId;
-      if (yearId !== yearFilterId) {
+      if (yearId !== effectiveYearFilterId) {
         setCreateError("Třída byla vytvořena pro jiný školní rok. Obnovuji seznam.");
         showToastOnce("Třída byla vytvořena pro jiný rok.", { type: "warning" });
         setCreateOpen(false);
@@ -487,7 +536,7 @@ export function ClassroomsPageContent(): React.JSX.Element {
       const resolvedLabel =
         (created.label ?? `${gradeLabel(created.grade)}.${created.section ?? ""}`).toLowerCase();
       const matchesFilters =
-        yearId === yearFilterId &&
+        yearId === effectiveYearFilterId &&
         (!gradeFilter || created.grade === gradeFilter) &&
         !teacherFilter &&
         (!searchTerm || resolvedLabel.includes(searchTerm.toLowerCase()));
@@ -618,7 +667,7 @@ export function ClassroomsPageContent(): React.JSX.Element {
   };
 
   const handleEnrollExisting = async () => {
-    if (!effectiveSelectedId || !yearFilterId) {
+    if (!effectiveSelectedId || !effectiveYearFilterId) {
       setAddError("Nejdřív vyber třídu a školní rok.");
       return;
     }
@@ -643,7 +692,7 @@ export function ClassroomsPageContent(): React.JSX.Element {
           body: {
             studentId: ids[i],
             classSectionId: effectiveSelectedId,
-            yearId: yearFilterId,
+            yearId: effectiveYearFilterId,
           },
         });
         enrolled++;
@@ -675,7 +724,7 @@ export function ClassroomsPageContent(): React.JSX.Element {
       setAddError("Nejdřív vyber třídu.");
       return;
     }
-    if (!yearFilterId) {
+    if (!effectiveYearFilterId) {
       setAddError("Nejdřív vyber školní rok.");
       return;
     }
@@ -711,7 +760,7 @@ export function ClassroomsPageContent(): React.JSX.Element {
         errors: Array<{ index: number; name: string; message: string }>;
         results?: Array<{ index: number; name: string; status: string; message?: string }>;
       }>("POST", "/enrollments/bulk", {
-        body: { classroomId: effectiveSelectedId, academicYearId: yearFilterId, entries },
+        body: { classroomId: effectiveSelectedId, academicYearId: effectiveYearFilterId, entries },
       });
 
       setBulkResult(result);
@@ -752,8 +801,13 @@ export function ClassroomsPageContent(): React.JSX.Element {
     }
   };
 
+  const handleCreateOrgSubject = () => {
+    setSubjectsModalOpen(false);
+    router.push("/app/settings");
+  };
+
   const generateStudentInvite = useCallback(async () => {
-    if (!effectiveSelectedId || !yearFilterId) {
+    if (!effectiveSelectedId || !effectiveYearFilterId) {
       setInviteCode("");
       setInviteToken("");
       setInviteError("Nejdřív vyber třídu a školní rok.");
@@ -772,7 +826,7 @@ export function ClassroomsPageContent(): React.JSX.Element {
           type: "STUDENT_CLASS",
           role: "STUDENT",
           classSectionId: effectiveSelectedId,
-          yearId: yearFilterId,
+          yearId: effectiveYearFilterId,
         },
       });
       setInviteCode(invite?.code ?? "");
@@ -784,7 +838,7 @@ export function ClassroomsPageContent(): React.JSX.Element {
     } finally {
       setInviteLoading(false);
     }
-  }, [effectiveSelectedId, yearFilterId]);
+  }, [effectiveSelectedId, effectiveYearFilterId]);
 
   useEffect(() => {
     if (!addOpen || addMode !== "INVITE") return;
@@ -811,19 +865,19 @@ export function ClassroomsPageContent(): React.JSX.Element {
       ? "loading"
       : years.length === 0
         ? "empty"
-        : yearFilterId
+        : effectiveYearFilterId
           ? "selected"
           : "needs-selection";
   const hasYear = yearUiState === "selected";
   const isInitializingYear = yearUiState === "loading";
   const emptyState =
-    classroomsState.status === "READY_EMPTY" && hasYear && summary.length === 0;
+    !isTeacherView && classroomsState.status === "READY_EMPTY" && hasYear && summary.length === 0;
   const emptyStateMessage = hasFilters
     ? "Žádné třídy neodpovídají filtrům."
     : "Zatím nemáte žádné třídy.";
   const needsYearSelection = yearUiState === "needs-selection";
 
-  if (!isInitOrg && process.env.NODE_ENV !== "production" && academicYearStatus === "loading" && years.length === 0) {
+  if (!isInitOrg && process.env.NODE_ENV !== "production" && academicYearBootstrapState === "READY" && academicYearStatus === "loading" && years.length === 0) {
     throw new Error("AcademicYear empty UI rendered while data is still loading.");
   }
 
@@ -898,8 +952,9 @@ export function ClassroomsPageContent(): React.JSX.Element {
   }
 
   if (
-    (classroomsState.status === "AUTH_LOADING" ||
-      classroomsState.status === "FETCHING") &&
+    ((classroomsState.status === "AUTH_LOADING" ||
+      classroomsState.status === "FETCHING") ||
+      (isTeacherView && structureLoading && !classroomStructure)) &&
     !isRepairState
   ) {
     return (
@@ -935,21 +990,33 @@ export function ClassroomsPageContent(): React.JSX.Element {
           </Button>
         </>
       )}
+      {isReadOnly && !isTeacherView && (
+        <InfoAlert
+          title={`Zobrazujete historický školní rok${selectedYear ? ` (${selectedYear.name})` : ""}`}
+          description="Tento rok je uzavřený — data jsou pouze ke čtení. Přepněte na aktivní rok pro úpravy."
+        />
+      )}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Classrooms</h1>
+          <h1 className="text-2xl font-semibold text-slate-900">Třídy</h1>
           <p className="text-sm text-slate-500">
             {selectedYear ? `Školní rok ${selectedYear.name}` : "Vyber školní rok"}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {isReadOnly && <Badge variant="warning">Read-only</Badge>}
+          {isReadOnly && !isTeacherView && <Badge variant="warning">Read-only</Badge>}
           {canManageClasses && (
             <Button
               data-testid="create-classroom-btn"
               onClick={() => setCreateOpen(true)}
-              disabled={!hasYear || isReadOnly || academicYearStatus !== "ready"}
-              title={isReadOnly ? "Minulý rok je pouze ke čtení" : undefined}
+              disabled={!hasYear || isReadOnly || academicYearStatus !== "ready" || yearWriteBlocked}
+              title={
+                yearWriteBlocked
+                  ? "Školní rok vypršel. Vytvořte nový rok."
+                  : isReadOnly
+                    ? "Minulý rok je pouze ke čtení"
+                    : undefined
+              }
             >
               Vytvořit třídu
             </Button>
@@ -962,26 +1029,32 @@ export function ClassroomsPageContent(): React.JSX.Element {
           <div className="grid gap-3 md:grid-cols-5">
             <label className="space-y-1 text-sm text-slate-600">
               Školní rok
-              <Select
-                value={yearFilterId ?? ""}
-                onValueChange={(value) => {
-                  updateQuery({ year: value, cursor: null, dir: null, highlight: null });
-                  setSelectedYearId(value);
-                }}
-                disabled={academicYearStatus !== "ready"}
-              >
-                <SelectTrigger className="rounded-2xl" aria-label="Academic year">
-                  <SelectValue placeholder="Školní rok" />
-                </SelectTrigger>
-                <SelectContent>
-                  {years.map((year) => (
-                    <SelectItem key={year.id} value={year.id}>
-                      {year.name}
-                      {!year.isActive ? " · read-only" : ""}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {isTeacherView ? (
+                <div className="flex h-9 items-center rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700">
+                  {selectedYear?.name ?? "—"}
+                </div>
+              ) : (
+                <Select
+                  value={yearFilterId ?? ""}
+                  onValueChange={(value) => {
+                    updateQuery({ year: value, cursor: null, dir: null, highlight: null });
+                    setSelectedYearId(value);
+                  }}
+                  disabled={academicYearStatus !== "ready"}
+                >
+                  <SelectTrigger className="rounded-2xl" aria-label="Academic year">
+                    <SelectValue placeholder="Školní rok" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {years.map((year) => (
+                      <SelectItem key={year.id} value={year.id}>
+                        {year.name}
+                        {!year.isActive ? " · read-only" : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </label>
             <label className="space-y-1 text-sm text-slate-600">
               Ročník
@@ -1046,27 +1119,29 @@ export function ClassroomsPageContent(): React.JSX.Element {
                 disabled={!hasYear}
               />
             </label>
-            <label className="space-y-1 text-sm text-slate-600">
-              Počet na stránku
-              <Select
-                value={String(limit)}
-                onValueChange={(value) =>
-                  updateQuery({ limit: value, cursor: null, dir: null, highlight: null })
-                }
-                disabled={!hasYear}
-              >
-                <SelectTrigger className="rounded-2xl">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {[5, 10, 20, 50].map((size) => (
-                    <SelectItem key={size} value={String(size)}>
-                      {size}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </label>
+            {!isTeacherView && (
+              <label className="space-y-1 text-sm text-slate-600">
+                Počet na stránku
+                <Select
+                  value={String(limit)}
+                  onValueChange={(value) =>
+                    updateQuery({ limit: value, cursor: null, dir: null, highlight: null })
+                  }
+                  disabled={!hasYear}
+                >
+                  <SelectTrigger className="rounded-2xl">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[5, 10, 20, 50].map((size) => (
+                      <SelectItem key={size} value={String(size)}>
+                        {size}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </label>
+            )}
           </div>
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm text-slate-500">
             <span>
@@ -1138,114 +1213,172 @@ export function ClassroomsPageContent(): React.JSX.Element {
         </Card>
       )}
 
-      {classroomsState.status === "READY_WITH_DATA" && summary.length > 0 && (
+      {((!isTeacherView && classroomsState.status === "READY_WITH_DATA" && summary.length > 0) ||
+        (isTeacherView && classroomStructure !== null && hasYear)) && (
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
           <div className="space-y-3">
-            {gradeGroups.map((group) => {
-              const isCollapsed = collapsedGrades[group.grade] ?? false;
-              return (
-                <Card key={group.grade} className="border-slate-200 p-3">
-                  <button
-                    type="button"
-                    className="flex w-full items-center justify-between gap-3 text-left"
-                    onClick={() => toggleGrade(group.grade)}
-                  >
-                    <div className="flex items-center gap-2">
-                      {isCollapsed ? (
-                        <ChevronRight className="h-4 w-4 text-slate-500" />
-                      ) : (
-                        <ChevronDown className="h-4 w-4 text-slate-500" />
-                      )}
-                      <div>
-                        <p className="text-sm font-semibold text-slate-900">
-                          Ročník {group.label}
-                        </p>
-                        <p className="text-xs text-slate-500">
-                          {group.classes.length} tříd
-                        </p>
+            {isTeacherView && classroomStructure ? (
+              <>
+                {[
+                    { key: "homeroom", title: "Moje třída", items: classroomStructure.homeroom ? [classroomStructure.homeroom] : [], emptyMsg: "Nemáte přiřazenou třídní třídu." as string | null, isHomeroom: true },
+                    { key: "teaching", title: "Třídy kde učím", items: classroomStructure.teachingClasses, emptyMsg: "Nejste přiřazen/a k výuce v žádné jiné třídě." as string | null, isHomeroom: false },
+                  ].map((section) => (
+                  <Card key={section.key} className="border-slate-200 p-3">
+                    <p className="mb-2 text-sm font-semibold text-slate-700">{section.title}</p>
+                    {section.items.length === 0 ? (
+                      section.emptyMsg ? (
+                        <p className="text-xs text-slate-400">{section.emptyMsg}</p>
+                      ) : null
+                    ) : (
+                      <div className="space-y-2">
+                        {section.items.map((cls) => {
+                          const classLabel = cls.label ?? `${gradeLabel(cls.grade)}.${cls.section}`;
+                          const teacherName = cls.homeroomTeacherName ?? cls.teacher?.membership?.user?.name ?? "—";
+                          const studentsCount = cls.studentCount ?? cls._count?.enrollments ?? 0;
+                          return (
+                            <button
+                              key={cls.id}
+                              ref={cls.id === highlightId ? highlightedCardRef : undefined}
+                              data-testid={`classroom-item-${cls.id}`}
+                              className={`w-full rounded-2xl border p-3 text-left transition ${cls.id === effectiveSelectedId
+                                ? "border-slate-900 bg-slate-900 text-white"
+                                : "border-slate-200 bg-white hover:border-slate-400"
+                                }`}
+                              onClick={() => updateQuery({ highlight: cls.id })}
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2">
+                                  {section.isHomeroom && (
+                                    <Star className={`h-3.5 w-3.5 shrink-0 ${cls.id === effectiveSelectedId ? "text-amber-300" : "text-amber-500"}`} />
+                                  )}
+                                  <div>
+                                    <p className="text-base font-semibold">{classLabel}</p>
+                                    <p className={`text-xs ${cls.id === effectiveSelectedId ? "text-white/70" : "text-slate-500"}`}>
+                                      {teacherName}
+                                    </p>
+                                  </div>
+                                </div>
+                                <Badge variant={cls.id === effectiveSelectedId ? "neutral" : "info"}>
+                                  {studentsCount} žáků
+                                </Badge>
+                              </div>
+                            </button>
+                          );
+                        })}
                       </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="info">{group.classes.length} tříd</Badge>
-                      <Badge variant="neutral">{group.studentsCount} žáků</Badge>
-                    </div>
-                  </button>
-                  {!isCollapsed && (
-                    <div className="mt-3 space-y-2">
-                      {group.classes.map((cls) => (
-                        <button
-                          key={cls.id}
-                          ref={cls.id === highlightId ? highlightedCardRef : undefined}
-                          data-testid={`classroom-item-${cls.id}`}
-                          className={`w-full rounded-2xl border p-3 text-left transition ${cls.id === effectiveSelectedId
-                            ? "border-slate-900 bg-slate-900 text-white"
-                            : "border-slate-200 bg-white hover:border-slate-400"
-                            }`}
-                          onClick={() => updateQuery({ highlight: cls.id })}
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <div>
-                              <p className="text-base font-semibold">{cls.classLabel}</p>
-                              <p className={`text-xs ${cls.id === effectiveSelectedId ? "text-white/70" : "text-slate-500"}`}>
-                                {cls.teacherName}
-                              </p>
-                            </div>
-                            <Badge variant={cls.id === effectiveSelectedId ? "neutral" : "info"}>
-                              {cls.studentsCount} žáků
-                            </Badge>
+                    )}
+                  </Card>
+                ))}
+              </>
+            ) : (
+              <>
+                {gradeGroups.map((group) => {
+                  const isCollapsed = collapsedGrades[group.grade] ?? false;
+                  return (
+                    <Card key={group.grade} className="border-slate-200 p-3">
+                      <button
+                        type="button"
+                        className="flex w-full items-center justify-between gap-3 text-left"
+                        onClick={() => toggleGrade(group.grade)}
+                      >
+                        <div className="flex items-center gap-2">
+                          {isCollapsed ? (
+                            <ChevronRight className="h-4 w-4 text-slate-500" />
+                          ) : (
+                            <ChevronDown className="h-4 w-4 text-slate-500" />
+                          )}
+                          <div>
+                            <p className="text-sm font-semibold text-slate-900">
+                              Ročník {group.label}
+                            </p>
+                            <p className="text-xs text-slate-500">
+                              {group.classes.length} tříd
+                            </p>
                           </div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </Card>
-              );
-            })}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="info">{group.classes.length} tříd</Badge>
+                          <Badge variant="neutral">{group.studentsCount} žáků</Badge>
+                        </div>
+                      </button>
+                      {!isCollapsed && (
+                        <div className="mt-3 space-y-2">
+                          {group.classes.map((cls) => (
+                            <button
+                              key={cls.id}
+                              ref={cls.id === highlightId ? highlightedCardRef : undefined}
+                              data-testid={`classroom-item-${cls.id}`}
+                              className={`w-full rounded-2xl border p-3 text-left transition ${cls.id === effectiveSelectedId
+                                ? "border-slate-900 bg-slate-900 text-white"
+                                : "border-slate-200 bg-white hover:border-slate-400"
+                                }`}
+                              onClick={() => updateQuery({ highlight: cls.id })}
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <div>
+                                  <p className="text-base font-semibold">{cls.classLabel}</p>
+                                  <p className={`text-xs ${cls.id === effectiveSelectedId ? "text-white/70" : "text-slate-500"}`}>
+                                    {cls.teacherName}
+                                  </p>
+                                </div>
+                                <Badge variant={cls.id === effectiveSelectedId ? "neutral" : "info"}>
+                                  {cls.studentsCount} žáků
+                                </Badge>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </Card>
+                  );
+                })}
 
-            {(cursor || meta.hasPrevPage || meta.hasNextPage) && (
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
-                <span>
-                  {cursor ? "Navigace po stránkách je aktivní" : "První stránka"}
-                </span>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={!cursor}
-                    onClick={() => updateQuery({ cursor: null, dir: null, highlight: null })}
-                  >
-                    Na začátek
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={!meta.hasPrevPage || !meta.prevCursor}
-                    onClick={() =>
-                      updateQuery({
-                        cursor: meta.prevCursor,
-                        dir: "prev",
-                        highlight: null,
-                      })
-                    }
-                  >
-                    Předchozí
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={!meta.hasNextPage || !meta.nextCursor}
-                    onClick={() =>
-                      updateQuery({
-                        cursor: meta.nextCursor,
-                        dir: "next",
-                        highlight: null,
-                      })
-                    }
-                  >
-                    Další
-                  </Button>
-                </div>
-              </div>
+                {(cursor || meta.hasPrevPage || meta.hasNextPage) && (
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
+                    <span>
+                      {cursor ? "Navigace po stránkách je aktivní" : "První stránka"}
+                    </span>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={!cursor}
+                        onClick={() => updateQuery({ cursor: null, dir: null, highlight: null })}
+                      >
+                        Na začátek
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={!meta.hasPrevPage || !meta.prevCursor}
+                        onClick={() =>
+                          updateQuery({
+                            cursor: meta.prevCursor,
+                            dir: "prev",
+                            highlight: null,
+                          })
+                        }
+                      >
+                        Předchozí
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={!meta.hasNextPage || !meta.nextCursor}
+                        onClick={() =>
+                          updateQuery({
+                            cursor: meta.nextCursor,
+                            dir: "next",
+                            highlight: null,
+                          })
+                        }
+                      >
+                        Další
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
 
@@ -1264,9 +1397,35 @@ export function ClassroomsPageContent(): React.JSX.Element {
                       {(detail.label ?? `${gradeLabel(detail.grade)}.${detail.section}`) +
                         ` (${detail.academicYear?.label ?? selectedYear?.name ?? "—"})`}
                     </h2>
-                    <p className="text-sm text-slate-500">
-                      Třídní učitel: {detail.teacher?.membership?.user?.name ?? "Neuveden"}
-                    </p>
+                    {canManageClasses ? (
+                      <div className="mt-1 flex flex-wrap items-center gap-2">
+                        <span className="shrink-0 text-sm text-slate-500">Třídní učitel:</span>
+                        <Select
+                          value={detail.teacher?.id ?? "none"}
+                          onValueChange={(value) =>
+                            void handleSetHomeroom(detail.id, value === "none" ? null : value)
+                          }
+                          disabled={homeroomSaving || isReadOnly}
+                        >
+                          <SelectTrigger className="h-7 w-auto min-w-[140px] rounded-xl text-sm">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">Neuveden</SelectItem>
+                            {teacherOptions.map((t) => (
+                              <SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {homeroomSaveError && (
+                          <span className="text-xs text-red-600">{homeroomSaveError}</span>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-slate-500">
+                        Třídní učitel: {detail.teacher?.membership?.user?.name ?? "Neuveden"}
+                      </p>
+                    )}
                   </div>
                   {canManageEnrollments && (
                     <Button
@@ -1767,45 +1926,63 @@ export function ClassroomsPageContent(): React.JSX.Element {
         onOpenChange={setSubjectsModalOpen}
       >
         <div className="space-y-4">
-          <label className="space-y-1 text-sm text-slate-600">
-            Hledat předmět
-            <Input
-              value={subjectSearchInput}
-              onChange={(event) => setSubjectSearchInput(event.target.value)}
-              placeholder="Matematika, čeština…"
-            />
-          </label>
-
           {orgSubjectsLoading ? (
             <p className="text-sm text-slate-500">Načítám předměty organizace…</p>
-          ) : filteredOrgSubjects.length === 0 ? (
-            <p className="text-sm text-slate-500">Žádné předměty pro tento filtr.</p>
-          ) : (
-            <div className="max-h-64 overflow-y-auto rounded-2xl border border-slate-200 p-2">
-              {filteredOrgSubjects.map((subject) => {
-                const checked = selectedOrgSubjectIds.has(subject.id);
-                return (
-                  <label
-                    key={subject.id}
-                    className="flex cursor-pointer items-center gap-2 rounded-xl px-3 py-2 hover:bg-slate-50"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => {
-                        setSelectedOrgSubjectIds((prev) => {
-                          const next = new Set(prev);
-                          if (next.has(subject.id)) next.delete(subject.id);
-                          else next.add(subject.id);
-                          return next;
-                        });
-                      }}
-                    />
-                    <span className="text-sm text-slate-700">{subjectLabel(subject)}</span>
-                  </label>
-                );
-              })}
+          ) : orgSubjects.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-4 py-5">
+              <p className="text-sm text-slate-700">
+                Pro tuto školu zatím nejsou vytvořené žádné předměty.
+              </p>
+              <p className="mt-1 text-sm text-slate-500">
+                Nejdřív vytvoř předmět ve správě školy, potom ho bude možné přiřadit třídě.
+              </p>
+              <div className="mt-4">
+                <Button onClick={handleCreateOrgSubject}>
+                  Vytvořit předmět
+                </Button>
+              </div>
             </div>
+          ) : (
+            <>
+              <label className="space-y-1 text-sm text-slate-600">
+                Hledat předmět
+                <Input
+                  value={subjectSearchInput}
+                  onChange={(event) => setSubjectSearchInput(event.target.value)}
+                  placeholder="Matematika, čeština…"
+                />
+              </label>
+
+              {filteredOrgSubjects.length === 0 ? (
+                <p className="text-sm text-slate-500">Žádné předměty pro tento filtr.</p>
+              ) : (
+                <div className="max-h-64 overflow-y-auto rounded-2xl border border-slate-200 p-2">
+                  {filteredOrgSubjects.map((subject) => {
+                    const checked = selectedOrgSubjectIds.has(subject.id);
+                    return (
+                      <label
+                        key={subject.id}
+                        className="flex cursor-pointer items-center gap-2 rounded-xl px-3 py-2 hover:bg-slate-50"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => {
+                            setSelectedOrgSubjectIds((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(subject.id)) next.delete(subject.id);
+                              else next.add(subject.id);
+                              return next;
+                            });
+                          }}
+                        />
+                        <span className="text-sm text-slate-700">{subjectLabel(subject)}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </>
           )}
 
           {subjectSaveError && <ErrorAlert title="Chyba" description={subjectSaveError} />}
@@ -1817,12 +1994,14 @@ export function ClassroomsPageContent(): React.JSX.Element {
             <Button variant="outline" onClick={() => setSubjectsModalOpen(false)}>
               Zrušit
             </Button>
-            <Button
-              onClick={() => void handleSaveClassSubjects()}
-              disabled={classOrgSubjectsSaving}
-            >
-              {classOrgSubjectsSaving ? "Ukládám…" : "Uložit"}
-            </Button>
+            {orgSubjects.length > 0 && (
+              <Button
+                onClick={() => void handleSaveClassSubjects()}
+                disabled={classOrgSubjectsSaving}
+              >
+                {classOrgSubjectsSaving ? "Ukládám…" : "Uložit"}
+              </Button>
+            )}
           </div>
         </div>
       </BaseModal>

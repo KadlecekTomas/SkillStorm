@@ -1,7 +1,8 @@
 // src/modules/subjects/dto/query-subjects.dto.ts
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsInt, IsOptional, IsString, Min } from 'class-validator';
+import { IsEnum, IsInt, IsOptional, IsString, Min } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
+import { SchoolGrade } from '@prisma/client';
 
 export class QuerySubjectsDto {
   @ApiPropertyOptional({ example: 1 })
@@ -35,4 +36,13 @@ export class QuerySubjectsDto {
   @IsOptional()
   @Transform(({ value }) => value === 'true' || value === true)
   includeInactive?: boolean;
+
+  @ApiPropertyOptional({
+    enum: SchoolGrade,
+    example: 'GRADE_5',
+    description: 'Filter to subjects with an enabled SubjectLevel for the given grade.',
+  })
+  @IsOptional()
+  @IsEnum(SchoolGrade)
+  grade?: SchoolGrade;
 }

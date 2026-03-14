@@ -171,7 +171,6 @@ export const useClassrooms = ({
         "/classrooms",
         {
           query: {
-            yearId: selectedYearId!,
             limit,
             ...(targetCursor ? { cursor: targetCursor, direction: targetDirection } : {}),
             ...(grade ? { grade } : {}),
@@ -201,7 +200,7 @@ export const useClassrooms = ({
 
       return { data, meta };
     },
-    [selectedYearId, grade, search, teacherId, limit],
+    [grade, search, teacherId, limit],
   );
 
   const refetch = useCallback(async (options?: { bypassCache?: boolean; skipFetch?: boolean }): Promise<boolean> => {
@@ -269,10 +268,11 @@ export const useClassrooms = ({
     } catch (error) {
       if (ac.signal.aborted) return false;
 
-      const err = error instanceof Error
-        ? error
-        : new Error("Nepodařilo se načíst třídy");
+      if (process.env.NODE_ENV !== "production") {
+        console.error("Classrooms API error:", error);
+      }
 
+      const err = new Error("Nelze načíst seznam tříd. Zkuste stránku obnovit.");
       dispatch({ type: "ERROR", error: err });
       return false;
     }

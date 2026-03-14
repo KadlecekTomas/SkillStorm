@@ -15,6 +15,7 @@ import {
   SubmissionStatus,
   AuditEntityType,
   OrganizationRole,
+  EnrollmentStatus,
 } from '@prisma/client';
 import type { JwtPayload } from '@/auth/types/jwt-payload';
 import {
@@ -416,6 +417,288 @@ export class StatsService {
     });
   }
 
+  // ===== DIRECTOR DASHBOARD ==================================================
+  async getDirectorDashboard(organizationId: string | null, user: JwtPayload) {
+    await this.ensureOrgContext(user, organizationId);
+    const membership = await this.resolveMembership(user, organizationId);
+    const isDirectorLevel =
+      membership?.role === OrganizationRole.DIRECTOR ||
+      (membership?.role as string) === 'OWNER';
+    if (!isDirectorLevel && user.systemRole !== SystemRole.SUPERADMIN) {
+      throw new ForbiddenException('Director dashboard requires DIRECTOR or OWNER role.');
+    }
+    if (!organizationId) {
+      throw new ForbiddenException('Organization context required.');
+    }
+
+    // ── Time windows ──────────────────────────────────────────────────────────
+    const now = new Date();
+    const startOfWeek = new Date(now);
+    startOfWeek.setDate(now.getDate() - ((now.getDay() + 6) % 7)); // Monday
+    startOfWeek.setHours(0, 0, 0, 0);
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    // ── Active academic year ──────────────────────────────────────────────────
+    const currentYear = await this.prisma.academicYear.findFirst({
+      where: { orgId: organizationId, isCurrent: true, deletedAt: null },
+      select: { id: true },
+    });
+
+    // ── Parallel root queries ─────────────────────────────────────────────────
+    const [testsThisMonth, submissionsThisWeek, classes, teacherMemberships] =
+      await Promise.all([
+        // Tests created this month
+        this.prisma.test.count({
+          where: { organizationId, deletedAt: null, createdAt: { gte: startOfMonth } },
+        }),
+        // Submissions this week (all students, any status)
+        this.prisma.submission.count({
+          where: { organizationId, deletedAt: null, createdAt: { gte: startOfWeek } },
+        }),
+        // Class sections for current year (no deletedAt on ClassSection)
+        this.prisma.classSection.findMany({
+          where: {
+            orgId: organizationId,
+            ...(currentYear ? { yearId: currentYear.id } : {}),
+          },
+          select: {
+            id: true,
+            label: true,
+            grade: true,
+            section: true,
+            teacher: {
+              select: {
+                membership: { select: { user: { select: { name: true } } } },
+              },
+            },
+            enrollments: {
+              where: { status: EnrollmentStatus.ACTIVE },
+              select: { id: true },
+            },
+          },
+        }),
+        // All teacher memberships for this org
+        this.prisma.membership.findMany({
+          where: { organizationId, role: OrganizationRole.TEACHER, deletedAt: null },
+          select: { id: true, user: { select: { name: true } } },
+        }),
+      ]);
+
+    // ── Per-class score + weekly activity ────────────────────────────────────
+    const classIds = classes.map((c) => c.id);
+    const allClassSubs = classIds.length
+      ? await this.prisma.submission.findMany({
+          where: {
+            organizationId,
+            deletedAt: null,
+            score: { not: null },
+            assignment: {
+              classSectionId: { in: classIds },
+              // Scope to current year — prevents cross-year score pollution
+              ...(currentYear ? { yearId: currentYear.id } : {}),
+            },
+          },
+          select: {
+            score: true,
+            submittedAt: true,
+            createdAt: true,
+            studentId: true,
+            assignment: {
+              select: {
+                classSectionId: true,
+                // Needed for weighted avg: SUM(score)/SUM(maxScore)*100
+                test: { select: { questions: { select: { score: true } } } },
+              },
+            },
+          },
+        })
+      : [];
+
+    // scoreMap uses weighted points (not raw average) to avoid scale mismatch
+    const classScoreMap = new Map<
+      string,
+      { points: number; maxPoints: number; lastAt: Date | null }
+    >();
+    // Per-student weighted score for at-risk computation (reuses allClassSubs data)
+    const studentScoreMap = new Map<
+      string,
+      { points: number; maxPoints: number; lastAt: Date | null }
+    >();
+    const classWeekCount = new Map<string, number>();
+    for (const s of allClassSubs) {
+      const cid = s.assignment?.classSectionId;
+      if (!cid) continue;
+      const maxScore =
+        s.assignment?.test?.questions?.reduce(
+          (sum, q) => sum + (q.score ?? 0),
+          0,
+        ) ?? 0;
+      if (maxScore <= 0) continue; // skip submissions for tests with no scored questions
+      const prev = classScoreMap.get(cid) ?? {
+        points: 0,
+        maxPoints: 0,
+        lastAt: null,
+      };
+      prev.points += s.score ?? 0;
+      prev.maxPoints += maxScore;
+      if (s.submittedAt && (!prev.lastAt || s.submittedAt > prev.lastAt))
+        prev.lastAt = s.submittedAt;
+      classScoreMap.set(cid, prev);
+      if (s.createdAt >= startOfWeek) {
+        classWeekCount.set(cid, (classWeekCount.get(cid) ?? 0) + 1);
+      }
+      // Accumulate per-student weighted scores for at-risk list
+      if (s.studentId && s.score != null) {
+        const sPrev = studentScoreMap.get(s.studentId) ?? { points: 0, maxPoints: 0, lastAt: null };
+        sPrev.points += s.score;
+        sPrev.maxPoints += maxScore;
+        if (s.submittedAt && (!sPrev.lastAt || s.submittedAt > sPrev.lastAt))
+          sPrev.lastAt = s.submittedAt;
+        studentScoreMap.set(s.studentId, sPrev);
+      }
+    }
+
+    const classesResult = classes
+      .map((c) => {
+        const stats = classScoreMap.get(c.id);
+        // Weighted average: SUM(points) / SUM(maxPoints) * 100
+        const avgScore =
+          stats && stats.maxPoints > 0
+            ? Math.round((stats.points / stats.maxPoints) * 10000) / 100
+            : null;
+        const weekSubs = classWeekCount.get(c.id) ?? 0;
+        const riskLevel: 'NONE' | 'MEDIUM' | 'HIGH' =
+          weekSubs === 0 && !stats ? 'HIGH'
+          : avgScore !== null && avgScore < 50 ? 'HIGH'
+          : avgScore !== null && avgScore < 70 ? 'MEDIUM'
+          : 'NONE';
+        return {
+          id: c.id,
+          label: c.label ?? `${c.grade}.${c.section}`,
+          teacherName: c.teacher?.membership?.user?.name ?? null,
+          studentCount: c.enrollments.length,
+          avgScore: avgScore !== null ? Math.round(avgScore) : null,
+          submissionsThisWeek: weekSubs,
+          lastActivityAt: stats?.lastAt?.toISOString() ?? null,
+          riskLevel,
+        };
+      })
+      .sort((a, b) => a.label.localeCompare(b.label));
+
+    // ── Per-teacher activity ──────────────────────────────────────────────────
+    const teacherIds = teacherMemberships.map((m) => m.id);
+    const [teacherTestCounts, teacherWeekSubs] = await Promise.all([
+      this.prisma.test.groupBy({
+        by: ['creatorId'],
+        where: { organizationId, deletedAt: null, creatorId: { in: teacherIds } },
+        _count: { id: true },
+      }),
+      teacherIds.length
+        ? this.prisma.submission.findMany({
+            where: {
+              organizationId,
+              deletedAt: null,
+              createdAt: { gte: startOfWeek },
+              test: { creatorId: { in: teacherIds }, deletedAt: null },
+            },
+            select: { test: { select: { creatorId: true } }, submittedAt: true },
+          })
+        : Promise.resolve([] as { test: { creatorId: string } | null; submittedAt: Date | null }[]),
+    ]);
+
+    const testCountByTeacher = new Map(teacherTestCounts.map((t) => [t.creatorId, t._count.id]));
+    const lastSubByTeacher = new Map<string, Date>();
+    const weekSubCountByTeacher = new Map<string, number>();
+    for (const s of teacherWeekSubs) {
+      const tid = s.test?.creatorId;
+      if (!tid) continue;
+      weekSubCountByTeacher.set(tid, (weekSubCountByTeacher.get(tid) ?? 0) + 1);
+      if (s.submittedAt) {
+        const prev = lastSubByTeacher.get(tid);
+        if (!prev || s.submittedAt > prev) lastSubByTeacher.set(tid, s.submittedAt);
+      }
+    }
+    const teachersResult = teacherMemberships
+      .map((m) => ({
+        membershipId: m.id,
+        name: m.user?.name ?? '—',
+        testsCreated: testCountByTeacher.get(m.id) ?? 0,
+        submissionsThisWeek: weekSubCountByTeacher.get(m.id) ?? 0,
+        lastActivityAt: lastSubByTeacher.get(m.id)?.toISOString() ?? null,
+        activeThisWeek: weekSubCountByTeacher.has(m.id),
+      }))
+      .sort((a, b) => b.submissionsThisWeek - a.submissionsThisWeek);
+
+    // ── At-risk students: weighted avg per studentId derived from allClassSubs ──
+    // studentScoreMap was built in the allClassSubs loop above.
+    // Threshold: < 70% weighted average → at risk.
+    const AT_RISK_THRESHOLD_PCT = 70;
+    const riskMembershipIds = Array.from(studentScoreMap.entries())
+      .filter(([, v]) => {
+        if (v.maxPoints <= 0) return false;
+        return (v.points / v.maxPoints) * 100 < AT_RISK_THRESHOLD_PCT;
+      })
+      .map(([studentId]) => studentId);
+
+    const [riskMemberships, riskStudents] = await Promise.all([
+      riskMembershipIds.length
+        ? this.prisma.membership.findMany({
+            where: { id: { in: riskMembershipIds } },
+            select: { id: true, user: { select: { name: true } } },
+          })
+        : Promise.resolve([] as { id: string; user: { name: string | null } | null }[]),
+      riskMembershipIds.length
+        ? this.prisma.student.findMany({
+            where: { membershipId: { in: riskMembershipIds }, deletedAt: null },
+            select: {
+              membershipId: true,
+              enrollments: {
+                where: {
+                  status: EnrollmentStatus.ACTIVE,
+                  ...(currentYear ? { yearId: currentYear.id } : {}),
+                },
+                select: { classSection: { select: { label: true, grade: true, section: true } } },
+                take: 1,
+              },
+            },
+          })
+        : Promise.resolve([] as { membershipId: string; enrollments: { classSection: { label: string | null; grade: string; section: string } | null }[] }[]),
+    ]);
+
+    const nameMap = new Map(riskMemberships.map((m) => [m.id, m.user?.name ?? '—']));
+    const classLabelMap = new Map(
+      riskStudents.map((s) => {
+        const cs = s.enrollments[0]?.classSection;
+        return [s.membershipId, cs?.label ?? `${cs?.grade ?? ''}.${cs?.section ?? ''}`];
+      }),
+    );
+
+    const atRiskStudents = Array.from(studentScoreMap.entries())
+      .filter(([, v]) => v.maxPoints > 0 && (v.points / v.maxPoints) * 100 < AT_RISK_THRESHOLD_PCT)
+      .sort((a, b) => (a[1].points / a[1].maxPoints) - (b[1].points / b[1].maxPoints))
+      .slice(0, 10)
+      .map(([studentId, v]) => ({
+        studentId,
+        displayName: nameMap.get(studentId) ?? '—',
+        classLabel: classLabelMap.get(studentId) ?? '—',
+        averageScorePercent: Math.round((v.points / v.maxPoints) * 10000) / 100,
+        lastActivityAt: v.lastAt?.toISOString() ?? null,
+      }));
+
+    const activeTeachersThisWeek = teachersResult.filter((t) => t.activeThisWeek).length;
+    const activeClassesThisWeek = classesResult.filter((c) => c.submissionsThisWeek > 0).length;
+
+    return {
+      testsThisMonth,
+      submissionsThisWeek,
+      activeTeachersThisWeek,
+      activeClassesThisWeek,
+      classes: classesResult,
+      teachers: teachersResult,
+      atRiskStudents,
+    };
+  }
+
   // ===== TEACHER DASHBOARD ===================================================
   async getTeacherDashboard(
     organizationId: string | null,
@@ -443,16 +726,27 @@ export class StatsService {
     });
 
     return cacheGetOrSet(this.cache, cacheKey, 60_000, async () => {
+      const currentYear = organizationId
+        ? await this.prisma.academicYear.findFirst({
+            where: { orgId: organizationId, isCurrent: true, deletedAt: null },
+            select: { id: true },
+          })
+        : null;
+
       const [
         classroomsCount,
         studentsCount,
         testsCreated,
-        scoreAgg,
+        scoredSubs,
         pending,
         recent,
       ] = await Promise.all([
         this.prisma.classSection.count({
-          where: { teacherId: teacher?.id ?? '___none___' },
+          where: {
+            teacherId: teacher?.id ?? '___none___',
+            ...(organizationId ? { orgId: organizationId } : {}),
+            ...(currentYear ? { yearId: currentYear.id } : {}),
+          },
         }),
         this.prisma.student.count({
           where: {
@@ -463,25 +757,40 @@ export class StatsService {
         this.prisma.test.count({
           where: { creatorId: membership.id, deletedAt: null },
         }),
-        this.prisma.submission.aggregate({
+        // Weighted avgScore: SUM(score)/SUM(maxPoints)*100, scoped to current year.
+        // _avg: { score } is wrong because score is raw points (not 0–1 fraction).
+        this.prisma.submission.findMany({
           where: {
             deletedAt: null,
-            test: { creatorId: membership.id, deletedAt: null },
             score: { not: null },
+            test: { creatorId: membership.id, deletedAt: null },
+            ...(currentYear
+              ? { assignment: { yearId: currentYear.id } }
+              : {}),
           },
-          _avg: { score: true },
+          select: {
+            score: true,
+            assignment: {
+              select: {
+                test: { select: { questions: { select: { score: true } } } },
+              },
+            },
+          },
+          take: 2000, // performance cap — sufficient for teacher-level stats
         }),
         this.prisma.submission.count({
           where: {
             deletedAt: null,
             test: { creatorId: membership.id, deletedAt: null },
             status: SubmissionStatus.PENDING,
+            ...(currentYear ? { assignment: { yearId: currentYear.id } } : {}),
           },
         }),
         this.prisma.submission.findMany({
           where: {
             deletedAt: null,
             test: { creatorId: membership.id, deletedAt: null },
+            ...(currentYear ? { assignment: { yearId: currentYear.id } } : {}),
           },
           include: {
             test: { select: { id: true, title: true } },
@@ -492,11 +801,30 @@ export class StatsService {
         }),
       ]);
 
+      // Weighted average: SUM(pointsEarned) / SUM(pointsPossible) * 100
+      let totalPts = 0;
+      let totalMaxPts = 0;
+      for (const s of scoredSubs) {
+        const maxScore =
+          s.assignment?.test?.questions?.reduce(
+            (sum, q) => sum + (q.score ?? 0),
+            0,
+          ) ?? 0;
+        if (maxScore > 0) {
+          totalPts += s.score ?? 0;
+          totalMaxPts += maxScore;
+        }
+      }
+      const avgScoreOnMyTests =
+        totalMaxPts > 0
+          ? Math.round((totalPts / totalMaxPts) * 10000) / 100
+          : null;
+
       return {
         classroomsCount,
         studentsCount,
         testsCreated,
-        avgScoreOnMyTests: scoreAgg._avg.score ?? null,
+        avgScoreOnMyTests,
         pendingSubmissions: pending,
         recentActivity: recent.map((s) => ({
           id: s.id,

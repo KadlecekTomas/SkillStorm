@@ -90,11 +90,79 @@ async function checkCounts(): Promise<void> {
   else fail(`submissions: expected > 0, got ${subCount}`);
 }
 
+/**
+ * Scoring integrity check.
+ *
+ * An "impossible state" is a APPROVED submission where:
+ *   - score > 0  AND  all responses have isCorrect = false
+ *   - score = 0  AND  at least one response has isCorrect = true
+ *
+ * These states can only arise if the seed (or a bug) wrote score and
+ * isCorrect from different sources instead of using computeScore().
+ */
+async function checkScoringIntegrity(): Promise<void> {
+  // Submissions with score > 0 but no correct responses
+  const impossiblePositive = await prisma.$queryRaw<Array<{ id: string; score: number }>>`
+    SELECT s.id, s.score
+    FROM submissions s
+    WHERE s.status = 'APPROVED'
+      AND s.score > 0
+      AND s.deleted_at IS NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM responses r
+        WHERE r.submission_id = s.id AND r.is_correct = true
+      )
+  `;
+
+  if (impossiblePositive.length === 0) {
+    pass('No impossible-positive submissions (score>0 but 0 correct responses)');
+  } else {
+    fail(
+      `Found ${impossiblePositive.length} impossible-positive submission(s): ` +
+        impossiblePositive.map((s) => `${s.id}(score=${s.score})`).join(', '),
+    );
+  }
+
+  // Submissions with score = 0 but at least one correct response
+  const impossibleZero = await prisma.$queryRaw<Array<{ id: string }>>`
+    SELECT s.id
+    FROM submissions s
+    WHERE s.status = 'APPROVED'
+      AND s.score = 0
+      AND s.deleted_at IS NULL
+      AND EXISTS (
+        SELECT 1 FROM responses r
+        WHERE r.submission_id = s.id AND r.is_correct = true
+      )
+  `;
+
+  if (impossibleZero.length === 0) {
+    pass('No impossible-zero submissions (score=0 but has correct responses)');
+  } else {
+    fail(
+      `Found ${impossibleZero.length} impossible-zero submission(s): ` +
+        impossibleZero.map((s) => s.id).join(', '),
+    );
+  }
+
+  // Basic sanity: APPROVED submissions must have a non-null score
+  const nullScore = await prisma.submission.count({
+    where: { status: 'APPROVED', score: null, deletedAt: null },
+  });
+  if (nullScore === 0) {
+    pass('All APPROVED submissions have a non-null score');
+  } else {
+    fail(`${nullScore} APPROVED submission(s) have null score`);
+  }
+}
+
 async function main(): Promise<void> {
   console.log('--- Seed verification ---\n');
   await checkSchema();
   console.log('');
   await checkCounts();
+  console.log('');
+  await checkScoringIntegrity();
   console.log('');
   if (failed) {
     console.log('Verification finished with FAILs.');

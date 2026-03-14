@@ -41,28 +41,54 @@ export class TopicsService {
   ) {}
 
   // ------- helpers -------
+  private orgSubjectsArgs(preferredOrgId?: string | null) {
+    return {
+      ...(preferredOrgId ? { where: { organizationId: preferredOrgId } } : {}),
+      select: { organizationId: true },
+      take: 1,
+      orderBy: { createdAt: 'asc' as const },
+    };
+  }
+
   private async getOrgIdBySubjectLevelId(
     subjectLevelId: string,
+    preferredOrgId?: string | null,
   ): Promise<string> {
     const sl = await this.prisma.subjectLevel.findUnique({
       where: { id: subjectLevelId },
-      select: { subject: { select: { organizationId: true } } },
+      include: {
+        subject: {
+          include: {
+            orgSubjects: this.orgSubjectsArgs(preferredOrgId),
+          },
+        },
+      },
     });
     if (!sl) throw new NotFoundException('SubjectLevel nebyl nalezen.');
-    return sl.subject.organizationId;
+    const orgId = sl.subject.orgSubjects[0]?.organizationId ?? null;
+    if (!orgId) throw new NotFoundException('Předmět není přiřazen žádné organizaci.');
+    return orgId;
   }
 
-  private async getTopicLevelOrg(topicLevelId: string) {
+  private async getTopicLevelOrg(topicLevelId: string, preferredOrgId?: string | null) {
     const tl = await this.prisma.topicLevel.findUnique({
       where: { id: topicLevelId },
-      select: {
+      include: {
         subjectLevel: {
-          select: { subject: { select: { organizationId: true } } },
+          include: {
+            subject: {
+              include: {
+                orgSubjects: this.orgSubjectsArgs(preferredOrgId),
+              },
+            },
+          },
         },
       },
     });
     if (!tl) throw new NotFoundException('TopicLevel nebyl nalezen.');
-    return tl.subjectLevel.subject.organizationId;
+    const orgId = tl.subjectLevel.subject.orgSubjects[0]?.organizationId ?? null;
+    if (!orgId) throw new NotFoundException('Předmět není přiřazen žádné organizaci.');
+    return orgId;
   }
 
   private async audit(opts: {
@@ -149,7 +175,10 @@ export class TopicsService {
 
   // ------- CREATE -------
   async create(dto: CreateTopicDto, user: JwtPayload) {
-    const orgId = await this.getOrgIdBySubjectLevelId(dto.subjectLevelId);
+    const orgId = await this.getOrgIdBySubjectLevelId(
+      dto.subjectLevelId,
+      user.organizationId,
+    );
     assertSameOrganization(orgId, user, 'téma');
 
     const catalogOk = await this.prisma.catalogTopic.findUnique({
@@ -218,7 +247,9 @@ export class TopicsService {
       }
       orgScope = orgId;
       where = {
-        subjectLevel: { subject: { organizationId: orgId } },
+        subjectLevel: {
+          subject: { orgSubjects: { some: { organizationId: orgId } } },
+        },
       };
     }
     if (q.subjectId) {
@@ -274,14 +305,21 @@ export class TopicsService {
   async findOne(id: string, user: JwtPayload) {
     const base = await this.prisma.topicLevel.findUnique({
       where: { id },
-      select: {
+      include: {
         subjectLevel: {
-          select: { subject: { select: { organizationId: true } } },
+          include: {
+            subject: {
+              include: {
+                orgSubjects: this.orgSubjectsArgs(user.organizationId),
+              },
+            },
+          },
         },
       },
     });
     if (!base) throw new NotFoundException('Téma nebylo nalezeno.');
-    const orgId = base.subjectLevel.subject.organizationId;
+    const orgId = base.subjectLevel.subject.orgSubjects[0]?.organizationId ?? null;
+    if (!orgId) throw new NotFoundException('Předmět není přiřazen žádné organizaci.');
     assertSameOrganization(orgId, user, 'téma');
 
     const scope = cacheScopeForUser(user.systemRole, orgId);
@@ -299,12 +337,16 @@ export class TopicsService {
   async findBySubjectId(subjectId: string, user: JwtPayload) {
     const subj = await this.prisma.subject.findUnique({
       where: { id: subjectId },
-      select: { organizationId: true },
+      include: {
+        orgSubjects: this.orgSubjectsArgs(user.organizationId),
+      },
     });
     if (!subj) throw new NotFoundException('Předmět nebyl nalezen.');
-    assertSameOrganization(subj.organizationId, user, 'předmět');
+    const orgId = subj.orgSubjects[0]?.organizationId ?? null;
+    if (!orgId) throw new NotFoundException('Předmět není přiřazen žádné organizaci.');
+    assertSameOrganization(orgId, user, 'předmět');
 
-    const scope = cacheScopeForUser(user.systemRole, subj.organizationId);
+    const scope = cacheScopeForUser(user.systemRole, orgId);
     const version = await getOrgVersion(this.cache, scope);
     const cacheKey = buildVersionedListKey({
       namespace: 'topics-by-subject',
@@ -333,7 +375,10 @@ export class TopicsService {
     });
     if (!current) throw new NotFoundException('Téma nebylo nalezeno.');
 
-    const orgId = current.subjectLevel.subject.organizationId;
+    const orgId = await this.getOrgIdBySubjectLevelId(
+      current.subjectLevelId,
+      user.organizationId,
+    );
     assertSameOrganization(orgId, user, 'téma');
 
     const nextSubjectLevelId = dto.subjectLevelId ?? current.subjectLevelId;
@@ -406,7 +451,10 @@ export class TopicsService {
       include: { subjectLevel: { include: { subject: true } } },
     });
     if (!current) throw new NotFoundException('Téma nebylo nalezeno.');
-    const orgId = current.subjectLevel.subject.organizationId;
+    const orgId = await this.getOrgIdBySubjectLevelId(
+      current.subjectLevelId,
+      user.organizationId,
+    );
     assertSameOrganization(orgId, user, 'téma');
 
     const deleted = await this.prisma.topicLevel.delete({ where: { id } });
@@ -433,7 +481,7 @@ export class TopicsService {
     dto: AssignMaterialsDto,
     user: JwtPayload,
   ) {
-    const orgId = await this.getTopicLevelOrg(topicLevelId);
+    const orgId = await this.getTopicLevelOrg(topicLevelId, user.organizationId);
     assertSameOrganization(orgId, user, 'téma');
 
     const materials = await this.prisma.learningMaterial.findMany({

@@ -426,6 +426,7 @@ async function createTests(orgUsers: OrgUserIds[]): Promise<TestRow[]> {
           organizationId: org.orgId,
           title,
           description: `Seed test ${ti + 1}`,
+          allowedGrades: [SchoolGrade.GRADE_6, SchoolGrade.GRADE_7, SchoolGrade.GRADE_8],
           status,
           creatorId: org.creatorMembershipId,
         },

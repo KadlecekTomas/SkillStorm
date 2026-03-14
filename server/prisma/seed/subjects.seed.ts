@@ -12,6 +12,8 @@ const CATALOG_SUBJECTS = [
     id: CATALOG_SUBJECT_IDS.math,
     code: 'MATH_SKILLSTORM',
     name: 'Matematika',
+    gradeFrom: 1,
+    gradeTo: 9,
     topics: [
       { id: CATALOG_TOPIC_IDS.mathFractions, name: 'Zlomky' },
       { id: CATALOG_TOPIC_IDS.mathGeometry, name: 'Geometrie' },
@@ -20,7 +22,9 @@ const CATALOG_SUBJECTS = [
   {
     id: CATALOG_SUBJECT_IDS.english,
     code: 'ENG_SKILLSTORM',
-    name: 'Angličtina',
+    name: 'Anglický jazyk',
+    gradeFrom: 1,
+    gradeTo: 9,
     topics: [
       { id: CATALOG_TOPIC_IDS.englishVocabulary, name: 'Slovní zásoba' },
       { id: CATALOG_TOPIC_IDS.englishGrammar, name: 'Gramatika' },
@@ -30,6 +34,8 @@ const CATALOG_SUBJECTS = [
     id: CATALOG_SUBJECT_IDS.informatics,
     code: 'IT_SKILLSTORM',
     name: 'Informatika',
+    gradeFrom: 1,
+    gradeTo: 9,
     topics: [
       { id: CATALOG_TOPIC_IDS.itAlgorithms, name: 'Algoritmy' },
       { id: CATALOG_TOPIC_IDS.itSecurity, name: 'Bezpečnost' },
@@ -37,8 +43,24 @@ const CATALOG_SUBJECTS = [
   },
 ];
 
+const DEFAULT_SUBJECTS = [
+  { name: 'Matematika', gradeFrom: 1, gradeTo: 9 },
+  { name: 'Český jazyk', gradeFrom: 1, gradeTo: 9 },
+  { name: 'Anglický jazyk', gradeFrom: 1, gradeTo: 9 },
+  { name: 'Prvouka', gradeFrom: 1, gradeTo: 3 },
+  { name: 'Přírodověda', gradeFrom: 4, gradeTo: 5 },
+  { name: 'Vlastivěda', gradeFrom: 4, gradeTo: 5 },
+  { name: 'Přírodopis', gradeFrom: 6, gradeTo: 9 },
+  { name: 'Fyzika', gradeFrom: 6, gradeTo: 9 },
+  { name: 'Chemie', gradeFrom: 8, gradeTo: 9 },
+  { name: 'Dějepis', gradeFrom: 6, gradeTo: 9 },
+  { name: 'Zeměpis', gradeFrom: 6, gradeTo: 9 },
+  { name: 'Informatika', gradeFrom: 1, gradeTo: 9 },
+] as const;
+
 export async function seed(prisma: PrismaClient) {
   logStep('Subjects > catalog & local subjects');
+  const grades = Object.values(SchoolGrade);
 
   // === 1️⃣ Katalogové předměty + témata ===
   for (const subject of CATALOG_SUBJECTS) {
@@ -107,42 +129,41 @@ export async function seed(prisma: PrismaClient) {
     }
   }
 
-  // === 2️⃣ Všechny organizace ===
   const organizations = await prisma.organization.findMany({
     where: { id: { in: Object.values(ORG_IDS) } },
     select: { id: true },
   });
 
-  for (const org of organizations) {
-    for (const subject of CATALOG_SUBJECTS) {
-      const subjectRecord = await prisma.subject.upsert({
-        where: {
-          organizationId_catalogSubjectId: {
-            organizationId: org.id,
-            catalogSubjectId: subject.id,
-          },
-        },
-        update: { name: subject.name },
-        create: {
-          organizationId: org.id,
-          catalogSubjectId: subject.id,
-          name: subject.name,
-        },
-      });
+  for (const subject of CATALOG_SUBJECTS) {
+    const subjectRecord = await prisma.subject.upsert({
+      where: { catalogSubjectId: subject.id },
+      update: {
+        name: subject.name,
+        gradeFrom: subject.gradeFrom,
+        gradeTo: subject.gradeTo,
+      },
+      create: {
+        catalogSubjectId: subject.id,
+        name: subject.name,
+        gradeFrom: subject.gradeFrom,
+        gradeTo: subject.gradeTo,
+      },
+    });
 
+    for (const grade of grades) {
       const subjectLevel = await prisma.subjectLevel.upsert({
         where: {
           subjectId_grade: {
             subjectId: subjectRecord.id,
-            grade: SchoolGrade.GRADE_6,
+            grade,
           },
         },
-        update: { label: `${subject.name} 6. ročník` },
+        update: { label: `${subject.name} ${grade}` },
         create: {
           subjectId: subjectRecord.id,
-          grade: SchoolGrade.GRADE_6,
-          order: 1,
-          label: `${subject.name} 6. ročník`,
+          grade,
+          order: null,
+          label: `${subject.name} ${grade}`,
         },
       });
 
@@ -165,66 +186,68 @@ export async function seed(prisma: PrismaClient) {
           },
         });
       }
+    }
 
-      // === 3️⃣ Vazba učitel <-> předmět (jen Chodovická) ===
-      if (org.id === ORG_IDS.chodovicka) {
-        const teacher = await prisma.teacher.findFirst({
-          where: {
-            membership: {
-              user: { email: USER_EMAILS.teacher },
-              organizationId: ORG_IDS.chodovicka,
-            },
+    for (const org of organizations) {
+      await prisma.orgSubject.upsert({
+        where: {
+          organizationId_subjectId: {
+            organizationId: org.id,
+            subjectId: subjectRecord.id,
           },
-          select: { id: true },
-        });
+        },
+        update: { isEnabled: true },
+        create: {
+          organizationId: org.id,
+          subjectId: subjectRecord.id,
+          isEnabled: true,
+          isCustom: false,
+        },
+      });
+    }
 
-        if (!teacher) {
-          console.log(
-            '⚠️ Subjects > Teacher not found for teacher@chodovicka.cz – skipping link.',
-          );
-          continue;
-        }
+    const teacher = await prisma.teacher.findFirst({
+      where: {
+        membership: {
+          user: { email: USER_EMAILS.teacher },
+          organizationId: ORG_IDS.chodovicka,
+        },
+      },
+      select: { id: true },
+    });
 
-        const existingLink = await prisma.teacherSubject.findUnique({
-          where: {
-            teacherId_subjectId: {
+    if (teacher) {
+      const existingLink = await prisma.teacherSubject.findUnique({
+        where: {
+          teacherId_subjectId: {
+            teacherId: teacher.id,
+            subjectId: subjectRecord.id,
+          },
+        },
+      });
+      if (!existingLink) {
+        try {
+          await prisma.teacherSubject.create({
+            data: {
               teacherId: teacher.id,
               subjectId: subjectRecord.id,
             },
-          },
-        });
-
-        if (existingLink) {
-          console.log(
-            `ℹ️ Subjects > Teacher already linked to ${subjectRecord.name}`,
-          );
-        } else {
-          try {
-            await prisma.teacherSubject.create({
-              data: {
-                teacherId: teacher.id,
-                subjectId: subjectRecord.id,
-              },
-            });
-            console.log(
-              `✅ Subjects > Linked teacher ${teacher.id} to ${subjectRecord.name}`,
-            );
-          } catch (err: any) {
-            if (err.code === 'P2002') {
-              console.log(
-                `⚠️ Subjects > Duplicate link detected for ${subjectRecord.name}, skipping.`,
-              );
-            } else {
-              console.error(
-                `❌ Subjects > Unexpected error linking teacher to ${subjectRecord.name}:`,
-                err,
-              );
-            }
-          }
+          });
+        } catch (err: any) {
+          if (err.code !== 'P2002') throw err;
         }
       }
     }
   }
+
+  await prisma.subject.createMany({
+    data: DEFAULT_SUBJECTS.map((item) => ({
+      name: item.name,
+      gradeFrom: item.gradeFrom,
+      gradeTo: item.gradeTo,
+    })),
+    skipDuplicates: true,
+  });
 
   logDone('Subjects & catalog data ready');
 }

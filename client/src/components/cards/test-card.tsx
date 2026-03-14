@@ -12,6 +12,7 @@ import { ArrowRight, Pencil, Send, Users, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { fetchWithAuth } from "@/lib/http/client";
 import { formatPercent, formatInt } from "@/utils/format";
+import { gradeLabel, normalizeAllowedGrades } from "@/lib/grades";
 
 type TestCardProps = {
   test: TestSummary;
@@ -88,6 +89,13 @@ export const TestCard = ({ test, assignmentSummary, onView, onAssign, onStatusCh
             <Badge variant="outline" className="w-fit text-slate-600">
               {assignmentBadgeText(assignmentSummary)}
             </Badge>
+            <div className="flex flex-wrap gap-1">
+              {normalizeAllowedGrades(test.allowedGrades).map((grade) => (
+                <Badge key={grade} variant="outline" className="w-fit text-slate-600">
+                  {gradeLabel(grade)}
+                </Badge>
+              ))}
+            </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="outline" size="sm" onClick={handleEdit} className="gap-1">

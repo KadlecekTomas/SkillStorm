@@ -18,7 +18,7 @@
  * 9) No NaN, undefined, or duplicate rows
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/guard/useAuth";
@@ -32,7 +32,10 @@ import { PermissionKey } from "@/types";
 import { AssignToClassModal } from "@/components/tests/AssignToClassModal";
 import { EditQuestionDialog } from "@/components/tests/EditQuestionDialog";
 import { useAcademicYears } from "@/hooks/use-academic-years";
+import { useSubjects, subjectLabel } from "@/hooks/use-subjects";
+import type { OrgSubjectOption } from "@/types";
 import type { AssignabilityReport, AssignabilityIssueReason } from "@/types/assignability";
+import { ALL_SCHOOL_GRADES, formatAllowedGrades, gradeLabel, type SchoolGradeValue } from "@/lib/grades";
 
 type QuestionOption = { id: string; text: string };
 
@@ -52,6 +55,7 @@ type TestDetail = {
   title: string;
   description?: string | null;
   subject?: { id: string; name: string; catalogSubject?: { code: string; name: string } | null } | null;
+  allowedGrades: string[];
   status: "DRAFT" | "PUBLISHED" | "ARCHIVED";
   questions?: TestQuestion[];
   assignability?: AssignabilityReport;
@@ -69,9 +73,11 @@ function devLog(...args: unknown[]) {
 }
 
 const REASON_LABELS: Record<AssignabilityIssueReason, string> = {
+  NO_ALLOWED_GRADES: "cílové ročníky",
   NO_QUESTIONS: "otázky",
   NO_SCORE: "bodové hodnocení",
   NO_CORRECT_ANSWER: "správná odpověď",
+  INVALID_OPTIONS: "možnosti odpovědí",
 };
 
 function readinessStatusLine(report: AssignabilityReport): { ready: boolean; text: string } {
@@ -79,7 +85,7 @@ function readinessStatusLine(report: AssignabilityReport): { ready: boolean; tex
     return { ready: true, text: "Test je připraven k přiřazení." };
   }
   const reasons = new Set(report.issues?.map((i) => i.reason) ?? []);
-  const parts = (["NO_QUESTIONS", "NO_SCORE", "NO_CORRECT_ANSWER"] as const)
+  const parts = (["NO_ALLOWED_GRADES", "NO_QUESTIONS", "NO_SCORE", "NO_CORRECT_ANSWER", "INVALID_OPTIONS"] as const)
     .filter((r) => reasons.has(r))
     .map((r) => REASON_LABELS[r]);
   const chunk = parts.length ? `chybí: ${parts.join(", ")}` : "není připraven";
@@ -92,14 +98,15 @@ function questionCountLabel(n: number): string {
   return `${n} otázek`;
 }
 
-/** Completion from assignability only: 3 conditions (questions, score, correct answer). No local recomputation. */
-function completionFromAssignability(report: AssignabilityReport): { satisfied: number; total: 3; percent: number } {
+/** Completion from assignability only: 4 conditions (allowed grades, questions, score, correct answer). */
+function completionFromAssignability(report: AssignabilityReport): { satisfied: number; total: 4; percent: number } {
   const reasons = new Set(report.issues?.map((i) => i.reason) ?? []);
   const satisfied =
+    (reasons.has("NO_ALLOWED_GRADES") ? 0 : 1) +
     (reasons.has("NO_QUESTIONS") ? 0 : 1) +
     (reasons.has("NO_SCORE") ? 0 : 1) +
     (reasons.has("NO_CORRECT_ANSWER") ? 0 : 1);
-  return { satisfied, total: 3, percent: (satisfied / 3) * 100 };
+  return { satisfied, total: 4, percent: (satisfied / 4) * 100 };
 }
 
 function progressBarFillClass(percent: number): string {
@@ -133,6 +140,7 @@ type StudentTestDetail = {
   title: string;
   description: string | null;
   subject: { id: string; name: string; catalogSubject?: { code: string; name: string } | null } | null;
+  allowedGrades: string[];
   academicYear?: { id: string; label: string; isCurrent: boolean } | null;
   questions: Array<{ id: string; text: string; type: string }>;
 };
@@ -254,6 +262,9 @@ function StudentTestView({ testId }: { testId: string }): React.JSX.Element {
             Předmět: {test.subject.catalogSubject?.name ?? test.subject.name}
           </p>
         )}
+        <p className="mt-0.5 text-sm text-slate-500">
+          Určeno pro: {formatAllowedGrades(test.allowedGrades)}
+        </p>
         {test.academicYear && (
           <p className="mt-0.5 text-sm text-slate-500">Školní rok: {test.academicYear.label}</p>
         )}
@@ -345,11 +356,42 @@ function TestPageInner({ testId }: { testId: string }): React.JSX.Element {
   const [editingQuestion, setEditingQuestion] = useState<TestQuestion | null>(null);
   const [questionActionLoadingId, setQuestionActionLoadingId] = useState<string | null>(null);
   const [questionActionError, setQuestionActionError] = useState<string | null>(null);
+  const [metadataDraft, setMetadataDraft] = useState<{ subjectId: string; allowedGrades: SchoolGradeValue[] }>({
+    subjectId: "",
+    allowedGrades: [],
+  });
+  const [metadataLoading, setMetadataLoading] = useState(false);
+  const [metadataError, setMetadataError] = useState<string | null>(null);
   const lastQuestionRef = useRef<HTMLLIElement>(null);
   const prevQuestionCountRef = useRef<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const requestIdRef = useRef(0);
   const { selectedYearId } = useAcademicYears();
+  const { subjects } = useSubjects();
+  const subjectOptions = useMemo<OrgSubjectOption[]>(() => {
+    if (!test?.subject) {
+      return subjects;
+    }
+    const exists = subjects.some((item) => item.subject.id === test.subject?.id);
+    if (exists) {
+      return subjects;
+    }
+    return [
+      {
+        id: `legacy-${test.subject.id}`,
+        organizationId: "",
+        isEnabled: false,
+        isCustom: false,
+        subject: {
+          id: test.subject.id,
+          name: test.subject.name,
+          gradeFrom: 1,
+          gradeTo: 9,
+        },
+      },
+      ...subjects,
+    ];
+  }, [subjects, test?.subject]);
 
   useEffect(() => {
     const length = test?.questions?.length ?? 0;
@@ -390,6 +432,16 @@ function TestPageInner({ testId }: { testId: string }): React.JSX.Element {
     const t = setTimeout(() => setSuccessMessage(null), 4000);
     return () => clearTimeout(t);
   }, [successMessage]);
+
+  useEffect(() => {
+    if (!test) return;
+    setMetadataDraft({
+      subjectId: test.subject?.id ?? "",
+      allowedGrades: test.allowedGrades.filter((grade): grade is SchoolGradeValue =>
+        ALL_SCHOOL_GRADES.includes(grade as SchoolGradeValue),
+      ),
+    });
+  }, [test]);
 
   const fetchTest = useCallback(async (isRefetch = false): Promise<TestDetail | null> => {
     const currentRequestId = ++requestIdRef.current;
@@ -578,9 +630,11 @@ function TestPageInner({ testId }: { testId: string }): React.JSX.Element {
           const details = data?.details;
           if (details?.issues?.length) {
             const reasons = details.issues.map((i) => {
+              if (i.reason === "NO_ALLOWED_GRADES") return "Test nemá nastavené cílové ročníky.";
               if (i.reason === "NO_QUESTIONS") return "Test neobsahuje otázky.";
               if (i.reason === "NO_SCORE") return "Některé otázky nemají bodové hodnocení.";
               if (i.reason === "NO_CORRECT_ANSWER") return "Některé otázky nemají správnou odpověď.";
+              if (i.reason === "INVALID_OPTIONS") return "Některé otázky mají neplatné možnosti odpovědí.";
               return "Test není připraven k publikaci.";
             });
             setPublishError(reasons.join(" ") || (message ?? "Test není připraven k publikaci."));
@@ -597,6 +651,39 @@ function TestPageInner({ testId }: { testId: string }): React.JSX.Element {
       setPublishLoading(false);
     }
   }, [testId, test, fetchTest]);
+
+  const handleSaveMetadata = useCallback(async () => {
+    if (!metadataDraft.subjectId) {
+      setMetadataError("Vyberte předmět.");
+      return;
+    }
+    if (metadataDraft.allowedGrades.length === 0) {
+      setMetadataError("Vyberte alespoň jeden cílový ročník.");
+      return;
+    }
+    setMetadataLoading(true);
+    setMetadataError(null);
+    try {
+      await fetchWithAuth("PATCH", `/tests/${testId}`, {
+        body: {
+          subjectId: metadataDraft.subjectId,
+          allowedGrades: metadataDraft.allowedGrades,
+        },
+      });
+      await fetchTest(true);
+      setSuccessMessage("Metadata testu byla uložena.");
+    } catch (e) {
+      setMetadataError(
+        e instanceof HttpError
+          ? ((e.data as { message?: string })?.message ?? e.message ?? "Nepodařilo se uložit metadata testu.")
+          : e instanceof Error
+            ? e.message
+            : "Nepodařilo se uložit metadata testu.",
+      );
+    } finally {
+      setMetadataLoading(false);
+    }
+  }, [fetchTest, metadataDraft.allowedGrades, metadataDraft.subjectId, testId]);
 
   /* Conditional UI returns only after all hooks are declared. */
   if (loading && !test) {
@@ -716,6 +803,9 @@ function TestPageInner({ testId }: { testId: string }): React.JSX.Element {
             Předmět: {test.subject.catalogSubject?.name ?? test.subject.name}
           </p>
         )}
+        <p className="mt-0.5 text-sm text-slate-500">
+          Určeno pro: {formatAllowedGrades(test.allowedGrades)}
+        </p>
         <div className="mt-4 flex flex-wrap items-end justify-between gap-4">
           <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
             <span>{questionCountLabel(questionCount)}</span>
@@ -764,9 +854,9 @@ function TestPageInner({ testId }: { testId: string }): React.JSX.Element {
                 />
               </div>
               <p className="text-xs text-slate-600">
-                {completion.satisfied === 3
+                {completion.satisfied === 4
                   ? "Test je připraven k přiřazení."
-                  : `Dokončení testu: ${completion.satisfied}/3 podmínek splněno`}
+                  : `Dokončení testu: ${completion.satisfied}/4 podmínek splněno`}
               </p>
             </div>
             <p className={`mt-2 text-sm ${statusLine.ready ? "text-emerald-600" : "text-red-600"}`}>
@@ -781,6 +871,75 @@ function TestPageInner({ testId }: { testId: string }): React.JSX.Element {
           <p className="font-medium text-red-600">Chyba</p>
           <p className="mt-0.5 text-slate-600">{publishError}</p>
         </div>
+      )}
+
+      {!isPreviewMode && (
+        <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">Pedagogické zařazení</h2>
+              <p className="text-sm text-slate-500">Předmět a cílové ročníky patří přímo tomuto testu.</p>
+            </div>
+            <Badge variant="outline" className="text-slate-600">Test = obsah</Badge>
+          </div>
+          <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,16rem)_1fr]">
+            <label className="block space-y-2">
+              <span className="text-sm font-medium text-slate-700">Předmět</span>
+              <select
+                value={metadataDraft.subjectId}
+                onChange={(e) => setMetadataDraft((prev) => ({ ...prev, subjectId: e.target.value }))}
+                className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+              >
+                <option value="">Vyberte předmět</option>
+                {subjectOptions.map((subject) => (
+                  <option key={subject.id} value={subject.subject.id}>
+                    {subjectLabel(subject)}{subject.isEnabled ? "" : " (deaktivováno)"}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="space-y-2">
+              <span className="text-sm font-medium text-slate-700">Cílové ročníky</span>
+              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                {ALL_SCHOOL_GRADES.map((grade) => {
+                  const checked = metadataDraft.allowedGrades.includes(grade);
+                  return (
+                    <label
+                      key={grade}
+                      className={`flex items-center gap-3 rounded-md border px-3 py-2 text-sm ${
+                        checked ? "border-slate-900 bg-slate-50 text-slate-900" : "border-slate-200 text-slate-700"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) =>
+                          setMetadataDraft((prev) => ({
+                            ...prev,
+                            allowedGrades: e.target.checked
+                              ? [...prev.allowedGrades, grade]
+                              : prev.allowedGrades.filter((item) => item !== grade),
+                          }))
+                        }
+                      />
+                      <span>{gradeLabel(grade)}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+          {metadataError && (
+            <div className="mt-4">
+              <ErrorAlert title="Chyba" description={metadataError} />
+            </div>
+          )}
+          <div className="mt-4 flex justify-end">
+            <Button onClick={() => void handleSaveMetadata()} disabled={metadataLoading}>
+              {metadataLoading ? "Ukládám…" : "Uložit metadata testu"}
+            </Button>
+          </div>
+        </section>
       )}
 
       {isPreviewMode ? (
@@ -965,6 +1124,7 @@ function TestPageInner({ testId }: { testId: string }): React.JSX.Element {
           if (!open) setPublishError(null);
         }}
         testId={testId}
+        allowedGrades={test.allowedGrades}
         yearId={selectedYearId}
         onSuccess={() => {
           devLog("assign success, refetching test");

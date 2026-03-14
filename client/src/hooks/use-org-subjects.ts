@@ -2,15 +2,21 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { fetchWithAuth } from "@/lib/http/client";
-import type { OrgSubject } from "@/types";
+import type { OrgSubjectOption } from "@/types";
 
-export function useOrgSubjects(grade?: number): {
-  subjects: OrgSubject[];
+type UseOrgSubjectsOptions = {
+  grade?: number;
+  includeDisabled?: boolean;
+};
+
+export function useOrgSubjects(options: UseOrgSubjectsOptions = {}): {
+  subjects: OrgSubjectOption[];
   loading: boolean;
   error: boolean;
   refetch: () => Promise<void>;
 } {
-  const [subjects, setSubjects] = useState<OrgSubject[]>([]);
+  const { grade, includeDisabled = false } = options;
+  const [subjects, setSubjects] = useState<OrgSubjectOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
@@ -18,8 +24,11 @@ export function useOrgSubjects(grade?: number): {
     setLoading(true);
     setError(false);
     try {
-      const query = grade != null ? `?grade=${grade}` : "";
-      const data = await fetchWithAuth<OrgSubject[]>("GET", `/org-subjects${query}`);
+      const query = new URLSearchParams();
+      if (grade != null) query.set("grade", String(grade));
+      if (includeDisabled) query.set("includeDisabled", "true");
+      const suffix = query.toString() ? `?${query.toString()}` : "";
+      const data = await fetchWithAuth<OrgSubjectOption[]>("GET", `/org-subjects${suffix}`);
       setSubjects(Array.isArray(data) ? data : []);
     } catch {
       setSubjects([]);
@@ -27,15 +36,15 @@ export function useOrgSubjects(grade?: number): {
     } finally {
       setLoading(false);
     }
-  }, [grade]);
+  }, [grade, includeDisabled]);
 
   useEffect(() => {
-    refetch();
+    void refetch();
   }, [refetch]);
 
   return { subjects, loading, error, refetch };
 }
 
-export function subjectLabel(s: OrgSubject): string {
-  return `${s.name} (${s.gradeFrom}–${s.gradeTo})`;
+export function subjectLabel(s: OrgSubjectOption): string {
+  return `${s.subject.name} (${s.subject.gradeFrom}–${s.subject.gradeTo})`;
 }

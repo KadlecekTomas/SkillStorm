@@ -13,6 +13,8 @@ type UseAcademicYearsResult = {
   selectedYear: AcademicYear | null;
   selectedYearId: string | null;
   isReadOnly: boolean;
+  /** True when the active year's endDate is in the past. Triggers expired-year UX. */
+  isAcademicYearExpired: boolean;
   status: "loading" | "ready" | "error";
   bootstrapState: "INIT" | "LOADING" | "READY" | "ERROR";
   loading: boolean;
@@ -169,6 +171,11 @@ export const useAcademicYears = (
 
   const isReadOnly = effectiveSelectedYear ? !effectiveSelectedYear.isActive : false;
 
+  const isAcademicYearExpired = useMemo((): boolean => {
+    if (!activeYear?.endDate) return false;
+    return new Date(activeYear.endDate) < new Date();
+  }, [activeYear]);
+
   const setSelectedYearId = useCallback(
     (yearId: string) => {
       if (!enabled || !orgId) return;
@@ -185,6 +192,7 @@ export const useAcademicYears = (
     selectedYear: effectiveSelectedYear,
     selectedYearId: effectiveSelectedYear?.id ?? null,
     isReadOnly,
+    isAcademicYearExpired,
     status,
     bootstrapState,
     loading,

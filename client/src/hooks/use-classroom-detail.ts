@@ -8,7 +8,7 @@ export type ClassroomDetail = {
   label?: string | null;
   grade: string;
   section: string;
-  teacher?: { membership?: { user?: { name?: string | null; email?: string | null } } };
+  teacher?: { id?: string; membership?: { user?: { name?: string | null; email?: string | null } } };
   enrollments?: {
     id: string;
     studentId: string;
