@@ -16,6 +16,10 @@ export class AssignTestDto {
   @IsUUID()
   classSectionId!: string;
 
+  @IsOptional()
+  @IsUUID()
+  topicLevelId?: string;
+
   @IsDateString()
   openAt!: string;
 

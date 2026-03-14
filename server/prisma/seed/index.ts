@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { TEST_IDS } from './seed-constants';
 import { seed as seedRbac } from './rbac.seed';
 import { seed as seedOrgs } from './orgs.seed';
 import { seed as seedAcademicYears } from './academic-years.seed';
@@ -38,13 +39,26 @@ async function ensureTeachersSeeded(prisma: PrismaClient) {
 }
 
 async function validateSeed(prisma: PrismaClient) {
-  const [userCount, teacherCount, studentCount, subjectCount, testCount] =
+  const [
+    userCount,
+    teacherCount,
+    studentCount,
+    subjectCount,
+    testCount,
+    diagnosticAssignmentsMissingTopic,
+  ] =
     await Promise.all([
       prisma.user.count(),
       prisma.teacher.count(),
       prisma.student.count(),
       prisma.subject.count(),
       prisma.test.count(),
+      prisma.assignment.count({
+        where: {
+          testId: { in: Object.values(TEST_IDS) },
+          topicLevelId: null,
+        },
+      }),
     ]);
 
   console.log(
@@ -55,7 +69,8 @@ async function validateSeed(prisma: PrismaClient) {
     !teacherCount ||
     !studentCount ||
     !subjectCount ||
-    !testCount
+    !testCount ||
+    diagnosticAssignmentsMissingTopic > 0
   ) {
     throw new Error('Seed validation failed – missing required demo data.');
   }

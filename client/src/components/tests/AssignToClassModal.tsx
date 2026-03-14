@@ -17,11 +17,17 @@ import type { AssignabilityReport } from "@/types/assignability";
 import { formatAllowedGrades, gradeLabel } from "@/lib/grades";
 
 type ClassSection = { id: string; label?: string | null; grade?: string; section?: string };
+type TopicOption = {
+  id: string;
+  name?: string | null;
+  catalogTopic?: { name?: string | null } | null;
+};
 
 export type AssignToClassModalProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   testId: string | null;
+  subjectId?: string | null;
   allowedGrades: string[];
   /** Active academic year id for fetching class sections */
   yearId: string | null;
@@ -35,17 +41,21 @@ export function AssignToClassModal({
   open,
   onOpenChange,
   testId,
+  subjectId,
   allowedGrades,
   yearId,
   onSuccess,
 }: AssignToClassModalProps): React.JSX.Element {
   const [classes, setClasses] = useState<ClassSection[]>([]);
+  const [topics, setTopics] = useState<TopicOption[]>([]);
   const [loading, setLoading] = useState(false);
+  const [topicsLoading, setTopicsLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [assignErrorDetails, setAssignErrorDetails] = useState<AssignabilityReport | null>(null);
   const [form, setForm] = useState({
     classSectionId: "",
+    topicLevelId: "",
     openAt: defaultOpen().slice(0, 16),
     closeAt: defaultClose().slice(0, 16),
     maxAttempts: 1,
@@ -73,6 +83,27 @@ export function AssignToClassModal({
       })
       .finally(() => setLoading(false));
   }, [open, yearId]);
+
+  useEffect(() => {
+    if (!open || !subjectId) {
+      setTopics([]);
+      setTopicsLoading(false);
+      setForm((prev) => ({ ...prev, topicLevelId: "" }));
+      return;
+    }
+    setTopicsLoading(true);
+    fetchWithAuth<TopicOption[] | { data?: TopicOption[] }>("GET", `/topics/by-subject/${subjectId}`)
+      .then((data) => {
+        const list = Array.isArray(data)
+          ? data
+          : (data && typeof data === "object" && "data" in data ? (data as { data?: TopicOption[] }).data : null) ?? [];
+        setTopics(Array.isArray(list) ? list : []);
+      })
+      .catch(() => {
+        setTopics([]);
+      })
+      .finally(() => setTopicsLoading(false));
+  }, [open, subjectId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -102,6 +133,7 @@ export function AssignToClassModal({
       await fetchWithAuth("POST", `/tests/${testId}/assign`, {
         body: {
           classSectionId: form.classSectionId,
+          ...(form.topicLevelId ? { topicLevelId: form.topicLevelId } : {}),
           openAt: new Date(form.openAt).toISOString(),
           closeAt: new Date(form.closeAt).toISOString(),
           maxAttempts: Math.max(1, Number(form.maxAttempts) || 1),
@@ -114,6 +146,7 @@ export function AssignToClassModal({
       onOpenChange(false);
       setForm({
         classSectionId: "",
+        topicLevelId: "",
         openAt: defaultOpen().slice(0, 16),
         closeAt: defaultClose().slice(0, 16),
         maxAttempts: 1,
@@ -153,6 +186,7 @@ export function AssignToClassModal({
   };
 
   const labelFor = (c: ClassSection) => (c.label ?? [c.grade, c.section].filter(Boolean).join(" ")) || c.id;
+  const topicLabelFor = (topic: TopicOption) => topic.name?.trim() || topic.catalogTopic?.name?.trim() || "Neznámé téma";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -177,6 +211,28 @@ export function AssignToClassModal({
           <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
             <span className="font-medium text-slate-900">Určeno pro ročníky:</span>{" "}
             {formatAllowedGrades(allowedGrades)}
+          </div>
+          <div className="space-y-2">
+            <label htmlFor="assign-topic" className="text-sm font-medium text-slate-700">
+              Vyberte téma (pro diagnostiku)
+            </label>
+            <select
+              id="assign-topic"
+              className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+              value={form.topicLevelId}
+              onChange={(e) => setForm((p) => ({ ...p, topicLevelId: e.target.value }))}
+              disabled={topicsLoading || !subjectId}
+            >
+              <option value="">Bez tématu</option>
+              {topics.map((topic) => (
+                <option key={topic.id} value={topic.id}>
+                  {topicLabelFor(topic)}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-slate-500">
+              Téma pomáhá systému identifikovat slabá místa studenta.
+            </p>
           </div>
           <div className="space-y-2">
             <label htmlFor="assign-class" className="text-sm font-medium text-slate-700">Třída</label>

@@ -236,6 +236,7 @@ function TestsPage(): React.JSX.Element {
         open={assignModalOpen}
         onOpenChange={setAssignModalOpen}
         testId={assignTestId}
+        subjectId={tests.find((item) => item.id === assignTestId)?.subject?.id ?? null}
         allowedGrades={tests.find((item) => item.id === assignTestId)?.allowedGrades ?? []}
         yearId={selectedYearId}
         onSuccess={fetchTests}

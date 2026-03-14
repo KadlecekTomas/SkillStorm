@@ -39,6 +39,7 @@ export async function seed(prisma: PrismaClient) {
         city: base.city,
         country: base.country,
         type: ORG_TYPES[key],
+        status: 'ACTIVE',
       },
       create: {
         id,
@@ -47,6 +48,7 @@ export async function seed(prisma: PrismaClient) {
         city: base.city,
         country: base.country,
         type: ORG_TYPES[key],
+        status: 'ACTIVE',
       },
     });
 

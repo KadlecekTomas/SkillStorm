@@ -1,295 +1,315 @@
-import { PrismaClient, SubmissionStatus, SchoolGrade } from '@prisma/client';
+import { PrismaClient, SubmissionStatus } from '@prisma/client';
 import {
+  ACADEMIC_YEAR_ID,
   ASSIGNMENT_IDS,
+  CLASS_SECTION_IDS,
   ORG_IDS,
   TEST_IDS,
-  RESPONSE_IDS,
 } from './seed-constants';
 import { getMembershipId, logDone, logStep, SEED_USERS } from './seed-helpers';
 
-const ASSIGNMENT_CONFIGS = [
-  {
-    id: ASSIGNMENT_IDS.math,
-    testKey: TEST_IDS.math,
-    openOffsetMinutes: -120,
-    closeOffsetMinutes: 7 * 24 * 60,
-  },
-  {
-    id: ASSIGNMENT_IDS.english,
-    testKey: TEST_IDS.english,
-    openOffsetMinutes: -60,
-    closeOffsetMinutes: 5 * 24 * 60,
-  },
-  {
-    id: ASSIGNMENT_IDS.informatics,
-    testKey: TEST_IDS.informatics,
-    openOffsetMinutes: 0,
-    closeOffsetMinutes: 10 * 24 * 60,
-  },
-];
+type SeedQuestion = {
+  id: string;
+  text: string;
+  correctAnswer: string | null;
+  correctAnswers: string[];
+  score: number;
+};
 
-export async function seed(prisma: PrismaClient) {
-  logStep('Assignments > creating demo assignments & submissions');
+type StudentScenario = {
+  studentMembershipId: string;
+  pattern: boolean[];
+};
 
-  const teacherMembershipId = await getMembershipId(
-    prisma,
-    SEED_USERS.teacher,
-    ORG_IDS.chodovicka,
-  );
-  const studentAId = await getMembershipId(
-    prisma,
-    SEED_USERS.student1,
-    ORG_IDS.chodovicka,
-  );
-  const studentBId = await getMembershipId(
-    prisma,
-    SEED_USERS.student2,
-    ORG_IDS.chodovicka,
-  );
+const DIAGNOSTIC_PATTERNS: Record<
+  string,
+  { title: string; students: StudentScenario[] }
+> = {
+  [ASSIGNMENT_IDS.mathFractions]: {
+    title: 'Zlomky',
+    students: [
+      { studentMembershipId: '', pattern: [false, false, true] }, // Petr -> WEAK
+      { studentMembershipId: '', pattern: [true, true, true] }, // Anna -> GOOD
+    ],
+  },
+  [ASSIGNMENT_IDS.mathEquations]: {
+    title: 'Rovnice',
+    students: [
+      { studentMembershipId: '', pattern: [true, true, true] }, // Petr -> GOOD
+      { studentMembershipId: '', pattern: [true, false, true] }, // Anna -> WARNING
+    ],
+  },
+  [ASSIGNMENT_IDS.mathPercentages]: {
+    title: 'Procenta',
+    students: [
+      { studentMembershipId: '', pattern: [true, false, true] }, // Petr -> WARNING
+      { studentMembershipId: '', pattern: [false, false, true] }, // Anna -> WEAK
+    ],
+  },
+};
 
-  const ACADEMIC_YEAR_LABEL = '2024/2025';
-  // --- Academic year ---
-  let academicYear = await prisma.academicYear.findFirst({
-    where: { orgId: ORG_IDS.chodovicka, label: ACADEMIC_YEAR_LABEL },
+function wrongAnswerFor(question: SeedQuestion): string {
+  const firstCorrect =
+    question.correctAnswer ?? question.correctAnswers[0] ?? '';
+  switch (firstCorrect.toLowerCase()) {
+    case 'true':
+      return 'false';
+    case 'false':
+      return 'true';
+    case '5/6':
+      return '2/5';
+    case '20':
+      return '25';
+    case '4':
+      return '5';
+    case '5':
+      return '4';
+    case '3/4':
+      return '1/4';
+    default:
+      return `WRONG_${question.id.slice(0, 4)}`;
+  }
+}
+
+function correctAnswerFor(question: SeedQuestion): string {
+  if (question.correctAnswer) return question.correctAnswer;
+  if (question.correctAnswers.length > 1) {
+    return JSON.stringify(question.correctAnswers);
+  }
+  return question.correctAnswers[0] ?? '';
+}
+
+async function ensureAssignmentWithTopic(
+  prisma: PrismaClient,
+  params: {
+    id: string;
+    testId: string;
+    classSectionId: string;
+    teacherMembershipId: string;
+  },
+) {
+  const topicAssignment = await prisma.testAssignment.findFirst({
+    where: { testId: params.testId },
+    orderBy: [{ isPrimary: 'desc' }, { order: 'asc' }, { id: 'asc' }],
+    select: { topicLevelId: true },
   });
-  if (academicYear) {
-    console.log(
-      `⚠️ AcademicYear '${academicYear.label}' already exists, skipping create.`,
-    );
-  } else {
-    try {
-      academicYear = await prisma.academicYear.create({
-        data: {
-          orgId: ORG_IDS.chodovicka,
-          label: ACADEMIC_YEAR_LABEL,
-          startsAt: new Date('2024-09-01'),
-          endsAt: new Date('2025-08-31'),
-          isCurrent: true,
-        },
-      });
-      console.log(`✅ AcademicYear '${ACADEMIC_YEAR_LABEL}' created.`);
-    } catch (err: any) {
-      if (err?.code === 'P2002') {
-        academicYear = await prisma.academicYear.findFirstOrThrow({
-          where: { orgId: ORG_IDS.chodovicka, label: ACADEMIC_YEAR_LABEL },
-        });
-        console.log(
-          `⚠️ AcademicYear '${ACADEMIC_YEAR_LABEL}' already exists (caught P2002), reusing.`,
-        );
-      } else {
-        throw err;
-      }
-    }
+
+  if (!topicAssignment?.topicLevelId) {
+    throw new Error(`Seed invariant failed: test ${params.testId} has no topicLevel link`);
   }
 
-  // --- Class section ---
-  let classSection = await prisma.classSection.findFirst({
-    where: {
-      orgId: ORG_IDS.chodovicka,
-      yearId: academicYear.id,
-      grade: SchoolGrade.GRADE_6,
-      section: 'A',
+  return prisma.assignment.upsert({
+    where: { id: params.id },
+    update: {
+      organizationId: ORG_IDS.chodovicka,
+      yearId: ACADEMIC_YEAR_ID,
+      testId: params.testId,
+      targetType: 'CLASS',
+      classSectionId: params.classSectionId,
+      topicLevelId: topicAssignment.topicLevelId,
+      openAt: new Date('2025-10-01T08:00:00.000Z'),
+      closeAt: new Date('2026-06-30T18:00:00.000Z'),
+      maxAttempts: 1,
+      timeLimitSec: 1800,
+      shuffle: false,
+      showExplain: 'after_close',
+      createdById: params.teacherMembershipId,
+    },
+    create: {
+      id: params.id,
+      organizationId: ORG_IDS.chodovicka,
+      yearId: ACADEMIC_YEAR_ID,
+      testId: params.testId,
+      targetType: 'CLASS',
+      classSectionId: params.classSectionId,
+      topicLevelId: topicAssignment.topicLevelId,
+      openAt: new Date('2025-10-01T08:00:00.000Z'),
+      closeAt: new Date('2026-06-30T18:00:00.000Z'),
+      maxAttempts: 1,
+      timeLimitSec: 1800,
+      shuffle: false,
+      showExplain: 'after_close',
+      createdById: params.teacherMembershipId,
     },
   });
-  if (classSection) {
-    console.log(
-      `⚠️ ClassSection '${classSection.label}' already exists, skipping create.`,
-    );
-  } else {
-    try {
-      classSection = await prisma.classSection.create({
-        data: {
-          orgId: ORG_IDS.chodovicka,
-          yearId: academicYear.id,
-          grade: SchoolGrade.GRADE_6,
-          section: 'A',
-          label: '6.A',
-        },
-      });
-      console.log(`✅ ClassSection '6.A' created.`);
-    } catch (err: any) {
-      if (err?.code === 'P2002') {
-        classSection = await prisma.classSection.findFirstOrThrow({
-          where: {
-            orgId: ORG_IDS.chodovicka,
-            yearId: academicYear.id,
-            grade: SchoolGrade.GRADE_6,
-            section: 'A',
-          },
-        });
-        console.log(
-          `⚠️ ClassSection '6.A' already exists (caught P2002), reusing.`,
-        );
-      } else {
-        throw err;
-      }
-    }
-  }
+}
 
-  // --- Pull existing tests safely ---
-  const tests = await prisma.test.findMany({
-    where: { organizationId: ORG_IDS.chodovicka },
-    include: { questions: true },
+async function seedSubmission(
+  prisma: PrismaClient,
+  params: {
+    assignmentId: string;
+    testId: string;
+    organizationId: string;
+    studentMembershipId: string;
+    pattern: boolean[];
+  },
+) {
+  const questions = await prisma.question.findMany({
+    where: { testId: params.testId },
+    orderBy: [{ order: 'asc' }, { id: 'asc' }],
+    select: {
+      id: true,
+      text: true,
+      score: true,
+      correctAnswer: true,
+      correctAnswers: true,
+    },
   });
 
-  const testByKey = new Map(tests.map((t) => [t.id, t]));
-
-  const assignmentsByKey = new Map<
-    string,
-    Awaited<ReturnType<typeof prisma.assignment.create>>
-  >();
-
-  for (const config of ASSIGNMENT_CONFIGS) {
-    const test = testByKey.get(config.testKey);
-    if (!test) {
-      console.warn(
-        `⚠️ Assignments > Test ${config.testKey} not found, skipping.`,
-      );
-      continue;
-    }
-
-    const now = new Date();
-    const openAt = new Date(
-      now.getTime() + config.openOffsetMinutes * 60 * 1000,
-    );
-    const closeAt = new Date(
-      now.getTime() + config.closeOffsetMinutes * 60 * 1000,
-    );
-
-    const existingAssignment = await prisma.assignment.findFirst({
-      where: {
-        organizationId: ORG_IDS.chodovicka,
-        testId: test.id,
-        classSectionId: classSection.id,
-      },
-    });
-
-    let assignment;
-    if (existingAssignment) {
-      assignment = await prisma.assignment.update({
-        where: { id: existingAssignment.id },
-        data: { openAt, closeAt },
-      });
-      console.log(
-        `⚠️ Assignments > Reusing assignment for test ${config.testKey}`,
-      );
-    } else {
-      assignment = await prisma.assignment.create({
-        data: {
-          organizationId: ORG_IDS.chodovicka,
-          yearId: academicYear.id,
-          testId: test.id,
-          targetType: 'CLASS',
-          classSectionId: classSection.id,
-          openAt,
-          closeAt,
-          maxAttempts: 2,
-          timeLimitSec: 1800,
-          shuffle: true,
-          showExplain: 'after_close',
-          createdById: teacherMembershipId,
-        },
-      });
-      console.log(
-        `✅ Assignments > Created assignment for test ${config.testKey}`,
-      );
-    }
-
-    assignmentsByKey.set(config.id, assignment);
-
-    // --- Enroll both demo students ---
-    for (const studentId of [studentAId, studentBId]) {
-      try {
-        await prisma.assignmentStudent.create({
-          data: {
-            assignmentId: assignment.id,
-            studentId,
-          },
-        });
-        console.log(
-          `✅ Assignments > Linked student ${studentId} to assignment ${assignment.id}`,
-        );
-      } catch (err: any) {
-        if (err?.code === 'P2002') {
-          console.log(
-            `⚠️ Assignments > Duplicate link (${assignment.id}, ${studentId}), skipping.`,
-          );
-          continue;
-        }
-        throw err;
-      }
-    }
+  if (questions.length === 0) {
+    throw new Error(`Seed invariant failed: test ${params.testId} has no questions`);
   }
 
-  // --- Demo submission for Math assignment ---
-  const mathAssignment = assignmentsByKey.get(ASSIGNMENT_IDS.math);
-  const mathTest = tests.find((t) => t.id === TEST_IDS.math);
+  if (questions.length !== params.pattern.length) {
+    throw new Error(
+      `Seed invariant failed: response pattern length mismatch for test ${params.testId}`,
+    );
+  }
 
-  if (mathAssignment && mathTest) {
-    const submission = await prisma.submission.upsert({
-      where: {
-        organizationId_studentId_assignmentId_attemptNo: {
-          organizationId: mathAssignment.organizationId,
-          studentId: studentAId,
-          assignmentId: mathAssignment.id,
-          attemptNo: 1,
-        },
-      },
-      update: {
-        status: SubmissionStatus.APPROVED,
-        score: 4,
-        submittedAt: new Date(),
-      },
-      create: {
-        organizationId: mathAssignment.organizationId,
-        assignmentId: mathAssignment.id,
-        testId: mathAssignment.testId,
-        studentId: studentAId,
+  const correctCount = params.pattern.filter(Boolean).length;
+  const score = correctCount / questions.length;
+  const submittedAt = new Date('2025-10-02T09:00:00.000Z');
+
+  const submission = await prisma.submission.upsert({
+    where: {
+      organizationId_studentId_assignmentId_attemptNo: {
+        organizationId: params.organizationId,
+        studentId: params.studentMembershipId,
+        assignmentId: params.assignmentId,
         attemptNo: 1,
-        status: SubmissionStatus.APPROVED,
-        score: 4,
-        submittedAt: new Date(),
       },
+    },
+    update: {
+      testId: params.testId,
+      status: SubmissionStatus.IN_PROGRESS,
+      score: null,
+      submittedAt: null,
+    },
+    create: {
+      organizationId: params.organizationId,
+      assignmentId: params.assignmentId,
+      testId: params.testId,
+      studentId: params.studentMembershipId,
+      attemptNo: 1,
+      status: SubmissionStatus.IN_PROGRESS,
+      score: null,
+      submittedAt: null,
+    },
+  });
+
+  await prisma.response.deleteMany({ where: { submissionId: submission.id } });
+  await prisma.response.createMany({
+    data: questions.map((question, index) => {
+      const isCorrect = params.pattern[index] === true;
+      const givenText = isCorrect
+        ? correctAnswerFor(question)
+        : wrongAnswerFor(question);
+      return {
+        submissionId: submission.id,
+        questionId: question.id,
+        givenText,
+        isCorrect,
+        awardedPoints: isCorrect ? question.score : 0,
+        maxPoints: question.score,
+        correctAnswerSnapshot: correctAnswerFor(question),
+        questionTextSnapshot: question.text,
+        attemptNumber: 1,
+        corrected: false,
+      };
+    }),
+  });
+
+  await prisma.submission.update({
+    where: { id: submission.id },
+    data: {
+      status: SubmissionStatus.APPROVED,
+      score,
+      submittedAt,
+    },
+  });
+}
+
+export async function seed(prisma: PrismaClient) {
+  logStep('Assignments > creating diagnostic assignments with topic coverage');
+
+  const [teacherMembershipId, studentAnnaId, studentPetrId] = await Promise.all([
+    getMembershipId(prisma, SEED_USERS.teacher, ORG_IDS.chodovicka),
+    getMembershipId(prisma, SEED_USERS.student1, ORG_IDS.chodovicka),
+    getMembershipId(prisma, SEED_USERS.student2, ORG_IDS.chodovicka),
+  ]);
+
+  DIAGNOSTIC_PATTERNS[ASSIGNMENT_IDS.mathFractions]!.students[0]!.studentMembershipId =
+    studentPetrId;
+  DIAGNOSTIC_PATTERNS[ASSIGNMENT_IDS.mathFractions]!.students[1]!.studentMembershipId =
+    studentAnnaId;
+  DIAGNOSTIC_PATTERNS[ASSIGNMENT_IDS.mathEquations]!.students[0]!.studentMembershipId =
+    studentPetrId;
+  DIAGNOSTIC_PATTERNS[ASSIGNMENT_IDS.mathEquations]!.students[1]!.studentMembershipId =
+    studentAnnaId;
+  DIAGNOSTIC_PATTERNS[ASSIGNMENT_IDS.mathPercentages]!.students[0]!.studentMembershipId =
+    studentPetrId;
+  DIAGNOSTIC_PATTERNS[ASSIGNMENT_IDS.mathPercentages]!.students[1]!.studentMembershipId =
+    studentAnnaId;
+
+  const assignmentSpecs = [
+    {
+      id: ASSIGNMENT_IDS.mathFractions,
+      testId: TEST_IDS.mathFractions,
+    },
+    {
+      id: ASSIGNMENT_IDS.mathEquations,
+      testId: TEST_IDS.mathEquations,
+    },
+    {
+      id: ASSIGNMENT_IDS.mathPercentages,
+      testId: TEST_IDS.mathPercentages,
+    },
+  ] as const;
+
+  for (const spec of assignmentSpecs) {
+    const assignment = await ensureAssignmentWithTopic(prisma, {
+      id: spec.id,
+      testId: spec.testId,
+      classSectionId: CLASS_SECTION_IDS.chodovickaA,
+      teacherMembershipId,
     });
 
-    // --- Add responses ---
-    const [question1, question2] = mathTest.questions;
-
-    if (question1) {
-      await prisma.response.upsert({
-        where: { id: RESPONSE_IDS.mathQ1 },
-        update: { givenText: '1', isCorrect: true },
+    for (const student of DIAGNOSTIC_PATTERNS[spec.id]!.students) {
+      await prisma.assignmentStudent.upsert({
+        where: {
+          assignmentId_studentId: {
+            assignmentId: assignment.id,
+            studentId: student.studentMembershipId,
+          },
+        },
+        update: {},
         create: {
-          id: RESPONSE_IDS.mathQ1,
-          submissionId: submission.id,
-          questionId: question1.id,
-          givenText: '1',
-          isCorrect: true,
+          assignmentId: assignment.id,
+          studentId: student.studentMembershipId,
         },
       });
-    }
 
-    if (question2) {
-      await prisma.response.upsert({
-        where: { id: RESPONSE_IDS.mathQ2 },
-        update: {
-          givenText: 'Součet vnitřních úhlů je 180°',
-          isCorrect: true,
-        },
-        create: {
-          id: RESPONSE_IDS.mathQ2,
-          submissionId: submission.id,
-          questionId: question2.id,
-          givenText: 'Součet vnitřních úhlů je 180°',
-          isCorrect: true,
-        },
+      await seedSubmission(prisma, {
+        assignmentId: assignment.id,
+        testId: spec.testId,
+        organizationId: assignment.organizationId,
+        studentMembershipId: student.studentMembershipId,
+        pattern: student.pattern,
       });
     }
-  } else {
-    console.warn(
-      '⚠️ Assignments > Math test or assignment missing – no submission created.',
+  }
+
+  const nullTopicAssignments = await prisma.assignment.count({
+    where: {
+      testId: { in: Object.values(TEST_IDS) },
+      topicLevelId: null,
+    },
+  });
+  if (nullTopicAssignments > 0) {
+    throw new Error(
+      `Seed invariant failed: ${nullTopicAssignments} diagnostic assignments still have null topicLevelId`,
     );
   }
 
-  logDone('Assignments & submissions ready');
+  logDone('Diagnostic assignments & submissions ready');
 }

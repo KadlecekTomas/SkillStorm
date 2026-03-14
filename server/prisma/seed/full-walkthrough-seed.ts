@@ -848,11 +848,24 @@ async function createAssignments(
           classSectionId: sec.id,
         },
       });
+      const testTopic = await prisma.testAssignment.findFirst({
+        where: { testId: test.testId },
+        orderBy: [{ isPrimary: 'desc' }, { order: 'asc' }, { id: 'asc' }],
+        select: { topicLevelId: true },
+      });
+      if (!testTopic?.topicLevelId) {
+        throw new Error(`Full walkthrough seed requires topicLevelId for test ${test.testId}`);
+      }
       const maxAttemptsFinal = sec.label === '6.A' ? 3 : 2;
       if (existing) {
         await prisma.assignment.update({
           where: { id: existing.id },
-          data: { openAt, closeAt, maxAttempts: maxAttemptsFinal },
+          data: {
+            openAt,
+            closeAt,
+            maxAttempts: maxAttemptsFinal,
+            topicLevelId: testTopic.topicLevelId,
+          },
         });
         assignments.push({
           id: existing.id,
@@ -869,6 +882,7 @@ async function createAssignments(
             testId: test.testId,
             targetType: 'CLASS',
             classSectionId: sec.id,
+            topicLevelId: testTopic.topicLevelId,
             openAt,
             closeAt,
             maxAttempts: maxAttemptsFinal,

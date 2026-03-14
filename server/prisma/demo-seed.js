@@ -352,6 +352,10 @@ async function ensureEnrollment(studentId, classSectionId, yearId, orgId) {
 }
 
 async function ensureTest(orgId, creatorId) {
+  const mathSubject = await prisma.subject.findFirst({
+    where: { name: 'Matematika', deletedAt: null },
+    select: { id: true },
+  });
   const existing = await prisma.test.findFirst({
     where: {
       organizationId: orgId,
@@ -366,6 +370,8 @@ async function ensureTest(orgId, creatorId) {
       data: {
         description: DEMO.test.description,
         creatorId,
+        subjectId: mathSubject?.id ?? null,
+        allowedGrades: [DEMO.classSection.grade],
         status: PublishStatus.PUBLISHED,
         publishedAt: new Date(),
       },
@@ -378,8 +384,88 @@ async function ensureTest(orgId, creatorId) {
       title: DEMO.test.title,
       description: DEMO.test.description,
       creatorId,
+      subjectId: mathSubject?.id ?? null,
+      allowedGrades: [DEMO.classSection.grade],
       status: PublishStatus.PUBLISHED,
       publishedAt: new Date(),
+    },
+  });
+}
+
+async function ensureDemoTopic(classGrade) {
+  const subject = await prisma.subject.findFirst({
+    where: { name: 'Matematika', deletedAt: null },
+    select: { id: true, catalogSubjectId: true },
+  });
+  if (!subject) throw new Error('Demo seed: Matematika subject missing');
+
+  let catalogSubject = subject.catalogSubjectId
+    ? await prisma.catalogSubject.findUnique({
+        where: { id: subject.catalogSubjectId },
+        select: { id: true },
+      })
+    : null;
+
+  if (!catalogSubject) {
+    catalogSubject = await prisma.catalogSubject.upsert({
+      where: { code: 'DEMO_MATH' },
+      update: { name: 'Matematika' },
+      create: {
+        code: 'DEMO_MATH',
+        name: 'Matematika',
+      },
+      select: { id: true },
+    });
+  }
+
+  let catalogTopic = await prisma.catalogTopic.findFirst({
+    where: {
+      subjectId: catalogSubject.id,
+      name: 'Zlomky',
+    },
+    select: { id: true },
+  });
+
+  if (!catalogTopic) {
+    catalogTopic = await prisma.catalogTopic.create({
+      data: {
+        subjectId: catalogSubject.id,
+        name: 'Zlomky',
+      },
+      select: { id: true },
+    });
+  }
+
+  const subjectLevel = await prisma.subjectLevel.upsert({
+    where: {
+      subjectId_grade: {
+        subjectId: subject.id,
+        grade: classGrade,
+      },
+    },
+    update: { isEnabled: true },
+    create: {
+      subjectId: subject.id,
+      grade: classGrade,
+      isEnabled: true,
+    },
+  });
+
+  return prisma.topicLevel.upsert({
+    where: {
+      subjectLevelId_catalogTopicId_phase: {
+        subjectLevelId: subjectLevel.id,
+        catalogTopicId: catalogTopic.id,
+        phase: 'INTRO',
+      },
+    },
+    update: { name: 'Zlomky' },
+    create: {
+      subjectLevelId: subjectLevel.id,
+      catalogTopicId: catalogTopic.id,
+      name: 'Zlomky',
+      phase: 'INTRO',
+      order: 1,
     },
   });
 }
@@ -456,7 +542,7 @@ async function ensureDemoQuestions(testId) {
   });
 }
 
-async function ensureAssignment(organizationId, yearId, testId, classSectionId, createdById) {
+async function ensureAssignment(organizationId, yearId, testId, classSectionId, createdById, topicLevelId) {
   const existing = await prisma.assignment.findFirst({
     where: {
       organizationId,
@@ -473,6 +559,7 @@ async function ensureAssignment(organizationId, yearId, testId, classSectionId, 
       where: { id: existing.id },
       data: {
         yearId,
+        topicLevelId,
         openAt,
         closeAt,
         maxAttempts: 1,
@@ -490,6 +577,7 @@ async function ensureAssignment(organizationId, yearId, testId, classSectionId, 
       testId,
       targetType: 'CLASS',
       classSectionId,
+      topicLevelId,
       openAt,
       closeAt,
       maxAttempts: 1,
@@ -600,6 +688,7 @@ async function runDemoSeed() {
   const student = await ensureStudent(studentMembership.id, organization.id);
   await ensureEnrollment(student.id, classSection.id, academicYear.id, organization.id);
 
+  const topicLevel = await ensureDemoTopic(DEMO.classSection.grade);
   const test = await ensureTest(organization.id, teacherMembership.id);
   await ensureDemoQuestions(test.id);
 
@@ -609,6 +698,7 @@ async function runDemoSeed() {
     test.id,
     classSection.id,
     teacherMembership.id,
+    topicLevel.id,
   );
 
   await resetDemoSubmission(assignment.id, studentMembership.id);

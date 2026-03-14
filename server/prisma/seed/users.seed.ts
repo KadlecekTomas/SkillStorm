@@ -83,11 +83,11 @@ export async function seed(prisma: PrismaClient) {
     },
     {
       email: USER_EMAILS.student1,
-      name: 'Anna Žáková',
+      name: 'Anna Nováková',
     },
     {
       email: USER_EMAILS.student2,
-      name: 'Petr Žák',
+      name: 'Petr Novák',
     },
     {
       email: USER_EMAILS.parent,

@@ -509,6 +509,14 @@ async function createAssignments(
     for (const sec of currentSections) {
       for (let k = 0; k < ASSIGNMENTS_PER_CLASS; k++) {
         const test = toAssignQueue[k % toAssignQueue.length]!;
+        const testTopic = await prisma.testAssignment.findFirst({
+          where: { testId: test.id },
+          orderBy: [{ isPrimary: 'desc' }, { order: 'asc' }, { id: 'asc' }],
+          select: { topicLevelId: true },
+        });
+        if (!testTopic?.topicLevelId) {
+          throw new Error(`Full production seed requires topicLevelId for test ${test.id}`);
+        }
         const a = await prisma.assignment.create({
           data: {
             organizationId: org.orgId,
@@ -516,6 +524,7 @@ async function createAssignments(
             testId: test.id,
             targetType: 'CLASS',
             classSectionId: sec.id,
+            topicLevelId: testTopic.topicLevelId,
             openAt,
             closeAt,
             maxAttempts: 2,
@@ -536,6 +545,14 @@ async function createAssignments(
     if (firstTest && currentSections.length >= 2) {
       const sec0 = currentSections[0]!;
       const sec1 = currentSections[1]!;
+      const firstTopic = await prisma.testAssignment.findFirst({
+        where: { testId: firstTest.id },
+        orderBy: [{ isPrimary: 'desc' }, { order: 'asc' }, { id: 'asc' }],
+        select: { topicLevelId: true },
+      });
+      if (!firstTopic?.topicLevelId) {
+        throw new Error(`Full production seed requires topicLevelId for test ${firstTest.id}`);
+      }
       const a1 = await prisma.assignment.create({
         data: {
           organizationId: org.orgId,
@@ -543,6 +560,7 @@ async function createAssignments(
           testId: firstTest.id,
           targetType: 'CLASS',
           classSectionId: sec0.id,
+          topicLevelId: firstTopic.topicLevelId,
           openAt,
           closeAt,
           maxAttempts: 2,
@@ -564,6 +582,7 @@ async function createAssignments(
           testId: firstTest.id,
           targetType: 'CLASS',
           classSectionId: sec1.id,
+          topicLevelId: firstTopic.topicLevelId,
           openAt,
           closeAt,
           maxAttempts: 2,

@@ -33,6 +33,7 @@ import { AcademicYearExpiredGuard } from '@/academic-years/academic-year-expired
 import { StudentAccessGuard } from './guards/student-access.guard';
 import { Throttle } from '@nestjs/throttler';
 import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
+import { StudentDiagnosticService } from '@/analytics/student-diagnostic.service';
 
 @ApiTags('Students')
 @ApiBearerAuth()
@@ -40,7 +41,10 @@ import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operatio
 @OrgOperation(OrgOperationType.EXECUTION)
 @UseGuards(RequireCurrentAcademicYearGuard, AcademicYearExpiredGuard)
 export class StudentsController {
-  constructor(private readonly service: StudentsService) {}
+  constructor(
+    private readonly service: StudentsService,
+    private readonly diagnosticService: StudentDiagnosticService,
+  ) {}
 
   // ---------- EXPORT ----------
   // src/modules/students/student.controller.ts
@@ -103,6 +107,19 @@ export class StudentsController {
     @Query('yearId') yearId?: string,
   ) {
     return this.service.getDetail(id, req.user, yearId);
+  }
+
+  @Get(':id/diagnostic')
+  @UseGuards(StudentAccessGuard)
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
+  @ApiOperation({ summary: 'Deterministic student diagnostic summary' })
+  @CacheTTL(0)
+  getDiagnostic(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() req: RequestWithUser,
+    @Query('yearId') yearId?: string,
+  ) {
+    return this.diagnosticService.getStudentDiagnostic(id, req.user, yearId);
   }
 
   // ---------- DETAIL ----------

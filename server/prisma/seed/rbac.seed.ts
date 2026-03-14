@@ -6,7 +6,7 @@ import {
 } from '@prisma/client';
 import { logDone, logStep } from './seed-helpers';
 import { USER_EMAILS } from './seed-constants';
-import { RBAC_DEFAULT_PERMISSIONS } from '../../src/modules/rbac/rbac.defaults';
+import { RBAC_DEFAULT_PERMISSIONS } from '@/modules/rbac/rbac.defaults';
 
 const ROLE_MATRIX: Partial<Record<OrganizationRole, PermissionKey[]>> = Object.values(
   OrganizationRole,

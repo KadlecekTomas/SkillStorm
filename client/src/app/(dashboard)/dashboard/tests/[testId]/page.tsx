@@ -17,7 +17,7 @@ type TestDetail = {
   id: string;
   title: string;
   description?: string | null;
-  subject?: string | null;
+  subject?: { id: string; name: string } | string | null;
   allowedGrades: string[];
   status: "DRAFT" | "PUBLISHED" | "ARCHIVED";
 };
@@ -79,6 +79,8 @@ function TestDetailPage(): React.JSX.Element {
   }
 
   const isPublished = test.status === "PUBLISHED";
+  const subjectName = typeof test.subject === "string" ? test.subject : test.subject?.name;
+  const subjectId = typeof test.subject === "string" ? null : test.subject?.id ?? null;
 
   const handlePrimaryCta = async () => {
     if (isPublished) {
@@ -110,7 +112,7 @@ function TestDetailPage(): React.JSX.Element {
       <Card className="p-6">
         <div className="flex flex-wrap items-center gap-3">
           <span className="text-sm text-slate-600">
-            {test.subject ?? "Předmět neuveden"} · {test.status === "DRAFT" ? "Koncept" : test.status === "PUBLISHED" ? "Publikováno" : "Archivováno"}
+            {subjectName ?? "Předmět neuveden"} · {test.status === "DRAFT" ? "Koncept" : test.status === "PUBLISHED" ? "Publikováno" : "Archivováno"}
           </span>
           <div className="ml-auto flex gap-2">
             <Button
@@ -128,6 +130,7 @@ function TestDetailPage(): React.JSX.Element {
         open={assignOpen}
         onOpenChange={setAssignOpen}
         testId={testId}
+        subjectId={subjectId}
         allowedGrades={test?.allowedGrades ?? []}
         yearId={selectedYearId}
         onSuccess={fetchTest}

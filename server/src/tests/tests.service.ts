@@ -1259,6 +1259,35 @@ export class TestsService {
       });
     }
 
+    let topicLevelId: string | null = null;
+    if (dto.topicLevelId) {
+      const topicLevel = await this.prisma.topicLevel.findUnique({
+        where: { id: dto.topicLevelId },
+        select: {
+          id: true,
+          subjectLevel: {
+            select: {
+              subjectId: true,
+            },
+          },
+        },
+      });
+      if (!topicLevel) {
+        throw new NotFoundException('Téma nebylo nalezeno.');
+      }
+      if (topicLevel.subjectLevel.subjectId !== test.subjectId) {
+        throw new BadRequestException({
+          code: 'TOPIC_NOT_IN_TEST_SUBJECT',
+          message: 'Vybrané téma nepatří do předmětu tohoto testu.',
+        });
+      }
+      topicLevelId = topicLevel.id;
+    } else {
+      this.logger.warn(
+        `Assigning test ${testId} without topicLevelId; diagnostic results will fall back to "${'Bez tématu'}".`,
+      );
+    }
+
     // Validate time window: openAt must be strictly before closeAt.
     const openAtDate = new Date(dto.openAt);
     const closeAtDate = new Date(dto.closeAt);
@@ -1301,7 +1330,7 @@ export class TestsService {
         testId: testId,
         targetType: 'CLASS',
         classSectionId: dto.classSectionId,
-        topicLevelId: null,
+        topicLevelId,
         openAt: new Date(dto.openAt),
         closeAt: new Date(dto.closeAt),
         maxAttempts: dto.maxAttempts,

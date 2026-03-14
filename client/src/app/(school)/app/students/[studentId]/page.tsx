@@ -6,9 +6,11 @@ import { ChevronLeft, ChevronDown } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useStudentDetail } from "@/hooks/use-student-detail";
+import { useStudentDiagnostic } from "@/hooks/use-student-diagnostic";
 import { useAcademicYears } from "@/hooks/use-academic-years";
 import { withGuard } from "@/lib/guard/withGuard";
 import { cn } from "@/utils/cn";
+import type { StudentDiagnosticStatus } from "@/lib/api/students";
 
 function ScoreBar({ score }: { score: number }): React.JSX.Element {
   const pct = Math.min(100, Math.max(0, score));
@@ -70,6 +72,27 @@ function YearSelector({
   );
 }
 
+function DiagnosticBadge({ status }: { status: StudentDiagnosticStatus }): React.JSX.Element {
+  const styles: Record<StudentDiagnosticStatus, string> = {
+    WEAK: "bg-red-100 text-red-700 border-red-200",
+    WARNING: "bg-amber-100 text-amber-700 border-amber-200",
+    GOOD: "bg-emerald-100 text-emerald-700 border-emerald-200",
+    INSUFFICIENT_DATA: "bg-slate-100 text-slate-700 border-slate-200",
+  };
+  const labels: Record<StudentDiagnosticStatus, string> = {
+    WEAK: "WEAK",
+    WARNING: "WARNING",
+    GOOD: "GOOD",
+    INSUFFICIENT_DATA: "INSUFFICIENT_DATA",
+  };
+
+  return (
+    <span className={cn("inline-flex rounded-full border px-2 py-1 text-xs font-semibold", styles[status])}>
+      {labels[status]}
+    </span>
+  );
+}
+
 function StudentDetailPageContent(): React.JSX.Element {
   const params = useParams();
   const router = useRouter();
@@ -82,6 +105,11 @@ function StudentDetailPageContent(): React.JSX.Element {
   const effectiveYearId = selectedYearId ?? activeYear?.id ?? null;
 
   const { detail, loading, error } = useStudentDetail(studentId, effectiveYearId);
+  const {
+    diagnostic,
+    loading: diagnosticLoading,
+    error: diagnosticError,
+  } = useStudentDiagnostic(studentId, effectiveYearId);
 
   const handleBack = () => router.back();
 
@@ -208,6 +236,102 @@ function StudentDetailPageContent(): React.JSX.Element {
           </div>
         </Card>
       )}
+
+      <section>
+        <h2 className="mb-3 text-base font-semibold text-slate-800">Diagnostika slabých míst</h2>
+        {diagnosticLoading ? (
+          <Card className="rounded-xl p-6 text-center text-slate-500">
+            Načítám diagnostiku…
+          </Card>
+        ) : diagnosticError ? (
+          <Card className="rounded-xl p-6 text-center text-red-600">
+            {diagnosticError}
+          </Card>
+        ) : !diagnostic || diagnostic.summary.topicsEvaluated === 0 ? (
+          <Card className="rounded-xl p-6 text-center text-slate-500">
+            Zatím není dost dat pro diagnostiku.
+          </Card>
+        ) : (
+          <div className="space-y-4">
+            {diagnostic.subjects.map((subjectGroup) => (
+              <Card key={subjectGroup.subjectId} className="rounded-xl p-5">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-900">{subjectGroup.subject}</h3>
+                    <p className="text-xs text-slate-500">
+                      {subjectGroup.topics.length} vyhodnocených témat
+                    </p>
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  {subjectGroup.topics.map((topic) => (
+                    <details
+                      key={topic.topicId}
+                      className="rounded-xl border border-slate-200 bg-slate-50/70 p-4"
+                    >
+                      <summary className="flex cursor-pointer list-none items-start justify-between gap-4">
+                        <div className="space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-medium text-slate-900">{topic.topic}</span>
+                            <DiagnosticBadge status={topic.status} />
+                          </div>
+                          <p className="text-sm text-slate-600">
+                            {(topic.accuracy * 100).toFixed(0)} % úspěšnost · {topic.correctAnswers}/{topic.totalAnswers}
+                          </p>
+                        </div>
+                        <span className="text-xs text-slate-500">Detail</span>
+                      </summary>
+
+                      <div className="mt-4 space-y-4 border-t border-slate-200 pt-4">
+                        <div>
+                          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            Nejčastější chyby
+                          </p>
+                          {topic.sampleMistakes.length > 0 ? (
+                            <div className="space-y-2">
+                              {topic.sampleMistakes.map((mistake) => (
+                                <div key={`${mistake.questionId}-${mistake.attemptedAt ?? ""}`} className="rounded-lg bg-white p-3">
+                                  <p className="text-sm font-medium text-slate-900">{mistake.questionText}</p>
+                                  <p className="mt-1 text-sm text-slate-600">
+                                    Odpověď žáka: <span className="font-medium text-slate-900">{mistake.studentAnswer}</span>
+                                  </p>
+                                  <p className="text-sm text-slate-600">
+                                    Správně: <span className="font-medium text-slate-900">{mistake.correctAnswer ?? "—"}</span>
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-sm text-slate-500">Bez chybných odpovědí.</p>
+                          )}
+                        </div>
+
+                        <div>
+                          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            Opakovaně chybované otázky
+                          </p>
+                          {topic.repeatedlyWrongQuestions.length > 0 ? (
+                            <ul className="space-y-2 text-sm text-slate-700">
+                              {topic.repeatedlyWrongQuestions.map((question) => (
+                                <li key={question.questionId} className="rounded-lg bg-white p-3">
+                                  <span className="font-medium text-slate-900">{question.questionText}</span>
+                                  <span className="ml-2 text-slate-500">({question.wrongCount}× špatně)</span>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="text-sm text-slate-500">Žádné opakované chyby.</p>
+                          )}
+                        </div>
+                      </div>
+                    </details>
+                  ))}
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
+      </section>
 
       {/* Recent tests */}
       <section>

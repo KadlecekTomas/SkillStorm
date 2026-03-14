@@ -1,206 +1,246 @@
-import { PrismaClient, PublishStatus, QuestionType, SchoolGrade } from '@prisma/client';
-import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
-import { CATALOG_TOPIC_IDS, ORG_IDS, TEST_IDS } from './seed-constants';
+import {
+  PrismaClient,
+  PublishStatus,
+  QuestionType,
+  SchoolGrade,
+} from '@prisma/client';
+import {
+  CATALOG_SUBJECT_IDS,
+  CATALOG_TOPIC_IDS,
+  DEFAULT_GRADE,
+  ORG_IDS,
+  TEST_IDS,
+} from './seed-constants';
 import { getMembershipId, logDone, logStep, SEED_USERS } from './seed-helpers';
 
-const TEST_DEFINITIONS = [
+type SeedQuestionDefinition = {
+  text: string;
+  type: QuestionType;
+  score: number;
+  correctAnswer?: string;
+  correctAnswers?: string[];
+  options?: string[];
+};
+
+type SeedTestDefinition = {
+  id: string;
+  title: string;
+  catalogTopicId: string;
+  questions: SeedQuestionDefinition[];
+};
+
+const TEST_DEFINITIONS: SeedTestDefinition[] = [
   {
-    id: TEST_IDS.math,
-    title: 'Matematika – diagnostický test',
+    id: TEST_IDS.mathFractions,
+    title: 'Matematika – Zlomky',
     catalogTopicId: CATALOG_TOPIC_IDS.mathFractions,
     questions: [
       {
-        text: 'Doplň výsledek: 5/6 + 1/6 = ?',
+        text: 'Kolik je 1/2 + 1/3?',
         type: QuestionType.FILL_IN_THE_BLANK,
-        score: 2,
-        correctAnswer: '1',
+        score: 1,
+        correctAnswer: '5/6',
       },
       {
-        text: 'Vyber pravdivé tvrzení o trojúhelníku.',
+        text: 'Který zlomek je větší?',
         type: QuestionType.MULTIPLE_CHOICE,
         score: 1,
-        options: [
-          'Součet vnitřních úhlů je 360°',
-          'Součet vnitřních úhlů je 180°',
-          'Každá strana je stejně dlouhá',
-        ],
-        correctAnswers: ['Součet vnitřních úhlů je 180°'],
+        options: ['1/4', '3/4', '2/5'],
+        correctAnswers: ['3/4'],
+      },
+      {
+        text: 'Platí 1/4 + 1/4 = 1/2?',
+        type: QuestionType.TRUE_FALSE,
+        score: 1,
+        correctAnswer: 'true',
       },
     ],
   },
   {
-    id: TEST_IDS.english,
-    title: 'Angličtina – slovní zásoba',
-    catalogTopicId: CATALOG_TOPIC_IDS.englishVocabulary,
+    id: TEST_IDS.mathEquations,
+    title: 'Matematika – Rovnice',
+    catalogTopicId: CATALOG_TOPIC_IDS.mathEquations,
     questions: [
       {
-        text: 'Doplň překlad: "improve" znamená ______.',
+        text: 'Vyřeš rovnici: x + 3 = 7',
         type: QuestionType.FILL_IN_THE_BLANK,
         score: 1,
-        correctAnswer: 'vylepšit',
+        correctAnswer: '4',
       },
       {
-        text: 'Vyber synonyma slova "happy".',
-        type: QuestionType.MULTIPLE_CHOICE,
-        score: 2,
-        options: ['joyful', 'sad', 'delighted', 'angry'],
-        correctAnswers: ['joyful', 'delighted'],
+        text: 'Vyřeš rovnici: 2x = 10',
+        type: QuestionType.FILL_IN_THE_BLANK,
+        score: 1,
+        correctAnswer: '5',
+      },
+      {
+        text: 'Rovnice obsahuje neznámou.',
+        type: QuestionType.TRUE_FALSE,
+        score: 1,
+        correctAnswer: 'true',
       },
     ],
   },
   {
-    id: TEST_IDS.informatics,
-    title: 'Informatika – algoritmické myšlení',
-    catalogTopicId: CATALOG_TOPIC_IDS.itAlgorithms,
+    id: TEST_IDS.mathPercentages,
+    title: 'Matematika – Procenta',
+    catalogTopicId: CATALOG_TOPIC_IDS.mathPercentages,
     questions: [
       {
-        text: 'Jaký je první krok při řešení problému?',
-        type: QuestionType.MULTIPLE_CHOICE,
-        score: 1,
-        options: ['Implementace', 'Analýza zadání', 'Testování'],
-        correctAnswers: ['Analýza zadání'],
-      },
-      {
-        text: 'Doplň: ______ je strukturovaný soubor kroků vedoucí k cíli.',
+        text: 'Kolik je 10 % z 200?',
         type: QuestionType.FILL_IN_THE_BLANK,
         score: 1,
-        correctAnswer: 'Algoritmus',
+        correctAnswer: '20',
       },
       {
-        text: 'Které příkazy patří mezi řídicí struktury?',
-        type: QuestionType.MULTIPLE_CHOICE,
-        score: 2,
-        options: ['if', 'for', 'print', 'return'],
-        correctAnswers: ['if', 'for'],
+        text: 'Platí 50 % = 1/2?',
+        type: QuestionType.TRUE_FALSE,
+        score: 1,
+        correctAnswer: 'true',
+      },
+      {
+        text: 'Kolik je 25 % z 80?',
+        type: QuestionType.FILL_IN_THE_BLANK,
+        score: 1,
+        correctAnswer: '20',
       },
     ],
   },
 ];
 
 export async function seed(prisma: PrismaClient) {
-  logStep('Tests > creating sample tests');
+  logStep('Tests > creating diagnostic-friendly math tests');
 
-  // ✅ Vyčištění tabulek (jen pro CI/test DB)
-  await prisma.testAssignment.deleteMany({});
-  await prisma.option.deleteMany({});
-  await prisma.answer.deleteMany({});
-  await prisma.question.deleteMany({});
-
-  const teacherMembershipId = await getMembershipId(
-    prisma,
-    SEED_USERS.teacher,
-    ORG_IDS.chodovicka,
-  );
+  const [teacherMembershipId, academicYear, mathSubject] = await Promise.all([
+    getMembershipId(prisma, SEED_USERS.teacher, ORG_IDS.chodovicka),
+    prisma.academicYear.findUniqueOrThrow({
+      where: { id: '99999999-aaaa-4000-b000-000000000080' },
+      select: { id: true },
+    }),
+    prisma.subject.findFirstOrThrow({
+      where: {
+        OR: [
+          { catalogSubjectId: CATALOG_SUBJECT_IDS.math },
+          { name: 'Matematika' },
+        ],
+      },
+      select: { id: true },
+    }),
+  ]);
 
   for (const testDef of TEST_DEFINITIONS) {
-    // 🔍 Najdi příslušný topicLevel
     const topicLevel = await prisma.topicLevel.findFirst({
       where: {
         catalogTopicId: testDef.catalogTopicId,
         subjectLevel: {
-          subject: {
-            orgSubjects: { some: { organizationId: ORG_IDS.chodovicka } },
-          },
+          subjectId: mathSubject.id,
+          grade: DEFAULT_GRADE,
         },
       },
       select: { id: true },
     });
 
     if (!topicLevel) {
-      console.warn(
-        `⚠️ Tests > TopicLevel not found for ${testDef.title}, skipping.`,
-      );
-      continue;
+      throw new Error(`TopicLevel missing for test ${testDef.title}`);
     }
 
-    let test: { id: string };
+    const test = await prisma.test.upsert({
+      where: { id: testDef.id },
+      update: {
+        organizationId: ORG_IDS.chodovicka,
+        title: testDef.title,
+        description: `Diagnostický test pro téma ${testDef.title}`,
+        subjectId: mathSubject.id,
+        academicYearId: academicYear.id,
+        allowedGrades: [SchoolGrade.GRADE_6],
+        status: PublishStatus.PUBLISHED,
+        creatorId: teacherMembershipId,
+      },
+      create: {
+        id: testDef.id,
+        organizationId: ORG_IDS.chodovicka,
+        title: testDef.title,
+        description: `Diagnostický test pro téma ${testDef.title}`,
+        subjectId: mathSubject.id,
+        academicYearId: academicYear.id,
+        allowedGrades: [SchoolGrade.GRADE_6],
+        status: PublishStatus.PUBLISHED,
+        creatorId: teacherMembershipId,
+      },
+    });
 
-    // ✅ Vytvoření nebo update testu
-    try {
-      test = await prisma.test.create({
-        data: {
-          id: testDef.id,
-          organizationId: ORG_IDS.chodovicka,
-          title: testDef.title,
-          description: `Ukázkový test pro téma ${testDef.title}`,
-          allowedGrades: [SchoolGrade.GRADE_6],
-          status: PublishStatus.PUBLISHED,
-          creatorId: teacherMembershipId,
-          questions: {
-            create: testDef.questions.map((q, i) => ({
-              text: q.text,
-              type: q.type,
-              order: i + 1,
-              score: q.score,
-              correctAnswer: q.correctAnswer ?? null,
-              correctAnswers: q.correctAnswers ?? [],
-              ...(q.options
-                ? {
-                    options: {
-                      create: q.options.map((opt) => ({ text: opt })),
-                    },
-                  }
-                : {}),
-            })),
-          },
+    const hasSubmissionData =
+      (await prisma.submission.count({
+        where: { testId: test.id },
+      })) > 0;
+
+    if (!hasSubmissionData) {
+      await prisma.option.deleteMany({
+        where: {
+          question: { testId: test.id },
         },
       });
-      console.log(`✅ Tests > Created new test: ${testDef.title}`);
-    } catch (err: unknown) {
-      if (
-        err instanceof PrismaClientKnownRequestError &&
-        err.code === 'P2002'
-      ) {
-        test = await prisma.test.update({
-          where: { id: testDef.id },
+      await prisma.answer.deleteMany({
+        where: {
+          question: { testId: test.id },
+        },
+      });
+      await prisma.question.deleteMany({
+        where: { testId: test.id },
+      });
+
+      for (const [index, question] of testDef.questions.entries()) {
+        await prisma.question.create({
           data: {
-            title: testDef.title,
-            description: `${testDef.title} – refreshed`,
-            allowedGrades: [SchoolGrade.GRADE_6],
-            status: PublishStatus.PUBLISHED,
+            testId: test.id,
+            text: question.text,
+            type: question.type,
+            order: index + 1,
+            score: question.score,
+            correctAnswer: question.correctAnswer ?? null,
+            correctAnswers: question.correctAnswers ?? [],
+            ...(question.options
+              ? {
+                  options: {
+                    create: question.options.map((text) => ({ text })),
+                  },
+                }
+              : {}),
           },
         });
-        console.log(
-          `⚠️ Tests > Duplicate test found, updated instead: ${testDef.title}`,
-        );
-      } else {
-        throw err;
       }
     }
 
-    // Vazba test ↔ topicLevel (bez pádu při duplicitě)
-    try {
-      await prisma.testAssignment.upsert({
-        where: {
-          topicLevelId_testId: {
-            topicLevelId: topicLevel.id,
-            testId: test.id,
-          },
-        },
-        update: {},
-        create: {
-          testId: test.id,
+    await prisma.testAssignment.upsert({
+      where: {
+        topicLevelId_testId: {
           topicLevelId: topicLevel.id,
-          isPrimary: true,
+          testId: test.id,
         },
-      });
-
-      console.log(
-        `✅ Tests > Linked ${testDef.title} to topic level ${topicLevel.id}`,
-      );
-    } catch (err: unknown) {
-      if (
-        err instanceof PrismaClientKnownRequestError &&
-        err.code === 'P2002'
-      ) {
-        console.warn(
-          `⚠️ Duplicate link detected for ${testDef.title}, skipping.`,
-        );
-      } else {
-        throw err;
-      }
-    }
+      },
+      update: { isPrimary: true },
+      create: {
+        testId: test.id,
+        topicLevelId: topicLevel.id,
+        isPrimary: true,
+      },
+    });
   }
 
-  logDone('Tests ready');
+  const missingLinks = await prisma.test.findMany({
+    where: {
+      id: { in: Object.values(TEST_IDS) },
+      assignments: { none: {} },
+    },
+    select: { id: true, title: true },
+  });
+  if (missingLinks.length > 0) {
+    throw new Error(
+      `Seed invariant failed: tests missing topic assignments: ${missingLinks
+        .map((item) => item.title)
+        .join(', ')}`,
+    );
+  }
+
+  logDone('Diagnostic math tests ready');
 }

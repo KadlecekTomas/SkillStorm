@@ -398,6 +398,15 @@ async function ensureAssignment(params: {
   classSectionId: string;
   createdById: string;
 }) {
+  const testTopic = await prisma.testAssignment.findFirst({
+    where: { testId: params.testId },
+    orderBy: [{ isPrimary: 'desc' }, { order: 'asc' }, { id: 'asc' }],
+    select: { topicLevelId: true },
+  });
+  if (!testTopic?.topicLevelId) {
+    throw new Error(`Demo flow seed requires topicLevelId for test ${params.testId}`);
+  }
+
   const existing = await prisma.assignment.findFirst({
     where: {
       organizationId: params.orgId,
@@ -415,6 +424,7 @@ async function ensureAssignment(params: {
       data: {
         openAt,
         closeAt,
+        topicLevelId: testTopic.topicLevelId,
         maxAttempts: 2,
         shuffle: true,
         showExplain: 'after_close',
@@ -429,7 +439,7 @@ async function ensureAssignment(params: {
       testId: params.testId,
       targetType: 'CLASS',
       classSectionId: params.classSectionId,
-      topicLevelId: null,
+      topicLevelId: testTopic.topicLevelId,
       openAt,
       closeAt,
       maxAttempts: 2,

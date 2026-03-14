@@ -16,7 +16,8 @@ const CATALOG_SUBJECTS = [
     gradeTo: 9,
     topics: [
       { id: CATALOG_TOPIC_IDS.mathFractions, name: 'Zlomky' },
-      { id: CATALOG_TOPIC_IDS.mathGeometry, name: 'Geometrie' },
+      { id: CATALOG_TOPIC_IDS.mathEquations, name: 'Rovnice' },
+      { id: CATALOG_TOPIC_IDS.mathPercentages, name: 'Procenta' },
     ],
   },
   {
@@ -135,20 +136,30 @@ export async function seed(prisma: PrismaClient) {
   });
 
   for (const subject of CATALOG_SUBJECTS) {
-    const subjectRecord = await prisma.subject.upsert({
-      where: { catalogSubjectId: subject.id },
-      update: {
-        name: subject.name,
-        gradeFrom: subject.gradeFrom,
-        gradeTo: subject.gradeTo,
+    const existingSubject = await prisma.subject.findFirst({
+      where: {
+        OR: [{ catalogSubjectId: subject.id }, { name: subject.name }],
       },
-      create: {
-        catalogSubjectId: subject.id,
-        name: subject.name,
-        gradeFrom: subject.gradeFrom,
-        gradeTo: subject.gradeTo,
-      },
+      select: { id: true },
     });
+
+    const subjectRecord = existingSubject
+      ? await prisma.subject.update({
+          where: { id: existingSubject.id },
+          data: {
+            name: subject.name,
+            gradeFrom: subject.gradeFrom,
+            gradeTo: subject.gradeTo,
+          },
+        })
+      : await prisma.subject.create({
+          data: {
+            catalogSubjectId: subject.id,
+            name: subject.name,
+            gradeFrom: subject.gradeFrom,
+            gradeTo: subject.gradeTo,
+          },
+        });
 
     for (const grade of grades) {
       const subjectLevel = await prisma.subjectLevel.upsert({

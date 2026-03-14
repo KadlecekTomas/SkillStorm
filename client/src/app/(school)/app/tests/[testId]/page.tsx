@@ -1124,6 +1124,7 @@ function TestPageInner({ testId }: { testId: string }): React.JSX.Element {
           if (!open) setPublishError(null);
         }}
         testId={testId}
+        subjectId={test.subject?.id ?? null}
         allowedGrades={test.allowedGrades}
         yearId={selectedYearId}
         onSuccess={() => {

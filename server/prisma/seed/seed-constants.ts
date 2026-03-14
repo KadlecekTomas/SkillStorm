@@ -40,7 +40,8 @@ export const CATALOG_SUBJECT_IDS = {
 
 export const CATALOG_TOPIC_IDS = {
   mathFractions: '33333333-4444-4000-9000-000000000020',
-  mathGeometry: '33333333-4444-4000-9000-000000000021',
+  mathEquations: '33333333-4444-4000-9000-000000000021',
+  mathPercentages: '33333333-4444-4000-9000-000000000026',
   englishVocabulary: '33333333-4444-4000-9000-000000000022',
   englishGrammar: '33333333-4444-4000-9000-000000000023',
   itAlgorithms: '33333333-4444-4000-9000-000000000024',
@@ -71,9 +72,9 @@ export const MATERIAL_IDS = {
 } as const;
 
 export const TEST_IDS = {
-  math: '88888888-9999-4000-b000-000000000070',
-  english: '88888888-9999-4000-b000-000000000071',
-  informatics: '88888888-9999-4000-b000-000000000072',
+  mathFractions: '88888888-9999-4000-b000-000000000070',
+  mathEquations: '88888888-9999-4000-b000-000000000071',
+  mathPercentages: '88888888-9999-4000-b000-000000000072',
 } as const;
 
 export const ACADEMIC_YEAR_ID =
@@ -85,18 +86,8 @@ export const CLASS_SECTION_IDS = {
 } as const;
 
 export const ASSIGNMENT_IDS = {
-  math: 'bbbb2222-cccc-4000-b000-0000000000a0',
-  english: 'bbbb2222-cccc-4000-b000-0000000000a1',
-  informatics: 'bbbb2222-cccc-4000-b000-0000000000a2',
+  mathFractions: 'bbbb2222-cccc-4000-b000-0000000000a0',
+  mathEquations: 'bbbb2222-cccc-4000-b000-0000000000a1',
+  mathPercentages: 'bbbb2222-cccc-4000-b000-0000000000a2',
 } as const;
-
-export const SUBMISSION_IDS = {
-  mathStudent1: 'cccc3333-dddd-4000-b000-0000000000b0',
-} as const;
-
 export const DEFAULT_GRADE = SchoolGrade.GRADE_6;
-
-export const RESPONSE_IDS = {
-  mathQ1: 'dddd4444-eeee-4000-b000-0000000000c0',
-  mathQ2: 'dddd4444-eeee-4000-b000-0000000000c1',
-};

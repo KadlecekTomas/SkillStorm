@@ -157,7 +157,14 @@ export class AssignmentsService {
     assertTenantWhere(testWhere, ctx.organizationId);
     const test = await this.prisma.test.findFirst({
       where: testWhere,
-      select: { id: true, organizationId: true, status: true, academicYearId: true, allowedGrades: true },
+      select: {
+        id: true,
+        organizationId: true,
+        status: true,
+        academicYearId: true,
+        allowedGrades: true,
+        subjectId: true,
+      },
     });
     if (!test || test.organizationId !== ctx.organizationId) {
       throw new NotFoundException('Test nenalezen');
@@ -215,6 +222,33 @@ export class AssignmentsService {
           code: 'TEST_NOT_ALLOWED_FOR_GRADE',
           message: 'Test není určen pro daný ročník.',
         });
+      }
+
+      if (dto.topicLevelId) {
+        const topicLevel = await this.prisma.topicLevel.findUnique({
+          where: { id: dto.topicLevelId },
+          select: {
+            id: true,
+            subjectLevel: {
+              select: {
+                subjectId: true,
+              },
+            },
+          },
+        });
+        if (!topicLevel) {
+          throw new NotFoundException('Téma nebylo nalezeno.');
+        }
+        if (!test.subjectId || topicLevel.subjectLevel.subjectId !== test.subjectId) {
+          throw new BadRequestException({
+            code: 'TOPIC_NOT_IN_TEST_SUBJECT',
+            message: 'Vybrané téma nepatří do předmětu tohoto testu.',
+          });
+        }
+      } else {
+        this.logger.warn(
+          `[create assignment] assignment for test ${test.id} created without topicLevelId; diagnostics will use fallback topic`,
+        );
       }
 
       // 6b) Enrollment guard: class must have at least one ACTIVE enrolled student

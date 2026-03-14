@@ -39,17 +39,17 @@ export async function seed(prisma: PrismaClient) {
     update: {
       orgId,
       yearId: ACADEMIC_YEAR_ID,
-      grade: SchoolGrade.GRADE_5,
+      grade: SchoolGrade.GRADE_6,
       section: 'A',
-      label: '5.A',
+      label: '6.A',
     },
     create: {
       id: CLASS_SECTION_IDS.chodovickaA,
       orgId,
       yearId: ACADEMIC_YEAR_ID,
-      grade: SchoolGrade.GRADE_5,
+      grade: SchoolGrade.GRADE_6,
       section: 'A',
-      label: '5.A',
+      label: '6.A',
     },
   });
 
@@ -58,17 +58,17 @@ export async function seed(prisma: PrismaClient) {
     update: {
       orgId,
       yearId: ACADEMIC_YEAR_ID,
-      grade: SchoolGrade.GRADE_5,
+      grade: SchoolGrade.GRADE_6,
       section: 'B',
-      label: '5.B',
+      label: '6.B',
     },
     create: {
       id: CLASS_SECTION_IDS.chodovickaB,
       orgId,
       yearId: ACADEMIC_YEAR_ID,
-      grade: SchoolGrade.GRADE_5,
+      grade: SchoolGrade.GRADE_6,
       section: 'B',
-      label: '5.B',
+      label: '6.B',
     },
   });
 
