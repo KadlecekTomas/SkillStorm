@@ -39,6 +39,9 @@ type Submission = {
   id: string;
   status: "PENDING" | "APPROVED" | "REJECTED";
   score: number | null;
+  earnedPoints?: number | null;
+  maxPoints?: number | null;
+  percentage?: number | null;
   submittedAt: string | null;
 };
 
@@ -216,6 +219,16 @@ function AssignmentSubmissionPage() {
   const scoreLabel = useMemo(() => {
     if (!submission) return null;
     if (submission.status === "REJECTED") return "Nelze vyhodnotit";
+    if (
+      submission.earnedPoints != null &&
+      submission.maxPoints != null &&
+      submission.maxPoints > 0
+    ) {
+      const percentage =
+        submission.percentage ??
+        (submission.earnedPoints / submission.maxPoints) * 100;
+      return `${submission.earnedPoints} / ${submission.maxPoints} (${Math.round(percentage)} %)`;
+    }
     if (submission.score === null) return "Skóre není k dispozici";
     return `${Math.round(submission.score * 100)} %`;
   }, [submission]);

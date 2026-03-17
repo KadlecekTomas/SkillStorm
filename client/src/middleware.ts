@@ -8,6 +8,12 @@ const LOGIN_PATH = "/login";
 const APP_PREFIX = "/app";
 const JOIN_PREFIX = "/join";
 
+function redirectToLogin(request: NextRequest, pathname: string, param: "from" | "redirect"): NextResponse {
+  const login = new URL(LOGIN_PATH, request.url);
+  login.searchParams.set(param, pathname);
+  return NextResponse.redirect(login);
+}
+
 /** Redirect legacy /dashboard* to /app* for bookmarks. */
 function redirectDashboardToApp(pathname: string, request: NextRequest): NextResponse | null {
   if (pathname === "/dashboard" || pathname.startsWith("/dashboard/")) {
@@ -35,9 +41,7 @@ export function middleware(request: NextRequest) {
 
   if (pathname === JOIN_PREFIX || pathname.startsWith(`${JOIN_PREFIX}/`)) {
     if (!hasAuthCookie) {
-      const login = new URL(LOGIN_PATH, request.url);
-      login.searchParams.set("redirect", `${pathname}${url.search}`);
-      return NextResponse.redirect(login);
+      return redirectToLogin(request, `${pathname}${url.search}`, "redirect");
     }
     return NextResponse.next();
   }
@@ -46,10 +50,10 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Missing session always goes to /login. /forbidden is reserved for authenticated users
+  // who do have a token but fail a role/permission gate later in the request lifecycle.
   if (!hasAuthCookie) {
-    const login = new URL(LOGIN_PATH, request.url);
-    login.searchParams.set("from", pathname);
-    return NextResponse.redirect(login);
+    return redirectToLogin(request, pathname, "from");
   }
 
   return NextResponse.next();

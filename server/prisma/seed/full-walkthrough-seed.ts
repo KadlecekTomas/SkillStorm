@@ -26,6 +26,7 @@ import {
   SchoolGrade,
   SubmissionStatus,
   SystemRole,
+  TopicPhase,
   UserStatus,
 } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
@@ -588,25 +589,31 @@ async function ensureCatalogAndSubjects(
 ): Promise<Map<string, Map<string, string>>> {
   logStep('CatalogSubjects + org Subjects');
 
-  const catalogDefs = [
-    { code: 'MAT', name: 'Matematika' },
-    { code: 'CZJ', name: 'Český jazyk' },
-    { code: 'FYZ', name: 'Fyzika' },
-    { code: 'DEJ', name: 'Dějepis' },
-    { code: 'INF', name: 'Informatika' },
-    { code: 'ENG', name: 'Angličtina' },
-    { code: 'ECO', name: 'Finanční gramotnost' },
-  ];
-
   // Upsert all catalog entries
   const catalogMap = new Map<string, string>(); // code → id
-  for (const def of catalogDefs) {
+  for (const def of WALKTHROUGH_SUBJECT_DEFS) {
     const cat = await prisma.catalogSubject.upsert({
       where: { code: def.code },
-      update: {},
-      create: def,
+      update: { name: def.name },
+      create: { code: def.code, name: def.name },
     });
     catalogMap.set(def.code, cat.id);
+
+    for (const topicName of def.topics) {
+      await prisma.catalogTopic.upsert({
+        where: {
+          subjectId_name: {
+            subjectId: cat.id,
+            name: topicName,
+          },
+        },
+        update: {},
+        create: {
+          subjectId: cat.id,
+          name: topicName,
+        },
+      });
+    }
   }
 
   const grades = Object.values(SchoolGrade);
@@ -617,17 +624,22 @@ async function ensureCatalogAndSubjects(
   for (const org of orgs) {
     const orgMap = new Map<string, string>();
 
-    for (const def of catalogDefs) {
+    for (const def of WALKTHROUGH_SUBJECT_DEFS) {
       const catalogId = catalogMap.get(def.code)!;
 
       const subject = await prisma.subject.upsert({
         where: { catalogSubjectId: catalogId },
-        update: {},
-        create: { catalogSubjectId: catalogId, name: def.name, gradeFrom: 1, gradeTo: 9 },
+        update: { name: def.name, gradeFrom: def.gradeFrom, gradeTo: def.gradeTo },
+        create: {
+          catalogSubjectId: catalogId,
+          name: def.name,
+          gradeFrom: def.gradeFrom,
+          gradeTo: def.gradeTo,
+        },
       });
 
       for (const grade of grades) {
-        await prisma.subjectLevel.upsert({
+        const subjectLevel = await prisma.subjectLevel.upsert({
           where: {
             subjectId_grade: {
               subjectId: subject.id,
@@ -642,6 +654,37 @@ async function ensureCatalogAndSubjects(
             label: null,
           },
         });
+
+        const catalogTopics = await prisma.catalogTopic.findMany({
+          where: { subjectId: catalogId },
+          select: { id: true, name: true },
+          orderBy: [{ name: 'asc' }, { id: 'asc' }],
+        });
+
+        for (let index = 0; index < catalogTopics.length; index += 1) {
+          const topic = catalogTopics[index];
+          if (!topic) continue;
+          await prisma.topicLevel.upsert({
+            where: {
+              subjectLevelId_catalogTopicId_phase: {
+                subjectLevelId: subjectLevel.id,
+                catalogTopicId: topic.id,
+                phase: TopicPhase.INTRO,
+              },
+            },
+            update: {
+              name: topic.name,
+              order: index + 1,
+            },
+            create: {
+              subjectLevelId: subjectLevel.id,
+              catalogTopicId: topic.id,
+              name: topic.name,
+              order: index + 1,
+              phase: TopicPhase.INTRO,
+            },
+          });
+        }
       }
 
       orgMap.set(def.code, subject.id);
@@ -666,8 +709,171 @@ const TITLE_TO_CODE: Record<string, string> = {
   'Finanční gramotnost': 'ECO',
 };
 
+const TEST_TOPIC_MAP: Record<string, string> = {
+  'Matematika – Zlomky': 'Zlomky',
+  'Matematika – zlomky': 'Zlomky',
+  'Matematika – Rovnice': 'Rovnice',
+  'Matematika – funkce': 'Rovnice',
+  'Matematika – Procenta': 'Procenta',
+  'Český jazyk – pravopis': 'Pravopis',
+  'Český jazyk – literatura': 'Literatura',
+  'Angličtina – B1': 'Vocabulary',
+  'Základy programování': 'Programování',
+  'Fyzika – síly': 'Mechanika',
+  'Dějepis – 20. století': 'Novověk',
+  'Finanční gramotnost': 'Rozpočet',
+};
+
+type ResolvedTopic = {
+  id: string;
+  name: string;
+};
+
+function normalizeSeedText(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase()
+    .trim();
+}
+
+async function findTopicForSubjectByName(
+  subjectId: string,
+  topicName: string,
+): Promise<ResolvedTopic | null> {
+  const normalizedTarget = normalizeSeedText(topicName);
+  const candidates = await prisma.topicLevel.findMany({
+    where: {
+      subjectLevel: { subjectId },
+    },
+    select: {
+      id: true,
+      name: true,
+      catalogTopic: { select: { name: true } },
+    },
+    orderBy: [{ order: 'asc' }, { id: 'asc' }],
+  });
+
+  for (const candidate of candidates) {
+    const candidateName = candidate.name?.trim() || candidate.catalogTopic?.name?.trim() || '';
+    if (candidateName && normalizeSeedText(candidateName) === normalizedTarget) {
+      return { id: candidate.id, name: candidateName };
+    }
+  }
+  return null;
+}
+
+async function resolveTopicForTest(
+  testTitle: string,
+  subjectId: string,
+): Promise<ResolvedTopic | null> {
+  const explicitTopic = TEST_TOPIC_MAP[testTitle];
+  if (explicitTopic) {
+    const mapped = await findTopicForSubjectByName(subjectId, explicitTopic);
+    if (mapped) return mapped;
+  }
+
+  const lower = normalizeSeedText(testTitle);
+  if (lower.includes('zlomk')) {
+    const fractions = await findTopicForSubjectByName(subjectId, 'Zlomky');
+    if (fractions) return fractions;
+  }
+  if (lower.includes('rovnic') || lower.includes('funkc')) {
+    const equations = await findTopicForSubjectByName(subjectId, 'Rovnice');
+    if (equations) return equations;
+  }
+  if (lower.includes('procent')) {
+    const percentages = await findTopicForSubjectByName(subjectId, 'Procenta');
+    if (percentages) return percentages;
+  }
+  if (lower.includes('pravopis')) {
+    const spelling = await findTopicForSubjectByName(subjectId, 'Pravopis');
+    if (spelling) return spelling;
+  }
+  if (lower.includes('gramatik')) {
+    const grammar = await findTopicForSubjectByName(subjectId, 'Gramatika');
+    if (grammar) return grammar;
+  }
+  if (lower.includes('literatur')) {
+    const literature = await findTopicForSubjectByName(subjectId, 'Literatura');
+    if (literature) return literature;
+  }
+  if (lower.includes('vocab') || lower.includes('anglict') || lower.includes('english') || lower.includes('b1')) {
+    const vocabulary = await findTopicForSubjectByName(subjectId, 'Vocabulary');
+    if (vocabulary) return vocabulary;
+  }
+  if (lower.includes('algorithm')) {
+    const algorithms = await findTopicForSubjectByName(subjectId, 'Algoritmy');
+    if (algorithms) return algorithms;
+  }
+  if (lower.includes('program')) {
+    const programming = await findTopicForSubjectByName(subjectId, 'Programování');
+    if (programming) return programming;
+  }
+  if (lower.includes('mechanik') || lower.includes('sil')) {
+    const mechanics = await findTopicForSubjectByName(subjectId, 'Mechanika');
+    if (mechanics) return mechanics;
+  }
+  if (lower.includes('elektr')) {
+    const electricity = await findTopicForSubjectByName(subjectId, 'Elektřina');
+    if (electricity) return electricity;
+  }
+  if (lower.includes('starovek')) {
+    const antiquity = await findTopicForSubjectByName(subjectId, 'Starověk');
+    if (antiquity) return antiquity;
+  }
+  if (lower.includes('novovek') || lower.includes('20. stoleti')) {
+    const modernHistory = await findTopicForSubjectByName(subjectId, 'Novověk');
+    if (modernHistory) return modernHistory;
+  }
+  if (lower.includes('rozpo')) {
+    const budget = await findTopicForSubjectByName(subjectId, 'Rozpočet');
+    if (budget) return budget;
+  }
+  if (lower.includes('usp')) {
+    const savings = await findTopicForSubjectByName(subjectId, 'Úspory');
+    if (savings) return savings;
+  }
+
+  const fallback = await prisma.topicLevel.findFirst({
+    where: {
+      subjectLevel: { subjectId },
+    },
+    select: {
+      id: true,
+      name: true,
+      catalogTopic: { select: { name: true } },
+    },
+    orderBy: [{ order: 'asc' }, { id: 'asc' }],
+  });
+
+  if (!fallback) return null;
+  return {
+    id: fallback.id,
+    name: fallback.name?.trim() || fallback.catalogTopic?.name?.trim() || 'Neznámé téma',
+  };
+}
+
 // --- 5) TESTY (min. 3 na org, PUBLISHED, scoreable) ---
 type OrgWithName = { id: string; name: string };
+type CatalogSubjectSeedDef = {
+  code: string;
+  name: string;
+  gradeFrom: number;
+  gradeTo: number;
+  topics: string[];
+};
+
+const WALKTHROUGH_SUBJECT_DEFS: CatalogSubjectSeedDef[] = [
+  { code: 'MAT', name: 'Matematika', gradeFrom: 1, gradeTo: 9, topics: ['Zlomky', 'Rovnice', 'Procenta'] },
+  { code: 'CZJ', name: 'Český jazyk', gradeFrom: 1, gradeTo: 9, topics: ['Pravopis', 'Gramatika', 'Literatura'] },
+  { code: 'ENG', name: 'Angličtina', gradeFrom: 1, gradeTo: 9, topics: ['Vocabulary', 'Grammar'] },
+  { code: 'INF', name: 'Informatika', gradeFrom: 1, gradeTo: 9, topics: ['Algoritmy', 'Programování'] },
+  { code: 'FYZ', name: 'Fyzika', gradeFrom: 6, gradeTo: 9, topics: ['Mechanika', 'Elektřina'] },
+  { code: 'DEJ', name: 'Dějepis', gradeFrom: 6, gradeTo: 9, topics: ['Starověk', 'Novověk'] },
+  { code: 'ECO', name: 'Finanční gramotnost', gradeFrom: 1, gradeTo: 9, topics: ['Rozpočet', 'Úspory'] },
+];
+
 async function createTests(
   orgs: OrgWithName[],
   orgUsers: OrgUserIds[],
@@ -697,6 +903,8 @@ async function createTests(
     id: string;
     orgId: string;
     testId: string;
+    title: string;
+    subjectId: string | null;
     questionIds: string[];
     questions: QuestionForScoring[];
   }[] = [];
@@ -799,6 +1007,8 @@ async function createTests(
         id: test.id,
         orgId: org.id,
         testId: test.id,
+        title: test.title,
+        subjectId: test.subjectId ?? null,
         questionIds: questions.map((q) => q.id),
         questions: questions.map((q) => ({
           id: q.id,
@@ -818,9 +1028,10 @@ async function createTests(
 async function createAssignments(
   orgUsers: OrgUserIds[],
   sections: { id: string; orgId: string; yearId: string; label: string }[],
-  tests: { id: string; orgId: string; testId: string }[],
+  tests: { id: string; orgId: string; testId: string; title: string; subjectId: string | null }[],
 ) {
   logStep('Assignments: per test, sensible open/close, maxAttempts 1 or 2–3');
+  logStep('Assignments: linking tests to topics');
   const openAt = new Date('2025-10-01T08:00:00.000Z');
   const closeAt = new Date('2026-06-30T18:00:00.000Z');
   const assignments: {
@@ -830,8 +1041,12 @@ async function createAssignments(
     maxAttempts: number;
     organizationId: string;
   }[] = [];
+  let assignmentsWithTopics = 0;
 
   for (const test of tests) {
+    if (!test.subjectId) {
+      throw new Error(`Seed cannot resolve topic for test "${test.title}" (${test.testId}) because subjectId is missing`);
+    }
     const orgSections = sections.filter(
       (s) => s.orgId === test.orgId && (s.label === '6.A' || s.label === '7.B'),
     );
@@ -848,14 +1063,11 @@ async function createAssignments(
           classSectionId: sec.id,
         },
       });
-      const testTopic = await prisma.testAssignment.findFirst({
-        where: { testId: test.testId },
-        orderBy: [{ isPrimary: 'desc' }, { order: 'asc' }, { id: 'asc' }],
-        select: { topicLevelId: true },
-      });
-      if (!testTopic?.topicLevelId) {
-        throw new Error(`Full walkthrough seed requires topicLevelId for test ${test.testId}`);
+      const topic = await resolveTopicForTest(test.title, test.subjectId);
+      if (!topic) {
+        throw new Error(`Seed cannot resolve topic for test "${test.title}" (${test.testId})`);
       }
+      console.log(`  → ${test.title} → topic ${topic.name}`);
       const maxAttemptsFinal = sec.label === '6.A' ? 3 : 2;
       if (existing) {
         await prisma.assignment.update({
@@ -864,9 +1076,11 @@ async function createAssignments(
             openAt,
             closeAt,
             maxAttempts: maxAttemptsFinal,
-            topicLevelId: testTopic.topicLevelId,
+            topicLevelId: topic.id,
           },
         });
+        console.log('  ↳ assignment already exists');
+        assignmentsWithTopics += 1;
         assignments.push({
           id: existing.id,
           testId: test.testId,
@@ -882,13 +1096,14 @@ async function createAssignments(
             testId: test.testId,
             targetType: 'CLASS',
             classSectionId: sec.id,
-            topicLevelId: testTopic.topicLevelId,
+            topicLevelId: topic.id,
             openAt,
             closeAt,
             maxAttempts: maxAttemptsFinal,
             createdById: creatorId,
           },
         });
+        assignmentsWithTopics += 1;
         assignments.push({
           id: a.id,
           testId: test.testId,
@@ -899,7 +1114,16 @@ async function createAssignments(
       }
     }
   }
-  logDone(`Assignments: ${assignments.length}`);
+  const brokenAssignments = await prisma.assignment.count({
+    where: {
+      testId: { in: tests.map((test) => test.testId) },
+      topicLevelId: null,
+    },
+  });
+  if (brokenAssignments > 0) {
+    throw new Error(`Seed produced ${brokenAssignments} assignments without topicLevelId`);
+  }
+  logDone(`Assignments with topics: ${assignmentsWithTopics}`);
   return assignments;
 }
 

@@ -3,7 +3,7 @@
  * Uses submission scores and dates to compute risk level per student.
  *
  * SCORE CONTRACT:
- *   - score (raw): points earned for a submission (e.g. 0.65 out of 3.0)
+ *   - score (raw): points earned for a submission (e.g. 2 out of 3)
  *   - maxScore: sum of question scores for that test (e.g. 3.0)
  *   - averageScorePercent: SUM(score) / SUM(maxScore) * 100 (weighted, 0–100)
  *

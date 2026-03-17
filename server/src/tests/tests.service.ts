@@ -1449,7 +1449,12 @@ export class TestsService {
         const totalEvaluated = correctCount + incorrectCount;
         return {
           id: s.id,
-          score: s.score,
+          score: s.earnedPoints,
+          maxPoints: s.maxPoints,
+          percentage:
+            s.earnedPoints != null && s.maxPoints != null && s.maxPoints > 0
+              ? Math.round((s.earnedPoints / s.maxPoints) * 10000) / 100
+              : null,
           status: s.status,
           submittedAt: s.submittedAt,
           attemptNo: s.attemptNo,

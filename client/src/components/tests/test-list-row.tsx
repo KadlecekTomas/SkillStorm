@@ -9,6 +9,8 @@ export type TestListRowProps = {
   subjectName?: string | null;
   status: "done" | "open";
   lastScore?: number | null;
+  lastMaxScore?: number | null;
+  lastPercentage?: number | null;
   assignmentId: string;
   onOpen?: (assignmentId: string) => void;
   onViewResult?: (assignmentId: string) => void;
@@ -19,12 +21,16 @@ export function TestListRow({
   subjectName,
   status,
   lastScore,
+  lastMaxScore,
+  lastPercentage,
   assignmentId,
   onOpen,
   onViewResult,
 }: TestListRowProps) {
   const scoreLabel =
-    lastScore != null ? `${Math.round(lastScore * 100)} %` : "—";
+    lastScore != null && lastMaxScore != null && lastMaxScore > 0
+      ? `${lastScore} / ${lastMaxScore} (${Math.round(lastPercentage ?? (lastScore / lastMaxScore) * 100)} %)`
+      : "—";
   const statusLabel = status === "done" ? "Splněno" : "Otevřeno";
 
   return (

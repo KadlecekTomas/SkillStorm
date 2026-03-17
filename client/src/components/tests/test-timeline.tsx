@@ -8,6 +8,8 @@ export type TestTimelineItem = {
   testTitle: string;
   submittedAt: string | null;
   score: number | null;
+  maxScore?: number | null;
+  percentage?: number | null;
   status: string;
   attemptNo: number;
 };
@@ -66,7 +68,9 @@ export function TestTimeline({ items }: TestTimelineProps) {
                 </td>
                 <td className="px-4 py-2 text-right font-medium text-slate-800">
                   {item.score != null
-                    ? `${Math.round(item.score * 100)} %`
+                    ? item.maxScore != null && item.maxScore > 0
+                      ? `${item.score} / ${item.maxScore} (${Math.round(item.percentage ?? (item.score / item.maxScore) * 100)} %)`
+                      : "—"
                     : "—"}
                 </td>
                 <td className="px-4 py-2 text-slate-600">{item.status}</td>

@@ -883,14 +883,9 @@ export class ClassSectionsService {
       },
       select: {
         studentId: true,
-        score: true,
+        earnedPoints: true,
+        maxPoints: true,
         submittedAt: true,
-        // Needed for weighted avg: SUM(score) / SUM(maxScore) * 100
-        assignment: {
-          select: {
-            test: { select: { questions: { select: { score: true } } } },
-          },
-        },
       },
       orderBy: { submittedAt: 'desc' },
       take: Math.min(5000, safeLimit * 50),
@@ -901,16 +896,9 @@ export class ClassSectionsService {
       { score: number | null; submittedAt: Date | null; maxScore: number }[]
     >();
     for (const s of submissions) {
-      const maxScore =
-        s.assignment?.test?.questions?.reduce(
-          (sum, q) => sum + (q.score ?? 0),
-          0,
-        ) ?? 0;
+      const maxScore = s.maxPoints ?? 0;
       const list = byMembershipId.get(s.studentId) ?? [];
-      // computeStudentRisk expects raw earned points (e.g. 1.95 out of 3.0),
-      // not the normalized 0–1 ratio stored in Submission.score.
-      const rawEarned = s.score != null ? s.score * maxScore : null;
-      list.push({ score: rawEarned, submittedAt: s.submittedAt, maxScore });
+      list.push({ score: s.earnedPoints ?? null, submittedAt: s.submittedAt, maxScore });
       byMembershipId.set(s.studentId, list);
     }
 
@@ -1024,7 +1012,7 @@ export class ClassSectionsService {
         },
         submissions: {
           where: { deletedAt: null },
-          select: { score: true, submittedAt: true },
+          select: { earnedPoints: true, maxPoints: true, submittedAt: true },
         },
       },
     });
@@ -1043,7 +1031,7 @@ export class ClassSectionsService {
       const test = a.test;
       if (!test.subject) continue;
       const maxScore = (test.questions ?? []).reduce(
-        (sum, q) => sum + (q.score ?? 0),
+        (sum, q) => sum + (q.score ?? 1),
         0,
       );
       if (maxScore <= 0) continue;
@@ -1062,11 +1050,11 @@ export class ClassSectionsService {
       }
       entry.testIds.add(test.id);
       for (const s of a.submissions) {
-        if (s.score != null) {
+        if (s.earnedPoints != null) {
           entry.submissions.push({
-            score: s.score,
+            score: s.earnedPoints,
             submittedAt: s.submittedAt,
-            maxScore,
+            maxScore: s.maxPoints ?? maxScore,
           });
         }
       }

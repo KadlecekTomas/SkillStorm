@@ -56,6 +56,8 @@ export type StudentTimelineItem = {
   testTitle: string;
   submittedAt: string | null;
   score: number | null;
+  maxPoints: number | null;
+  percentage: number | null;
   status: string;
   attemptNo: number;
   openAt: string;
@@ -212,7 +214,12 @@ export class AnalyticsService {
       assignmentId: s.assignmentId,
       testTitle: s.assignment.test.title,
       submittedAt: s.submittedAt?.toISOString() ?? null,
-      score: s.score,
+      score: s.earnedPoints ?? null,
+      maxPoints: s.maxPoints ?? null,
+      percentage:
+        s.earnedPoints != null && s.maxPoints != null && s.maxPoints > 0
+          ? Math.round((s.earnedPoints / s.maxPoints) * 10000) / 100
+          : null,
       status: s.status,
       attemptNo: s.attemptNo,
       openAt: s.assignment.openAt.toISOString(),
@@ -244,6 +251,8 @@ export class AnalyticsService {
         assignment_id: string;
         test_title: string;
         avg_score: number | null;
+        earned_points: bigint | null;
+        max_points: bigint | null;
         submission_count: bigint;
         total_students: bigint;
       }>
@@ -254,7 +263,13 @@ export class AnalyticsService {
         cs.section,
         a.assignment_id,
         t.title AS test_title,
-        AVG(s.score) AS avg_score,
+        CASE
+          WHEN COALESCE(SUM(s.max_points), 0) > 0
+            THEN (SUM(s.earned_points)::float / SUM(s.max_points)::float) * 100
+          ELSE NULL
+        END AS avg_score,
+        SUM(s.earned_points)::bigint AS earned_points,
+        SUM(s.max_points)::bigint AS max_points,
         COUNT(s.submission_id)::bigint AS submission_count,
         (
           SELECT COUNT(*)::bigint

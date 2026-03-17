@@ -18,9 +18,9 @@
 export type SubmissionForPerformance = {
   testId: string;
   title: string;
-  score: number | null;
+  earnedPoints: number | null;
   /** Sum of question scores for this test (raw points possible, e.g. 3.0). 0 if no scored questions. */
-  maxScore: number;
+  maxPoints: number;
   submittedAt: Date | null;
   topicLevelId: string | null;
   topicName: string | null;
@@ -61,9 +61,9 @@ export function computeStudentPerformance(
   // ── 1. Best attempt per test: GROUP BY testId, MAX(score) ─────────────────
   const bestByTest = new Map<string, SubmissionForPerformance>();
   for (const s of submissions) {
-    if (s.score == null) continue;
+    if (s.earnedPoints == null) continue;
     const existing = bestByTest.get(s.testId);
-    if (!existing || s.score > (existing.score ?? -Infinity)) {
+    if (!existing || s.earnedPoints > (existing.earnedPoints ?? -Infinity)) {
       bestByTest.set(s.testId, s);
     }
   }
@@ -72,14 +72,12 @@ export function computeStudentPerformance(
   // ── 2. Core stats from best-attempt dataset only ───────────────────────────
   const completedTests = bestAttempts.length;
 
-  // Convert normalized score (0–1) to raw earned points before summing.
-  // a.score is a 0–1 ratio; multiply by a.maxScore to get actual points earned.
   const totalPoints = bestAttempts.reduce(
-    (sum, a) => sum + (a.score ?? 0) * a.maxScore,
+    (sum, a) => sum + (a.earnedPoints ?? 0),
     0,
   );
   const totalMaxPoints = bestAttempts.reduce(
-    (sum, a) => sum + a.maxScore,
+    (sum, a) => sum + a.maxPoints,
     0,
   );
   // averageScore in 0–100 range, rounded to 2 decimal places
@@ -89,7 +87,7 @@ export function computeStudentPerformance(
       : 0;
 
   // Defensive: warn if scored submissions exist but average resolved to 0
-  if (submissions.some((s) => s.score != null) && averageScore === 0) {
+  if (submissions.some((s) => s.earnedPoints != null) && averageScore === 0) {
     console.warn(
       '[computeStudentPerformance] averageScore=0 despite scored submissions. ' +
         `completedTests=${completedTests}, totalPoints=${totalPoints}, ` +
@@ -114,8 +112,8 @@ export function computeStudentPerformance(
       points: 0,
       maxPoints: 0,
     };
-    prev.points += attempt.score ?? 0;
-    prev.maxPoints += attempt.maxScore;
+    prev.points += attempt.earnedPoints ?? 0;
+    prev.maxPoints += attempt.maxPoints;
     topicMap.set(attempt.topicLevelId, prev);
   }
   const progressByTopic = Array.from(topicMap.entries()).map(
@@ -133,8 +131,8 @@ export function computeStudentPerformance(
   const recentTests = submissions.slice(0, 10).map((s) => ({
     testId: s.testId,
     title: s.title,
-    score: s.score,
-    maxScore: s.maxScore > 0 ? s.maxScore : null,
+    score: s.earnedPoints,
+    maxScore: s.maxPoints > 0 ? s.maxPoints : null,
     submittedAt: s.submittedAt?.toISOString() ?? null,
   }));
 

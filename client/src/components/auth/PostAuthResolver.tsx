@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
 import { getAuthIntent, clearAuthIntent, buildJoinUrlFromIntent } from "@/lib/auth-intent";
+import { clearReturnUrl, readReturnUrl } from "@/lib/auth-session";
 import { resolvePostAuthTarget } from "@/lib/post-auth-policy";
 
 /**
@@ -41,12 +42,15 @@ export function PostAuthResolver(): null {
     const currentPath = path + (typeof window !== "undefined" ? window.location.search : "");
     const intent = getAuthIntent();
     const contextMode = (context?.mode ?? null) as "personal" | "organization" | "platform" | null;
-    const target = resolvePostAuthTarget({
-      authIntent: intent,
-      currentPath,
-      searchParams,
-      contextMode,
-    });
+    const storedReturnUrl = readReturnUrl();
+    const target =
+      storedReturnUrl ??
+      resolvePostAuthTarget({
+        authIntent: intent,
+        currentPath,
+        searchParams,
+        contextMode,
+      });
 
     if (target === null) {
       if (intent && path.startsWith("/join")) {
@@ -61,6 +65,9 @@ export function PostAuthResolver(): null {
         (intent.type === "RETURN_TO" && target === intent.path));
     if (intentWasUsed) {
       clearAuthIntent();
+    }
+    if (storedReturnUrl) {
+      clearReturnUrl();
     }
     navigatedThisTransitionRef.current = true;
     router.replace(target);

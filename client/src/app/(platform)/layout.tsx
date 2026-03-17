@@ -6,9 +6,11 @@ import { usePathname, useRouter } from "next/navigation";
 import { PlatformMainLayout } from "@/components/layout/platform-main-layout";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/use-auth";
+import { isLogoutNavigationInProgress, storeReturnUrl } from "@/lib/auth-session";
 import { isPlatformAdmin } from "@/utils/permissions";
 
 const PLATFORM_FORBIDDEN = "/app/platform/forbidden";
+const PLATFORM_FALLBACK = "/app";
 
 /**
  * Platform group layout.
@@ -73,22 +75,38 @@ export default function PlatformGroupLayout({
 }): JSX.Element {
   const router = useRouter();
   const pathname = usePathname();
-  const { isHydrated, user } = useAuth();
-  const allowed = isPlatformAdmin(user);
+  const { isAuthenticated, isHydrated, isLoggingOut, user } = useAuth();
+  const allowed = user != null && isPlatformAdmin(user);
   const isForbiddenPage = pathname === PLATFORM_FORBIDDEN;
 
   useSchoolContextLeakDetector();
 
   useEffect(() => {
     if (!isHydrated) return;
+    if (isLoggingOut) return;
+    if (isLogoutNavigationInProgress()) return;
+    if (!isAuthenticated || !user) {
+      if (typeof window !== "undefined") {
+        storeReturnUrl(window.location.pathname + window.location.search);
+      }
+      router.replace("/login");
+      return;
+    }
     // Don't redirect when already on the forbidden page — that would create an infinite loop.
     if (!allowed && !isForbiddenPage) {
-      router.replace(PLATFORM_FORBIDDEN);
+      const timeoutId = window.setTimeout(() => {
+        router.replace(PLATFORM_FALLBACK);
+      }, 50);
+      return () => {
+        window.clearTimeout(timeoutId);
+      };
     }
-  }, [isHydrated, allowed, isForbiddenPage, router]);
+  }, [isAuthenticated, isHydrated, isLoggingOut, user, allowed, isForbiddenPage, router]);
 
   // Hydrating: show skeleton to avoid flash of wrong content.
   if (!isHydrated) return <PlatformShell />;
+  if (isLogoutNavigationInProgress()) return <></>;
+  if (isLoggingOut || !isAuthenticated || !user) return <></>;
 
   // Forbidden page: render its own full-screen layout without the sidebar shell.
   // Non-forbidden unauthorized access: skeleton while the redirect fires.

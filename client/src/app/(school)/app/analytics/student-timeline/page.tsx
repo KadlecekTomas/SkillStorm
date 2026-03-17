@@ -22,6 +22,8 @@ type TimelineItem = {
   testTitle: string;
   submittedAt: string | null;
   score: number | null;
+  maxPoints: number | null;
+  percentage: number | null;
   status: string;
   attemptNo: number;
   openAt: string;
@@ -53,7 +55,7 @@ function StudentTimelinePage() {
     .filter((i) => i.submittedAt)
     .map((i) => ({
       label: i.testTitle.slice(0, 20) + (i.testTitle.length > 20 ? "…" : ""),
-      score: i.score != null ? Math.round(i.score * 100) : 0,
+      score: i.percentage != null ? Math.round(i.percentage) : 0,
       date: i.submittedAt
         ? new Date(i.submittedAt).toLocaleDateString("cs-CZ", {
             month: "short",
@@ -150,7 +152,9 @@ function StudentTimelinePage() {
                       </td>
                       <td className="px-4 py-2 text-right font-medium">
                         {i.score != null
-                          ? `${Math.round(i.score * 100)} %`
+                          ? i.maxPoints != null && i.maxPoints > 0
+                            ? `${i.score} / ${i.maxPoints} (${Math.round(i.percentage ?? (i.score / i.maxPoints) * 100)} %)`
+                            : `${Math.round(i.percentage ?? 0)} %`
                           : "—"}
                       </td>
                       <td className="px-4 py-2 text-slate-600">{i.status}</td>

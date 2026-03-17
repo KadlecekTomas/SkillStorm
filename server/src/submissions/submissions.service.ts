@@ -6,9 +6,12 @@ import {
   ForbiddenException,
   Logger,
   NotFoundException,
+  Inject,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
 import {
   AuditEntityType,
   SubmissionStatus,
@@ -24,6 +27,8 @@ import { GamificationService } from '@/gamification/gamification.service';
 import type { JwtPayload } from '@/auth/types/jwt-payload';
 import type { OrgContext } from '@/common/org-context/org-context.types';
 import { assertTenantWhere, withOrg } from '@/common/prisma/tenant-scope';
+import { bumpOrgVersion } from '@/shared/cache/org-cache.utils';
+import { invalidateDirectorDashboardCache } from '@/stats/stats.service';
 
 type JwtUser = JwtPayload;
 
@@ -51,6 +56,7 @@ export class SubmissionsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly gamification: GamificationService,
+    @Inject(CACHE_MANAGER) private readonly cache: Cache,
   ) {}
 
   // ---- helpers -------------------------------------------------------------
@@ -124,6 +130,8 @@ export class SubmissionsService {
       testId: string;
       status: SubmissionStatus;
       score: number | null;
+      earnedPoints?: number | null;
+      maxPoints?: number | null;
       submittedAt: Date | null;
       attemptNo: number;
       isAnonymous?: boolean | null;
@@ -139,12 +147,21 @@ export class SubmissionsService {
     options?: { includeResponses?: boolean },
   ) {
     const includeResponses = options?.includeResponses ?? true;
+    const earnedPoints = submission.earnedPoints ?? null;
+    const maxPoints = submission.maxPoints ?? null;
+    const percentage =
+      earnedPoints != null && maxPoints != null && maxPoints > 0
+        ? Math.round((earnedPoints / maxPoints) * 10000) / 100
+        : null;
     return {
       id: submission.id,
       assignmentId: submission.assignmentId,
       testId: submission.testId,
       status: submission.status,
       score: submission.score,
+      earnedPoints,
+      maxPoints,
+      percentage,
       submittedAt: submission.submittedAt,
       attemptNo: submission.attemptNo,
       isAnonymous: submission.isAnonymous ?? false,
@@ -209,6 +226,13 @@ export class SubmissionsService {
       return JSON.stringify(value);
     }
     return String(value ?? '');
+  }
+
+  private async invalidateSubmissionDerivedCaches(
+    organizationId: string,
+  ): Promise<void> {
+    await bumpOrgVersion(this.cache, organizationId);
+    invalidateDirectorDashboardCache(organizationId);
   }
 
   // ---- API methods ---------------------------------------------------------
@@ -302,30 +326,37 @@ export class SubmissionsService {
     if (now > assignment.closeAt)
       throw new BadRequestException('Assignment je uzavřen');
 
-    // 6) maxAttempts
-    const attempts = await this.prisma.submission.count({
-      where: {
-        organizationId: assignment.organizationId,
-        assignmentId: assignment.id,
-        studentId: membership.id,
-      },
-    });
-    if (attempts >= assignment.maxAttempts) {
-      throw new BadRequestException('Vyčerpán maximální počet pokusů');
-    }
-
-    // 7) create submission (PENDING draft). Idempotent: duplicate (org, assignment, student, attemptNo) → return existing (200).
+    // 6) count + create must be serialized for the same student to shrink the race window.
     try {
-      return await this.prisma.submission.create({
-        data: {
-          organizationId: assignment.organizationId,
-          assignmentId: assignment.id,
-          testId: assignment.testId,
-          studentId: membership.id,
-          attemptNo: attempts + 1,
-          status: SubmissionStatus.PENDING,
-        },
+      const created = await this.prisma.$transaction(async (tx) => {
+        await tx.$queryRaw(
+          Prisma.sql`SELECT membership_id FROM memberships WHERE membership_id = ${membership.id} FOR UPDATE`,
+        );
+
+        const attempts = await tx.submission.count({
+          where: {
+            organizationId: assignment.organizationId,
+            assignmentId: assignment.id,
+            studentId: membership.id,
+          },
+        });
+        if (attempts >= assignment.maxAttempts) {
+          throw new BadRequestException('Vyčerpán maximální počet pokusů');
+        }
+
+        return tx.submission.create({
+          data: {
+            organizationId: assignment.organizationId,
+            assignmentId: assignment.id,
+            testId: assignment.testId,
+            studentId: membership.id,
+            attemptNo: attempts + 1,
+            status: SubmissionStatus.PENDING,
+          },
+        });
       });
+      await this.invalidateSubmissionDerivedCaches(assignment.organizationId);
+      return created;
     } catch (e) {
       if (
         e instanceof PrismaClientKnownRequestError &&
@@ -360,74 +391,80 @@ export class SubmissionsService {
     if (String(membership.role) !== 'STUDENT') {
       throw new ForbiddenException('Only students can update submissions.');
     }
-    const submission = await this.prisma.submission.findUnique({
-      where: scopedSubmissionWhere(membership.organizationId, id),
-      include: {
-        assignment: { select: { organizationId: true } },
-        student: { select: { id: true, organizationId: true } },
-        responses: { select: { id: true, questionId: true } },
-      },
-    });
-    if (!submission) throw new NotFoundException('Submission nenalezena');
-    if (!submission.assignment) {
-      throw new NotFoundException('Submission nemá přiřazený assignment.');
-    }
-
-    if (submission.studentId !== membership.id) {
-      throw new ForbiddenException('Access denied');
-    }
-    if (submission.submittedAt) {
-      throw new ConflictException({
-        message: 'Submission je již uzavřena',
-        errorCode: SUBMISSION_LOCKED_ERROR_CODE,
-      });
-    }
-
     const list = dto.responses ?? [];
     if (list.length === 0) return { success: true };
 
-    const test = await this.prisma.test.findUnique({
-      where: { id: submission.testId },
-      select: { questions: { select: { id: true } } },
-    });
-    const validQuestionIds = new Set((test?.questions ?? []).map((q) => q.id));
-
-    for (const r of list) {
-      if (!validQuestionIds.has(r.questionId)) {
-        throw new BadRequestException('Nevalidní questionId');
-      }
-      const existing = submission.responses.find(
-        (x) => x.questionId === r.questionId,
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw(
+        Prisma.sql`SELECT submission_id FROM submissions WHERE submission_id = ${id} FOR UPDATE`,
       );
-      try {
-        if (existing) {
-          await this.prisma.response.update({
-            where: { id: existing.id },
-            data: { givenText: this.serializeGivenText(r.givenText) },
-          });
-        } else {
-          await this.prisma.response.create({
-            data: {
-              submissionId: submission.id,
-              questionId: r.questionId,
-              givenText: this.serializeGivenText(r.givenText),
-            },
-          });
-        }
-      } catch (e: unknown) {
-        if (isSubmissionLockedError(e)) {
-          throw new ConflictException({
-            message: 'Submission je již uzavřena',
-            errorCode: SUBMISSION_LOCKED_ERROR_CODE,
-          });
-        }
-        const prismaErr = e as { code?: string };
-        if (prismaErr.code === 'P2003' || prismaErr.code === 'P2023') {
+
+      const submission = await tx.submission.findUnique({
+        where: scopedSubmissionWhere(membership.organizationId, id),
+        include: {
+          assignment: { select: { organizationId: true } },
+          student: { select: { id: true, organizationId: true } },
+          responses: { select: { id: true, questionId: true } },
+        },
+      });
+      if (!submission) throw new NotFoundException('Submission nenalezena');
+      if (!submission.assignment) {
+        throw new NotFoundException('Submission nemá přiřazený assignment.');
+      }
+      if (submission.studentId !== membership.id) {
+        throw new ForbiddenException('Access denied');
+      }
+      if (submission.submittedAt) {
+        throw new ConflictException({
+          message: 'Submission je již uzavřena',
+          errorCode: SUBMISSION_LOCKED_ERROR_CODE,
+        });
+      }
+
+      const test = await tx.test.findUnique({
+        where: { id: submission.testId },
+        select: { questions: { select: { id: true } } },
+      });
+      const validQuestionIds = new Set((test?.questions ?? []).map((q) => q.id));
+
+      for (const r of list) {
+        if (!validQuestionIds.has(r.questionId)) {
           throw new BadRequestException('Nevalidní questionId');
         }
-        throw e;
+        const existing = submission.responses.find(
+          (x) => x.questionId === r.questionId,
+        );
+        try {
+          if (existing) {
+            await tx.response.update({
+              where: { id: existing.id },
+              data: { givenText: this.serializeGivenText(r.givenText) },
+            });
+          } else {
+            await tx.response.create({
+              data: {
+                submissionId: submission.id,
+                questionId: r.questionId,
+                givenText: this.serializeGivenText(r.givenText),
+              },
+            });
+          }
+        } catch (e: unknown) {
+          if (isSubmissionLockedError(e)) {
+            throw new ConflictException({
+              message: 'Submission je již uzavřena',
+              errorCode: SUBMISSION_LOCKED_ERROR_CODE,
+            });
+          }
+          const prismaErr = e as { code?: string };
+          if (prismaErr.code === 'P2003' || prismaErr.code === 'P2023') {
+            throw new BadRequestException('Nevalidní questionId');
+          }
+          throw e;
+        }
       }
-    }
+    });
+
     return { success: true };
   }
 
@@ -634,6 +671,8 @@ export class SubmissionsService {
             submittedAt: new Date(),
             status: SubmissionStatus.REJECTED,
             score: null,
+            earnedPoints: null,
+            maxPoints: scoreResult.maxScore,
           },
         });
         await tx.auditLog.create({
@@ -659,6 +698,8 @@ export class SubmissionsService {
           submittedAt: new Date(),
           status: SubmissionStatus.APPROVED,
           score: scoreResult.normalizedScore,
+          earnedPoints: scoreResult.total,
+          maxPoints: scoreResult.maxScore,
         },
       });
 
@@ -673,6 +714,8 @@ export class SubmissionsService {
             assignmentId,
             attemptNo: updated.attemptNo,
             score: updated.score,
+            earnedPoints: scoreResult.total,
+            maxPoints: scoreResult.maxScore,
           },
         },
       });
@@ -690,6 +733,7 @@ export class SubmissionsService {
         submissionId: finished.id,
       },
     );
+    await this.invalidateSubmissionDerivedCaches(organizationId);
 
     const durationMs = Date.now() - startMs;
     this.logger.log(
@@ -741,6 +785,8 @@ export class SubmissionsService {
           testId: true,
           status: true,
           score: true,
+          earnedPoints: true,
+          maxPoints: true,
           submittedAt: true,
           attemptNo: true,
           isAnonymous: true,
@@ -771,7 +817,22 @@ export class SubmissionsService {
 
     const submission = await this.prisma.submission.findUnique({
       where: scopedSubmissionWhere(membership.organizationId, id),
-      include: {
+      select: {
+        id: true,
+        organizationId: true,
+        studentId: true,
+        testId: true,
+        assignmentId: true,
+        score: true,
+        earnedPoints: true,
+        maxPoints: true,
+        status: true,
+        submittedAt: true,
+        deletedAt: true,
+        createdAt: true,
+        updatedAt: true,
+        attemptNo: true,
+        isAnonymous: true,
         responses: {
           select: {
             id: true,
@@ -810,16 +871,27 @@ export class SubmissionsService {
     }
 
     // ── Scoring integrity guard (log-only, no stored-value mutation) ──────────
-    if (submission.score != null && submission.assignment.test?.questions?.length) {
+    if (submission.assignment.test?.questions?.length) {
       const recomputed = computeScore(
         submission.assignment.test.questions,
         submission.responses,
       );
-      if (Math.abs(recomputed.normalizedScore - submission.score) > 0.01) {
+      const storedEarnedPoints = submission.earnedPoints ?? null;
+      const storedMaxPoints = submission.maxPoints ?? null;
+      const earnedMismatch = storedEarnedPoints !== recomputed.total;
+      const maxMismatch = storedMaxPoints !== recomputed.maxScore;
+      const normalizedMismatch =
+        submission.score != null &&
+        Math.abs(recomputed.normalizedScore - submission.score) > 0.01;
+      if (earnedMismatch || maxMismatch || normalizedMismatch) {
         this.logger.warn('Submission score mismatch detected', {
           submissionId: submission.id,
           storedScore: submission.score,
+          storedEarnedPoints,
+          storedMaxPoints,
           recomputedScore: recomputed.normalizedScore,
+          recomputedEarnedPoints: recomputed.total,
+          recomputedMaxPoints: recomputed.maxScore,
         });
       }
     }

@@ -25,6 +25,17 @@ import {
 } from '@/shared/cache/org-cache.utils';
 import type { StatsOverviewResponse } from './dto/overview.dto';
 
+const DASHBOARD_SUBMISSION_LIMIT = 2_000;
+const DIRECTOR_DASHBOARD_CACHE_TTL_MS = 30_000;
+const directorDashboardCache = new Map<
+  string,
+  { expiresAt: number; value: unknown }
+>();
+
+export function invalidateDirectorDashboardCache(organizationId: string): void {
+  directorDashboardCache.delete(organizationId);
+}
+
 @Injectable()
 export class StatsService {
   constructor(
@@ -86,6 +97,23 @@ export class StatsService {
 
   private anonymizeId(value: string) {
     return createHash('sha256').update(value).digest('hex').slice(0, 12);
+  }
+
+  private getDirectorDashboardCache<T>(organizationId: string): T | null {
+    const cached = directorDashboardCache.get(organizationId);
+    if (!cached) return null;
+    if (cached.expiresAt <= Date.now()) {
+      directorDashboardCache.delete(organizationId);
+      return null;
+    }
+    return cached.value as T;
+  }
+
+  private setDirectorDashboardCache(organizationId: string, value: unknown) {
+    directorDashboardCache.set(organizationId, {
+      expiresAt: Date.now() + DIRECTOR_DASHBOARD_CACHE_TTL_MS,
+      value,
+    });
   }
 
   // ===== ORG OVERVIEW ========================================================
@@ -371,7 +399,8 @@ export class StatsService {
         this.prisma.submission.findMany({
           where: { ...baseSubmissionWhere, submittedAt: { not: null } },
           select: { id: true, testId: true, score: true, submittedAt: true },
-          orderBy: [{ testId: 'asc' }, { submittedAt: 'desc' }],
+          orderBy: { createdAt: 'desc' },
+          take: DASHBOARD_SUBMISSION_LIMIT,
         }),
       ]);
 
@@ -418,19 +447,7 @@ export class StatsService {
   }
 
   // ===== DIRECTOR DASHBOARD ==================================================
-  async getDirectorDashboard(organizationId: string | null, user: JwtPayload) {
-    await this.ensureOrgContext(user, organizationId);
-    const membership = await this.resolveMembership(user, organizationId);
-    const isDirectorLevel =
-      membership?.role === OrganizationRole.DIRECTOR ||
-      (membership?.role as string) === 'OWNER';
-    if (!isDirectorLevel && user.systemRole !== SystemRole.SUPERADMIN) {
-      throw new ForbiddenException('Director dashboard requires DIRECTOR or OWNER role.');
-    }
-    if (!organizationId) {
-      throw new ForbiddenException('Organization context required.');
-    }
-
+  private async buildDirectorDashboard(organizationId: string) {
     // ── Time windows ──────────────────────────────────────────────────────────
     const now = new Date();
     const startOfWeek = new Date(now);
@@ -499,18 +516,15 @@ export class StatsService {
             },
           },
           select: {
-            score: true,
+            earnedPoints: true,
+            maxPoints: true,
             submittedAt: true,
             createdAt: true,
             studentId: true,
-            assignment: {
-              select: {
-                classSectionId: true,
-                // Needed for weighted avg: SUM(score)/SUM(maxScore)*100
-                test: { select: { questions: { select: { score: true } } } },
-              },
-            },
+            assignment: { select: { classSectionId: true } },
           },
+          orderBy: { createdAt: 'desc' },
+          take: DASHBOARD_SUBMISSION_LIMIT,
         })
       : [];
 
@@ -528,18 +542,14 @@ export class StatsService {
     for (const s of allClassSubs) {
       const cid = s.assignment?.classSectionId;
       if (!cid) continue;
-      const maxScore =
-        s.assignment?.test?.questions?.reduce(
-          (sum, q) => sum + (q.score ?? 0),
-          0,
-        ) ?? 0;
+      const maxScore = s.maxPoints ?? 0;
       if (maxScore <= 0) continue; // skip submissions for tests with no scored questions
       const prev = classScoreMap.get(cid) ?? {
         points: 0,
         maxPoints: 0,
         lastAt: null,
       };
-      prev.points += s.score ?? 0;
+      prev.points += s.earnedPoints ?? 0;
       prev.maxPoints += maxScore;
       if (s.submittedAt && (!prev.lastAt || s.submittedAt > prev.lastAt))
         prev.lastAt = s.submittedAt;
@@ -548,9 +558,9 @@ export class StatsService {
         classWeekCount.set(cid, (classWeekCount.get(cid) ?? 0) + 1);
       }
       // Accumulate per-student weighted scores for at-risk list
-      if (s.studentId && s.score != null) {
+      if (s.studentId && s.earnedPoints != null) {
         const sPrev = studentScoreMap.get(s.studentId) ?? { points: 0, maxPoints: 0, lastAt: null };
-        sPrev.points += s.score;
+        sPrev.points += s.earnedPoints ?? 0;
         sPrev.maxPoints += maxScore;
         if (s.submittedAt && (!sPrev.lastAt || s.submittedAt > sPrev.lastAt))
           sPrev.lastAt = s.submittedAt;
@@ -699,6 +709,31 @@ export class StatsService {
     };
   }
 
+  async getDirectorDashboard(organizationId: string | null, user: JwtPayload) {
+    await this.ensureOrgContext(user, organizationId);
+    const membership = await this.resolveMembership(user, organizationId);
+    const isDirectorLevel =
+      membership?.role === OrganizationRole.DIRECTOR ||
+      (membership?.role as string) === 'OWNER';
+    if (!isDirectorLevel && user.systemRole !== SystemRole.SUPERADMIN) {
+      throw new ForbiddenException('Director dashboard requires DIRECTOR or OWNER role.');
+    }
+    if (!organizationId) {
+      throw new ForbiddenException('Organization context required.');
+    }
+
+    const cached = this.getDirectorDashboardCache<
+      Awaited<ReturnType<StatsService['buildDirectorDashboard']>>
+    >(organizationId);
+    if (cached) {
+      return cached;
+    }
+
+    const dashboard = await this.buildDirectorDashboard(organizationId);
+    this.setDirectorDashboardCache(organizationId, dashboard);
+    return dashboard;
+  }
+
   // ===== TEACHER DASHBOARD ===================================================
   async getTeacherDashboard(
     organizationId: string | null,
@@ -762,19 +797,15 @@ export class StatsService {
         this.prisma.submission.findMany({
           where: {
             deletedAt: null,
-            score: { not: null },
+            earnedPoints: { not: null },
             test: { creatorId: membership.id, deletedAt: null },
             ...(currentYear
               ? { assignment: { yearId: currentYear.id } }
               : {}),
           },
           select: {
-            score: true,
-            assignment: {
-              select: {
-                test: { select: { questions: { select: { score: true } } } },
-              },
-            },
+            earnedPoints: true,
+            maxPoints: true,
           },
           take: 2000, // performance cap — sufficient for teacher-level stats
         }),
@@ -805,13 +836,9 @@ export class StatsService {
       let totalPts = 0;
       let totalMaxPts = 0;
       for (const s of scoredSubs) {
-        const maxScore =
-          s.assignment?.test?.questions?.reduce(
-            (sum, q) => sum + (q.score ?? 0),
-            0,
-          ) ?? 0;
+        const maxScore = s.maxPoints ?? 0;
         if (maxScore > 0) {
-          totalPts += s.score ?? 0;
+          totalPts += s.earnedPoints ?? 0;
           totalMaxPts += maxScore;
         }
       }

@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { storeReturnUrl } from "@/lib/auth-session";
 
 export default function AccountLayout({
   children,
@@ -16,6 +17,9 @@ export default function AccountLayout({
   useEffect(() => {
     if (isLoading) return;
     if (!isAuthenticated) {
+      if (typeof window !== "undefined") {
+        storeReturnUrl(window.location.pathname + window.location.search);
+      }
       router.replace("/login");
     }
   }, [isAuthenticated, isLoading, router]);

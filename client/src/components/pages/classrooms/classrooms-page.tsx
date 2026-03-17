@@ -29,6 +29,7 @@ import { PermissionKey } from "@/types";
 import { showToastOnce } from "@/utils/toast";
 import { isRepairStateClassrooms } from "@/lib/app-state/app-state";
 import { isYearWriteBlocked } from "@/lib/academic-year/write-gate";
+import { ReportIssueButton } from "@/components/support/report-issue-button";
 import { ArrowUp, ArrowDown, ChevronDown, ChevronRight, Minus, Star } from "lucide-react";
 import { cn } from "@/utils/cn";
 
@@ -1989,6 +1990,16 @@ export function ClassroomsPageContent(): React.JSX.Element {
           {!subjectSaveError && classOrgSubjectsError && (
             <ErrorAlert title="Chyba" description={classOrgSubjectsError} />
           )}
+
+          <div className="flex justify-end">
+            <ReportIssueButton
+              compact
+              label="Report issue with classroom subjects"
+              componentContext="classroom_subject_assignment"
+              defaultCategory="SUBJECT"
+              defaultMessage="Problém s přiřazením předmětů ke třídě"
+            />
+          </div>
 
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setSubjectsModalOpen(false)}>

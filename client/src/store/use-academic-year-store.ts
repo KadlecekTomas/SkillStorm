@@ -7,6 +7,7 @@ type AcademicYearState = {
   selectedByOrg: Record<string, string>;
   setSelected: (orgId: string, yearId: string) => void;
   clearOrg: (orgId: string) => void;
+  clearAll: () => void;
 };
 
 export const useAcademicYearStore = create<AcademicYearState>()(
@@ -23,6 +24,7 @@ export const useAcademicYearStore = create<AcademicYearState>()(
           delete next[orgId];
           return { selectedByOrg: next };
         }),
+      clearAll: () => set(() => ({ selectedByOrg: {} })),
     }),
     { name: "skillstorm_academic_year" },
   ),

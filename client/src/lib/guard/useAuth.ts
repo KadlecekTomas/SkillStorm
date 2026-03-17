@@ -6,6 +6,11 @@ import { fetchWithAuth } from "@/lib/http/client";
 import { useAuthStore, type OrganizationContext, type AuthPhase } from "@/store/use-auth-store";
 import { useAcademicYearStore } from "@/store/use-academic-year-store";
 import { deriveOrgState, type OrgState } from "@/lib/org-state";
+import {
+  clearClientSessionArtifacts,
+  clearLogoutNavigationInProgress,
+  markLogoutNavigationInProgress,
+} from "@/lib/auth-session";
 import type { OrganizationRole, PermissionKey, User, AuthContext } from "@/types";
 import { showToastOnce } from "@/utils/toast";
 import { AUTH_DEBUG, API_BASE_PATH } from "@/utils/env";
@@ -81,6 +86,7 @@ export const useAuth = (): UseAuthResult => {
   const router = useRouter();
   const syncRef = useRef<Promise<AuthEnvelope> | null>(null);
   const refreshAttemptedRef = useRef(false);
+  const sessionRecoveryAttemptedRef = useRef(false);
   const {
     authPhase,
     user,
@@ -99,7 +105,8 @@ export const useAuth = (): UseAuthResult => {
     setOffline,
     setHadSession,
     setHydrated,
-    logout: clearStore,
+    beginLogout,
+    clearAuthState,
   } = useAuthStore((state) => ({
     authPhase: state.authPhase,
     user: state.user,
@@ -118,7 +125,8 @@ export const useAuth = (): UseAuthResult => {
     setOffline: state.setOffline,
     setHadSession: state.setHadSession,
     setHydrated: state.setHydrated,
-    logout: state.logout,
+    beginLogout: state.beginLogout,
+    clearAuthState: state.clearAuthState,
   }));
 
   const isLoggingOut = authPhase === "LOGGING_OUT";
@@ -163,11 +171,12 @@ export const useAuth = (): UseAuthResult => {
         try {
           const profile = await fetchWithAuth<AuthEnvelope>("GET", "/auth/me", meConfig);
           setProfile(profile);
+          setHadSession(true);
           setAuthStatus("authenticated");
           return profile;
         } catch (error) {
           if (refreshAttemptedRef.current) {
-            clearStore();
+            clearAuthState();
             setAuthStatus("unauthenticated");
             throw error;
           }
@@ -179,10 +188,11 @@ export const useAuth = (): UseAuthResult => {
             });
             const profile = await fetchWithAuth<AuthEnvelope>("GET", "/auth/me", meConfig);
             setProfile(profile);
+            setHadSession(true);
             setAuthStatus("authenticated");
             return profile;
           } catch (refreshError) {
-            clearStore();
+            clearAuthState();
             setAuthStatus("unauthenticated");
             throw refreshError;
           }
@@ -204,9 +214,10 @@ export const useAuth = (): UseAuthResult => {
     [
       setLoading,
       setProfile,
+      setHadSession,
       setAuthStatus,
       setHydrated,
-      clearStore,
+      clearAuthState,
       pathname,
       hydrated,
       authStatus,
@@ -246,8 +257,17 @@ export const useAuth = (): UseAuthResult => {
       return;
     }
     if (!hadSession) {
-      setAuthStatus("unauthenticated");
-      setHydrated(true);
+      if (sessionRecoveryAttemptedRef.current) {
+        setAuthStatus("unauthenticated");
+        setHydrated(true);
+        return;
+      }
+      sessionRecoveryAttemptedRef.current = true;
+      setHydrated(false);
+      syncProfile({ force: true }).catch(() => {
+        setAuthStatus("unauthenticated");
+        setHydrated(true);
+      });
       return;
     }
     if (authStatus === "authenticated") return;
@@ -285,12 +305,35 @@ export const useAuth = (): UseAuthResult => {
 
   // Auth invariant: logout is a hard boundary. No protected component may render after logout.
   const logout = useCallback(async () => {
-    clearStore();
-    if (typeof window !== "undefined") {
-      fetch(`${API_BASE_PATH}/auth/logout`, { method: "POST", credentials: "include" }).catch(() => {});
-    }
+    beginLogout();
+    markLogoutNavigationInProgress();
+    const logoutRequest = fetch(`${API_BASE_PATH}/auth/logout`, {
+      method: "POST",
+      credentials: "include",
+      cache: "no-store",
+      keepalive: true,
+    }).catch(() => undefined);
+
+    clearClientSessionArtifacts();
+    useAcademicYearStore.getState().clearAll();
     router.replace("/login");
-  }, [clearStore, router]);
+    if (typeof window !== "undefined") {
+      window.setTimeout(() => {
+        if (window.location.pathname.startsWith("/app")) {
+          window.location.replace("/login");
+        }
+      }, 0);
+    }
+
+    try {
+      await logoutRequest;
+    } catch {
+      // Logout must still clear local session state even if the network call fails.
+    } finally {
+      clearAuthState();
+      clearLogoutNavigationInProgress();
+    }
+  }, [beginLogout, clearAuthState, router]);
 
   const switchOrganization = useCallback(
     async (membershipId: string) => {

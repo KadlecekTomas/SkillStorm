@@ -16,6 +16,7 @@ import { showToastOnce } from "@/utils/toast";
 import { usePermissions } from "@/hooks/use-permissions";
 import { fetchWithAuth } from "@/lib/http/client";
 import Link from "next/link";
+import { ReportIssueButton } from "@/components/support/report-issue-button";
 
 const profileSchema = z.object({
   fullName: z.string().min(3),
@@ -439,11 +440,20 @@ export default function SettingsPage(): React.JSX.Element {
 
       {canManageSubjects && allSubjects.filter((s) => s.isEnabled).length > 0 && (
         <Card className="md:col-span-2 flex flex-col gap-3 p-6">
-          <div>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
             <h3 className="text-lg font-semibold text-slate-900">Osnova dle ročníků</h3>
             <p className="text-sm text-slate-500">
               Povolte předměty pro jednotlivé ročníky pro potřeby osnov a plánování výuky. Toto nastavení už neurčuje, pro které ročníky je test platný.
             </p>
+            </div>
+            <ReportIssueButton
+              compact
+              label="Report issue with subjects"
+              componentContext="subjects_settings"
+              defaultCategory="SUBJECT"
+              defaultMessage="Problém s předměty ve škole"
+            />
           </div>
           {subjectsLoading ? (
             <p className="text-sm text-slate-500">Načítám…</p>

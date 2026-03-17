@@ -9,6 +9,7 @@ import {
   ScrollText,
   ShieldCheck,
   LogOut,
+  LifeBuoy,
 } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { useAuth } from "@/hooks/use-auth";
@@ -40,6 +41,11 @@ export const PLATFORM_NAV_ITEMS: PlatformNavItem[] = [
     label: "Audit Logs",
     icon: <ScrollText className="h-4 w-4" />,
     href: "/app/platform/audit",
+  },
+  {
+    label: "Support",
+    icon: <LifeBuoy className="h-4 w-4" />,
+    href: "/app/platform/support",
   },
 ];
 
@@ -83,6 +89,12 @@ export const PlatformSidebar = (): React.JSX.Element => {
   const pathname = usePathname();
   const { user, logout } = useAuth();
   const displayName = user?.fullName ?? user?.name ?? "Platform Admin";
+  const handleLogout = () => {
+    void logout();
+    if (typeof window !== "undefined") {
+      window.location.replace("/login");
+    }
+  };
 
   return (
     <aside className="hidden min-h-screen w-60 flex-shrink-0 flex-col justify-between border-r border-gray-200 bg-white px-3 py-5 lg:flex">
@@ -119,7 +131,7 @@ export const PlatformSidebar = (): React.JSX.Element => {
       <div className="space-y-1.5">
         <button
           type="button"
-          onClick={() => void logout()}
+          onClick={handleLogout}
           className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700"
         >
           <LogOut className="h-4 w-4" />

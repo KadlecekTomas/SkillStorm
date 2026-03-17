@@ -10,6 +10,7 @@ import { NoOrganizationScreen } from "@/components/onboarding/NoOrganizationScre
 import { reportForbiddenAccess } from "@/utils/rbac-telemetry";
 import { AUTH_DEBUG } from "@/utils/env";
 import { useAuth } from "@/hooks/use-auth";
+import { storeReturnUrl } from "@/lib/auth-session";
 
 type GuardBoundaryProps = GuardOptions & {
   children: ReactNode;
@@ -58,6 +59,9 @@ export const GuardBoundary = ({
 
     // ❌ nepřihlášen → login
     if (!user && authStatus === "unauthenticated") {
+      if (typeof window !== "undefined") {
+        storeReturnUrl(window.location.pathname + window.location.search);
+      }
       if (AUTH_DEBUG) {
         console.log(
           "%c[AUTH][REDIRECT]",

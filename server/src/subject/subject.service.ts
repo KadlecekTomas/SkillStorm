@@ -231,17 +231,19 @@ export class SubjectsService {
     }
     assertTeacherOrDirectorInOrgOrSuperadmin(user, orgId ?? user.organizationId ?? '', 'předmět');
 
-    const level = await this.prisma.subjectLevel.findFirst({
-      where: { subjectId, grade: grade as any },
-      select: { id: true },
-    });
-    if (!level) {
-      throw new NotFoundException('SubjectLevel pro daný ročník nebyl nalezen');
-    }
-
-    const updated = await this.prisma.subjectLevel.update({
-      where: { id: level.id },
-      data: { isEnabled },
+    const updated = await this.prisma.subjectLevel.upsert({
+      where: {
+        subjectId_grade: {
+          subjectId,
+          grade: grade as any,
+        },
+      },
+      create: {
+        subjectId,
+        grade: grade as any,
+        isEnabled,
+      },
+      update: { isEnabled },
       include: { subject: { select: { id: true } } },
     });
 

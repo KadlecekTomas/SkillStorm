@@ -618,7 +618,8 @@ export class StudentsService {
         ...(yearId ? { assignment: { yearId } } : {}),
       },
       select: {
-        score: true,
+        earnedPoints: true,
+        maxPoints: true,
         submittedAt: true,
         testId: true,
         assignment: {
@@ -652,9 +653,10 @@ export class StudentsService {
         return {
           testId: s.testId,
           title: test?.title ?? '—',
-          score: s.score,
-          maxScore:
-            test?.questions?.reduce((sum, q) => sum + (q.score ?? 0), 0) ?? 0,
+          earnedPoints: s.earnedPoints ?? null,
+          maxPoints:
+            s.maxPoints ??
+            (test?.questions?.reduce((sum, q) => sum + (q.score ?? 1), 0) ?? 0),
           submittedAt: s.submittedAt,
           topicLevelId: tl?.id ?? null,
           topicName: tl?.catalogTopic?.name ?? null,

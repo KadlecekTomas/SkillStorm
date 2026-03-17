@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/select";
 import { UserMenu } from "@/components/layout/user-menu";
 import { useAuth } from "@/hooks/use-auth";
+import { ReportIssueButton } from "@/components/support/report-issue-button";
 
 /** Role-deterministic dashboard title. No manual switching, derived only from membership.role. */
 function getDashboardTitle(
@@ -46,6 +47,9 @@ export function DashboardHeader(): React.JSX.Element {
   const title = getDashboardTitle(context, role);
 
   const showBetaBadge = process.env.NEXT_PUBLIC_BETA_MODE === "1";
+  const canReportIssue =
+    context?.mode === "organization" &&
+    (role === "TEACHER" || role === "DIRECTOR" || role === "OWNER");
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-dashed border-slate-200 bg-white/70 px-6 py-4">
@@ -89,6 +93,7 @@ export function DashboardHeader(): React.JSX.Element {
             {role.toLowerCase()}
           </Badge>
         )}
+        {canReportIssue && <ReportIssueButton compact />}
         <UserMenu
           displayName={user?.fullName ?? user?.name ?? "Uživatel"}
           avatarUrl={user?.avatarUrl ?? null}

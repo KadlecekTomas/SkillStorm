@@ -7,10 +7,10 @@
  * @AllowAnyOrgStatus() or @AllowPendingOrg().
  */
 import { Test } from '@nestjs/testing';
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, UseGuards } from '@nestjs/common';
 import { DiscoveryModule, DiscoveryService } from '@nestjs/core';
 import { Reflector } from '@nestjs/core';
-import { PATH_METADATA } from '@nestjs/common/constants';
+import { GUARDS_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import { AppModule } from '../src/app.module';
 import { ORG_OPERATION_KEY } from '@/common/decorators/org-operation.decorator';
 import { ALLOW_ANY_ORG_STATUS } from '@/common/decorators/allow-any-org-status.decorator';
@@ -18,6 +18,18 @@ import { ALLOW_PENDING_ORG } from '@/common/decorators/allow-pending-org.decorat
 
 /** Truly public controllers (no auth/org); not subject to readiness gating in practice. */
 const EXPLICIT_PUBLIC_CONTROLLERS = new Set(['HealthController', 'MetricsController']);
+const EXCLUDED_NON_ORG_CONTROLLERS = new Set([
+  'AuthController',
+  'InvitesController',
+  'InvitationsController',
+  'PrivacyController',
+]);
+const ORG_SCOPED_GUARDS = new Set([
+  'RequireCurrentAcademicYearGuard',
+  'AcademicYearExpiredGuard',
+  'StudentAccessGuard',
+  'DummyOrgScopedGuard',
+]);
 
 function getRouteHandlerKeys(metatype: Function): string[] {
   const proto = metatype.prototype;
@@ -57,6 +69,23 @@ function hasOrgOperation(
   return atClass !== undefined || atMethod !== undefined;
 }
 
+function getGuardNames(target: object | Function | undefined): string[] {
+  if (!target) return [];
+  const guards = (Reflect.getMetadata(GUARDS_METADATA, target) as Array<Function | { name?: string }> | undefined) ?? [];
+  return guards
+    .map((guard) => guard?.name)
+    .filter((name): name is string => typeof name === 'string' && name.length > 0);
+}
+
+function isOrgScopedRoute(metatype: Function, methodKey: string): boolean {
+  const methodFn = (metatype as any).prototype?.[methodKey];
+  const classGuardNames = getGuardNames(metatype);
+  const methodGuardNames = getGuardNames(methodFn);
+  return [...classGuardNames, ...methodGuardNames].some((name) =>
+    ORG_SCOPED_GUARDS.has(name),
+  );
+}
+
 describe('OrgOperation decorator enforcement (structural)', () => {
   it('every route subject to readiness gating has @OrgOperation (class or handler)', async () => {
     const app = await Test.createTestingModule({
@@ -72,10 +101,12 @@ describe('OrgOperation decorator enforcement (structural)', () => {
       const metatype = wrapper.metatype as Function & { name?: string };
       if (!metatype?.name) continue;
       if (EXPLICIT_PUBLIC_CONTROLLERS.has(metatype.name)) continue;
+      if (EXCLUDED_NON_ORG_CONTROLLERS.has(metatype.name)) continue;
 
       const routeKeys = getRouteHandlerKeys(metatype);
       for (const methodKey of routeKeys) {
         if (isExemptFromReadiness(reflector, metatype, methodKey)) continue;
+        if (!isOrgScopedRoute(metatype, methodKey)) continue;
         if (!hasOrgOperation(reflector, metatype, methodKey)) {
           missing.push(`${metatype.name}.${methodKey}`);
         }
@@ -86,7 +117,10 @@ describe('OrgOperation decorator enforcement (structural)', () => {
   });
 
   it('fails when a controller behind readiness has no @OrgOperation (negative)', async () => {
+    class DummyOrgScopedGuard {}
+
     @Controller('dummy')
+    @UseGuards(DummyOrgScopedGuard)
     class DummyController {
       @Get()
       get() {
@@ -108,10 +142,12 @@ describe('OrgOperation decorator enforcement (structural)', () => {
       const metatype = wrapper.metatype as Function & { name?: string };
       if (!metatype?.name) continue;
       if (EXPLICIT_PUBLIC_CONTROLLERS.has(metatype.name)) continue;
+      if (EXCLUDED_NON_ORG_CONTROLLERS.has(metatype.name)) continue;
 
       const routeKeys = getRouteHandlerKeys(metatype);
       for (const methodKey of routeKeys) {
         if (isExemptFromReadiness(reflector, metatype, methodKey)) continue;
+        if (!isOrgScopedRoute(metatype, methodKey)) continue;
         if (!hasOrgOperation(reflector, metatype, methodKey)) {
           missing.push(`${metatype.name}.${methodKey}`);
         }

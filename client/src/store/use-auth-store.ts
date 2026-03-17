@@ -69,7 +69,8 @@ export type AuthState = {
   setOffline: (offline: boolean) => void;
   setHadSession: (hadSession: boolean) => void;
   setHydrated: (hydrated: boolean) => void;
-  logout: () => Promise<void>;
+  beginLogout: () => void;
+  clearAuthState: () => void;
 };
 
 const deriveRoles = (user: User | null): OrganizationRole[] => {
@@ -137,23 +138,24 @@ export const useAuthStore = create<AuthState>()(
       setOffline: (offline) => set(() => ({ offline })),
       setHadSession: (hadSession) => set(() => ({ hadSession })),
       setHydrated: (hydrated) => set(() => ({ hydrated })),
-      logout: () => {
-        set(() => ({ authPhase: "LOGGING_OUT" as AuthPhase }));
-        queueMicrotask(() =>
-          set(() => ({
-            authPhase: "UNAUTHENTICATED" as AuthPhase,
-            user: null,
-            org: null,
-            context: null,
-            permissions: [],
-            roles: [],
-            loading: false,
-            authStatus: "unauthenticated",
-            hadSession: false,
-          })),
-        );
-        return Promise.resolve();
-      },
+      beginLogout: () =>
+        set(() => ({
+          authPhase: "LOGGING_OUT" as AuthPhase,
+          loading: false,
+        })),
+      clearAuthState: () =>
+        set(() => ({
+          authPhase: "UNAUTHENTICATED" as AuthPhase,
+          user: null,
+          org: null,
+          context: null,
+          permissions: [],
+          roles: [],
+          loading: false,
+          authStatus: "unauthenticated",
+          hadSession: false,
+          hydrated: true,
+        })),
     }),
     {
       name: "skillstorm_auth",

@@ -3,6 +3,12 @@
 import { API_BASE_PATH, AUTH_DEBUG } from "@/utils/env";
 import { useAuthStore, type OrganizationContext } from "@/store/use-auth-store";
 import { setAuthIntent, buildReturnToPath } from "@/lib/auth-intent";
+import {
+  clearClientSessionArtifacts,
+  clearLogoutNavigationInProgress,
+  markLogoutNavigationInProgress,
+} from "@/lib/auth-session";
+import { useAcademicYearStore } from "@/store/use-academic-year-store";
 
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
@@ -232,7 +238,10 @@ const shouldBypassAuthRetry = (path: string): boolean => {
 
 const logoutAndRedirect = (): void => {
   // Clear local state first (avoid UI thinking it is still authed)
-  useAuthStore.getState().logout();
+  markLogoutNavigationInProgress();
+  useAuthStore.getState().clearAuthState();
+  useAcademicYearStore.getState().clearAll();
+  clearClientSessionArtifacts();
 
   if (typeof window !== "undefined") {
     const currentPath = window.location.pathname;
@@ -247,6 +256,7 @@ const logoutAndRedirect = (): void => {
 
     const target = LOGIN_REDIRECT;
     window.location.replace(target);
+    clearLogoutNavigationInProgress();
   }
 };
 

@@ -181,7 +181,7 @@ async function seedSubmission(
     },
     update: {
       testId: params.testId,
-      status: SubmissionStatus.IN_PROGRESS,
+      status: SubmissionStatus.PENDING,
       score: null,
       submittedAt: null,
     },
@@ -191,7 +191,7 @@ async function seedSubmission(
       testId: params.testId,
       studentId: params.studentMembershipId,
       attemptNo: 1,
-      status: SubmissionStatus.IN_PROGRESS,
+      status: SubmissionStatus.PENDING,
       score: null,
       submittedAt: null,
     },

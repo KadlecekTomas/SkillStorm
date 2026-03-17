@@ -15,6 +15,7 @@ import { fetchWithAuth, HttpError } from "@/lib/http/client";
 import { showToastOnce } from "@/utils/toast";
 import type { AssignabilityReport } from "@/types/assignability";
 import { formatAllowedGrades, gradeLabel } from "@/lib/grades";
+import { ReportIssueButton } from "@/components/support/report-issue-button";
 
 type ClassSection = { id: string; label?: string | null; grade?: string; section?: string };
 type TopicOption = {
@@ -233,6 +234,14 @@ export function AssignToClassModal({
             <p className="text-xs text-slate-500">
               Téma pomáhá systému identifikovat slabá místa studenta.
             </p>
+            <ReportIssueButton
+              compact
+              label="Report assignment problem"
+              componentContext="test_assignment_modal"
+              defaultCategory="TEST_ASSIGNMENT"
+              defaultMessage="Problém při přiřazení testu třídě"
+              className="mt-1 -ml-2"
+            />
           </div>
           <div className="space-y-2">
             <label htmlFor="assign-class" className="text-sm font-medium text-slate-700">Třída</label>

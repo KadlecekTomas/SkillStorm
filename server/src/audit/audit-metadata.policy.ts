@@ -36,6 +36,12 @@ export const AUDIT_METADATA_ALLOWLIST = new Set<string>([
   'organizationId',
   'targetUserId',
   'targetEntityId',
+
+  // lightweight support tickets
+  'category',
+  'page',
+  'status',
+  'resolvedAt',
 ]);
 
 export const AUDIT_METADATA_DENYLIST = new Set<string>([

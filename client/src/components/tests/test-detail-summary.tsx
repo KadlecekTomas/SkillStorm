@@ -7,6 +7,8 @@ export type TestDetailSummaryProps = {
   testTitle: string;
   subjectName?: string | null;
   score: number | null;
+  maxScore?: number | null;
+  percentage?: number | null;
   submittedAt: string | null;
   attemptNo: number;
 };
@@ -15,10 +17,15 @@ export function TestDetailSummary({
   testTitle,
   subjectName,
   score,
+  maxScore,
+  percentage,
   submittedAt,
   attemptNo,
 }: TestDetailSummaryProps) {
-  const scoreLabel = score != null ? `${Math.round(score * 100)} %` : "—";
+  const scoreLabel =
+    score != null && maxScore != null && maxScore > 0
+      ? `${score} / ${maxScore} (${Math.round(percentage ?? (score / maxScore) * 100)} %)`
+      : "—";
   const dateLabel = submittedAt
     ? new Date(submittedAt).toLocaleString("cs-CZ", {
         dateStyle: "medium",

@@ -29,6 +29,8 @@ model User {
   isPlatformAdmin   Boolean            @default(false) @map("is_platform_admin")
   analyticsEvents   AnalyticsEvent[]
   auditLogs         AuditLog[]
+  supportTickets    SupportTicket[]
+  resolvedSupportTickets SupportTicket[] @relation("SupportResolvedBy")
   materialPurchases MaterialPurchase[]
   memberships       Membership[]
   refreshTokens       RefreshToken[]
@@ -78,6 +80,7 @@ model Organization {
   invites           Invite[]
   promotionLogs     PromotionLog[]
   submissions       Submission[]
+  supportTickets    SupportTicket[]
 
   @@index([name])
   @@index([city])
@@ -318,6 +321,28 @@ model AuditLog {
   @@index([entityType])
   @@index([createdAt])
   @@map("audit_logs")
+}
+
+model SupportTicket {
+  id             String       @id @default(uuid()) @map("support_ticket_id")
+  organizationId String       @map("organization_id")
+  userId         String       @map("user_id")
+  category       String       @db.VarChar(100)
+  message        String
+  page           String?      @db.VarChar(255)
+  metadata       Json?
+  status         String       @default("OPEN") @db.VarChar(20)
+  resolvedById   String?      @map("resolved_by_id")
+  resolvedAt     DateTime?    @map("resolved_at")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  resolvedBy     User?        @relation("SupportResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, status, createdAt])
+  @@index([userId, createdAt])
+  @@index([resolvedById])
+  @@map("support_tickets")
 }
 
 model AnalyticsEvent {
@@ -818,6 +843,8 @@ model Submission {
   studentId      String           @map("student_id")
   testId         String           @map("test_id")
   score          Float?
+  earnedPoints   Int?             @map("earned_points")
+  maxPoints      Int?             @map("max_points")
   status         SubmissionStatus @default(PENDING)
   submittedAt    DateTime?        @map("submitted_at")
   deletedAt      DateTime?        @map("deleted_at")
@@ -839,6 +866,8 @@ model Submission {
   @@index([testId, studentId])
   @@index([testId, status])
   @@index([studentId, submittedAt])
+  @@index([organizationId, createdAt])
+  @@index([organizationId, assignmentId, studentId])
   @@index([organizationId, studentId, createdAt])
   @@map("submissions")
 }
@@ -1103,6 +1132,7 @@ enum AuditEntityType {
   LEARNING_MATERIAL
   PERMISSION
   STUDENT
+  SUPPORT_TICKET
 }
 
 enum PublishStatus {

@@ -1,5 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { ConflictException, NotFoundException } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { SubmissionsService, SUBMISSION_LOCKED_ERROR_CODE } from './submissions.service';
 import { PrismaService } from '@/prisma/prisma.service';
 import { GamificationService } from '@/gamification/gamification.service';
@@ -42,6 +43,7 @@ describe('SubmissionsService (integrity)', () => {
         SubmissionsService,
         { provide: PrismaService, useValue: prisma },
         { provide: GamificationService, useValue: { awardXpForEvent: jest.fn() } },
+        { provide: CACHE_MANAGER, useValue: { get: jest.fn(), set: jest.fn() } },
       ],
     }).compile();
     service = module.get(SubmissionsService);

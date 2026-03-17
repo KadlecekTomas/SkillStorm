@@ -55,6 +55,50 @@ export type OrgSubjectOption = {
 
 export type OrgSubject = OrgSubjectOption;
 
+export type SupportCategory =
+  | "SUBJECT"
+  | "TEST"
+  | "STUDENT"
+  | "ASSIGNMENT"
+  | "TEST_ASSIGNMENT"
+  | "OTHER";
+
+export type SupportTicketMetadata = {
+  page?: string | null;
+  routePathname?: string | null;
+  queryString?: string | null;
+  componentContext?: string | null;
+  userAgent?: string | null;
+  viewportWidth?: number | null;
+  viewportHeight?: number | null;
+  uiRole?: string | null;
+  clientTimestamp?: string | null;
+};
+
+export type SupportTicket = {
+  id: string;
+  category: string;
+  message: string;
+  page: string | null;
+  metadata?: SupportTicketMetadata | null;
+  status: string;
+  resolvedAt?: string | null;
+  createdAt: string;
+};
+
+export type AdminSupportTicket = SupportTicket & {
+  organizationId: string;
+  organization: {
+    id: string;
+    name: string;
+  };
+  user: {
+    id: string;
+    name: string;
+    email?: string | null;
+  };
+};
+
 /** SubjectLevel — grade enablement record for a Subject. */
 export type SubjectLevel = {
   id: string;
