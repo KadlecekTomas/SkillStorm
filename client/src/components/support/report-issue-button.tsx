@@ -27,12 +27,12 @@ import { cn } from "@/utils/cn";
 import type { SupportCategory } from "@/types";
 
 const CATEGORIES: Array<{ value: SupportCategory; label: string }> = [
-  { value: "SUBJECT", label: "Subject" },
+  { value: "SUBJECT", label: "Předmět" },
   { value: "TEST", label: "Test" },
   { value: "STUDENT", label: "Student" },
-  { value: "ASSIGNMENT", label: "Assignment" },
-  { value: "TEST_ASSIGNMENT", label: "Test assignment" },
-  { value: "OTHER", label: "Other" },
+  { value: "ASSIGNMENT", label: "Zadání" },
+  { value: "TEST_ASSIGNMENT", label: "Přiřazení testu" },
+  { value: "OTHER", label: "Jiné" },
 ];
 
 type ReportIssueButtonProps = {
@@ -96,7 +96,7 @@ export function ReportIssueButton({
           clientTimestamp: new Date().toISOString(),
         },
       });
-      showToastOnce("Support request sent.", { type: "success" });
+      showToastOnce("Požadavek byl odeslán.", { type: "success" });
       setOpen(false);
       reset();
     } catch (error) {
@@ -118,7 +118,7 @@ export function ReportIssueButton({
         onClick={() => setOpen(true)}
       >
         <LifeBuoy className={compact ? "h-3.5 w-3.5" : "h-4 w-4"} />
-        <span>{label ?? (compact ? "Nahlásit problém" : "Report issue")}</span>
+        <span>{label ?? "Nahlásit problém"}</span>
       </Button>
 
       <Dialog
@@ -158,7 +158,7 @@ export function ReportIssueButton({
 
             <div className="space-y-2">
               <label className="text-sm font-medium text-slate-700">
-                Describe the problem
+                Popis problému
               </label>
               <Textarea
                 rows={6}

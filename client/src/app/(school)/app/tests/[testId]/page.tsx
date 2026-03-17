@@ -394,17 +394,6 @@ function TestPageInner({ testId }: { testId: string }): React.JSX.Element {
   }, [subjects, test?.subject]);
 
   useEffect(() => {
-    const length = test?.questions?.length ?? 0;
-    if (IS_DEV) {
-      console.log("[TestDetail] render question length", {
-        testId,
-        questionLength: length,
-        questionIds: (test?.questions ?? []).map((q) => q.id),
-      });
-    }
-  }, [testId, test?.questions]);
-
-  useEffect(() => {
     if (!test) {
       prevQuestionCountRef.current = null;
       return;
@@ -472,7 +461,12 @@ function TestPageInner({ testId }: { testId: string }): React.JSX.Element {
       setTest(data ?? null);
       return data ?? null;
     } catch (e) {
-      if ((e as any)?.name === "AbortError") {
+      if (
+        typeof e === "object" &&
+        e !== null &&
+        "name" in e &&
+        e.name === "AbortError"
+      ) {
         return null;
       }
 
@@ -532,7 +526,6 @@ function TestPageInner({ testId }: { testId: string }): React.JSX.Element {
           order: nextOrder,
         },
       });
-      if (IS_DEV) console.log("[TestDetail] add question response", response);
       if (!response?.id) {
         throw new Error("Backend nevrátil ID vytvořené otázky.");
       }
@@ -540,14 +533,6 @@ function TestPageInner({ testId }: { testId: string }): React.JSX.Element {
       const refreshedQuestions = refreshed?.questions ?? [];
       const refreshedCount = refreshedQuestions.length;
       const containsCreated = refreshedQuestions.some((q) => q.id === response.id);
-      if (IS_DEV) {
-        console.log("[TestDetail] add question verification", {
-          previousCount,
-          refreshedCount,
-          createdQuestionId: response.id,
-          containsCreated,
-        });
-      }
       if (!containsCreated || refreshedCount <= previousCount) {
         throw new Error("Otázka nebyla potvrzena po uložení.");
       }

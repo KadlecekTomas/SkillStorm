@@ -70,29 +70,29 @@ function ContextSummary({ ticket }: { ticket: AdminSupportTicket }) {
   return (
     <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
       <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
-        Context
+        Kontext
       </p>
       <div className="space-y-1 text-xs text-gray-600">
         <p>
-          <span className="font-medium text-gray-700">Route:</span>{" "}
+          <span className="font-medium text-gray-700">Trasa:</span>{" "}
           <span className="font-mono">{buildRoute(ticket) || "—"}</span>
         </p>
         <p>
-          <span className="font-medium text-gray-700">Component:</span>{" "}
+          <span className="font-medium text-gray-700">Komponenta:</span>{" "}
           <span className="font-mono">{context.componentContext || "—"}</span>
         </p>
         <p>
           <span className="font-medium text-gray-700">Viewport:</span> {formatViewport(ticket)}
         </p>
         <p>
-          <span className="font-medium text-gray-700">Browser:</span> {formatBrowser(ticket)}
+          <span className="font-medium text-gray-700">Prohlížeč:</span> {formatBrowser(ticket)}
         </p>
         <p>
-          <span className="font-medium text-gray-700">Submitted by:</span> {ticket.user.name}
+          <span className="font-medium text-gray-700">Nahlásil:</span> {ticket.user.name}
           {context.uiRole ? ` (${context.uiRole})` : ""}
         </p>
         <p>
-          <span className="font-medium text-gray-700">Organization:</span> {ticket.organization.name}
+          <span className="font-medium text-gray-700">Organizace:</span> {ticket.organization.name}
         </p>
       </div>
     </div>
@@ -145,27 +145,27 @@ export default function PlatformSupportPage(): React.JSX.Element {
         <div className="flex items-center gap-2.5">
           <LifeBuoy className="h-5 w-5 text-amber-600" />
           <div>
-            <h1 className="text-lg font-semibold text-gray-900">Support requests</h1>
+            <h1 className="text-lg font-semibold text-gray-900">Support hlášení</h1>
             <p className="text-sm text-gray-500">
-              Lightweight operational inbox for school-reported issues.
+              Přehled otevřených hlášení od uživatelů školních organizací.
             </p>
           </div>
         </div>
         <Button type="button" variant="outline" onClick={() => void load()} disabled={loading}>
           {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-          Refresh
+          Obnovit
         </Button>
       </div>
 
       <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
         <div className="hidden grid-cols-[1.2fr_1fr_0.8fr_2fr_1.2fr_1fr_1fr] gap-3 border-b border-gray-200 px-4 py-3 text-xs font-medium uppercase tracking-wide text-gray-400 lg:grid">
-          <span>Organization</span>
-          <span>User</span>
-          <span>Category</span>
-          <span>Message</span>
-          <span>Page</span>
-          <span>Created</span>
-          <span>Status</span>
+          <span>Organizace</span>
+          <span>Uživatel</span>
+          <span>Kategorie</span>
+          <span>Zpráva</span>
+          <span>Stránka</span>
+          <span>Vytvořeno</span>
+          <span>Stav</span>
         </div>
 
         {loading ? (
@@ -180,8 +180,8 @@ export default function PlatformSupportPage(): React.JSX.Element {
               <Wrench className="h-6 w-6" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-gray-900">No open support tickets.</p>
-              <p className="text-sm text-gray-500">The inbox is empty right now.</p>
+              <p className="text-sm font-semibold text-gray-900">Žádná otevřená hlášení.</p>
+              <p className="text-sm text-gray-500">Ve frontě teď není žádný nevyřešený požadavek.</p>
             </div>
           </div>
         ) : (
@@ -207,7 +207,7 @@ export default function PlatformSupportPage(): React.JSX.Element {
                   <div className="flex gap-2">
                     <Button type="button" size="sm" variant="outline" onClick={() => setSelected(ticket)}>
                       <Eye className="h-4 w-4" />
-                      View
+                      Detail
                     </Button>
                     <Button
                       type="button"
@@ -218,10 +218,10 @@ export default function PlatformSupportPage(): React.JSX.Element {
                       {resolvingId === ticket.id ? (
                         <>
                           <Loader2 className="h-4 w-4 animate-spin" />
-                          Resolving…
+                          Vyřizuji…
                         </>
                       ) : (
-                        "Resolve"
+                        "Vyřešit"
                       )}
                     </Button>
                   </div>
@@ -236,7 +236,7 @@ export default function PlatformSupportPage(): React.JSX.Element {
                     href={`/admin/organizations/${ticket.organizationId}`}
                     className="text-xs font-medium text-violet-700 hover:text-violet-900"
                   >
-                    Open organization
+                    Otevřít organizaci
                   </Link>
                 </div>
               </div>
@@ -255,22 +255,22 @@ export default function PlatformSupportPage(): React.JSX.Element {
           </DialogHeader>
           <div className="space-y-3 text-sm text-slate-700">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Page</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Stránka</p>
               <p className="font-mono">{selected ? buildRoute(selected) : "—"}</p>
             </div>
             {selected && <ContextSummary ticket={selected} />}
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Message</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Zpráva</p>
               <p className="whitespace-pre-wrap">{selected?.message ?? "—"}</p>
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Created</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Vytvořeno</p>
               <p>{selected ? formatDate(selected.createdAt) : "—"}</p>
             </div>
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setSelected(null)}>
-              Close
+              Zavřít
             </Button>
             {selected && (
               <Button
@@ -281,10 +281,10 @@ export default function PlatformSupportPage(): React.JSX.Element {
                 {resolvingId === selected.id ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Resolving…
+                    Vyřizuji…
                   </>
                 ) : (
-                  "Resolve"
+                  "Vyřešit"
                 )}
               </Button>
             )}

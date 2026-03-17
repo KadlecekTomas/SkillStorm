@@ -1649,9 +1649,6 @@ export class TestsService {
     dto: CreateQuestionDto,
     user: JwtPayload,
   ): Promise<unknown> {
-    // Temporary end-to-end trace for addQuestion diagnostics.
-    // eslint-disable-next-line no-console
-    console.log('ADD QUESTION CALLED', { testId, dto });
     const t = await this.getEditableTestFor(user, testId);
 
     // Scope mismatch guard: test's org must match the calling user's org.
@@ -1677,26 +1674,6 @@ export class TestsService {
         correctAnswers: answers.correctAnswers ?? [],
       },
     });
-    // eslint-disable-next-line no-console
-    console.log('QUESTION CREATED WITH SCOPE', {
-      id: q.id,
-      testId: q.testId,
-      org: t.organizationId,
-      paramTestId: testId,
-      resolvedTestId: t.id,
-    });
-    const testQuestionCount = await this.prisma.question.count({
-      where: { testId: t.id },
-    });
-    // eslint-disable-next-line no-console
-    console.log('COUNT AFTER INSERT', testQuestionCount);
-    const addQuestionTrace = `[TRACE][addQuestion] testId=${testId} createdQuestionId=${q.id} createdOrder=${String(
-      q.order,
-    )} countAfterInsert=${testQuestionCount}`;
-    this.logger.log(addQuestionTrace);
-    // Temporary trace for debugging flow visibility in tests/local runs.
-    // eslint-disable-next-line no-console
-    console.log(addQuestionTrace);
     await this.audit({
       userId: user.userId,
       orgId: t.organizationId,
