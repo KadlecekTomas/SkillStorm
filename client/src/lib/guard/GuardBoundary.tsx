@@ -27,7 +27,6 @@ export const GuardBoundary = ({
   const { user, authStatus, isLoggingOut } = useAuth();
   const guard = useGuard(options);
   const router = useRouter();
-  if (isLoggingOut) return null;
 
   const readyMarker = (
     <div
@@ -38,11 +37,9 @@ export const GuardBoundary = ({
   );
 
   useEffect(() => {
-    // ⛔ nikdy neredirectuj během bootstrapu
     if (guard.isLoading) return;
     if (authStatus === "authenticating" || authStatus === "refreshing") return;
 
-    // ✅ pokud je přístup povolen, nic nedělej
     if (guard.allowed) return;
 
     if (AUTH_DEBUG) {
@@ -57,7 +54,6 @@ export const GuardBoundary = ({
       );
     }
 
-    // ❌ nepřihlášen → login
     if (!user && authStatus === "unauthenticated") {
       if (typeof window !== "undefined") {
         storeReturnUrl(window.location.pathname + window.location.search);
@@ -73,7 +69,6 @@ export const GuardBoundary = ({
       return;
     }
 
-    // ⛔ přihlášen, ale nemá oprávnění
     if (guard.reason === "FORBIDDEN") {
       reportForbiddenAccess({
         route: typeof window !== "undefined" ? window.location.pathname : "",
@@ -94,6 +89,9 @@ export const GuardBoundary = ({
     options.requireSchoolWorkspace,
     router,
   ]);
+
+  if (isLoggingOut) return null;
+
   if (guard.isLoading) {
     return (
       loadingFallback ?? (

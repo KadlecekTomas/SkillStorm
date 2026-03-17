@@ -19,7 +19,6 @@ import { audit } from "@/lib/audit/audit.client";
 type AuthEnvelope = {
   user: User;
   org?: OrganizationContext | null;
-  /** Backend /auth/me returns "organization"; store accepts org ?? organization. */
   organization?: OrganizationContext | null;
   roles: OrganizationRole[];
   permissions: PermissionKey[];
@@ -41,16 +40,12 @@ export type UseAuthResult = {
   roles: OrganizationRole[];
   permissions: PermissionKey[];
   context: AuthContext | null;
-  /** True after auth bootstrap has completed (getMe, restore session, or decided unauthenticated). */
   isHydrated: boolean;
   isLoading: boolean;
   isAuthenticated: boolean;
-  /** Auth invariant: logout is a hard boundary. No protected component may render after logout. */
   authPhase: AuthPhase;
   isLoggingOut: boolean;
-  /** True pokud má uživatel alespoň jednu organizaci (membership). Zdroj: /auth/me. */
   hasOrganization: boolean;
-  /** Stav organizace odvozený výhradně z /auth/me. */
   orgState: OrgState;
   authStatus:
     | "anonymous"
@@ -62,15 +57,11 @@ export type UseAuthResult = {
   login: (payload: LoginPayload) => Promise<void>;
   logout: () => Promise<void>;
   syncProfile: (options?: { force?: boolean }) => Promise<AuthEnvelope>;
-  /** Switch active organization by membershipId. New JWT, no reload, clear org caches, navigate to dashboard. */
   switchOrganization: (membershipId: string) => Promise<void>;
-  /** Switch active organization by orgId (e.g. after creating org). Calls POST /auth/use-org, updates token + profile. No redirect. Returns new context on success. */
   switchToOrganizationByOrgId: (orgId: string) => Promise<AuthContext | null>;
 };
 
-
-type AuthResponse = AuthEnvelope & {
-};
+type AuthResponse = AuthEnvelope;
 
 export type LoginPayload = {
   email: string;
@@ -303,7 +294,6 @@ export const useAuth = (): UseAuthResult => {
     [setLoading, setProfile, setHadSession, setAuthStatus],
   );
 
-  // Auth invariant: logout is a hard boundary. No protected component may render after logout.
   const logout = useCallback(async () => {
     beginLogout();
     markLogoutNavigationInProgress();
@@ -377,13 +367,6 @@ export const useAuth = (): UseAuthResult => {
     [org?.id, setLoading, setProfile, router],
   );
 
-  /**
-   * Switch active organization by orgId (e.g. after create-org).
-   * CONTRACT: POST /auth/use-org must return user (with memberships), organization, context.
-   * - If res.user exists: setProfile uses ONLY res.user (no fallback to store).
-   * - If res.user missing: GET /auth/me then setProfile from response.
-   * - Returns context only when context.mode === "organization"; otherwise throws.
-   */
   const switchToOrganizationByOrgId = useCallback(
     async (orgId: string): Promise<AuthContext | null> => {
       const previousOrgId = org?.id ?? null;
@@ -438,8 +421,6 @@ export const useAuth = (): UseAuthResult => {
   const orgState = useMemo(
     () => {
       if (context?.mode === "platform") {
-        // Platform admins nejsou vázaní na konkrétní školu – z pohledu
-        // readiness je platforma vždy „připravená“.
         return "HAS_ORG" as OrgState;
       }
       return deriveOrgState({

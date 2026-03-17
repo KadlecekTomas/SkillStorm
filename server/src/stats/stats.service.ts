@@ -223,8 +223,7 @@ export class StatsService {
         };
       }
 
-      // žádný filtr na submittedAt – chceme současný stav
-      // OPRAVA: počítej všechny submission pokusy (všechny attemptNo), ne jen první
+      // Počítáme aktuální stav napříč všemi pokusy.
       const [approved, rejected, pending, all, maxAgg, totalTests, avgAgg] =
         await this.prisma.$transaction([
           this.prisma.submission.count({
@@ -261,7 +260,7 @@ export class StatsService {
           }),
           this.prisma.test.count({ where: baseTestWhere }),
           this.prisma.submission.aggregate({
-            // průměr jen ze skutečně vyhodnocených (score != null)
+            // Průměr pouze z vyhodnocených submission.
             where: {
               deletedAt: null,
               test: { is: baseTestWhere },
@@ -274,24 +273,16 @@ export class StatsService {
       const avgScoreValue = avgAgg._avg?.score ?? null;
       const lastSubmittedAt = maxAgg._max?.submittedAt ?? null;
 
-      // evaluated = všechny schválené + zamítnuté (všechny attempty)
       const evaluated = approved + rejected;
       const passRateEvaluated = evaluated > 0 ? approved / evaluated : 0;
       const passRateAll = all > 0 ? approved / all : 0;
 
       return {
-        // preference z volání – už bezpečně normalizovaná
         scope: safeScope,
-
-        // základní sumáře
         totalTests,
         counts: { approved, rejected, pending, all },
-
-        // ALIASY pro zpětnou kompatibilitu (na to míří tvoje e2e testy)
         totalSubmissions: safeScope === 'evaluated' ? evaluated : all,
         pendingSubmissions: pending,
-
-        // primární hodnoty
         passRate: safeScope === 'evaluated' ? passRateEvaluated : passRateAll,
         passRateEvaluated,
         passRateAll,
