@@ -30,7 +30,7 @@
 
 ## 2-Minute Guided Flow
 
-### 1. Director / teacher view (about 45 seconds)
+### 1. Director / teacher view 
 
 1. Open `http://localhost:3000/login`.
 2. Log in as `director@zs.demo.local` if you want to show settings + invites, or as `teacher1@zs.demo.local` if you want to go straight to tests.
@@ -51,7 +51,7 @@
    - one assignment is present for the demo class
    - the assignment window is already open
 
-### 2. Student view (about 75 seconds)
+### 2. Student view
 
 1. Log out.
 2. Log in as `student-d@zs.demo.local`.
