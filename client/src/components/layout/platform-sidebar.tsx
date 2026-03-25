@@ -89,6 +89,14 @@ export const PlatformSidebar = (): React.JSX.Element => {
   const pathname = usePathname();
   const { user, logout } = useAuth();
   const displayName = user?.fullName ?? user?.name ?? "Platform Admin";
+  const systemRoleLabel =
+    user?.systemRole === "SUPERADMIN"
+      ? "Superadmin"
+      : user?.systemRole === "SUPPORT"
+        ? "Support"
+        : user?.systemRole === "DEVOPS"
+          ? "DevOps"
+          : "Platform";
   const handleLogout = () => {
     void logout();
     if (typeof window !== "undefined") {
@@ -108,7 +116,7 @@ export const PlatformSidebar = (): React.JSX.Element => {
             <p className="text-sm font-semibold leading-none text-gray-900">
               SkillStorm
             </p>
-            <p className="mt-0.5 text-xs text-gray-500">Platform Admin</p>
+            <p className="mt-0.5 text-xs text-gray-500">Platform workspace</p>
           </div>
         </div>
 
@@ -159,7 +167,7 @@ export const PlatformSidebar = (): React.JSX.Element => {
                 {displayName}
               </p>
               <span className="mt-0.5 inline-block rounded px-1.5 py-0.5 text-xs font-bold uppercase tracking-wide bg-amber-100 text-amber-700">
-                Superadmin
+                {systemRoleLabel}
               </span>
             </div>
           </div>

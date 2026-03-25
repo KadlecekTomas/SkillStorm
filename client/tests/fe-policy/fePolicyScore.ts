@@ -1,6 +1,17 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
+/**
+ * Pomocný soubor pro FE policy report.
+ *
+ * K čemu slouží:
+ * - ukládá výsledky frontend policy kontrol do JSON reportu,
+ * - drží přehled kategorií a jednotlivých checků,
+ * - umožňuje report vynulovat, aktualizovat a na konci shrnout.
+ *
+ * Report je určený hlavně pro interní kontrolu kvality frontendu.
+ * Nejde o produkční logiku aplikace.
+ */
 export type PolicyCategory =
   | "Auth"
   | "RBAC"

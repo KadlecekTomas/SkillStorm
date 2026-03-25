@@ -89,7 +89,7 @@ export class SubmissionsController {
   }
 
   @Get(':id')
-  @Permission(PermissionKey.VIEW_RESULTS, PermissionKey.MANAGE_STUDENTS)
+  @Permission(OrganizationRole.STUDENT, PermissionKey.VIEW_RESULTS, PermissionKey.MANAGE_STUDENTS)
   async findOne(@Param('id') id: string, @Req() req: RequestWithUser) {
     const ctx = await this.orgContext.get(req);
     return ok(this.submissionsService.findOne(id, req.user, ctx));

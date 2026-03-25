@@ -88,6 +88,26 @@ describe("resolvePostAuthTarget", () => {
     expect(result).toBe("/app/settings");
   });
 
+  it("normalizes /app redirect to /app/platform for platform context", () => {
+    const result = resolvePostAuthTarget({
+      authIntent: null,
+      currentPath: "/login",
+      searchParams: searchParams({ from: "/app" }),
+      contextMode: "platform",
+    });
+    expect(result).toBe("/app/platform");
+  });
+
+  it("normalizes school return_to intent to /app/platform for platform context", () => {
+    const result = resolvePostAuthTarget({
+      authIntent: { type: "RETURN_TO", path: "/app/tests" },
+      currentPath: "/login",
+      searchParams: searchParams({}),
+      contextMode: "platform",
+    });
+    expect(result).toBe("/app/platform");
+  });
+
   it("returns null when redirect param equals current path", () => {
     const result = resolvePostAuthTarget({
       authIntent: null,

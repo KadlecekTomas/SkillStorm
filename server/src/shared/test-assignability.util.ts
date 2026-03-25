@@ -8,7 +8,8 @@ export type AssignabilityIssueReason =
   | 'NO_QUESTIONS'
   | 'NO_SCORE'
   | 'NO_CORRECT_ANSWER'
-  | 'INVALID_OPTIONS';
+  | 'INVALID_OPTIONS'
+  | 'NO_TOPIC_ASSIGNMENT';
 
 export type AssignabilityIssue = {
   questionId?: string;
@@ -25,6 +26,7 @@ export type AssignabilityReport = {
     missingCorrectAnswers: number;
     invalidOptions: number;
     zeroPoints: number;
+    noTopicAssignments: number;
   };
 };
 
@@ -70,6 +72,7 @@ export function computeAssignability(
     missingCorrectAnswers: 0,
     invalidOptions: 0,
     zeroPoints: 0,
+    noTopicAssignments: 0,
   };
 
   if (allowedGrades.length === 0) {

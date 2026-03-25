@@ -63,6 +63,9 @@ export type SupportCategory =
   | "TEST_ASSIGNMENT"
   | "OTHER";
 
+export type SupportTicketStatus = "OPEN" | "IN_REVIEW" | "RESOLVED";
+export type SupportTicketPriority = "LOW" | "MEDIUM" | "HIGH";
+
 export type SupportTicketMetadata = {
   page?: string | null;
   routePathname?: string | null;
@@ -81,9 +84,13 @@ export type SupportTicket = {
   message: string;
   page: string | null;
   metadata?: SupportTicketMetadata | null;
-  status: string;
+  status: SupportTicketStatus;
+  priority: SupportTicketPriority;
+  internalNote?: string | null;
+  resolutionNote?: string | null;
   resolvedAt?: string | null;
   createdAt: string;
+  updatedAt: string;
 };
 
 export type AdminSupportTicket = SupportTicket & {
@@ -97,6 +104,16 @@ export type AdminSupportTicket = SupportTicket & {
     name: string;
     email?: string | null;
   };
+  assignedTo?: {
+    id: string;
+    name: string;
+    email?: string | null;
+  } | null;
+  resolvedBy?: {
+    id: string;
+    name: string;
+    email?: string | null;
+  } | null;
 };
 
 /** SubjectLevel — grade enablement record for a Subject. */

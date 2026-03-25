@@ -9,7 +9,7 @@ export type RiskOverviewStudent = {
   averageScorePercent: number;
   lastActivityAt: string | null;
   trend: "UP" | "DOWN" | "STABLE";
-  riskLevel: "NONE" | "MEDIUM" | "HIGH";
+  riskLevel: "LOW" | "MEDIUM" | "HIGH";
   riskFlags: ("LOW_AVERAGE" | "INACTIVE" | "DECLINING")[];
 };
 

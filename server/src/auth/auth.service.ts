@@ -1306,10 +1306,11 @@ export class AuthService {
     // Explicit auth context contract
     // -------------------------
     // Invariant (governance): platform context is determined solely by systemRole.
-    // SUPERADMIN and DEVOPS are always in 'platform' mode, regardless of memberships.
+    // SUPERADMIN, DEVOPS and SUPPORT are always in 'platform' mode, regardless of memberships.
     const isPlatformAdminContext =
       userRow.systemRole === SystemRole.SUPERADMIN ||
-      userRow.systemRole === SystemRole.DEVOPS;
+      userRow.systemRole === SystemRole.DEVOPS ||
+      userRow.systemRole === SystemRole.SUPPORT;
 
     let contextMode: AuthContextMode;
     let contextOrganizationId: string | null;

@@ -9,6 +9,7 @@ import { Alert } from "@/components/ui/alert";
 import { withGuard } from "@/lib/guard/withGuard";
 import { PermissionKey } from "@/types";
 import { useAuth } from "@/lib/guard/useAuth";
+import { formatDate } from "@/lib/format-date";
 
 type AssignmentRow = {
   id: string;
@@ -30,7 +31,13 @@ function AssignmentsPage() {
 
   useEffect(() => {
     fetchWithAuth<AssignmentRow[]>("GET", "/assignments/my")
-      .then((data) => setItems(data ?? []))
+      .then((data) => {
+        const nextItems = data ?? [];
+        nextItems.forEach((item) => {
+          console.log("assignment.openAt raw:", item.openAt);
+        });
+        setItems(nextItems);
+      })
       .catch((e: unknown) => {
         const message = e instanceof Error ? e.message : "Nelze načíst assignmenty";
         setError(message);
@@ -46,8 +53,8 @@ function AssignmentsPage() {
           <Card key={a.id} className="flex items-center justify-between p-4">
             <div>
               <p className="font-semibold">Assignment</p>
-              <p className="text-sm text-slate-600">Open: {new Date(a.openAt).toLocaleString()}</p>
-              <p className="text-sm text-slate-600">Close: {new Date(a.closeAt).toLocaleString()}</p>
+              <p className="text-sm text-slate-600">Open: {formatDate(a.openAt)}</p>
+              <p className="text-sm text-slate-600">Close: {formatDate(a.closeAt)}</p>
             </div>
             <Button
               onClick={() => router.push(`/assignments/${a.id}`)}

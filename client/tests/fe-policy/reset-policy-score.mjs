@@ -1,6 +1,9 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
+/**
+ * Resetuje FE policy report do prázdného výchozího stavu před spuštěním testů.
+ */
 const categories = [
   "Auth",
   "RBAC",

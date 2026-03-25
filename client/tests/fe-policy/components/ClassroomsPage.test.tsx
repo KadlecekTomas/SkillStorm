@@ -71,7 +71,9 @@ describe("ClassroomsPageContent", () => {
   });
 
   it("shows empty state when no classrooms exist", async () => {
-    vi.mocked(fetchWithAuth).mockResolvedValueOnce({ data: [] });
+    vi.mocked(fetchWithAuth)
+      .mockResolvedValueOnce({ data: [] })
+      .mockResolvedValueOnce([]);
 
     render(<ClassroomsPageContent />);
 
@@ -104,6 +106,7 @@ describe("ClassroomsPageContent", () => {
           },
         ],
       })
+      .mockResolvedValueOnce([])
       .mockResolvedValueOnce({
         id: "class-1",
         grade: "GRADE_5",
@@ -129,7 +132,9 @@ describe("ClassroomsPageContent", () => {
   });
 
   it("reloads classrooms when academic year changes", async () => {
-    vi.mocked(fetchWithAuth).mockResolvedValueOnce({ data: [] });
+    vi.mocked(fetchWithAuth)
+      .mockResolvedValueOnce({ data: [] })
+      .mockResolvedValueOnce([]);
 
     const { rerender } = render(<ClassroomsPageContent />);
 
@@ -138,7 +143,7 @@ describe("ClassroomsPageContent", () => {
         "GET",
         "/classrooms",
         expect.objectContaining({
-          query: expect.objectContaining({ yearId: "year-1" }),
+          query: expect.objectContaining({ limit: 20 }),
         }),
       );
     });
@@ -152,11 +157,11 @@ describe("ClassroomsPageContent", () => {
     rerender(<ClassroomsPageContent />);
 
     await waitFor(() => {
-      expect(fetchWithAuth).toHaveBeenCalledWith(
+      expect(fetchWithAuth).toHaveBeenLastCalledWith(
         "GET",
         "/classrooms",
         expect.objectContaining({
-          query: expect.objectContaining({ yearId: "year-2" }),
+          query: expect.objectContaining({ limit: 20 }),
         }),
       );
     });

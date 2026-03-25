@@ -11,6 +11,17 @@ function roundScore(value: number): number {
   return Math.round(value * factor) / factor;
 }
 
+function normalizeBool(value: unknown): boolean | string {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    const v = value.trim().toLowerCase();
+    if (v === 'true') return true;
+    if (v === 'false') return false;
+    return v;
+  }
+  return String(value ?? '').trim().toLowerCase();
+}
+
 function normalizeText(s?: string | null): string | null {
   if (s === undefined || s === null) return null;
   const t = s.trim();
@@ -134,9 +145,9 @@ export function computeScore(
     maxScore += qScore;
 
     if (q.type === QuestionType.TRUE_FALSE) {
-      correct =
-        String(given ?? '').toLowerCase() ===
-        String(correctAnswer ?? '').toLowerCase();
+      const normalizedGiven = normalizeBool(given);
+      const normalizedCorrect = normalizeBool(correctAnswer);
+      correct = normalizedGiven === normalizedCorrect;
       gained = correct ? qScore : 0;
     } else if (q.type === QuestionType.FILL_IN_THE_BLANK) {
       correct =

@@ -1,3 +1,5 @@
+export type TestEditMode = 'FULL' | 'LIMITED' | 'NONE';
+
 export type TeacherQuestionViewDTO = {
   id: string;
   text: string;
@@ -36,4 +38,6 @@ export type TeacherTestViewDTO = {
   } | null;
   questions: TeacherQuestionViewDTO[];
   assignability: unknown;
+  submissionCount: number;
+  editMode: TestEditMode;
 };

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { fetchWithAuth, HttpError } from "@/lib/http/client";
 import { ErrorAlert, InfoAlert, SuccessAlert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/card";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { withGuard } from "@/lib/guard/withGuard";
 import type { OrganizationRole } from "@/types";
+import { formatDate } from "@/lib/format-date";
 
 type Assignment = {
   id: string;
@@ -17,6 +18,15 @@ type Assignment = {
   closeAt: string;
   maxAttempts: number;
   attemptNo?: number;
+};
+
+type AssignmentSummary = {
+  id: string;
+  testId: string;
+  attemptsUsed: number;
+  submissionId: string | null;
+  submittedAt: string | null;
+  effectiveStatus?: string;
 };
 
 type TestQuestion = {
@@ -53,8 +63,10 @@ type ResponsePayload = {
 function AssignmentSubmissionPage() {
   const params = useParams<{ assignmentId: string }>();
   const assignmentId = params.assignmentId;
+  const router = useRouter();
 
   const [assignment, setAssignment] = useState<Assignment | null>(null);
+  const [assignmentSummary, setAssignmentSummary] = useState<AssignmentSummary | null>(null);
   const [test, setTest] = useState<TestDetail | null>(null);
   const [submission, setSubmission] = useState<Submission | null>(null);
   const [answers, setAnswers] = useState<Record<string, string | string[]>>({});
@@ -72,13 +84,23 @@ function AssignmentSubmissionPage() {
 
     const load = async () => {
       try {
-        const assignmentData = await fetchWithAuth<Assignment>("GET", `/assignments/${assignmentId}`);
+        const [assignmentData, assignmentSummaries] = await Promise.all([
+          fetchWithAuth<Assignment>("GET", `/assignments/${assignmentId}`),
+          fetchWithAuth<AssignmentSummary[]>("GET", "/assignments/my").catch(() => [] as AssignmentSummary[]),
+        ]);
         if (!active) return;
         if (!assignmentData) {
           setError("Zadání nebylo nalezeno.");
           return;
         }
+        console.log("assignment.openAt raw:", assignmentData.openAt);
         setAssignment(assignmentData);
+        const summary = (assignmentSummaries ?? []).find((item) => item.id === assignmentId) ?? null;
+        setAssignmentSummary(summary);
+        if (summary?.submissionId) {
+          router.replace(`/app/results/${summary.submissionId}`);
+          return;
+        }
         if (!assignmentData.testId) {
           setError("Zadání nemá přiřazený test.");
           return;
@@ -102,7 +124,7 @@ function AssignmentSubmissionPage() {
     return () => {
       active = false;
     };
-  }, [assignmentId]);
+  }, [assignmentId, router]);
 
   const isReadOnly = submission?.status === "APPROVED" || submission?.status === "REJECTED";
 
@@ -187,11 +209,17 @@ function AssignmentSubmissionPage() {
     if (!submission?.id) return;
     setError(null);
     setSuccess(null);
+    const responses = buildResponses();
+    if (responses.length === 0) {
+      setError("Vyplň alespoň jednu odpověď.");
+      return;
+    }
     setSubmitting(true);
     try {
       const finished = await fetchWithAuth<Submission>(
         "POST",
         `/submissions/${submission.id}/finish`,
+        { body: { responses } },
       );
       setSubmission(finished);
       if (finished.status === "REJECTED") {
@@ -241,23 +269,34 @@ function AssignmentSubmissionPage() {
     return <ErrorAlert title="Chyba" description="Zadání se nepodařilo načíst" />;
   }
 
+  if (assignmentSummary?.submissionId) {
+    return <LoadingSpinner label="Načítám výsledek" />;
+  }
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold">{test.title}</h1>
         {test.description && <p className="text-sm text-slate-600">{test.description}</p>}
         <p className="text-sm text-slate-500">
-          Otevřeno: {new Date(assignment.openAt).toLocaleString()} | Uzavřeno: {new Date(assignment.closeAt).toLocaleString()}
+          Otevřeno: {formatDate(assignment.openAt)} | Uzavřeno: {formatDate(assignment.closeAt)}
         </p>
       </div>
 
       {error && <ErrorAlert title="Chyba" description={error} />}
       {success && <SuccessAlert title="Hotovo" description={success} />}
 
-      {!submission && (
+      {!submission && !assignmentSummary?.submissionId && (assignmentSummary?.attemptsUsed ?? 0) === 0 && (
         <Button onClick={startSubmission} disabled={submitting}>
           {submitting ? "Zakládám submission..." : "Začít pokus"}
         </Button>
+      )}
+
+      {!submission && !assignmentSummary?.submissionId && (assignmentSummary?.attemptsUsed ?? 0) > 0 && (
+        <InfoAlert
+          title="Pokus už existuje"
+          description="Tento assignment už má vytvořený pokus. Obnov stránku nebo otevři výsledek z přehledu zadání."
+        />
       )}
 
       {submission && (
@@ -275,7 +314,7 @@ function AssignmentSubmissionPage() {
             )}
           </div>
           {submission.submittedAt && (
-            <p className="text-sm text-slate-500">Odevzdáno: {new Date(submission.submittedAt).toLocaleString()}</p>
+            <p className="text-sm text-slate-500">Odevzdáno: {formatDate(submission.submittedAt)}</p>
           )}
         </Card>
       )}

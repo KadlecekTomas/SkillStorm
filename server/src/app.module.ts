@@ -48,6 +48,7 @@ import { PlatformModule } from './platform/platform.module';
 import { OrgSubjectModule } from './org-subject/org-subject.module';
 import { OrgContextModule } from './common/org-context/org-context.module';
 import { SupportModule } from './support/support.module';
+import { TestingModule } from './testing/testing.module';
 
 @Module({
   imports: [
@@ -112,6 +113,7 @@ import { SupportModule } from './support/support.module';
     OrgSubjectModule,
     OrgContextModule,
     SupportModule,
+    TestingModule,
   ],
   providers: [
     { provide: APP_INTERCEPTOR, useClass: ResponseEnvelopeInterceptor },

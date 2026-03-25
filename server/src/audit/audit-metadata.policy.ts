@@ -41,6 +41,15 @@ export const AUDIT_METADATA_ALLOWLIST = new Set<string>([
   'category',
   'page',
   'status',
+  'fromStatus',
+  'toStatus',
+  'priority',
+  'assignedToId',
+  'assignedToName',
+  'resolverId',
+  'resolverName',
+  'resolutionNote',
+  'hasInternalNote',
   'resolvedAt',
 ]);
 

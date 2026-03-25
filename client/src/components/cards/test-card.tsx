@@ -49,7 +49,9 @@ export const TestCard = ({ test, assignmentSummary, onView, onAssign, onStatusCh
     router.push(`/app/tests/${test.id}`);
   };
 
-  const handleEdit = () => handleView();
+  const handleEdit = (): void => {
+    router.push(`/app/tests/${test.id}/edit`);
+  };
 
   const handlePublishUnpublish = async () => {
     const next = test.status === "PUBLISHED" ? "DRAFT" : "PUBLISHED";

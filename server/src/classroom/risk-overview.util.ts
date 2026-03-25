@@ -1,6 +1,6 @@
 /**
  * Deterministic Early Warning risk logic. No AI/ML, no new DB.
- * Uses submission scores and dates to compute risk level per student.
+ * Uses submission scores and dates to derive normalized student risk inputs.
  *
  * SCORE CONTRACT:
  *   - score (raw): points earned for a submission (e.g. 2 out of 3)
@@ -10,10 +10,9 @@
  * Callers must pass maxScore per submission. Submissions with maxScore=0
  * are excluded from averageScorePercent (treated as unscored).
  */
+import type { RiskFlag, RiskLevel } from '@/shared/risk-model';
 
 export type RiskTrend = 'UP' | 'DOWN' | 'STABLE';
-export type RiskLevel = 'NONE' | 'MEDIUM' | 'HIGH';
-export type RiskFlag = 'LOW_AVERAGE' | 'INACTIVE' | 'DECLINING';
 
 export type SubmissionInput = {
   score: number | null;
@@ -22,8 +21,6 @@ export type SubmissionInput = {
   maxScore: number;
 };
 
-const LOW_AVERAGE_THRESHOLD_PERCENT = 60; // < 60% → LOW_AVERAGE flag
-const INACTIVE_DAYS_THRESHOLD = 14; // > 14 days without activity → INACTIVE flag
 const DECLINE_THRESHOLD_PCT = 10; // 10 percentage-point drop → DECLINING flag
 
 export type StudentRiskInput = {
@@ -32,12 +29,12 @@ export type StudentRiskInput = {
   now?: Date;
 };
 
-export type StudentRiskResult = {
+export type StudentRiskMetrics = {
   averageScorePercent: number;
   lastActivityAt: string | null;
+  daysSinceLastActivity: number;
   trend: RiskTrend;
-  riskLevel: RiskLevel;
-  riskFlags: RiskFlag[];
+  trendPercent: number;
 };
 
 function daysBetween(a: Date, b: Date): number {
@@ -52,10 +49,10 @@ function toPercent(s: SubmissionInput): number | null {
 }
 
 /**
- * Pure function: compute risk for one student from their submissions.
+ * Pure function: derive normalized metrics for one student from their submissions.
  * All submissions must already be scoped to the relevant academic year.
  */
-export function computeStudentRisk(input: StudentRiskInput): StudentRiskResult {
+export function deriveStudentRiskMetrics(input: StudentRiskInput): StudentRiskMetrics {
   const now = input.now ?? new Date();
 
   // Only submissions with valid score and maxScore contribute to statistics
@@ -78,12 +75,13 @@ export function computeStudentRisk(input: StudentRiskInput): StudentRiskResult {
   // lastActivityAt — most recent submitted submission
   const lastSubmission = sorted[0];
   const lastActivityAt = lastSubmission?.submittedAt?.toISOString() ?? null;
-  const lastActivityDays = lastActivityAt
+  const daysSinceLastActivity = lastActivityAt
     ? daysBetween(now, new Date(lastActivityAt))
     : Infinity;
 
   // Trend: compare newest 2 vs all prior, in percentage space (not raw points)
   let trend: RiskTrend = 'STABLE';
+  let trendPercent = 0;
   if (sorted.length >= 3) {
     const last2 = sorted.slice(0, 2);
     const previous = sorted.slice(2);
@@ -97,6 +95,7 @@ export function computeStudentRisk(input: StudentRiskInput): StudentRiskResult {
       const last2Avg =
         last2Pcts.reduce((s, x) => s + x, 0) / last2Pcts.length;
       const prevAvg = prevPcts.reduce((s, x) => s + x, 0) / prevPcts.length;
+      trendPercent = Math.round((last2Avg - prevAvg) * 100) / 100;
       if (last2Avg < prevAvg - DECLINE_THRESHOLD_PCT) {
         trend = 'DOWN';
       } else if (last2Avg > prevAvg + DECLINE_THRESHOLD_PCT) {
@@ -105,24 +104,13 @@ export function computeStudentRisk(input: StudentRiskInput): StudentRiskResult {
     }
   }
 
-  const isLowAverage = averageScorePercent < LOW_AVERAGE_THRESHOLD_PERCENT;
-  const isInactive = lastActivityDays > INACTIVE_DAYS_THRESHOLD;
-  const isDeclining = trend === 'DOWN';
-
-  const riskFlags: RiskFlag[] = [];
-  if (isLowAverage) riskFlags.push('LOW_AVERAGE');
-  if (isInactive) riskFlags.push('INACTIVE');
-  if (isDeclining) riskFlags.push('DECLINING');
-
-  const flagCount = riskFlags.length;
-  const riskLevel: RiskLevel =
-    flagCount >= 2 ? 'HIGH' : flagCount === 1 ? 'MEDIUM' : 'NONE';
-
   return {
     averageScorePercent: Math.round(averageScorePercent * 100) / 100,
     lastActivityAt,
+    daysSinceLastActivity,
     trend,
-    riskLevel,
-    riskFlags,
+    trendPercent,
   };
 }
+
+export type { RiskFlag, RiskLevel };

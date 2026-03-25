@@ -9,6 +9,7 @@ import { ErrorAlert } from "@/components/ui/alert";
 import { withGuard } from "@/lib/guard/withGuard";
 import { PermissionKey } from "@/types";
 import { useAuth } from "@/lib/guard/useAuth";
+import { formatDate } from "@/lib/format-date";
 
 type AssignmentRow = {
   id: string;
@@ -19,7 +20,16 @@ type AssignmentRow = {
   closeAt: string;
   maxAttempts: number;
   attemptNo: number;
+  attemptsUsed: number;
+  submissionId: string | null;
 };
+
+function assignmentTargetHref(assignment: AssignmentRow): string {
+  if (assignment.submissionId || assignment.attemptsUsed > 0) {
+    return `/app/results/${assignment.submissionId ?? assignment.id}`;
+  }
+  return `/app/assignments/${assignment.id}`;
+}
 
 function AssignmentsPage() {
   const [items, setItems] = useState<AssignmentRow[]>([]);
@@ -30,7 +40,13 @@ function AssignmentsPage() {
 
   useEffect(() => {
     fetchWithAuth<AssignmentRow[]>("GET", "/assignments/my")
-      .then((data) => setItems(data ?? []))
+      .then((data) => {
+        const nextItems = data ?? [];
+        nextItems.forEach((item) => {
+          console.log("assignment.openAt raw:", item.openAt);
+        });
+        setItems(nextItems);
+      })
       .catch((e: unknown) => {
         const message = e instanceof Error ? e.message : "Nelze načíst assignmenty";
         setError(message);
@@ -46,15 +62,15 @@ function AssignmentsPage() {
           <Card key={a.id} className="flex items-center justify-between p-4">
             <div>
               <p className="font-semibold">Assignment</p>
-              <p className="text-sm text-slate-600">Open: {new Date(a.openAt).toLocaleString()}</p>
-              <p className="text-sm text-slate-600">Close: {new Date(a.closeAt).toLocaleString()}</p>
+              <p className="text-sm text-slate-600">Open: {formatDate(a.openAt)}</p>
+              <p className="text-sm text-slate-600">Close: {formatDate(a.closeAt)}</p>
             </div>
             <Button
-              onClick={() => router.push(`/app/assignments/${a.id}`)}
+              onClick={() => router.push(assignmentTargetHref(a))}
               disabled={!isStudent}
               title={isStudent ? "" : "Pouze student může odevzdat assignment"}
             >
-              Otevřít test
+              {a.submissionId || a.attemptsUsed > 0 ? "Zobrazit výsledek" : "Otevřít test"}
             </Button>
           </Card>
         ))}

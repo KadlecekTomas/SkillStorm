@@ -4,60 +4,27 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/utils/cn";
 import { ExternalLink } from "lucide-react";
-import {
-  calculateStudentRisk,
-  getClassStats,
-  getPrimaryDriver,
-  PRIMARY_DRIVER_LABELS,
-  type RiskLevel,
-  type StudentRiskResult,
-} from "@/utils/risk-engine";
+import type { RiskOverviewStudent } from "@/hooks/use-classroom-risk-overview";
 
 export type StudentRiskRow = {
   id: string;
   name: string;
-  overallPercent: number;
-  worstTopic: string | null;
-  /** Optional worst-topic success rate for risk scoring. */
-  worstTopicPercent?: number | null;
-  trend: "up" | "down" | "same";
-  /** Optional numeric trend in percent points (e.g. -15). */
-  trendPercent?: number | null;
-  attempts: number;
+  averageScorePercent: number;
+  trend: RiskOverviewStudent["trend"];
+  riskLevel: RiskOverviewStudent["riskLevel"];
+  riskFlags: RiskOverviewStudent["riskFlags"];
+  lastActivityAt: string | null;
   profileHref?: string | null;
 };
 
-export type { RiskLevel };
-
-const RISK_THRESHOLD = 60;
+export type RiskLevel = RiskOverviewStudent["riskLevel"];
 
 type StudentRiskRadarProps = {
   students: StudentRiskRow[];
 };
-
-function getStudentRisk(
-  s: StudentRiskRow,
-  classAverageAttempts: number,
-  classStats: { classAveragePercent: number; classStdDeviation: number },
-): StudentRiskResult {
-  return calculateStudentRisk({
-    overallPercent: s.overallPercent,
-    ...(s.trendPercent != null && { trendPercent: s.trendPercent }),
-    trend: s.trend,
-    attempts: s.attempts,
-    ...(classAverageAttempts > 0 && { classAverageAttempts }),
-    ...(s.worstTopicPercent != null && { weakTopicPercent: s.worstTopicPercent }),
-    ...(s.worstTopic != null && { weakTopicName: s.worstTopic }),
-    classAveragePercent: classStats.classAveragePercent,
-    ...(classStats.classStdDeviation > 0 && {
-      classStdDeviation: classStats.classStdDeviation,
-    }),
-  });
-}
-
-function trendLabel(trend: "up" | "down" | "same"): string {
-  if (trend === "up") return "↑";
-  if (trend === "down") return "↓";
+function trendLabel(trend: RiskOverviewStudent["trend"]): string {
+  if (trend === "UP") return "↑";
+  if (trend === "DOWN") return "↓";
   return "—";
 }
 
@@ -74,17 +41,27 @@ function riskLabel(level: RiskLevel): string {
 }
 
 export function StudentRiskRadar({ students }: StudentRiskRadarProps): React.JSX.Element {
-  const classAverageAttempts =
-    students.length > 0
-      ? students.reduce((sum, s) => sum + s.attempts, 0) / students.length
-      : 0;
-  const classStats = getClassStats(students.map((s) => s.overallPercent));
+  const severity = { HIGH: 0, MEDIUM: 1, LOW: 2 } as const;
+  const sorted = [...students].sort((a, b) => {
+    if (severity[a.riskLevel] !== severity[b.riskLevel]) {
+      return severity[a.riskLevel] - severity[b.riskLevel];
+    }
+    return a.averageScorePercent - b.averageScorePercent;
+  });
 
-  const withScores = students.map((s) => ({
-    student: s,
-    risk: getStudentRisk(s, classAverageAttempts, classStats),
-  }));
-  const sorted = [...withScores].sort((a, b) => b.risk.score - a.risk.score);
+  const formatDate = (iso: string | null): string => {
+    if (!iso) return "—";
+    return new Date(iso).toLocaleDateString("cs-CZ", {
+      day: "numeric",
+      month: "short",
+    });
+  };
+
+  const flagLabel: Record<RiskOverviewStudent["riskFlags"][number], string> = {
+    LOW_AVERAGE: "Nízký průměr",
+    INACTIVE: "Neaktivita",
+    DECLINING: "Klesající trend",
+  };
 
   return (
     <section aria-label="Žáci v riziku">
@@ -98,36 +75,27 @@ export function StudentRiskRadar({ students }: StudentRiskRadarProps): React.JSX
               <tr className="border-b border-slate-100 text-left text-xs font-medium uppercase text-slate-500">
                 <th className="w-10 px-4 py-3" aria-label="Riziko" />
                 <th className="px-4 py-3">Žák</th>
-                <th className="px-4 py-3 text-right">Celková %</th>
-                <th className="px-4 py-3">Nejslabší téma</th>
+                <th className="px-4 py-3 text-right">Průměr</th>
                 <th className="px-4 py-3 text-right">Trend</th>
-                <th className="px-4 py-3 text-right">Pokusy</th>
+                <th className="px-4 py-3">Signály</th>
+                <th className="px-4 py-3">Aktivita</th>
                 <th className="w-24 px-4 py-3" />
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {sorted.map(({ student: s, risk }) => {
-                const primary = getPrimaryDriver(risk.components);
-                const primaryLine =
-                  primary != null ? `Hlavní faktor: ${PRIMARY_DRIVER_LABELS[primary]}` : null;
+              {sorted.map((s) => {
                 const tooltip = [
-                  `${riskLabel(risk.level)} (skóre ${risk.score})`,
-                  primaryLine,
-                  ...(risk.reasons.length > 0 ? risk.reasons : []),
-                ]
-                  .filter(Boolean)
-                  .join("\n");
+                  `Riziko: ${riskLabel(s.riskLevel)}`,
+                  ...s.riskFlags.map((flag) => flagLabel[flag]),
+                ].join("\n");
                 return (
                   <tr
                     key={s.id}
-                    className={cn(
-                      "text-slate-700",
-                      s.overallPercent < RISK_THRESHOLD && "bg-red-50/50",
-                    )}
+                    className="text-slate-700"
                   >
                     <td className="px-4 py-3" title={tooltip}>
                       <span
-                        className={cn("inline-block h-2.5 w-2.5 rounded-full", riskDotColor(risk.level))}
+                        className={cn("inline-block h-2.5 w-2.5 rounded-full", riskDotColor(s.riskLevel))}
                         aria-hidden
                       />
                     </td>
@@ -136,19 +104,23 @@ export function StudentRiskRadar({ students }: StudentRiskRadarProps): React.JSX
                       <span
                         className={cn(
                           "font-medium",
-                          s.overallPercent >= 80 && "text-emerald-600",
-                          s.overallPercent >= 60 && s.overallPercent < 80 && "text-amber-600",
-                          s.overallPercent < 60 && "text-red-600",
+                          s.averageScorePercent >= 80 && "text-emerald-600",
+                          s.averageScorePercent >= 60 && s.averageScorePercent < 80 && "text-amber-600",
+                          s.averageScorePercent < 60 && "text-red-600",
                         )}
                       >
-                        {Math.round(s.overallPercent)} %
+                        {Math.round(s.averageScorePercent)} %
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-slate-600">{s.worstTopic ?? "—"}</td>
                     <td className="px-4 py-3 text-right text-slate-600">
                       {trendLabel(s.trend)}
                     </td>
-                    <td className="px-4 py-3 text-right">{s.attempts}</td>
+                    <td className="px-4 py-3 text-slate-600">
+                      {s.riskFlags.length > 0
+                        ? s.riskFlags.map((flag) => flagLabel[flag]).join(", ")
+                        : "—"}
+                    </td>
+                    <td className="px-4 py-3 text-slate-600">{formatDate(s.lastActivityAt)}</td>
                     <td className="px-4 py-3">
                       {s.profileHref && (
                         <Button variant="ghost" size="sm" asChild>

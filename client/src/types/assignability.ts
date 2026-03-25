@@ -8,7 +8,8 @@ export type AssignabilityIssueReason =
   | "NO_QUESTIONS"
   | "NO_SCORE"
   | "NO_CORRECT_ANSWER"
-  | "INVALID_OPTIONS";
+  | "INVALID_OPTIONS"
+  | "NO_TOPIC_ASSIGNMENT";
 
 export type AssignabilityIssue = {
   questionId?: string;

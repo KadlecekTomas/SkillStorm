@@ -1480,7 +1480,7 @@ export function ClassroomsPageContent(): React.JSX.Element {
                       <p className="text-sm text-slate-500">Načítám přehled…</p>
                     ) : riskOverview && riskOverview.students.length > 0 ? (
                       (() => {
-                        const atRisk = riskOverview.students.filter((s) => s.riskLevel !== "NONE");
+                        const atRisk = riskOverview.students.filter((s) => s.riskLevel !== "LOW");
                         if (atRisk.length === 0) {
                           return (
                             <p className="rounded-2xl border border-slate-100 bg-green-50/80 px-4 py-3 text-sm text-green-800">
@@ -1528,12 +1528,12 @@ export function ClassroomsPageContent(): React.JSX.Element {
                                       <Badge
                                         variant="neutral"
                                         className={cn(
-                                          s.riskLevel === "NONE" && "bg-green-100 text-green-800 border-green-200",
+                                          s.riskLevel === "LOW" && "bg-green-100 text-green-800 border-green-200",
                                           s.riskLevel === "MEDIUM" && "bg-amber-100 text-amber-800 border-amber-200",
                                           s.riskLevel === "HIGH" && "bg-red-100 text-red-800 border-red-200",
                                         )}
                                       >
-                                        {s.riskLevel === "NONE" && "Bez rizika"}
+                                        {s.riskLevel === "LOW" && "Nízké"}
                                         {s.riskLevel === "MEDIUM" && "Střední"}
                                         {s.riskLevel === "HIGH" && "Vysoké"}
                                       </Badge>

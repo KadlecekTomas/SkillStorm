@@ -24,6 +24,7 @@ import {
   getOrgVersion,
 } from '@/shared/cache/org-cache.utils';
 import type { StatsOverviewResponse } from './dto/overview.dto';
+import { RiskService } from '@/risk/risk.service';
 
 const DASHBOARD_SUBMISSION_LIMIT = 2_000;
 const DIRECTOR_DASHBOARD_CACHE_TTL_MS = 30_000;
@@ -38,9 +39,23 @@ export function invalidateDirectorDashboardCache(organizationId: string): void {
 
 @Injectable()
 export class StatsService {
+  /**
+   * Centrální service pro dashboardové statistiky a přehledy podle role.
+   *
+   * Soustřeďuje:
+   * - organizační overview,
+   * - studentský dashboard,
+   * - director dashboard,
+   * - pomocné kontroly scope a membershipu,
+   * - jednoduchou cache pro dražší agregace.
+   *
+   * Soubor je větší záměrně: drží statistickou logiku pohromadě na jednom místě,
+   * aby výpočty nad submissions, testy a rolemi zůstaly konzistentní.
+   */
   constructor(
     private prisma: PrismaService,
     @Inject(CACHE_MANAGER) private cache: Cache,
+    private readonly riskService: RiskService,
   ) {}
 
   // ----- Audit helper --------------------------------------------------------
@@ -97,6 +112,12 @@ export class StatsService {
 
   private anonymizeId(value: string) {
     return createHash('sha256').update(value).digest('hex').slice(0, 12);
+  }
+
+  private daysSince(date: Date | null, now: Date): number {
+    if (!date) return Number.POSITIVE_INFINITY;
+    const ms = Math.abs(now.getTime() - date.getTime());
+    return Math.floor(ms / (24 * 60 * 60 * 1000));
   }
 
   private getDirectorDashboardCache<T>(organizationId: string): T | null {
@@ -568,11 +589,11 @@ export class StatsService {
             ? Math.round((stats.points / stats.maxPoints) * 10000) / 100
             : null;
         const weekSubs = classWeekCount.get(c.id) ?? 0;
-        const riskLevel: 'NONE' | 'MEDIUM' | 'HIGH' =
-          weekSubs === 0 && !stats ? 'HIGH'
-          : avgScore !== null && avgScore < 50 ? 'HIGH'
-          : avgScore !== null && avgScore < 70 ? 'MEDIUM'
-          : 'NONE';
+        const riskLevel = this.riskService.computeStudentRisk({
+          averageScorePercent: avgScore ?? 0,
+          daysSinceLastActivity: this.daysSince(stats?.lastAt ?? null, now),
+          trendPercent: 0,
+        });
         return {
           id: c.id,
           label: c.label ?? `${c.grade}.${c.section}`,
@@ -630,14 +651,18 @@ export class StatsService {
       }))
       .sort((a, b) => b.submissionsThisWeek - a.submissionsThisWeek);
 
-    // ── At-risk students: weighted avg per studentId derived from allClassSubs ──
+    // ── At-risk students: unified risk model over weighted score + inactivity ──
     // studentScoreMap was built in the allClassSubs loop above.
-    // Threshold: < 70% weighted average → at risk.
-    const AT_RISK_THRESHOLD_PCT = 70;
     const riskMembershipIds = Array.from(studentScoreMap.entries())
       .filter(([, v]) => {
         if (v.maxPoints <= 0) return false;
-        return (v.points / v.maxPoints) * 100 < AT_RISK_THRESHOLD_PCT;
+        return (
+          this.riskService.computeStudentRisk({
+            averageScorePercent: (v.points / v.maxPoints) * 100,
+            daysSinceLastActivity: this.daysSince(v.lastAt, now),
+            trendPercent: 0,
+          }) !== 'LOW'
+        );
       })
       .map(([studentId]) => studentId);
 
@@ -675,7 +700,16 @@ export class StatsService {
     );
 
     const atRiskStudents = Array.from(studentScoreMap.entries())
-      .filter(([, v]) => v.maxPoints > 0 && (v.points / v.maxPoints) * 100 < AT_RISK_THRESHOLD_PCT)
+      .filter(([, v]) => {
+        if (v.maxPoints <= 0) return false;
+        return (
+          this.riskService.computeStudentRisk({
+            averageScorePercent: (v.points / v.maxPoints) * 100,
+            daysSinceLastActivity: this.daysSince(v.lastAt, now),
+            trendPercent: 0,
+          }) !== 'LOW'
+        );
+      })
       .sort((a, b) => (a[1].points / a[1].maxPoints) - (b[1].points / b[1].maxPoints))
       .slice(0, 10)
       .map(([studentId, v]) => ({

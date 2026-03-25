@@ -12,6 +12,28 @@ export function isPlatformAdmin(user: User | null | undefined): boolean {
   return user.systemRole === "SUPERADMIN" || user.isPlatformAdmin === true;
 }
 
+/** Platform read access — SUPERADMIN | SUPPORT | DEVOPS | delegated platform admin. */
+export function canAccessPlatform(user: User | null | undefined): boolean {
+  if (!user) return false;
+  return (
+    user.systemRole === "SUPERADMIN" ||
+    user.systemRole === "SUPPORT" ||
+    user.systemRole === "DEVOPS" ||
+    user.isPlatformAdmin === true
+  );
+}
+
+/** Platform mutations remain restricted to SUPERADMIN. */
+export function canMutatePlatform(user: User | null | undefined): boolean {
+  if (!user) return false;
+  return user.systemRole === "SUPERADMIN";
+}
+
+export function canTriageSupport(user: User | null | undefined): boolean {
+  if (!user) return false;
+  return user.systemRole === "SUPERADMIN" || user.systemRole === "SUPPORT";
+}
+
 export const derivePermissions = (user: User | null): PermissionKey[] => {
   if (!user) return [];
 
@@ -39,7 +61,13 @@ const PLATFORM_HOME = "/app/platform";
 
 export const getRoleHomePath = (user: User | null): string => {
   if (!user) return roleHome.DEFAULT;
-  if (user.systemRole === "SUPERADMIN") return PLATFORM_HOME;
+  if (
+    user.systemRole === "SUPERADMIN" ||
+    user.systemRole === "SUPPORT" ||
+    user.systemRole === "DEVOPS"
+  ) {
+    return PLATFORM_HOME;
+  }
   const activeMembership =
     user.memberships?.find(
       (membership) => membership.organizationId === user.organizationId,

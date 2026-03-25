@@ -28,7 +28,8 @@ import {
 } from '@prisma/client';
 import { hasAtLeastRole } from '@/shared/access.utils';
 import { AuditService } from '@/audit/audit.service';
-import { computeStudentRisk } from './risk-overview.util';
+import { RiskService } from '@/risk/risk.service';
+import { deriveStudentRiskMetrics } from './risk-overview.util';
 import type { ClassroomRiskOverviewResponseDto, ClassroomRiskOverviewStudentDto } from './dto/risk-overview.dto';
 import type {
   SubjectPerformanceResponseDto,
@@ -72,6 +73,7 @@ export class ClassSectionsService {
     private prisma: PrismaService,
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
     private readonly auditService: AuditService,
+    private readonly riskService: RiskService,
   ) {}
 
   private async getCurrentAcademicYear(orgId: string) {
@@ -891,6 +893,13 @@ export class ClassSectionsService {
       take: Math.min(5000, safeLimit * 50),
     });
 
+    console.log('RISK INPUT:', {
+      classroomId,
+      classYearId: classSection.yearId,
+      membershipIds,
+      submissions,
+    });
+
     const byMembershipId = new Map<
       string,
       { score: number | null; submittedAt: Date | null; maxScore: number }[]
@@ -911,9 +920,26 @@ export class ClassSectionsService {
       const displayName =
         student.membership?.user?.name?.trim() || 'Žák';
       const rawSubs = byMembershipId.get(membershipId) ?? [];
-      const risk = computeStudentRisk({
+      const risk = deriveStudentRiskMetrics({
         displayName,
         submissions: rawSubs,
+      });
+      const riskInput = {
+        averageScorePercent: risk.averageScorePercent,
+        daysSinceLastActivity: risk.daysSinceLastActivity,
+        trendPercent: risk.trendPercent,
+      };
+      console.log('RISK COMPUTED:', {
+        classroomId,
+        membershipId,
+        studentId: student.id,
+        displayName,
+        earnedPoints: rawSubs.map((submission) => submission.score),
+        maxPoints: rawSubs.map((submission) => submission.maxScore),
+        score: risk.averageScorePercent,
+        submissions: rawSubs,
+        averageScorePercent: risk.averageScorePercent,
+        finalRiskFlags: this.riskService.getStudentRiskFlags(riskInput),
       });
       students.push({
         studentId: student.id,
@@ -921,8 +947,8 @@ export class ClassSectionsService {
         averageScorePercent: risk.averageScorePercent,
         lastActivityAt: risk.lastActivityAt,
         trend: risk.trend,
-        riskLevel: risk.riskLevel,
-        riskFlags: risk.riskFlags,
+        riskLevel: this.riskService.computeStudentRisk(riskInput),
+        riskFlags: this.riskService.getStudentRiskFlags(riskInput),
       });
     }
 

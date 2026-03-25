@@ -7,7 +7,7 @@ import { PlatformMainLayout } from "@/components/layout/platform-main-layout";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/use-auth";
 import { isLogoutNavigationInProgress, storeReturnUrl } from "@/lib/auth-session";
-import { isPlatformAdmin } from "@/utils/permissions";
+import { canAccessPlatform } from "@/utils/permissions";
 
 const PLATFORM_FORBIDDEN = "/app/platform/forbidden";
 const PLATFORM_FALLBACK = "/app";
@@ -76,7 +76,7 @@ export default function PlatformGroupLayout({
   const router = useRouter();
   const pathname = usePathname();
   const { isAuthenticated, isHydrated, isLoggingOut, user } = useAuth();
-  const allowed = user != null && isPlatformAdmin(user);
+  const allowed = user != null && canAccessPlatform(user);
   const isForbiddenPage = pathname === PLATFORM_FORBIDDEN;
 
   useSchoolContextLeakDetector();

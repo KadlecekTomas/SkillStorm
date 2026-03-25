@@ -62,7 +62,7 @@ export class TopicsController {
   // BY SUBJECT – TAKY PŘED :id
   // =======================
   @Get('/by-subject/:subjectId')
-  @Permission(PermissionKey.MANAGE_TEACHERS)
+  @Permission(PermissionKey.CREATE_TEST)
   @ApiOperation({ summary: 'TopicLevel podle Subject ID' })
   @CacheTTL(0)
   getBySubject(

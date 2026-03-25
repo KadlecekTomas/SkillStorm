@@ -40,25 +40,31 @@ export default function LoginPage(): JSX.Element {
   return (
     <div className="space-y-6">
       <div>
-        <p className="text-sm font-medium uppercase tracking-wide text-slate-400">
-          Welcome back
-        </p>
         <h1 className="text-2xl font-semibold text-slate-900">
-          Sign in to SkillStorm
+          Přihlášení do EduTo
         </h1>
         <p className="text-sm text-slate-500">
-          Use your EduTo credentials to access the unified dashboard.
+          Přihlaste se pomocí svého účtu.
         </p>
       </div>
+
       <AuthForm key="login" mode="login" />
+
       <p className="text-center text-sm text-slate-500">
-        <Link href="/reset-password" className="font-medium text-slate-700 underline hover:text-slate-900">
+        <Link
+          href="/reset-password"
+          className="font-medium text-slate-700 underline hover:text-slate-900"
+        >
           Zapomněli jste heslo?
         </Link>
       </p>
+
       <p className="text-center text-sm text-slate-500">
         Nemáte účet?{" "}
-        <Link href={registerHref} className="font-medium text-slate-700 underline hover:text-slate-900">
+        <Link
+          href={registerHref}
+          className="font-medium text-slate-700 underline hover:text-slate-900"
+        >
           Zaregistrujte se
         </Link>
       </p>

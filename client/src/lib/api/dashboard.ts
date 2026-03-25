@@ -123,7 +123,7 @@ export interface DirectorDashboardResponse {
     avgScore: number | null;
     submissionsThisWeek: number;
     lastActivityAt: string | null;
-    riskLevel: "NONE" | "MEDIUM" | "HIGH";
+    riskLevel: "LOW" | "MEDIUM" | "HIGH";
   }>;
   teachers: Array<{
     membershipId: string;

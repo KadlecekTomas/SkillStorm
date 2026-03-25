@@ -72,6 +72,28 @@ describe('submission-scoring (determinism)', () => {
     expect(decimals.length).toBeLessThanOrEqual(4);
   });
 
+  it('evaluates TRUE_FALSE answers correctly with string/boolean normalization', () => {
+    const tf = (givenText: string, correctAnswer: string): boolean => {
+      const q: QuestionForScoring[] = [{ id: 'q', type: QuestionType.TRUE_FALSE, correctAnswer, correctAnswers: null, score: 1 }];
+      const r: ResponseForScoring[] = [{ id: 'r', questionId: 'q', givenText }];
+      const result = computeScore(q, r);
+      return result.results[0]!.correct === true;
+    };
+
+    // string "true" vs stored correctAnswer "true"
+    expect(tf('true', 'true')).toBe(true);
+    // string "false" vs stored correctAnswer "false"
+    expect(tf('false', 'false')).toBe(true);
+    // case insensitive
+    expect(tf('TRUE', 'true')).toBe(true);
+    expect(tf('True', 'true')).toBe(true);
+    // wrong answer
+    expect(tf('false', 'true')).toBe(false);
+    expect(tf('true', 'false')).toBe(false);
+    // empty answer
+    expect(tf('', 'true')).toBe(false);
+  });
+
   it('unscorable questions are excluded from score', () => {
     const withUnscorable: QuestionForScoring[] = [
       ...questions,

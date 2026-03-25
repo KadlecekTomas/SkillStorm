@@ -51,7 +51,7 @@ import {
 } from '@/shared/org-readiness-v2';
 import { createOrgReadinessError } from '@/shared/errors/org-readiness.error';
 import { OrgOperationType } from '@/common/decorators/org-operation.decorator';
-import type { TeacherTestViewDTO } from './dto/teacher-test-view.dto';
+import type { TeacherTestViewDTO, TestEditMode } from './dto/teacher-test-view.dto';
 import type { StudentTestViewDTO } from './dto/student-test-view.dto';
 import { assertTenantWhere, withOrg } from '@/common/prisma/tenant-scope';
 import type { OrgContext } from '@/common/org-context/org-context.types';
@@ -205,6 +205,25 @@ export class TestsService {
         },
       },
       questions: true,
+      _count: {
+        select: {
+          submissions: true,
+        },
+      },
+      assignments: {
+        select: {
+          id: true,
+          topicLevelId: true,
+          isPrimary: true,
+          topicLevel: {
+            select: {
+              id: true,
+              catalogTopic: { select: { id: true, name: true } },
+              subjectLevel: { select: { grade: true } },
+            },
+          },
+        },
+      },
     });
   }
 
@@ -260,11 +279,67 @@ export class TestsService {
   private mapTeacherView(
     test: unknown,
     assignability: AssignabilityReport,
+    editMode: TestEditMode,
   ): TeacherTestViewDTO {
+    const teacherTest = test as Record<string, unknown> & {
+      _count?: { submissions?: number };
+    };
     return {
-      ...(test as Record<string, unknown>),
+      ...teacherTest,
+      submissionCount: teacherTest._count?.submissions ?? 0,
+      editMode,
       assignability,
     } as TeacherTestViewDTO;
+  }
+
+  private async testHasSubmissions(testId: string): Promise<boolean> {
+    const count = await this.prisma.submission.count({
+      where: {
+        testId,
+        deletedAt: null,
+      },
+    });
+    return count > 0;
+  }
+
+  private async resolveTestEditMode(testId: string): Promise<TestEditMode> {
+    const hasSubmissions = await this.testHasSubmissions(testId);
+    return hasSubmissions ? 'LIMITED' : 'FULL';
+  }
+
+  async canEditTest(testId: string, user: JwtPayload): Promise<TestEditMode> {
+    const test = await this.prisma.test.findUnique({
+      where: { id: testId },
+      select: {
+        id: true,
+        organizationId: true,
+        creatorId: true,
+        deletedAt: true,
+      },
+    });
+    if (!test || test.deletedAt) {
+      throw new NotFoundException('Test nenalezen');
+    }
+
+    if (
+      user.systemRole !== SystemRole.SUPERADMIN &&
+      user.organizationId !== test.organizationId
+    ) {
+      throw new NotFoundException('Test nenalezen');
+    }
+
+    await this.ensureCanEditTest(user, test);
+    return this.resolveTestEditMode(testId);
+  }
+
+  private async ensureQuestionMutationsAllowed(testId: string): Promise<void> {
+    const editMode = await this.resolveTestEditMode(testId);
+    if (editMode !== 'FULL') {
+      throw new ConflictException({
+        code: 'TEST_QUESTIONS_LOCKED',
+        message: 'Test has submissions. Question editing is locked.',
+      });
+    }
   }
 
   private mapStudentView(test: unknown): StudentTestViewDTO {
@@ -601,25 +676,34 @@ export class TestsService {
   private async computeTestAssignability(
     testId: string,
   ): Promise<AssignabilityReport> {
-    const test = await this.prisma.test.findUnique({
-      where: { id: testId },
-      select: {
-        allowedGrades: true,
-        questions: {
-          select: {
-            id: true,
-            type: true,
-            correctAnswer: true,
-            correctAnswers: true,
-            score: true,
-            options: {
-              select: { text: true },
+    const [test, topicCount] = await Promise.all([
+      this.prisma.test.findUnique({
+        where: { id: testId },
+        select: {
+          allowedGrades: true,
+          questions: {
+            select: {
+              id: true,
+              type: true,
+              correctAnswer: true,
+              correctAnswers: true,
+              score: true,
+              options: {
+                select: { text: true },
+              },
             },
           },
         },
-      },
-    });
-    return computeAssignability(test?.questions ?? [], test?.allowedGrades ?? []);
+      }),
+      this.prisma.testAssignment.count({ where: { testId } }),
+    ]);
+    const report = computeAssignability(test?.questions ?? [], test?.allowedGrades ?? []);
+    if (topicCount === 0) {
+      report.issues.push({ reason: 'NO_TOPIC_ASSIGNMENT' });
+      report.reasons.noTopicAssignments = 1;
+      report.isAssignable = false;
+    }
+    return report;
   }
 
   private throwIfNotAssignable(report: AssignabilityReport): void {
@@ -627,7 +711,7 @@ export class TestsService {
       throw new ConflictException({
         errorCode: 'TEST_NOT_ASSIGNABLE',
         code: 'TEST_NOT_ASSIGNABLE',
-        message: 'Test is not assignable',
+        message: 'Test nemá přiřazené téma nebo není připraven k publikaci',
         reasons: report.reasons,
         details: report,
       });
@@ -678,6 +762,31 @@ export class TestsService {
         ),
       });
     });
+
+    // Auto-create TestAssignment rows when a catalogTopicId is provided.
+    if (dto.catalogTopicId) {
+      const topicLevels = await this.prisma.topicLevel.findMany({
+        where: {
+          catalogTopicId: dto.catalogTopicId,
+          subjectLevel: { subjectId: dto.subjectId },
+        },
+        select: { id: true },
+      });
+      if (topicLevels.length > 0) {
+        await this.prisma.testAssignment.createMany({
+          data: topicLevels.map((tl, idx) => ({
+            testId: created.id,
+            topicLevelId: tl.id,
+            isPrimary: idx === 0,
+          })),
+          skipDuplicates: true,
+        });
+      } else {
+        this.logger.warn(
+          `[create] catalogTopicId=${dto.catalogTopicId} matched no TopicLevel rows for subjectId=${dto.subjectId}`,
+        );
+      }
+    }
 
     await this.audit({
       userId: user.userId,
@@ -914,7 +1023,8 @@ export class TestsService {
         select: this.buildTestProjection(OrganizationRole.DIRECTOR, 'detail'),
       });
       if (!teacherView) throw new NotFoundException('Test nenalezen');
-      return this.mapTeacherView(teacherView, assignability);
+      const editMode = await this.canEditTest(id, user);
+      return this.mapTeacherView(teacherView, assignability, editMode);
     }
 
     if (!user.organizationId || user.organizationId !== base.organizationId) {
@@ -959,7 +1069,8 @@ export class TestsService {
       select: this.buildTestProjection(user.organizationRole ?? null, 'detail'),
     });
     if (!teacherView) throw new NotFoundException('Test nenalezen');
-    return this.mapTeacherView(teacherView, assignability);
+    const editMode = await this.canEditTest(id, user);
+    return this.mapTeacherView(teacherView, assignability, editMode);
   }
   async update(
     id: string,
@@ -990,6 +1101,20 @@ export class TestsService {
     }
 
     await this.ensureCanEditTest(user, current);
+
+    const editMode = await this.canEditTest(id, user);
+    if (
+      editMode !== 'FULL' &&
+      (
+        dto.subjectId !== undefined ||
+        dto.allowedGrades !== undefined
+      )
+    ) {
+      throw new ConflictException({
+        code: 'TEST_STRUCTURE_LOCKED',
+        message: 'Test has submissions. Question editing is locked.',
+      });
+    }
 
     if (dto.status === PublishStatus.PUBLISHED) {
       if (current.organizationId) {
@@ -1223,6 +1348,13 @@ export class TestsService {
     }
 
     const report = await this.computeTestAssignability(test.id);
+    this.logger.debug(
+      `[assignTest] testId=${testId} status=${test.status} ` +
+      `isAssignable=${report.isAssignable} ` +
+      `topicAssignments=${report.reasons.noTopicAssignments === 0 ? 'ok' : 'missing'} ` +
+      `selectedTopicLevelId=${dto.topicLevelId ?? 'none'} ` +
+      `issues=[${report.issues.map((i) => i.reason).join(',')}]`,
+    );
     this.throwIfNotAssignable(report);
 
     if (user.systemRole !== SystemRole.SUPERADMIN) {
@@ -1650,6 +1782,7 @@ export class TestsService {
     user: JwtPayload,
   ): Promise<unknown> {
     const t = await this.getEditableTestFor(user, testId);
+    await this.ensureQuestionMutationsAllowed(testId);
 
     // Scope mismatch guard: test's org must match the calling user's org.
     // Use the DB-verified organizationId from the test, never trust the
@@ -1694,6 +1827,7 @@ export class TestsService {
     user: JwtPayload,
   ): Promise<unknown> {
     const t = await this.getEditableTestFor(user, testId);
+    await this.ensureQuestionMutationsAllowed(testId);
     const exists = await this.prisma.question.findFirst({
       where: { id: questionId, testId },
       select: {
@@ -1757,6 +1891,7 @@ export class TestsService {
     user: JwtPayload,
   ): Promise<unknown> {
     const t = await this.getEditableTestFor(user, testId);
+    await this.ensureQuestionMutationsAllowed(testId);
 
     // ověř, že všechny otázky patří do testu
     const ids = dto.items.map((i) => i.id);
@@ -1794,6 +1929,7 @@ export class TestsService {
     user: JwtPayload,
   ): Promise<unknown> {
     const t = await this.getEditableTestFor(user, testId);
+    await this.ensureQuestionMutationsAllowed(testId);
     const exists = await this.prisma.question.findFirst({
       where: { id: questionId, testId },
     });
@@ -1820,6 +1956,7 @@ export class TestsService {
     user: JwtPayload,
   ): Promise<unknown> {
     const t = await this.getEditableTestFor(user, testId);
+    await this.ensureQuestionMutationsAllowed(testId);
     const q = await this.prisma.question.findFirst({
       where: { id: questionId, testId },
     });
@@ -1848,6 +1985,7 @@ export class TestsService {
     user: JwtPayload,
   ): Promise<unknown> {
     const t = await this.getEditableTestFor(user, testId);
+    await this.ensureQuestionMutationsAllowed(testId);
     const exists = await this.prisma.option.findFirst({
       where: { id: optionId, questionId, question: { testId } },
     });
@@ -1881,6 +2019,7 @@ export class TestsService {
     user: JwtPayload,
   ): Promise<unknown> {
     const t = await this.getEditableTestFor(user, testId);
+    await this.ensureQuestionMutationsAllowed(testId);
     const exists = await this.prisma.option.findFirst({
       where: { id: optionId, questionId, question: { testId } },
     });
@@ -1907,6 +2046,7 @@ export class TestsService {
     user: JwtPayload,
   ): Promise<unknown> {
     const t = await this.getEditableTestFor(user, testId);
+    await this.ensureQuestionMutationsAllowed(testId);
     const q = await this.prisma.question.findFirst({
       where: { id: questionId, testId },
     });
@@ -1935,6 +2075,7 @@ export class TestsService {
     user: JwtPayload,
   ): Promise<unknown> {
     const t = await this.getEditableTestFor(user, testId);
+    await this.ensureQuestionMutationsAllowed(testId);
     const exists = await this.prisma.answer.findFirst({
       where: { id: answerId, questionId, question: { testId } },
     });
@@ -1968,6 +2109,7 @@ export class TestsService {
     user: JwtPayload,
   ): Promise<unknown> {
     const t = await this.getEditableTestFor(user, testId);
+    await this.ensureQuestionMutationsAllowed(testId);
     const exists = await this.prisma.answer.findFirst({
       where: { id: answerId, questionId, question: { testId } },
     });

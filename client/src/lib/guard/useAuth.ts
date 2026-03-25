@@ -72,6 +72,19 @@ const PUBLIC_ROUTES = ["/login", "/register", "/forgot-password", "/reset-passwo
 const isPublicRoutePath = (path: string) =>
   PUBLIC_ROUTES.includes(path) || path.startsWith("/reset-password/");
 
+/**
+ * Hlavní klientský auth hook.
+ *
+ * Zodpovídá za:
+ * - bootstrap session po načtení aplikace,
+ * - synchronizaci profilu přes `/auth/me`,
+ * - obnovu session přes refresh token,
+ * - logout a přepínání aktivní organizace,
+ * - odvození auth stavu pro guardy a layouty.
+ *
+ * Hook schválně drží auth logiku na jednom místě, aby zbytek UI
+ * pracoval už jen s jednotným auth stavem a nemusel řešit refresh flow.
+ */
 export const useAuth = (): UseAuthResult => {
   const pathname = usePathname();
   const router = useRouter();
@@ -243,8 +256,26 @@ export const useAuth = (): UseAuthResult => {
     if (isLoggingOut) return;
     if (loading) return;
     if (isPublicRoute) {
-      setAuthStatus("anonymous");
-      setHydrated(true);
+      // Public routes must not demote an already authenticated session.
+      // Otherwise login/register can race with PostAuthResolver and bounce
+      // platform users back to /login during the redirect.
+      if (authStatus === "authenticated" || user) {
+        setHydrated(true);
+        return;
+      }
+      if (!hadSession) {
+        setAuthStatus("anonymous");
+        setHydrated(true);
+        return;
+      }
+      if (authStatus === "authenticating" || authStatus === "refreshing") {
+        return;
+      }
+      setHydrated(false);
+      syncProfile().catch(() => {
+        setAuthStatus("anonymous");
+        setHydrated(true);
+      });
       return;
     }
     if (!hadSession) {

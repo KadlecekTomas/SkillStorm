@@ -7,7 +7,8 @@ import { ErrorAlert, InfoAlert } from "@/components/ui/alert";
 import { withGuard } from "@/lib/guard/withGuard";
 import { useAuth } from "@/hooks/use-auth";
 import { useAcademicYears } from "@/hooks/use-academic-years";
-import { useClassrooms, type ClassroomListItem } from "@/hooks/use-classrooms";
+import { useClassrooms } from "@/hooks/use-classrooms";
+import type { ClassroomRiskOverview } from "@/hooks/use-classroom-risk-overview";
 import Link from "next/link";
 import type {
   TeacherTopicAnalyticsItem,
@@ -31,11 +32,6 @@ import {
   PriorityAlerts,
   type PriorityAlertItem,
 } from "@/components/results/PriorityAlerts";
-import {
-  calculateStudentRisk,
-  calculateTopicRisk,
-  getClassStats,
-} from "@/utils/risk-engine";
 import {
   PerformanceTrend,
   type TrendDataPoint,
@@ -107,17 +103,21 @@ function ResultsPage(): React.JSX.Element {
     setLoading(true);
     setError(null);
     try {
-      const [topicsRes, errorsRes] = await Promise.all([
+      const [topicsRes, errorsRes, riskRes] = await Promise.all([
         fetchWithAuth<TeacherTopicsResponse>("GET", `/analytics/teacher/${encodeURIComponent(classId)}/topics`, {
           query: { yearId: selectedYearId },
         }),
         fetchWithAuth<TeacherErrorsResponse>("GET", `/analytics/teacher/${encodeURIComponent(classId)}/errors`, {
           query: { yearId: selectedYearId },
         }),
+        fetchWithAuth<ClassroomRiskOverview>("GET", `/classrooms/${encodeURIComponent(classId)}/risk-overview`),
       ]);
 
       const topicItems = topicsRes?.items ?? [];
       const errorItems = errorsRes?.items ?? [];
+      const riskStudents = riskRes?.students ?? [];
+      const atRiskStudents = riskStudents.filter((student) => student.riskLevel !== "LOW");
+      const decliningStudents = riskStudents.filter((student) => student.riskFlags.includes("DECLINING"));
 
       const assignmentCount = Math.max(1, topicItems.length * 2);
       const overallSuccess =
@@ -148,8 +148,8 @@ function ResultsPage(): React.JSX.Element {
               ...(worstTopicShare != null && { shareOfTotalMistakes: worstTopicShare }),
             }
           : null,
-        studentsAtRiskCount: 0,
-        studentsDecliningCount: 0,
+        studentsAtRiskCount: atRiskStudents.length,
+        studentsDecliningCount: decliningStudents.length,
       });
 
       const topErrorLabels = errorItems
@@ -197,7 +197,18 @@ function ResultsPage(): React.JSX.Element {
         })),
       );
 
-      setStudents([]);
+      setStudents(
+        riskStudents.map((student) => ({
+          id: student.studentId,
+          name: student.displayName,
+          averageScorePercent: student.averageScorePercent,
+          trend: student.trend,
+          riskLevel: student.riskLevel,
+          riskFlags: student.riskFlags,
+          lastActivityAt: student.lastActivityAt,
+          profileHref: `/app/students/${student.studentId}`,
+        })),
+      );
       const baseDate = new Date();
       setTrendData(
         [6, 5, 4, 3, 2, 1, 0].map((d) => {
@@ -236,35 +247,13 @@ function ResultsPage(): React.JSX.Element {
 
   const priorityAlerts = useMemo((): PriorityAlertItem[] => {
     const out: PriorityAlertItem[] = [];
-    const classAvgAttempts =
-      students.length > 0
-        ? students.reduce((sum, s) => sum + s.attempts, 0) / students.length
-        : 0;
-    const classStats = getClassStats(students.map((s) => s.overallPercent));
-
-    const studentRisks = students.map((s) => ({
-      student: s,
-      risk: calculateStudentRisk({
-        overallPercent: s.overallPercent,
-        ...(s.trendPercent != null && { trendPercent: s.trendPercent }),
-        trend: s.trend,
-        attempts: s.attempts,
-        ...(classAvgAttempts > 0 && { classAverageAttempts: classAvgAttempts }),
-        ...(s.worstTopicPercent != null && { weakTopicPercent: s.worstTopicPercent }),
-        ...(s.worstTopic != null && { weakTopicName: s.worstTopic }),
-        classAveragePercent: classStats.classAveragePercent,
-        ...(classStats.classStdDeviation > 0 && {
-          classStdDeviation: classStats.classStdDeviation,
-        }),
-      }),
-    }));
-    const highRiskStudents = studentRisks.filter((r) => r.risk.level === "HIGH");
-    const mediumOrWorse = studentRisks.filter((r) => r.risk.score >= 35);
+    const highRiskStudents = students.filter((student) => student.riskLevel === "HIGH");
+    const mediumOrWorse = students.filter((student) => student.riskLevel !== "LOW");
 
     if (highRiskStudents.length > 0) {
       const names = highRiskStudents
         .slice(0, 3)
-        .map((r) => r.student.name)
+        .map((student) => student.name)
         .join(", ");
       out.push({
         id: "student-high-risk",
@@ -275,34 +264,6 @@ function ResultsPage(): React.JSX.Element {
         id: "student-medium-risk",
         text: `${mediumOrWorse.length} ${mediumOrWorse.length === 1 ? "žák" : "žáci"} se středním rizikem`,
       });
-    }
-
-    const topicRisks = topics.map((t) => ({
-      topic: t,
-      risk: calculateTopicRisk({
-        id: t.id,
-        name: t.name,
-        successRate: t.successRate,
-        trend: t.trend,
-      }),
-    }));
-    const topTopicRisks = topicRisks
-      .filter((r) => r.risk.score >= 35)
-      .sort((a, b) => b.risk.score - a.risk.score)
-      .slice(0, 2);
-
-    for (const { topic, risk } of topTopicRisks) {
-      if (risk.reasons.length > 0) {
-        out.push({
-          id: `topic-${topic.id}`,
-          text: `Téma „${topic.name}": ${risk.reasons[0]} (skóre ${risk.score})`,
-        });
-      } else if (risk.score >= 35) {
-        out.push({
-          id: `topic-${topic.id}`,
-          text: `Téma „${topic.name}" vyžaduje pozornost (skóre ${risk.score})`,
-        });
-      }
     }
 
     errorTypes.forEach((e) => {
@@ -410,7 +371,7 @@ function ResultsPage(): React.JSX.Element {
                   <SelectValue placeholder="Vyber třídu" />
                 </SelectTrigger>
                 <SelectContent>
-                  {classrooms.map((c: ClassroomListItem) => (
+                  {classrooms.map((c) => (
                     <SelectItem key={c.id} value={c.id}>
                       {c.grade}. {c.section}
                       {c.label ? ` (${c.label})` : ""}

@@ -17,6 +17,8 @@ export type MyAssignmentDto = {
   attemptNo: number;
   /** Total number of submission attempts the student has created for this assignment. */
   attemptsUsed: number;
+  /** ID of the latest submission attempt, or null when no attempt exists yet. */
+  submissionId: string | null;
   /** ISO string of the latest submission's submittedAt, or null if not yet submitted. */
   submittedAt: string | null;
   /** Status of the latest submission (PENDING | APPROVED | REJECTED) or null if no submission. */

@@ -5,17 +5,6 @@
  *
  * State flow: mutation → await → refetch → set state from GET /tests/:id only.
  * No derived FE state for totalPoints, assignability, or question counts.
- *
- * Verification checklist (manual):
- * 1) Create test
- * 2) Add question (when question CRUD is on this page)
- * 3) Refresh page manually → state consistent
- * 4) Delete question → refetch, no ghost row
- * 5) Publish (only when assignability.isAssignable)
- * 6) Assign
- * 7) Invalid test (e.g. score 0) → proper TEST_NOT_ASSIGNABLE message
- * 8) Reload → correct state
- * 9) No NaN, undefined, or duplicate rows
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -25,7 +14,7 @@ import { useAuth } from "@/lib/guard/useAuth";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
-import { ErrorAlert, WarningAlert } from "@/components/ui/alert";
+import { ErrorAlert, InfoAlert, WarningAlert } from "@/components/ui/alert";
 import { fetchWithAuth, HttpError } from "@/lib/http/client";
 import { withGuard } from "@/lib/guard/withGuard";
 import { PermissionKey } from "@/types";
@@ -36,6 +25,8 @@ import { useSubjects, subjectLabel } from "@/hooks/use-subjects";
 import type { OrgSubjectOption } from "@/types";
 import type { AssignabilityReport, AssignabilityIssueReason } from "@/types/assignability";
 import { ALL_SCHOOL_GRADES, formatAllowedGrades, gradeLabel, type SchoolGradeValue } from "@/lib/grades";
+import { Loader2, Send, Users } from "lucide-react";
+import { formatDate } from "@/lib/format-date";
 
 type QuestionOption = { id: string; text: string };
 
@@ -50,6 +41,19 @@ type TestQuestion = {
   options?: QuestionOption[];
 };
 
+type TestTopicAssignment = {
+  id: string;
+  topicLevelId: string;
+  isPrimary: boolean;
+  topicLevel: {
+    id: string;
+    catalogTopic: { id: string; name: string } | null;
+    subjectLevel: { grade: string | null };
+  };
+};
+
+type TestEditMode = "FULL" | "LIMITED" | "NONE";
+
 type TestDetail = {
   id: string;
   title: string;
@@ -59,6 +63,10 @@ type TestDetail = {
   status: "DRAFT" | "PUBLISHED" | "ARCHIVED";
   questions?: TestQuestion[];
   assignability?: AssignabilityReport;
+  submissionCount: number;
+  editMode: TestEditMode;
+  /** TestAssignment rows — topic diagnostic linkage (API key: assignments) */
+  assignments?: TestTopicAssignment[];
 };
 
 type FetchErrorKind = "404" | "403" | "error";
@@ -67,29 +75,78 @@ const IS_DEV =
   typeof process !== "undefined" && process.env.NODE_ENV === "development";
 
 function devLog(...args: unknown[]) {
-  if (IS_DEV) {
-    console.debug("[TestDetail]", ...args);
-  }
+  if (IS_DEV) console.debug("[TestDetail]", ...args);
 }
 
-const REASON_LABELS: Record<AssignabilityIssueReason, string> = {
-  NO_ALLOWED_GRADES: "cílové ročníky",
-  NO_QUESTIONS: "otázky",
-  NO_SCORE: "bodové hodnocení",
-  NO_CORRECT_ANSWER: "správná odpověď",
-  INVALID_OPTIONS: "možnosti odpovědí",
-};
+// ─── Readiness checklist ──────────────────────────────────────────────────────
 
-function readinessStatusLine(report: AssignabilityReport): { ready: boolean; text: string } {
-  if (report.isAssignable) {
-    return { ready: true, text: "Test je připraven k přiřazení." };
+const CHECKLIST: { reason: AssignabilityIssueReason; label: string }[] = [
+  { reason: "NO_QUESTIONS",        label: "Otázky" },
+  { reason: "NO_SCORE",            label: "Bodování" },
+  { reason: "NO_CORRECT_ANSWER",   label: "Správné odpovědi" },
+  { reason: "NO_ALLOWED_GRADES",   label: "Cílové ročníky" },
+  { reason: "NO_TOPIC_ASSIGNMENT", label: "Téma testu" },
+];
+
+function Checklist({
+  report,
+  onItemClick,
+}: {
+  report: AssignabilityReport;
+  onItemClick: (reason: AssignabilityIssueReason) => void;
+}) {
+  const failing = new Set(report.issues?.map((i) => i.reason) ?? []);
+
+  if (failing.size === 0) {
+    return (
+      <p className="text-sm font-medium text-emerald-700">
+        ✅ Test je připraven k publikaci
+      </p>
+    );
   }
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {CHECKLIST.map(({ reason, label }) => {
+        const ok = !failing.has(reason);
+        return ok ? (
+          <span
+            key={reason}
+            className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 ring-1 ring-emerald-200"
+          >
+            ✓ {label}
+          </span>
+        ) : (
+          <button
+            key={reason}
+            type="button"
+            onClick={() => onItemClick(reason)}
+            className="inline-flex cursor-pointer items-center gap-1 rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 ring-1 ring-red-200 transition-colors hover:bg-red-100"
+          >
+            ✗ {label} →
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// Pure helper — derives human-readable publish blockers from assignability report
+function getPublishBlockingReasons(report: AssignabilityReport): string[] {
   const reasons = new Set(report.issues?.map((i) => i.reason) ?? []);
-  const parts = (["NO_ALLOWED_GRADES", "NO_QUESTIONS", "NO_SCORE", "NO_CORRECT_ANSWER", "INVALID_OPTIONS"] as const)
-    .filter((r) => reasons.has(r))
-    .map((r) => REASON_LABELS[r]);
-  const chunk = parts.length ? `chybí: ${parts.join(", ")}` : "není připraven";
-  return { ready: false, text: `Test ještě není připraven (${chunk}).` };
+  const result: string[] = [];
+  if (reasons.has("NO_QUESTIONS")) result.push("chybí otázky");
+  if (reasons.has("NO_SCORE")) {
+    const n = report.issues?.filter((i) => i.reason === "NO_SCORE").length ?? 0;
+    result.push(`${n === 1 ? "1 otázka nemá" : `${n} otázek nemá`} bodové hodnocení`);
+  }
+  if (reasons.has("NO_CORRECT_ANSWER")) {
+    const n = report.issues?.filter((i) => i.reason === "NO_CORRECT_ANSWER").length ?? 0;
+    result.push(`${n === 1 ? "1 otázka nemá" : `${n} otázek nemá`} správnou odpověď`);
+  }
+  if (reasons.has("INVALID_OPTIONS")) result.push("neplatné možnosti u otázek");
+  if (reasons.has("NO_ALLOWED_GRADES")) result.push("nejsou zvoleny cílové ročníky");
+  return result;
 }
 
 function questionCountLabel(n: number): string {
@@ -98,28 +155,7 @@ function questionCountLabel(n: number): string {
   return `${n} otázek`;
 }
 
-/** Completion from assignability only: 4 conditions (allowed grades, questions, score, correct answer). */
-function completionFromAssignability(report: AssignabilityReport): { satisfied: number; total: 4; percent: number } {
-  const reasons = new Set(report.issues?.map((i) => i.reason) ?? []);
-  const satisfied =
-    (reasons.has("NO_ALLOWED_GRADES") ? 0 : 1) +
-    (reasons.has("NO_QUESTIONS") ? 0 : 1) +
-    (reasons.has("NO_SCORE") ? 0 : 1) +
-    (reasons.has("NO_CORRECT_ANSWER") ? 0 : 1);
-  return { satisfied, total: 4, percent: (satisfied / 4) * 100 };
-}
-
-function progressBarFillClass(percent: number): string {
-  if (percent >= 100) return "bg-emerald-500";
-  if (percent >= 34) return "bg-amber-500";
-  return "bg-red-500";
-}
-
-// ---------------------------------------------------------------------------
-// Student view — shown when the authenticated user has the STUDENT role.
-// Displays test metadata + the student's assignment for this test (if any),
-// then links to /app/assignments/[assignmentId] for the actual submission flow.
-// ---------------------------------------------------------------------------
+// ─── Student view ─────────────────────────────────────────────────────────────
 
 type EffectiveAssignmentStatus = "UPCOMING" | "OPEN" | "IN_PROGRESS" | "SUBMITTED" | "CLOSED" | "NO_ATTEMPTS_LEFT";
 
@@ -130,6 +166,7 @@ type StudentAssignment = {
   closeAt: string;
   maxAttempts: number;
   attemptsUsed: number;
+  submissionId: string | null;
   submittedAt: string | null;
   submissionStatus: string | null;
   effectiveStatus: EffectiveAssignmentStatus;
@@ -144,6 +181,13 @@ type StudentTestDetail = {
   academicYear?: { id: string; label: string; isCurrent: boolean } | null;
   questions: Array<{ id: string; text: string; type: string }>;
 };
+
+function assignmentTargetHref(assignment: StudentAssignment): string {
+  if (assignment.submissionId || assignment.attemptsUsed > 0) {
+    return `/app/results/${assignment.submissionId ?? assignment.id}`;
+  }
+  return `/app/assignments/${assignment.id}`;
+}
 
 function AssignmentCta({ assignment, onNavigate }: { assignment: StudentAssignment; onNavigate: () => void }): React.JSX.Element {
   switch (assignment.effectiveStatus) {
@@ -162,7 +206,7 @@ function AssignmentCta({ assignment, onNavigate }: { assignment: StudentAssignme
     case "UPCOMING":
       return (
         <Button disabled className="cursor-not-allowed opacity-60">
-          Dostupné od {new Date(assignment.openAt).toLocaleString("cs-CZ")}
+          Dostupné od {formatDate(assignment.openAt)}
         </Button>
       );
     case "CLOSED":
@@ -208,13 +252,14 @@ function StudentTestView({ testId }: { testId: string }): React.JSX.Element {
         const found = pool.sort(
           (a, b) => new Date(b.closeAt).getTime() - new Date(a.closeAt).getTime(),
         )[0] ?? null;
+        if (found) {
+          console.log("assignment.openAt raw:", found.openAt);
+        }
         setAssignment(found);
       } catch (e) {
         if (!active) return;
         setFetchError(
-          e instanceof HttpError && e.status === 404
-            ? "404"
-            : "error",
+          e instanceof HttpError && e.status === 404 ? "404" : "error",
         );
       } finally {
         if (active) setLoading(false);
@@ -287,13 +332,13 @@ function StudentTestView({ testId }: { testId: string }): React.JSX.Element {
             <div>
               <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Otevřeno od</p>
               <p className="mt-0.5 font-medium text-slate-800">
-                {new Date(assignment.openAt).toLocaleString("cs-CZ")}
+                {formatDate(assignment.openAt)}
               </p>
             </div>
             <div>
               <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Uzavřeno</p>
               <p className="mt-0.5 font-medium text-slate-800">
-                {new Date(assignment.closeAt).toLocaleString("cs-CZ")}
+                {formatDate(assignment.closeAt)}
               </p>
             </div>
             <div>
@@ -303,7 +348,7 @@ function StudentTestView({ testId }: { testId: string }): React.JSX.Element {
           </div>
 
           <div className="border-t border-slate-100 pt-4">
-            <AssignmentCta assignment={assignment} onNavigate={() => router.push(`/app/assignments/${assignment.id}`)} />
+            <AssignmentCta assignment={assignment} onNavigate={() => router.push(assignmentTargetHref(assignment))} />
           </div>
         </div>
       )}
@@ -311,12 +356,8 @@ function StudentTestView({ testId }: { testId: string }): React.JSX.Element {
   );
 }
 
-/**
- * Wrapper + Inner split for Rules of Hooks: React requires the same number and order
- * of hooks on every render. The wrapper only reads testId from the URL and guards
- * the "missing testId" case; the inner component receives testId as a required prop
- * and declares all data/effect hooks unconditionally before any conditional return.
- */
+// ─── Wrapper ──────────────────────────────────────────────────────────────────
+
 function TestPageWrapper(): React.JSX.Element {
   const params = useParams<{ testId: string }>();
   const testId = params?.testId ?? null;
@@ -341,7 +382,12 @@ function TestPageWrapper(): React.JSX.Element {
   return <TestPageInner testId={testId} />;
 }
 
+// ─── Teacher / director inner page ───────────────────────────────────────────
+
+type AutosaveState = "idle" | "saving" | "saved" | "error";
+
 function TestPageInner({ testId }: { testId: string }): React.JSX.Element {
+  const router = useRouter();
   const [test, setTest] = useState<TestDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<FetchErrorKind | null>(null);
@@ -360,22 +406,29 @@ function TestPageInner({ testId }: { testId: string }): React.JSX.Element {
     subjectId: "",
     allowedGrades: [],
   });
-  const [metadataLoading, setMetadataLoading] = useState(false);
-  const [metadataError, setMetadataError] = useState<string | null>(null);
+  const [autosaveState, setAutosaveState] = useState<AutosaveState>("idle");
+  // flash highlight for scroll-to-error (distinct from highlightQuestionId for new questions)
+  const [focusQuestionId, setFocusQuestionId] = useState<string | null>(null);
+
   const lastQuestionRef = useRef<HTMLLIElement>(null);
   const prevQuestionCountRef = useRef<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const requestIdRef = useRef(0);
+  const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autosaveClearRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Tracks whether the current metadataDraft is from user input (vs. initial sync from server)
+  const userChangedMetadataRef = useRef(false);
+  // Dynamic refs for scroll-to targeting
+  const questionRefs = useRef<Record<string, HTMLLIElement | null>>({});
+  const metadataSectionRef = useRef<HTMLElement | null>(null);
+  const questionsSectionRef = useRef<HTMLElement | null>(null);
+
   const { selectedYearId } = useAcademicYears();
   const { subjects } = useSubjects();
   const subjectOptions = useMemo<OrgSubjectOption[]>(() => {
-    if (!test?.subject) {
-      return subjects;
-    }
+    if (!test?.subject) return subjects;
     const exists = subjects.some((item) => item.subject.id === test.subject?.id);
-    if (exists) {
-      return subjects;
-    }
+    if (exists) return subjects;
     return [
       {
         id: `legacy-${test.subject.id}`,
@@ -393,16 +446,11 @@ function TestPageInner({ testId }: { testId: string }): React.JSX.Element {
     ];
   }, [subjects, test?.subject]);
 
+  // Scroll to new question
   useEffect(() => {
-    if (!test) {
-      prevQuestionCountRef.current = null;
-      return;
-    }
+    if (!test) { prevQuestionCountRef.current = null; return; }
     const n = test.questions?.length ?? 0;
-    if (prevQuestionCountRef.current === null) {
-      prevQuestionCountRef.current = n;
-      return;
-    }
+    if (prevQuestionCountRef.current === null) { prevQuestionCountRef.current = n; return; }
     if (n > prevQuestionCountRef.current) {
       lastQuestionRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
       const lastId = test?.questions?.[test.questions.length - 1]?.id;
@@ -416,14 +464,17 @@ function TestPageInner({ testId }: { testId: string }): React.JSX.Element {
     prevQuestionCountRef.current = n;
   }, [test, test?.questions?.length, test?.questions]);
 
+  // Clear success message after 4s
   useEffect(() => {
     if (!successMessage) return;
     const t = setTimeout(() => setSuccessMessage(null), 4000);
     return () => clearTimeout(t);
   }, [successMessage]);
 
+  // Sync test → metadataDraft on load (does NOT trigger autosave)
   useEffect(() => {
     if (!test) return;
+    userChangedMetadataRef.current = false;
     setMetadataDraft({
       subjectId: test.subject?.id ?? "",
       allowedGrades: test.allowedGrades.filter((grade): grade is SchoolGradeValue =>
@@ -434,48 +485,20 @@ function TestPageInner({ testId }: { testId: string }): React.JSX.Element {
 
   const fetchTest = useCallback(async (isRefetch = false): Promise<TestDetail | null> => {
     const currentRequestId = ++requestIdRef.current;
-
-    // Abort previous request
-    if (abortRef.current) {
-      abortRef.current.abort();
-    }
-
+    if (abortRef.current) abortRef.current.abort();
     const controller = new AbortController();
     abortRef.current = controller;
-
     setFetchError(null);
     if (!isRefetch) setLoading(true);
-
     try {
-      const data = await fetchWithAuth<TestDetail>(
-        "GET",
-        `/tests/${testId}`,
-        { signal: controller.signal }
-      );
-
-      // Ignore if not the latest request
-      if (currentRequestId !== requestIdRef.current) {
-        return null;
-      }
-
+      const data = await fetchWithAuth<TestDetail>("GET", `/tests/${testId}`, { signal: controller.signal });
+      if (currentRequestId !== requestIdRef.current) return null;
       setTest(data ?? null);
       return data ?? null;
     } catch (e) {
-      if (
-        typeof e === "object" &&
-        e !== null &&
-        "name" in e &&
-        e.name === "AbortError"
-      ) {
-        return null;
-      }
-
-      if (currentRequestId !== requestIdRef.current) {
-        return null;
-      }
-
+      if (typeof e === "object" && e !== null && "name" in e && e.name === "AbortError") return null;
+      if (currentRequestId !== requestIdRef.current) return null;
       setTest(null);
-
       if (e instanceof HttpError) {
         if (e.status === 404) setFetchError("404");
         else if (e.status === 403) setFetchError("403");
@@ -483,25 +506,58 @@ function TestPageInner({ testId }: { testId: string }): React.JSX.Element {
       } else {
         setFetchError("error");
       }
-
       return null;
     } finally {
-      if (currentRequestId === requestIdRef.current) {
-        setLoading(false);
-      }
+      if (currentRequestId === requestIdRef.current) setLoading(false);
     }
   }, [testId]);
 
+  useEffect(() => { fetchTest(); }, [testId, fetchTest]);
   useEffect(() => {
-    fetchTest();
-  }, [testId, fetchTest]);
+    return () => { if (abortRef.current) abortRef.current.abort(); };
+  }, []);
+
+  // Autosave metadata after 1.2s of inactivity — only fires when user changed something
+  const doSaveMetadata = useCallback(async () => {
+    if (!metadataDraft.subjectId && metadataDraft.allowedGrades.length === 0) return;
+    setAutosaveState("saving");
+    try {
+      await fetchWithAuth("PATCH", `/tests/${testId}`, {
+        body: {
+          ...(metadataDraft.subjectId ? { subjectId: metadataDraft.subjectId } : {}),
+          ...(metadataDraft.allowedGrades.length > 0 ? { allowedGrades: metadataDraft.allowedGrades } : {}),
+        },
+      });
+      await fetchTest(true);
+      setAutosaveState("saved");
+      if (autosaveClearRef.current) clearTimeout(autosaveClearRef.current);
+      autosaveClearRef.current = setTimeout(() => setAutosaveState("idle"), 3000);
+    } catch {
+      setAutosaveState("error");
+    }
+  }, [fetchTest, metadataDraft, testId]);
 
   useEffect(() => {
-    return () => {
-      if (abortRef.current) {
-        abortRef.current.abort();
-      }
-    };
+    if (!userChangedMetadataRef.current) return;
+    if (!test || test.status !== "DRAFT") return;
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    autosaveTimerRef.current = setTimeout(() => void doSaveMetadata(), 1200);
+    return () => { if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current); };
+  }, [metadataDraft, test, doSaveMetadata]);
+
+  const setSubjectId = useCallback((id: string) => {
+    userChangedMetadataRef.current = true;
+    setMetadataDraft((prev) => ({ ...prev, subjectId: id }));
+  }, []);
+
+  const toggleGrade = useCallback((grade: SchoolGradeValue, checked: boolean) => {
+    userChangedMetadataRef.current = true;
+    setMetadataDraft((prev) => ({
+      ...prev,
+      allowedGrades: checked
+        ? [...prev.allowedGrades, grade]
+        : prev.allowedGrades.filter((g) => g !== grade),
+    }));
   }, []);
 
   const handleAddQuestion = useCallback(async () => {
@@ -512,96 +568,83 @@ function TestPageInner({ testId }: { testId: string }): React.JSX.Element {
     const nextOrder = previousCount;
     try {
       const response = await fetchWithAuth<{
-        id: string;
-        text: string;
-        type: string;
-        order: number | null;
-        correctAnswer: string | null;
-        correctAnswers: string[];
-        score: number;
+        id: string; text: string; type: string; order: number | null;
+        correctAnswer: string | null; correctAnswers: string[]; score: number;
       }>("POST", `/tests/${testId}/questions`, {
-        body: {
-          text: "Nová otázka",
-          type: "TRUE_FALSE",
-          order: nextOrder,
-        },
+        body: { text: "Nová otázka", type: "TRUE_FALSE", order: nextOrder },
       });
-      if (!response?.id) {
-        throw new Error("Backend nevrátil ID vytvořené otázky.");
-      }
+      if (!response?.id) throw new Error("Backend nevrátil ID vytvořené otázky.");
       const refreshed = await fetchTest(true);
       const refreshedQuestions = refreshed?.questions ?? [];
-      const refreshedCount = refreshedQuestions.length;
-      const containsCreated = refreshedQuestions.some((q) => q.id === response.id);
-      if (!containsCreated || refreshedCount <= previousCount) {
+      if (!refreshedQuestions.some((q) => q.id === response.id) || refreshedQuestions.length <= previousCount) {
         throw new Error("Otázka nebyla potvrzena po uložení.");
       }
       setHighlightQuestionId(response.id);
       setSuccessMessage("Otázka byla přidána.");
     } catch (e) {
-      const err = e as { response?: { data?: unknown }; data?: unknown };
-      const errData = err?.response?.data ?? (e instanceof HttpError ? (e as HttpError).data : err?.data);
-      if (IS_DEV) console.error("[TestDetail] add question error", errData ?? e);
       setAddQuestionError(
         e instanceof HttpError
           ? ((e.data as { message?: string })?.message ?? e.message ?? "Nepodařilo se přidat otázku.")
-          : e instanceof Error
-            ? e.message
-            : "Nepodařilo se přidat otázku.",
+          : e instanceof Error ? e.message : "Nepodařilo se přidat otázku.",
       );
     } finally {
       setAddQuestionLoading(false);
     }
   }, [testId, test, fetchTest]);
 
-  const handleDeleteQuestion = useCallback(
-    async (questionId: string) => {
-      if (!test || test.status !== "DRAFT") return;
-      if (typeof window !== "undefined") {
-        const confirmed = window.confirm("Opravdu chceš smazat tuto otázku?");
-        if (!confirmed) return;
-      }
-      setQuestionActionError(null);
-      setQuestionActionLoadingId(questionId);
-      try {
-        await fetchWithAuth("DELETE", `/tests/${testId}/questions/${questionId}`);
-        setSuccessMessage("Otázka byla smazána.");
-        await fetchTest(true);
-      } catch (e) {
-        setQuestionActionError(
-          e instanceof HttpError
-            ? ((e.data as { message?: string })?.message ??
-                e.message ??
-                "Nepodařilo se smazat otázku.")
-            : e instanceof Error
-              ? e.message
-              : "Nepodařilo se smazat otázku.",
-        );
-      } finally {
-        setQuestionActionLoadingId(null);
-      }
-    },
-    [fetchTest, test, testId],
-  );
+  const handleDeleteQuestion = useCallback(async (questionId: string) => {
+    if (!test || test.status !== "DRAFT") return;
+    if (typeof window !== "undefined" && !window.confirm("Opravdu chceš smazat tuto otázku?")) return;
+    setQuestionActionError(null);
+    setQuestionActionLoadingId(questionId);
+    try {
+      await fetchWithAuth("DELETE", `/tests/${testId}/questions/${questionId}`);
+      setSuccessMessage("Otázka byla smazána.");
+      await fetchTest(true);
+    } catch (e) {
+      setQuestionActionError(
+        e instanceof HttpError
+          ? ((e.data as { message?: string })?.message ?? e.message ?? "Nepodařilo se smazat otázku.")
+          : e instanceof Error ? e.message : "Nepodařilo se smazat otázku.",
+      );
+    } finally {
+      setQuestionActionLoadingId(null);
+    }
+  }, [fetchTest, test, testId]);
 
-  const handlePrimaryCta = useCallback(async () => {
-    if (!test || test.assignability == null) return;
-    const assignability = test.assignability;
-    const canPublishOrAssign = assignability.isAssignable;
-    const isPublished = test.status === "PUBLISHED";
-    if (isPublished) {
-      setAssignOpen(true);
+  const scrollToInvalid = useCallback((reason: AssignabilityIssueReason) => {
+    if (reason === "NO_ALLOWED_GRADES") {
+      metadataSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       return;
     }
-    if (!canPublishOrAssign) return;
+    if (reason === "NO_QUESTIONS") {
+      questionsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    // Per-question issues: scroll to first affected question and flash it
+    const issue = test?.assignability?.issues?.find((i) => i.reason === reason && i.questionId);
+    if (issue?.questionId) {
+      questionRefs.current[issue.questionId]?.scrollIntoView({ behavior: "smooth", block: "center" });
+      setFocusQuestionId(issue.questionId);
+      setTimeout(() => setFocusQuestionId(null), 2000);
+    }
+  }, [test]);
+
+  const handlePublish = useCallback(async () => {
+    if (!test || test.assignability == null) return;
+    if (test.status === "PUBLISHED") { setAssignOpen(true); return; }
+    if (!test.assignability.isAssignable) {
+      // Guide the teacher to the first blocking issue instead of silently refusing
+      const firstIssue = test.assignability.issues?.[0];
+      if (firstIssue) scrollToInvalid(firstIssue.reason);
+      return;
+    }
     setPublishError(null);
     setPublishLoading(true);
-    devLog("mutation start", "publish");
+    devLog("publish start");
     try {
       await fetchWithAuth("PATCH", `/tests/${testId}`, { body: { status: "PUBLISHED" } });
-      devLog("mutation success", "publish");
       await fetchTest(true);
-      devLog("refetch after publish done");
       setSuccessMessage("Test byl publikován.");
       setAssignOpen(true);
     } catch (e) {
@@ -637,51 +680,15 @@ function TestPageInner({ testId }: { testId: string }): React.JSX.Element {
     }
   }, [testId, test, fetchTest]);
 
-  const handleSaveMetadata = useCallback(async () => {
-    if (!metadataDraft.subjectId) {
-      setMetadataError("Vyberte předmět.");
-      return;
-    }
-    if (metadataDraft.allowedGrades.length === 0) {
-      setMetadataError("Vyberte alespoň jeden cílový ročník.");
-      return;
-    }
-    setMetadataLoading(true);
-    setMetadataError(null);
-    try {
-      await fetchWithAuth("PATCH", `/tests/${testId}`, {
-        body: {
-          subjectId: metadataDraft.subjectId,
-          allowedGrades: metadataDraft.allowedGrades,
-        },
-      });
-      await fetchTest(true);
-      setSuccessMessage("Metadata testu byla uložena.");
-    } catch (e) {
-      setMetadataError(
-        e instanceof HttpError
-          ? ((e.data as { message?: string })?.message ?? e.message ?? "Nepodařilo se uložit metadata testu.")
-          : e instanceof Error
-            ? e.message
-            : "Nepodařilo se uložit metadata testu.",
-      );
-    } finally {
-      setMetadataLoading(false);
-    }
-  }, [fetchTest, metadataDraft.allowedGrades, metadataDraft.subjectId, testId]);
+  // ─── Error / loading states ─────────────────────────────────────────────────
 
-  /* Conditional UI returns only after all hooks are declared. */
-  if (loading && !test) {
-    return <LoadingSpinner label="Načítám test" />;
-  }
+  if (loading && !test) return <LoadingSpinner label="Načítám test" />;
 
   if (fetchError === "404" || (!loading && !test && fetchError === null)) {
     return (
       <div className="space-y-4">
         <WarningAlert title="Test nenalezen" description="Test nenalezen." />
-        <Link href="/app/tests">
-          <Button variant="outline">Zpět na testy</Button>
-        </Link>
+        <Link href="/app/tests"><Button variant="outline">Zpět na testy</Button></Link>
       </div>
     );
   }
@@ -689,13 +696,8 @@ function TestPageInner({ testId }: { testId: string }): React.JSX.Element {
   if (fetchError === "403") {
     return (
       <div className="space-y-4">
-        <WarningAlert
-          title="Přístup odepřen"
-          description="Nemáte oprávnění k tomuto testu."
-        />
-        <Link href="/app/tests">
-          <Button variant="outline">Zpět na testy</Button>
-        </Link>
+        <WarningAlert title="Přístup odepřen" description="Nemáte oprávnění k tomuto testu." />
+        <Link href="/app/tests"><Button variant="outline">Zpět na testy</Button></Link>
       </div>
     );
   }
@@ -703,16 +705,9 @@ function TestPageInner({ testId }: { testId: string }): React.JSX.Element {
   if (fetchError === "error") {
     return (
       <div className="space-y-4">
-        <ErrorAlert
-          title="Chyba"
-          description="Nepodařilo se načíst test. Zkuste to znovu."
-        />
-        <Button variant="outline" onClick={() => void fetchTest(false)}>
-          Zkusit znovu
-        </Button>
-        <Link href="/app/tests">
-          <Button variant="outline">Zpět na testy</Button>
-        </Link>
+        <ErrorAlert title="Chyba" description="Nepodařilo se načíst test. Zkuste to znovu." />
+        <Button variant="outline" onClick={() => void fetchTest(false)}>Zkusit znovu</Button>
+        <Link href="/app/tests"><Button variant="outline">Zpět na testy</Button></Link>
       </div>
     );
   }
@@ -720,257 +715,184 @@ function TestPageInner({ testId }: { testId: string }): React.JSX.Element {
   if (!test || test.assignability == null) {
     return (
       <div className="space-y-4">
-        <ErrorAlert
-          title="Chyba při načítání testu"
-          description="Stav připravenosti testu nebyl načten z backendu."
-        />
-        <Link href="/app/tests">
-          <Button variant="outline">Zpět na testy</Button>
-        </Link>
+        <ErrorAlert title="Chyba při načítání testu" description="Stav připravenosti testu nebyl načten z backendu." />
+        <Link href="/app/tests"><Button variant="outline">Zpět na testy</Button></Link>
       </div>
     );
   }
 
+  // ─── Derived state ──────────────────────────────────────────────────────────
+
   const isPublished = test.status === "PUBLISHED";
+  const isDraft = test.status === "DRAFT";
+  const canInlineEdit = false;
+  const isLocked = test.editMode === "LIMITED";
   const assignability = test.assignability;
-  const canPublishOrAssign = assignability.isAssignable;
-
-  const statusLabel =
-    test.status === "DRAFT"
-      ? "Koncept"
-      : test.status === "PUBLISHED"
-        ? "Publikováno"
-        : "Archivováno";
-
+  const canPublish = assignability.isAssignable;
   const questionCount = test.questions?.length ?? 0;
   const totalPoints = assignability.totalPoints ?? 0;
-  const statusLine = readinessStatusLine(assignability);
-  const primaryCtaLabel = isPublished ? "Přiřadit třídě" : "Dokončit a přiřadit";
-  const primaryCtaLoadingLabel = isPublished ? "Přiřazuji…" : "Dokončuji…";
-  const hasQuestions = questionCount > 0;
-  const completion = completionFromAssignability(assignability);
+
+  const statusLabel = isLocked
+    ? "Uzamčeno"
+    : test.status === "DRAFT" ? "Koncept"
+    : test.status === "PUBLISHED" ? "Publikováno"
+    : "Archivováno";
+
+  // ─── JSX ────────────────────────────────────────────────────────────────────
 
   return (
-    <div
-      className={`space-y-8 pb-8 transition-colors duration-200 ${
-        isPreviewMode ? "min-h-screen bg-slate-50" : ""
-      }`}
-    >
-      {successMessage && (
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-800 transition-opacity">
-          {successMessage}
-        </div>
-      )}
+    <div className={`space-y-6 pb-12 transition-colors duration-200 ${isPreviewMode ? "min-h-screen bg-slate-50" : ""}`}>
 
+      {/* Preview bar */}
       {isPreviewMode && (
         <div className="sticky top-0 z-20 -mx-4 flex items-center justify-between gap-4 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6 md:-mx-8 md:px-8">
-          <p className="text-sm text-slate-600">Režim náhledu – takto test uvidí žák</p>
+          <p className="text-sm text-slate-600">Náhled — takto test uvidí žák</p>
           <Button variant="ghost" size="sm" onClick={() => setIsPreviewMode(false)}>
             Zpět do úprav
           </Button>
         </div>
       )}
 
-      <header
-        className={`sticky z-10 -mx-4 -mt-2 px-4 py-4 backdrop-blur sm:-mx-6 sm:px-6 md:-mx-8 md:px-8 ${
-          isPreviewMode ? "top-12 bg-slate-50/95" : "top-0 bg-white/95"
-        }`}
-      >
+      {/* Sticky header */}
+      <header className={`sticky z-10 -mx-4 -mt-2 px-4 py-4 backdrop-blur sm:-mx-6 sm:px-6 md:-mx-8 md:px-8 ${isPreviewMode ? "top-12 bg-slate-50/95" : "top-0 bg-white/95"}`}>
         <Link href="/app/tests" className="text-xs text-slate-500 hover:text-slate-700">
           ← Zpět na testy
         </Link>
-        <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-900">{test.title}</h1>
-        {test.description && (
-          <p className="mt-1 line-clamp-2 text-sm text-slate-500">{test.description}</p>
-        )}
-        {test.subject && (
-          <p className="mt-1 text-sm text-slate-600">
-            Předmět: {test.subject.catalogSubject?.name ?? test.subject.name}
-          </p>
-        )}
-        <p className="mt-0.5 text-sm text-slate-500">
-          Určeno pro: {formatAllowedGrades(test.allowedGrades)}
-        </p>
-        <div className="mt-4 flex flex-wrap items-end justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-            <span>{questionCountLabel(questionCount)}</span>
-            <span className="text-slate-300">|</span>
-            <span>{totalPoints} bodů</span>
-            {!isPreviewMode && (
-              <>
-                <span className="text-slate-300">|</span>
-                <Badge variant="neutral" className="text-xs">{statusLabel}</Badge>
-              </>
+
+        <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
+          {/* Title + status */}
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900">{test.title}</h1>
+              <Badge variant="neutral" className="text-xs">{statusLabel}</Badge>
+            </div>
+            {test.description && (
+              <p className="mt-0.5 line-clamp-1 text-sm text-slate-500">{test.description}</p>
             )}
+            <p className="mt-1 text-xs text-slate-400">
+              {questionCountLabel(questionCount)}
+              {totalPoints > 0 && <span> · {totalPoints} bodů</span>}
+            </p>
           </div>
+
+          {/* Primary CTA — top right */}
           {!isPreviewMode && (
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" onClick={() => setIsPreviewMode(true)} className="text-slate-600" aria-label="Náhled testu jako žák">
-                👁 Náhled
-              </Button>
-              <div className="flex flex-col items-end gap-1">
-                {!canPublishOrAssign ? (
-                  <Button disabled className="cursor-not-allowed bg-slate-300 text-slate-500">
-                    {primaryCtaLabel}
+            <div className="flex shrink-0 flex-col items-end gap-1.5">
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => router.push(`/app/tests/${testId}/edit`)}
+                >
+                  Upravit test
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-slate-600"
+                  onClick={() => setIsPreviewMode(true)}
+                >
+                  Náhled
+                </Button>
+                {isPublished ? (
+                  <Button
+                    onClick={() => setAssignOpen(true)}
+                    className="gap-1 bg-slate-900 hover:bg-slate-800"
+                  >
+                    <Users className="h-4 w-4" />
+                    Přiřadit třídě
                   </Button>
                 ) : (
+                  // Not disabled when blocked — click scrolls to first error instead
                   <Button
-                    onClick={handlePrimaryCta}
+                    onClick={() => void handlePublish()}
                     disabled={publishLoading}
-                    className="bg-slate-900 hover:bg-slate-800"
+                    className={
+                      canPublish && !publishLoading
+                        ? "gap-1 bg-slate-900 hover:bg-slate-800"
+                        : "cursor-not-allowed gap-1 bg-slate-200 text-slate-400"
+                    }
                   >
-                    {publishLoading ? primaryCtaLoadingLabel : primaryCtaLabel}
+                    {publishLoading
+                      ? <><Loader2 className="h-4 w-4 animate-spin" /> Publikuji…</>
+                      : <><Send className="h-4 w-4" /> Publikovat test</>
+                    }
                   </Button>
                 )}
-                {!isPublished && canPublishOrAssign && (
-                  <p className="text-xs text-slate-500">Po dokončení vyberete třídu.</p>
-                )}
               </div>
+
+              {/* Inline blocking reasons — visible when blocked */}
+              {!canPublish && isDraft && !publishLoading && (
+                <div className="text-right text-xs text-slate-500">
+                  {getPublishBlockingReasons(assignability).map((reason, i) => (
+                    <p key={i}>· {reason}</p>
+                  ))}
+                </div>
+              )}
+
+              {/* Server-side publish error (e.g. 403, race condition) */}
+              {publishError && (
+                <p className="text-right text-xs text-red-600">{publishError}</p>
+              )}
             </div>
           )}
         </div>
-        {!isPreviewMode && (
-          <>
-            <div className="mt-4 space-y-1">
-              <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
-                <div
-                  className={`h-full transition-all duration-300 ease-out ${progressBarFillClass(completion.percent)}`}
-                  style={{ width: `${Math.min(100, completion.percent)}%` }}
-                />
-              </div>
-              <p className="text-xs text-slate-600">
-                {completion.satisfied === 4
-                  ? "Test je připraven k přiřazení."
-                  : `Dokončení testu: ${completion.satisfied}/4 podmínek splněno`}
-              </p>
-            </div>
-            <p className={`mt-2 text-sm ${statusLine.ready ? "text-emerald-600" : "text-red-600"}`}>
-              {statusLine.ready ? "✓ " : ""}{statusLine.text}
-            </p>
-          </>
+
+        {/* Readiness checklist — clickable items scroll to the problem */}
+        {!isPreviewMode && isDraft && (
+          <div className="mt-3">
+            <Checklist report={assignability} onItemClick={scrollToInvalid} />
+          </div>
         )}
       </header>
 
-      {!isPreviewMode && publishError && (
-        <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
-          <p className="font-medium text-red-600">Chyba</p>
-          <p className="mt-0.5 text-slate-600">{publishError}</p>
+      {/* Success toast */}
+      {successMessage && (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-800">
+          {successMessage}
         </div>
       )}
 
-      {!isPreviewMode && (
-        <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <h2 className="text-lg font-semibold text-slate-900">Pedagogické zařazení</h2>
-              <p className="text-sm text-slate-500">Předmět a cílové ročníky patří přímo tomuto testu.</p>
-            </div>
-            <Badge variant="outline" className="text-slate-600">Test = obsah</Badge>
-          </div>
-          <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,16rem)_1fr]">
-            <label className="block space-y-2">
-              <span className="text-sm font-medium text-slate-700">Předmět</span>
-              <select
-                value={metadataDraft.subjectId}
-                onChange={(e) => setMetadataDraft((prev) => ({ ...prev, subjectId: e.target.value }))}
-                className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-              >
-                <option value="">Vyberte předmět</option>
-                {subjectOptions.map((subject) => (
-                  <option key={subject.id} value={subject.subject.id}>
-                    {subjectLabel(subject)}{subject.isEnabled ? "" : " (deaktivováno)"}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="space-y-2">
-              <span className="text-sm font-medium text-slate-700">Cílové ročníky</span>
-              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                {ALL_SCHOOL_GRADES.map((grade) => {
-                  const checked = metadataDraft.allowedGrades.includes(grade);
-                  return (
-                    <label
-                      key={grade}
-                      className={`flex items-center gap-3 rounded-md border px-3 py-2 text-sm ${
-                        checked ? "border-slate-900 bg-slate-50 text-slate-900" : "border-slate-200 text-slate-700"
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={(e) =>
-                          setMetadataDraft((prev) => ({
-                            ...prev,
-                            allowedGrades: e.target.checked
-                              ? [...prev.allowedGrades, grade]
-                              : prev.allowedGrades.filter((item) => item !== grade),
-                          }))
-                        }
-                      />
-                      <span>{gradeLabel(grade)}</span>
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-          {metadataError && (
-            <div className="mt-4">
-              <ErrorAlert title="Chyba" description={metadataError} />
-            </div>
-          )}
-          <div className="mt-4 flex justify-end">
-            <Button onClick={() => void handleSaveMetadata()} disabled={metadataLoading}>
-              {metadataLoading ? "Ukládám…" : "Uložit metadata testu"}
-            </Button>
-          </div>
-        </section>
+      {!isPreviewMode && isLocked && (
+        <InfoAlert
+          title="Tento test již obsahuje odevzdané pokusy. Úpravy otázek jsou uzamčeny."
+          description="Otevřete Upravit test. Lze měnit pouze název a popis."
+        />
       )}
 
+      {/* Questions */}
       {isPreviewMode ? (
-        hasQuestions ? (
-          <section className="mt-10 max-w-2xl space-y-6 transition-opacity duration-200">
+        questionCount > 0 ? (
+          <section className="max-w-2xl space-y-6">
             {test.questions!.map((q, idx) => (
-              <article
-                key={q.id}
-                className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
-              >
+              <article key={q.id} className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                 <p className="text-base font-medium text-slate-800">
                   {idx + 1}. {q.text ?? "(bez textu)"}
                 </p>
                 <div className="mt-4 space-y-2">
                   {q.type === "MULTIPLE_CHOICE" && (q.options?.length ? (
-                    <div className="space-y-2">
-                      {q.options.map((opt) => (
-                        <label
-                          key={opt.id}
-                          className="flex cursor-default items-center gap-2 text-slate-700"
-                        >
-                          <input type="radio" name={`preview-q-${q.id}`} disabled className="h-4 w-4" />
-                          <span>{opt.text}</span>
-                        </label>
-                      ))}
-                    </div>
+                    q.options.map((opt) => (
+                      <label key={opt.id} className="flex cursor-default items-center gap-2 text-slate-700">
+                        <input type="radio" name={`preview-q-${q.id}`} disabled className="h-4 w-4" />
+                        <span>{opt.text}</span>
+                      </label>
+                    ))
                   ) : (
-                    <div className="space-y-2">
-                      {(q.correctAnswers?.length ? q.correctAnswers : q.correctAnswer ? [q.correctAnswer] : ["—"]).map((a, i) => (
-                        <label key={i} className="flex cursor-default items-center gap-2 text-slate-700">
-                          <input type="radio" name={`preview-q-${q.id}`} disabled className="h-4 w-4" />
-                          <span>{a}</span>
-                        </label>
-                      ))}
-                    </div>
+                    (q.correctAnswers?.length ? q.correctAnswers : q.correctAnswer ? [q.correctAnswer] : ["—"]).map((a, i) => (
+                      <label key={i} className="flex cursor-default items-center gap-2 text-slate-700">
+                        <input type="radio" name={`preview-q-${q.id}`} disabled className="h-4 w-4" />
+                        <span>{a}</span>
+                      </label>
+                    ))
                   ))}
                   {q.type === "TRUE_FALSE" && (
                     <div className="flex gap-6">
-                      <label className="flex cursor-default items-center gap-2 text-slate-700">
-                        <input type="radio" name={`preview-q-${q.id}`} disabled className="h-4 w-4" />
-                        <span>Ano</span>
-                      </label>
-                      <label className="flex cursor-default items-center gap-2 text-slate-700">
-                        <input type="radio" name={`preview-q-${q.id}`} disabled className="h-4 w-4" />
-                        <span>Ne</span>
-                      </label>
+                      {["Ano", "Ne"].map((label) => (
+                        <label key={label} className="flex cursor-default items-center gap-2 text-slate-700">
+                          <input type="radio" name={`preview-q-${q.id}`} disabled className="h-4 w-4" />
+                          <span>{label}</span>
+                        </label>
+                      ))}
                     </div>
                   )}
                   {(q.type === "FILL_IN_THE_BLANK" || (q.type !== "MULTIPLE_CHOICE" && q.type !== "TRUE_FALSE")) && (
@@ -987,120 +909,212 @@ function TestPageInner({ testId }: { testId: string }): React.JSX.Element {
             ))}
           </section>
         ) : (
-          <section className="mt-10 py-12 text-center">
+          <section className="py-12 text-center">
             <p className="text-slate-500">Tento test neobsahuje žádné otázky.</p>
           </section>
         )
-      ) : hasQuestions ? (
-        <section className="mt-10 space-y-4">
+      ) : (
+        <section ref={questionsSectionRef} className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-lg font-semibold text-slate-900">Otázky</h2>
-            <Button
-              variant="outline"
-              size="sm"
-              className="text-slate-600"
-              disabled={test.status !== "DRAFT" || addQuestionLoading}
-              onClick={() => void handleAddQuestion()}
-            >
-              {addQuestionLoading ? "Přidávám…" : "+ Přidat otázku"}
-            </Button>
+            <h2 className="text-base font-semibold text-slate-900">Otázky</h2>
+            {canInlineEdit && questionCount > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!isDraft || addQuestionLoading}
+                onClick={() => void handleAddQuestion()}
+              >
+                {addQuestionLoading ? "Přidávám…" : "+ Přidat otázku"}
+              </Button>
+            )}
           </div>
-          {addQuestionError && (
-            <ErrorAlert title="Chyba" description={addQuestionError} className="text-sm" />
+
+          {addQuestionError && <ErrorAlert title="Chyba" description={addQuestionError} className="text-sm" />}
+          {questionActionError && <ErrorAlert title="Chyba" description={questionActionError} className="text-sm" />}
+          {!canInlineEdit && (
+            <InfoAlert
+              title="Detail testu je pouze pro čtení"
+              description="Pro úpravy otevři režim Upravit test. Otázky se už neupravují přímo v detailu."
+            />
           )}
-          {questionActionError && (
-            <ErrorAlert title="Chyba" description={questionActionError} className="text-sm" />
-          )}
-          <ul className="grid gap-3 sm:grid-cols-1">
-            {test.questions!.map((q, idx) => {
-              const issue = assignability.issues?.find((i) => i.questionId === q.id);
-              const score = q.score ?? 0;
-              const correct =
-                q.correctAnswer ??
-                (q.correctAnswers?.length ? q.correctAnswers.join(", ") : "—");
-              const isLast = idx === test.questions!.length - 1;
-              const isHighlight = highlightQuestionId === q.id;
-              return (
-                <li
-                  key={q.id}
-                  ref={isLast ? lastQuestionRef : undefined}
-                  className={`rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition-colors duration-500 ${
-                    isHighlight ? "bg-emerald-50/80 ring-1 ring-emerald-200" : ""
-                  }`}
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1 space-y-1">
-                      <p className="text-xs uppercase tracking-wide text-slate-400">
-                        {idx + 1} · {q.type || "otázka"}
-                      </p>
-                      <p className="text-sm font-medium text-slate-800">
-                        {q.text ?? "(bez textu)"}
-                      </p>
-                      <div className="flex flex-wrap gap-4 text-xs text-slate-500">
-                        <span>({score} bodů)</span>
-                        <span>Správná odpověď: {String(correct)}</span>
-                      </div>
-                      {issue && (
-                        <p className="text-xs text-red-600" role="alert">
-                          {issue.reason === "NO_SCORE" && "Chybí bodové hodnocení."}
-                          {issue.reason === "NO_CORRECT_ANSWER" && "Chybí správná odpověď."}
+
+          {questionCount === 0 ? (
+            <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-slate-200 py-12 text-center">
+              <p className="text-base text-slate-500">Žádné otázky.</p>
+              <Button
+                className="mt-4 bg-slate-900 hover:bg-slate-800"
+                onClick={() => router.push(`/app/tests/${testId}/edit`)}
+              >
+                Upravit test
+              </Button>
+              {addQuestionError && <ErrorAlert title="Chyba" description={addQuestionError} className="mt-3 text-sm" />}
+            </div>
+          ) : (
+            <ul className="space-y-2">
+              {test.questions!.map((q, idx) => {
+                const issue = assignability.issues?.find((i) => i.questionId === q.id);
+                const score = q.score ?? 0;
+                const correct =
+                  q.correctAnswer ?? (q.correctAnswers?.length ? q.correctAnswers.join(", ") : null);
+                const isLast = idx === test.questions!.length - 1;
+                const isHighlight = highlightQuestionId === q.id;
+                const isFocused = focusQuestionId === q.id;
+                const isInvalid = !!issue;
+
+                return (
+                  <li
+                    key={q.id}
+                    ref={(el) => {
+                      questionRefs.current[q.id] = el;
+                      if (isLast) (lastQuestionRef as React.MutableRefObject<HTMLLIElement | null>).current = el;
+                    }}
+                    className={`rounded-lg border bg-white p-4 shadow-sm transition-colors duration-300 ${
+                      isFocused
+                        ? "border-amber-300 bg-amber-50 ring-1 ring-amber-200"
+                        : isInvalid
+                          ? "border-red-300 ring-1 ring-red-200"
+                          : isHighlight
+                            ? "border-emerald-200 ring-1 ring-emerald-200"
+                            : "border-slate-200"
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <p className="text-xs uppercase tracking-wide text-slate-400">
+                          {idx + 1} · {q.type || "otázka"}
                         </p>
+                        <p className="text-sm font-medium text-slate-800">
+                          {q.text ?? "(bez textu)"}
+                        </p>
+                        <div className="flex flex-wrap gap-3 text-xs text-slate-500">
+                          <span>{score} bodů</span>
+                          {correct
+                            ? <span>Správná odpověď: {correct}</span>
+                            : <span className="text-red-600 font-medium">Chybí správná odpověď</span>
+                          }
+                        </div>
+                        {issue && issue.reason === "NO_SCORE" && (
+                          <p className="text-xs font-medium text-red-600" role="alert">
+                            Chybí bodové hodnocení
+                          </p>
+                        )}
+                      </div>
+                      {canInlineEdit && (
+                        <div className="flex shrink-0 gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-slate-600"
+                            disabled={!isDraft || questionActionLoadingId === q.id}
+                            onClick={() => setEditingQuestion(q)}
+                          >
+                            Upravit
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-slate-600"
+                            disabled={!isDraft || questionActionLoadingId === q.id}
+                            onClick={() => void handleDeleteQuestion(q.id)}
+                          >
+                            {questionActionLoadingId === q.id ? "Mažu…" : "Smazat"}
+                          </Button>
+                        </div>
                       )}
                     </div>
-                    <div className="flex shrink-0 gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-slate-600"
-                        disabled={test.status !== "DRAFT" || questionActionLoadingId === q.id}
-                        onClick={() => setEditingQuestion(q)}
-                      >
-                        Upravit
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-slate-600"
-                        disabled={test.status !== "DRAFT" || questionActionLoadingId === q.id}
-                        onClick={() => void handleDeleteQuestion(q.id)}
-                      >
-                        {questionActionLoadingId === q.id ? "Mažu…" : "Smazat"}
-                      </Button>
-                    </div>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-      ) : (
-        <section className="mt-10 flex flex-col items-center justify-center rounded-lg border border-dashed border-slate-200 py-12 text-center">
-          <p className="text-base text-slate-500">Tento test zatím neobsahuje žádné otázky.</p>
-          <Button
-            className="mt-4 bg-slate-900 hover:bg-slate-800"
-            disabled={test.status !== "DRAFT" || addQuestionLoading}
-            onClick={() => void handleAddQuestion()}
-          >
-            {addQuestionLoading ? "Přidávám…" : "+ Přidat první otázku"}
-          </Button>
-          {addQuestionError && (
-            <ErrorAlert title="Chyba" description={addQuestionError} className="mt-3 text-sm" />
+                  </li>
+                );
+              })}
+            </ul>
           )}
         </section>
       )}
 
-      <EditQuestionDialog
-        open={editingQuestion !== null}
-        onOpenChange={(open) => {
-          if (!open) setEditingQuestion(null);
-        }}
-        testId={testId}
-        question={editingQuestion}
-        onSaved={async () => {
-          await fetchTest(true);
-          setSuccessMessage("Otázka byla upravena.");
-        }}
-      />
+      {/* Metadata — autosave, below questions */}
+      {!isPreviewMode && isDraft && canInlineEdit && (
+        <section ref={metadataSectionRef} className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-base font-semibold text-slate-900">Nastavení testu</h2>
+            <span className="text-xs">
+              {autosaveState === "saving" && (
+                <span className="flex items-center gap-1 text-slate-400">
+                  <Loader2 className="h-3 w-3 animate-spin" /> Ukládání…
+                </span>
+              )}
+              {autosaveState === "saved" && (
+                <span className="text-emerald-600">Uloženo ✓</span>
+              )}
+              {autosaveState === "error" && (
+                <span className="flex items-center gap-1.5 text-red-600">
+                  Chyba uložení –{" "}
+                  <button
+                    type="button"
+                    className="underline hover:no-underline"
+                    onClick={() => void doSaveMetadata()}
+                  >
+                    zkusit znovu
+                  </button>
+                </span>
+              )}
+            </span>
+          </div>
+
+          <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,16rem)_1fr]">
+            <label className="block space-y-1.5">
+              <span className="text-sm font-medium text-slate-700">Předmět</span>
+              <select
+                value={metadataDraft.subjectId}
+                onChange={(e) => setSubjectId(e.target.value)}
+                className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+              >
+                <option value="">Vyberte předmět</option>
+                {subjectOptions.map((subject) => (
+                  <option key={subject.id} value={subject.subject.id}>
+                    {subjectLabel(subject)}{subject.isEnabled ? "" : " (deaktivováno)"}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div className="space-y-1.5">
+              <span className="text-sm font-medium text-slate-700">Cílové ročníky</span>
+              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                {ALL_SCHOOL_GRADES.map((grade) => {
+                  const checked = metadataDraft.allowedGrades.includes(grade);
+                  return (
+                    <label
+                      key={grade}
+                      className={`flex items-center gap-3 rounded-md border px-3 py-2 text-sm cursor-pointer ${
+                        checked ? "border-slate-900 bg-slate-50 text-slate-900" : "border-slate-200 text-slate-700"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => toggleGrade(grade, e.target.checked)}
+                      />
+                      <span>{gradeLabel(grade)}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {canInlineEdit && (
+        <EditQuestionDialog
+          open={editingQuestion !== null}
+          onOpenChange={(open) => { if (!open) setEditingQuestion(null); }}
+          testId={testId}
+          question={editingQuestion}
+          onSaved={async () => {
+            await fetchTest(true);
+            setSuccessMessage("Otázka byla upravena.");
+          }}
+        />
+      )}
 
       <AssignToClassModal
         open={assignOpen}
@@ -1109,11 +1123,11 @@ function TestPageInner({ testId }: { testId: string }): React.JSX.Element {
           if (!open) setPublishError(null);
         }}
         testId={testId}
-        subjectId={test.subject?.id ?? null}
         allowedGrades={test.allowedGrades}
         yearId={selectedYearId}
+        {...(test.assignments !== undefined ? { testAssignments: test.assignments } : {})}
         onSuccess={() => {
-          devLog("assign success, refetching test");
+          devLog("assign success");
           setSuccessMessage("Test byl přiřazen třídě.");
           void fetchTest(true);
         }}

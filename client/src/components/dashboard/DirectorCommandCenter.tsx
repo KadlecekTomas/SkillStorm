@@ -39,7 +39,7 @@ function formatDate(iso: string | null): string {
   });
 }
 
-function riskBadge(level: "NONE" | "MEDIUM" | "HIGH"): React.JSX.Element {
+function riskBadge(level: "LOW" | "MEDIUM" | "HIGH"): React.JSX.Element {
   if (level === "HIGH")
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-600">
@@ -69,7 +69,7 @@ function ClassRiskTable({
   classes: DirectorDashboardResponse["classes"];
 }): React.JSX.Element {
   const sorted = [...classes].sort((a, b) => {
-    const order = { HIGH: 0, MEDIUM: 1, NONE: 2 };
+    const order = { HIGH: 0, MEDIUM: 1, LOW: 2 };
     return order[a.riskLevel] - order[b.riskLevel];
   });
   return (

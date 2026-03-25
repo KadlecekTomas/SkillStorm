@@ -21,17 +21,40 @@ type ClassSection = { id: string; label?: string | null; grade?: string; section
 type TopicOption = {
   id: string;
   name?: string | null;
-  catalogTopic?: { name?: string | null } | null;
+  catalogTopic?: { id?: string | null; name?: string | null } | null;
+  subjectLevel?: { grade?: string | null } | null;
+};
+/** Deduplicated catalog topic for the dropdown. */
+type CatalogTopicEntry = {
+  catalogTopicId: string;
+  name: string;
+  /** grade string → topicLevelId */
+  gradeMap: Record<string, string>;
+};
+
+/** Shape of TestAssignment as returned by the test detail endpoint. */
+export type TestTopicAssignment = {
+  id: string;
+  topicLevelId: string;
+  isPrimary: boolean;
+  topicLevel: {
+    id: string;
+    catalogTopic: { id: string; name: string } | null;
+    subjectLevel: { grade: string | null };
+  };
 };
 
 export type AssignToClassModalProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   testId: string | null;
+  /** @deprecated Use testAssignments instead — topics are now scoped to the test */
   subjectId?: string | null;
   allowedGrades: string[];
   /** Active academic year id for fetching class sections */
   yearId: string | null;
+  /** TestAssignment rows from the test detail. When provided, skips the by-subject topic fetch. */
+  testAssignments?: TestTopicAssignment[];
   onSuccess?: () => void;
 };
 
@@ -45,10 +68,11 @@ export function AssignToClassModal({
   subjectId,
   allowedGrades,
   yearId,
+  testAssignments,
   onSuccess,
 }: AssignToClassModalProps): React.JSX.Element {
   const [classes, setClasses] = useState<ClassSection[]>([]);
-  const [topics, setTopics] = useState<TopicOption[]>([]);
+  const [catalogTopics, setCatalogTopics] = useState<CatalogTopicEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [topicsLoading, setTopicsLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -56,7 +80,8 @@ export function AssignToClassModal({
   const [assignErrorDetails, setAssignErrorDetails] = useState<AssignabilityReport | null>(null);
   const [form, setForm] = useState({
     classSectionId: "",
-    topicLevelId: "",
+    /** Stores catalogTopicId; resolved to topicLevelId at submit based on class grade. */
+    catalogTopicId: "",
     openAt: defaultOpen().slice(0, 16),
     closeAt: defaultClose().slice(0, 16),
     maxAttempts: 1,
@@ -85,26 +110,65 @@ export function AssignToClassModal({
       .finally(() => setLoading(false));
   }, [open, yearId]);
 
+  // Build deduplicated catalog topic list from testAssignments (preferred) or fetch by subjectId.
   useEffect(() => {
-    if (!open || !subjectId) {
-      setTopics([]);
+    if (!open) {
+      setCatalogTopics([]);
       setTopicsLoading(false);
-      setForm((prev) => ({ ...prev, topicLevelId: "" }));
+      setForm((prev) => ({ ...prev, catalogTopicId: "" }));
+      return;
+    }
+
+    // --- Fast path: use pre-loaded testAssignments from the test detail ---
+    if (testAssignments !== undefined) {
+      const byId = new Map<string, CatalogTopicEntry>();
+      for (const ta of testAssignments) {
+        const tl = ta.topicLevel;
+        const ctId = tl.catalogTopic?.id ?? ta.topicLevelId;
+        const name = tl.catalogTopic?.name?.trim() || "Neznámé téma";
+        const grade = tl.subjectLevel?.grade ?? "__any__";
+        if (!byId.has(ctId)) {
+          byId.set(ctId, { catalogTopicId: ctId, name, gradeMap: {} });
+        }
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        byId.get(ctId)!.gradeMap[grade] = ta.topicLevelId;
+      }
+      setCatalogTopics(Array.from(byId.values()));
+      setTopicsLoading(false);
+      return;
+    }
+
+    // --- Fallback: fetch all topics for subject (legacy, no testAssignments provided) ---
+    if (!subjectId) {
+      setCatalogTopics([]);
+      setTopicsLoading(false);
+      setForm((prev) => ({ ...prev, catalogTopicId: "" }));
       return;
     }
     setTopicsLoading(true);
     fetchWithAuth<TopicOption[] | { data?: TopicOption[] }>("GET", `/topics/by-subject/${subjectId}`)
       .then((data) => {
-        const list = Array.isArray(data)
+        const list: TopicOption[] = Array.isArray(data)
           ? data
           : (data && typeof data === "object" && "data" in data ? (data as { data?: TopicOption[] }).data : null) ?? [];
-        setTopics(Array.isArray(list) ? list : []);
+        const byId = new Map<string, CatalogTopicEntry>();
+        for (const tl of list) {
+          const ctId = tl.catalogTopic?.id ?? tl.id;
+          const name = tl.catalogTopic?.name?.trim() || tl.name?.trim() || "Neznámé téma";
+          const grade = tl.subjectLevel?.grade ?? "__any__";
+          if (!byId.has(ctId)) {
+            byId.set(ctId, { catalogTopicId: ctId, name, gradeMap: {} });
+          }
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+          byId.get(ctId)!.gradeMap[grade] = tl.id;
+        }
+        setCatalogTopics(Array.from(byId.values()));
       })
       .catch(() => {
-        setTopics([]);
+        setCatalogTopics([]);
       })
       .finally(() => setTopicsLoading(false));
-  }, [open, subjectId]);
+  }, [open, subjectId, testAssignments]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -130,11 +194,23 @@ export function AssignToClassModal({
     setError(null);
     setAssignErrorDetails(null);
     setSubmitting(true);
+    // Resolve topicLevelId: pick the TopicLevel whose grade matches the selected class.
+    let resolvedTopicLevelId: string | undefined;
+    if (form.catalogTopicId) {
+      const entry = catalogTopics.find((ct) => ct.catalogTopicId === form.catalogTopicId);
+      if (entry) {
+        const classGrade = selectedClass?.grade ?? "__any__";
+        resolvedTopicLevelId =
+          entry.gradeMap[classGrade] ??       // exact grade match
+          entry.gradeMap["__any__"] ??         // grade-less fallback
+          Object.values(entry.gradeMap)[0];    // any available
+      }
+    }
     try {
       await fetchWithAuth("POST", `/tests/${testId}/assign`, {
         body: {
           classSectionId: form.classSectionId,
-          ...(form.topicLevelId ? { topicLevelId: form.topicLevelId } : {}),
+          ...(resolvedTopicLevelId ? { topicLevelId: resolvedTopicLevelId } : {}),
           openAt: new Date(form.openAt).toISOString(),
           closeAt: new Date(form.closeAt).toISOString(),
           maxAttempts: Math.max(1, Number(form.maxAttempts) || 1),
@@ -147,7 +223,7 @@ export function AssignToClassModal({
       onOpenChange(false);
       setForm({
         classSectionId: "",
-        topicLevelId: "",
+        catalogTopicId: "",
         openAt: defaultOpen().slice(0, 16),
         closeAt: defaultClose().slice(0, 16),
         maxAttempts: 1,
@@ -187,7 +263,6 @@ export function AssignToClassModal({
   };
 
   const labelFor = (c: ClassSection) => (c.label ?? [c.grade, c.section].filter(Boolean).join(" ")) || c.id;
-  const topicLabelFor = (topic: TopicOption) => topic.name?.trim() || topic.catalogTopic?.name?.trim() || "Neznámé téma";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -215,22 +290,28 @@ export function AssignToClassModal({
           </div>
           <div className="space-y-2">
             <label htmlFor="assign-topic" className="text-sm font-medium text-slate-700">
-              Vyberte téma (pro diagnostiku)
+              Téma testu
             </label>
-            <select
-              id="assign-topic"
-              className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-              value={form.topicLevelId}
-              onChange={(e) => setForm((p) => ({ ...p, topicLevelId: e.target.value }))}
-              disabled={topicsLoading || !subjectId}
-            >
-              <option value="">Bez tématu</option>
-              {topics.map((topic) => (
-                <option key={topic.id} value={topic.id}>
-                  {topicLabelFor(topic)}
-                </option>
-              ))}
-            </select>
+            {catalogTopics.length === 0 && !topicsLoading ? (
+              <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                Test nemá přiřazené žádné téma. Přidejte téma v editoru testu před přiřazením třídě.
+              </p>
+            ) : (
+              <select
+                id="assign-topic"
+                className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                value={form.catalogTopicId}
+                onChange={(e) => setForm((p) => ({ ...p, catalogTopicId: e.target.value }))}
+                disabled={topicsLoading}
+              >
+                <option value="">Bez tématu</option>
+                {catalogTopics.map((ct) => (
+                  <option key={ct.catalogTopicId} value={ct.catalogTopicId}>
+                    {ct.name}
+                  </option>
+                ))}
+              </select>
+            )}
             <p className="text-xs text-slate-500">
               Téma pomáhá systému identifikovat slabá místa studenta.
             </p>

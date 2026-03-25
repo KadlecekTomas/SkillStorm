@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { LifeBuoy, Loader2 } from "lucide-react";
@@ -182,6 +183,9 @@ export function ReportIssueButton({
           </div>
 
           <DialogFooter>
+            <Button type="button" variant="ghost" asChild disabled={submitting}>
+              <Link href="/app/support">Moje hlášení</Link>
+            </Button>
             <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={submitting}>
               Zrušit
             </Button>

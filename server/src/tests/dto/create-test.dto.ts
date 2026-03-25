@@ -50,4 +50,11 @@ export class CreateTestDto {
   @IsOptional()
   @IsUUID()
   academicYearId?: string;
+
+  @ApiPropertyOptional({
+    description: 'CatalogTopic UUID — auto-creates TestAssignment rows for all matching TopicLevel records',
+  })
+  @IsOptional()
+  @IsUUID()
+  catalogTopicId?: string;
 }

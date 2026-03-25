@@ -630,6 +630,7 @@ export class AssignmentsService {
               deletedAt: null,
             },
             select: {
+              id: true,
               assignmentId: true,
               attemptNo: true,
               score: true,
@@ -823,6 +824,7 @@ export class AssignmentsService {
         maxAttempts: a.maxAttempts,
         attemptNo: latestSubmission?.attemptNo ?? 0,
         attemptsUsed,
+        submissionId: latestSubmission?.id ?? null,
         submittedAt: latestSubmission?.submittedAt?.toISOString() ?? null,
         submissionStatus: latestSubmission?.status ?? null,
         effectiveStatus: this.computeEffectiveStatus(a, latestSubmission, attemptsUsed, now),
@@ -909,6 +911,7 @@ export class AssignmentsService {
         maxAttempts: a.maxAttempts,
         attemptNo: latestSubmission?.attemptNo ?? 0,
         attemptsUsed,
+        submissionId: latestSubmission?.id ?? null,
         submittedAt: latestSubmission?.submittedAt?.toISOString() ?? null,
         submissionStatus: latestSubmission?.status ?? null,
         effectiveStatus: this.computeEffectiveStatus(a, latestSubmission, attemptsUsed, now),

@@ -19,6 +19,7 @@ import {
 import { BookOpenCheck, NotebookTabs, ClipboardList } from "lucide-react";
 import { OverviewCard } from "@/components/cards/overview-card";
 import { Alert } from "@/components/ui/alert";
+import { formatDate } from "@/lib/format-date";
 
 export function StudentDashboard(): React.JSX.Element {
   const router = useRouter();
@@ -37,6 +38,9 @@ export function StudentDashboard(): React.JSX.Element {
     Promise.all([getDashboardStudent(), getAssignmentsOverview()])
       .then(([dashRes, overviewRes]) => {
         if (!cancelled) {
+          overviewRes.active.forEach((item) => {
+            console.log("assignment.openAt raw:", item.openAt);
+          });
           setData(dashRes);
           setOverview(overviewRes);
         }
@@ -127,7 +131,7 @@ export function StudentDashboard(): React.JSX.Element {
                   <div className="flex-1 min-w-0">
                     <p className="truncate text-sm font-medium text-slate-900">{item.title}</p>
                     <p className="text-xs text-slate-500">
-                      Do: {new Date(item.closeAt).toLocaleDateString("cs-CZ", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })}
+                      Do: {formatDate(item.closeAt)}
                       {" · "}
                       {item.remainingAttempts === 1
                         ? "1 pokus zbývá"

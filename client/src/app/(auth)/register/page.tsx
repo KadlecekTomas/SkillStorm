@@ -55,16 +55,15 @@ export default function RegisterPage(): JSX.Element {
   return (
     <div className="space-y-6">
       <div>
-        <p className="text-sm font-medium uppercase tracking-wide text-slate-400">
-          Create space
-        </p>
         <h1 className="text-2xl font-semibold text-slate-900">
-          Register for SkillStorm
+          Vytvoření účtu v EduTo
         </h1>
+
         <p className="text-sm text-slate-500">
-          Vyber si individuální účet, založ školu, nebo zvol připojení a dokonči ho v onboarding kroku.
+          Vytvořte si účet a pokračujte do nastavení.
         </p>
       </div>
+
       <AuthForm
         key={`register-${initialMode}-${initialJoinCode}`}
         mode="register"

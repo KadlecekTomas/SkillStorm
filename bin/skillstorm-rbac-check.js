@@ -1,4 +1,15 @@
 #!/usr/bin/env node
+/**
+ * Jednoduchá statická kontrola RBAC dekorátorů pro backend controllery.
+ *
+ * K čemu slouží:
+ * - projde controllery v `server/src`,
+ * - zkontroluje, že každý controller má základní access metadata,
+ * - upozorní na soubory, kde chybí `@Permission`, `@Roles` nebo `@Public`.
+ *
+ * Jde jen o strukturální pojistku. Neověřuje runtime chování,
+ * správnost oprávnění ani autorizaci uvnitř service vrstvy.
+ */
 const fs = require("node:fs");
 const path = require("node:path");
 

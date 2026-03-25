@@ -13,7 +13,8 @@ describe("TestTimeline", () => {
         assignmentId: "a1",
         testTitle: "První test",
         submittedAt: "2025-01-15T10:00:00Z",
-        score: 0.9,
+        score: 9,
+        maxScore: 10,
         status: "APPROVED",
         attemptNo: 1,
       },
@@ -22,7 +23,7 @@ describe("TestTimeline", () => {
     render(<TestTimeline items={items} />);
 
     expect(screen.getByText("První test")).toBeInTheDocument();
-    expect(screen.getByText("90 %")).toBeInTheDocument();
+    expect(screen.getByText("9 / 10 (90 %)")).toBeInTheDocument();
     expect(screen.getByText("APPROVED")).toBeInTheDocument();
   });
 
@@ -41,7 +42,8 @@ describe("TestTimeline", () => {
         assignmentId: "a1",
         testTitle: "Test A",
         submittedAt: "2025-01-01T00:00:00Z",
-        score: 0.7,
+        score: 7,
+        maxScore: 10,
         status: "APPROVED",
         attemptNo: 1,
       },
@@ -50,7 +52,8 @@ describe("TestTimeline", () => {
         assignmentId: "a2",
         testTitle: "Test B",
         submittedAt: "2025-01-02T00:00:00Z",
-        score: 0.85,
+        score: 17,
+        maxScore: 20,
         status: "APPROVED",
         attemptNo: 1,
       },
@@ -60,7 +63,7 @@ describe("TestTimeline", () => {
 
     expect(screen.getByText("Test A")).toBeInTheDocument();
     expect(screen.getByText("Test B")).toBeInTheDocument();
-    expect(screen.getByText("70 %")).toBeInTheDocument();
-    expect(screen.getByText("85 %")).toBeInTheDocument();
+    expect(screen.getByText("7 / 10 (70 %)")).toBeInTheDocument();
+    expect(screen.getByText("17 / 20 (85 %)")).toBeInTheDocument();
   });
 });

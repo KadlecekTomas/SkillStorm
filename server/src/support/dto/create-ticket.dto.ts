@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsObject, IsOptional, IsString, Length, MaxLength } from 'class-validator';
+import { IsIn, IsObject, IsOptional, IsString, Length, MaxLength } from 'class-validator';
+import { SupportTicketPriority } from '@prisma/client';
 
 export class CreateTicketDto {
   @ApiProperty({ example: 'Test' })
@@ -26,4 +27,9 @@ export class CreateTicketDto {
   @IsOptional()
   @IsObject()
   metadata?: Record<string, unknown>;
+
+  @ApiPropertyOptional({ enum: SupportTicketPriority, example: SupportTicketPriority.MEDIUM })
+  @IsOptional()
+  @IsIn(Object.values(SupportTicketPriority))
+  priority?: SupportTicketPriority;
 }

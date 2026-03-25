@@ -15,6 +15,7 @@
  * - Třída 8.C: bez přiřazených testů (negativní scénář – třída bez testů)
  * - GET /analytics/student-timeline: více položek pro jedno assignmentId, správné pořadí
  */
+import 'dotenv/config';
 import {
   EnrollmentStatus,
   OrganizationRole,
@@ -242,6 +243,7 @@ async function createClassSections(
     id: string;
     orgId: string;
     yearId: string;
+    grade: SchoolGrade;
     label: string;
   }[] = [];
   const gradeSectionPairs: [SchoolGrade, string, string][] = [
@@ -276,6 +278,7 @@ async function createClassSections(
           id: existing.id,
           orgId: org.id,
           yearId: year.id,
+          grade,
           label,
         });
       } else {
@@ -292,6 +295,7 @@ async function createClassSections(
           id: cs.id,
           orgId: org.id,
           yearId: year.id,
+          grade,
           label,
         });
       }
@@ -694,6 +698,118 @@ async function ensureCatalogAndSubjects(
 
   logDone(`Catalog subjects + org subjects ready`);
   return result;
+}
+
+function schoolGradeToNumber(grade: SchoolGrade): number {
+  switch (grade) {
+    case SchoolGrade.GRADE_1:
+      return 1;
+    case SchoolGrade.GRADE_2:
+      return 2;
+    case SchoolGrade.GRADE_3:
+      return 3;
+    case SchoolGrade.GRADE_4:
+      return 4;
+    case SchoolGrade.GRADE_5:
+      return 5;
+    case SchoolGrade.GRADE_6:
+      return 6;
+    case SchoolGrade.GRADE_7:
+      return 7;
+    case SchoolGrade.GRADE_8:
+      return 8;
+    case SchoolGrade.GRADE_9:
+      return 9;
+    case SchoolGrade.HIGH_SCHOOL_YEAR_1:
+      return 10;
+    case SchoolGrade.HIGH_SCHOOL_YEAR_2:
+      return 11;
+    case SchoolGrade.HIGH_SCHOOL_YEAR_3:
+      return 12;
+    case SchoolGrade.HIGH_SCHOOL_YEAR_4:
+      return 13;
+  }
+}
+
+async function attachOrgSubjectsToSeededClassSections(
+  orgs: OrgWithName[],
+  sections: { id: string; orgId: string; grade: SchoolGrade }[],
+  subjectsByOrg: Map<string, Map<string, string>>,
+) {
+  logStep('Class section subjects: attaching grade-compatible org subjects');
+
+  let createdOrgSubjects = 0;
+  let createdLinks = 0;
+
+  for (const org of orgs) {
+    const subjectIds = Array.from(subjectsByOrg.get(org.id)?.values() ?? []);
+    if (subjectIds.length === 0) continue;
+
+    const subjects = await prisma.subject.findMany({
+      where: { id: { in: subjectIds } },
+      select: { id: true, gradeFrom: true, gradeTo: true },
+    });
+
+    const orgSubjectIdsBySubjectId = new Map<string, string>();
+
+    for (const subject of subjects) {
+      const orgSubject = await prisma.orgSubject.upsert({
+        where: {
+          organizationId_subjectId: {
+            organizationId: org.id,
+            subjectId: subject.id,
+          },
+        },
+        update: {
+          isEnabled: true,
+        },
+        create: {
+          organizationId: org.id,
+          subjectId: subject.id,
+          isEnabled: true,
+        },
+      });
+
+      orgSubjectIdsBySubjectId.set(subject.id, orgSubject.id);
+    }
+
+    createdOrgSubjects += orgSubjectIdsBySubjectId.size;
+
+    const orgSections = sections.filter((section) => section.orgId === org.id);
+
+    for (const section of orgSections) {
+      const grade = schoolGradeToNumber(section.grade);
+
+      for (const subject of subjects) {
+        const matchesGrade =
+          grade >= subject.gradeFrom && grade <= subject.gradeTo;
+        if (!matchesGrade) continue;
+
+        const orgSubjectId = orgSubjectIdsBySubjectId.get(subject.id);
+        if (!orgSubjectId) continue;
+
+        await prisma.classSectionOrgSubject.upsert({
+          where: {
+            classSectionId_orgSubjectId: {
+              classSectionId: section.id,
+              orgSubjectId,
+            },
+          },
+          update: {},
+          create: {
+            classSectionId: section.id,
+            orgSubjectId,
+          },
+        });
+
+        createdLinks += 1;
+      }
+    }
+  }
+
+  logDone(
+    `Class section subjects ready (${createdOrgSubjects} org subjects, ${createdLinks} class links)`,
+  );
 }
 
 // Title → catalog code mapping
@@ -1114,12 +1230,14 @@ async function createAssignments(
       }
     }
   }
-  const brokenAssignments = await prisma.assignment.count({
-    where: {
-      testId: { in: tests.map((test) => test.testId) },
-      topicLevelId: null,
-    },
-  });
+  const brokenAssignments = assignments.length
+    ? await prisma.assignment.count({
+        where: {
+          id: { in: assignments.map((assignment) => assignment.id) },
+          topicLevelId: null,
+        },
+      })
+    : 0;
   if (brokenAssignments > 0) {
     throw new Error(`Seed produced ${brokenAssignments} assignments without topicLevelId`);
   }
@@ -1172,11 +1290,11 @@ async function createSubmissions(
     'Submissions: Student A–F scenarios (1 attempt, 2 attempts, 3 attempts, none, decline, 1 test only)',
   );
 
-  // Reset all submissions for seeded assignments so repeated seed runs produce a
-  // clean slate (tests consume attempts and make the seed non-idempotent otherwise).
-  const assignmentIds = assignments.map((a) => a.id);
+  // Reset all submissions for seeded demo students so repeated seed runs restore
+  // the exact walkthrough scenarios even after manual/E2E runs created extra data.
+  const seededStudentIds = orgUsers.flatMap((org) => org.studentMembershipIds);
   const deleted = await prisma.submission.deleteMany({
-    where: { assignmentId: { in: assignmentIds } },
+    where: { studentId: { in: seededStudentIds } },
   });
   if (deleted.count > 0) logStep(`Cleared ${deleted.count} stale submissions`);
 
@@ -1391,6 +1509,29 @@ async function createSubmissions(
   logDone(`Submissions: ${created} created/updated`);
 }
 
+async function cleanupGoldenFlowArtifacts(orgs: { id: string }[]) {
+  logStep('Cleanup: removing stale Golden Flow E2E artifacts');
+
+  const goldenTests = await prisma.test.findMany({
+    where: {
+      organizationId: { in: orgs.map((org) => org.id) },
+      title: { startsWith: 'Golden Flow ' },
+    },
+    select: { id: true },
+  });
+
+  if (goldenTests.length === 0) {
+    logDone('Cleanup: no stale Golden Flow tests');
+    return;
+  }
+
+  await prisma.test.deleteMany({
+    where: { id: { in: goldenTests.map((test) => test.id) } },
+  });
+
+  logDone(`Cleanup: removed ${goldenTests.length} stale Golden Flow tests`);
+}
+
 async function main() {
   console.log('🌱 Full walkthrough seed – start');
   await ensurePlatformBootstrapUsers();
@@ -1403,6 +1544,8 @@ async function main() {
   await createTeacherClassSections(orgUsers, sections);
   await createStudentsAndEnrollments(orgUsers, sections);
   const subjectsByOrg = await ensureCatalogAndSubjects(orgs);
+  await attachOrgSubjectsToSeededClassSections(orgs, sections, subjectsByOrg);
+  await cleanupGoldenFlowArtifacts(orgs);
   const tests = await createTests(orgs, orgUsers, years, subjectsByOrg);
   const assignments = await createAssignments(orgUsers, sections, tests);
   await createSubmissions(orgUsers, sections, tests, assignments);

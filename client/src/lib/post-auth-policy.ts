@@ -16,6 +16,20 @@ export type ResolvePostAuthTargetArgs = {
   contextMode: ContextMode;
 };
 
+function normalizeTargetForContext(
+  target: string,
+  contextMode: ContextMode,
+): string {
+  if (
+    contextMode === "platform" &&
+    (target === "/app" || (target.startsWith("/app/") && !target.startsWith("/app/platform")))
+  ) {
+    return "/app/platform";
+  }
+
+  return target;
+}
+
 /**
  * Returns the path to navigate to after auth, or null if no navigation needed
  * (e.g. already on target). Order: intent (JOIN / RETURN_TO) → safe redirect/from
@@ -28,12 +42,15 @@ export function resolvePostAuthTarget(args: ResolvePostAuthTargetArgs): string |
   // 1) Intent takes precedence
   if (authIntent) {
     if (authIntent.type === "JOIN") {
-      const target = buildJoinUrlFromIntent(authIntent);
+      const target = normalizeTargetForContext(
+        buildJoinUrlFromIntent(authIntent),
+        contextMode,
+      );
       return normalizedCurrent === target ? null : target;
     }
     if (authIntent.type === "RETURN_TO") {
       if (!isSafeRedirectPath(authIntent.path)) return null;
-      const target = authIntent.path.trim();
+      const target = normalizeTargetForContext(authIntent.path.trim(), contextMode);
       return normalizedCurrent === target ? null : target;
     }
   }
@@ -41,7 +58,8 @@ export function resolvePostAuthTarget(args: ResolvePostAuthTargetArgs): string |
   // 2) Safe redirect/from from URL (fallback when no intent)
   const redirectFromUrl = getSafeRedirectRedirect(searchParams);
   if (redirectFromUrl) {
-    return normalizedCurrent === redirectFromUrl ? null : redirectFromUrl;
+    const target = normalizeTargetForContext(redirectFromUrl, contextMode);
+    return normalizedCurrent === target ? null : target;
   }
 
   // 3) Context-based fallback

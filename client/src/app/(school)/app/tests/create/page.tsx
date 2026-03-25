@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
@@ -13,6 +13,8 @@ import { withGuard } from "@/lib/guard/withGuard";
 import { ALL_SCHOOL_GRADES, gradeLabel, type SchoolGradeValue } from "@/lib/grades";
 import { PermissionKey } from "@/types";
 
+type CatalogTopicOption = { catalogTopicId: string; name: string };
+
 function CreateTestPage(): React.JSX.Element {
   const router = useRouter();
   const { subjects, loading: subjectsLoading } = useSubjects();
@@ -20,8 +22,38 @@ function CreateTestPage(): React.JSX.Element {
   const [description, setDescription] = useState("");
   const [subjectId, setSubjectId] = useState<string>("");
   const [allowedGrades, setAllowedGrades] = useState<SchoolGradeValue[]>([]);
+  const [catalogTopicId, setCatalogTopicId] = useState<string>("");
+  const [topicOptions, setTopicOptions] = useState<CatalogTopicOption[]>([]);
+  const [topicsLoading, setTopicsLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Fetch deduplicated catalog topics whenever subjectId changes.
+  useEffect(() => {
+    if (!subjectId) {
+      setTopicOptions([]);
+      setCatalogTopicId("");
+      return;
+    }
+    setTopicsLoading(true);
+    setCatalogTopicId("");
+    fetchWithAuth<
+      { id: string; catalogTopic?: { id?: string | null; name?: string | null } | null; name?: string | null }[]
+      | { data?: { id: string; catalogTopic?: { id?: string | null; name?: string | null } | null; name?: string | null }[] }
+    >("GET", `/topics/by-subject/${subjectId}`)
+      .then((raw) => {
+        const list = Array.isArray(raw) ? raw : ((raw as { data?: typeof raw }).data ?? []);
+        const byId = new Map<string, CatalogTopicOption>();
+        for (const tl of Array.isArray(list) ? list : []) {
+          const ctId = tl.catalogTopic?.id ?? tl.id;
+          const name = tl.catalogTopic?.name?.trim() || tl.name?.trim() || "Neznámé téma";
+          if (!byId.has(ctId)) byId.set(ctId, { catalogTopicId: ctId, name });
+        }
+        setTopicOptions(Array.from(byId.values()));
+      })
+      .catch(() => setTopicOptions([]))
+      .finally(() => setTopicsLoading(false));
+  }, [subjectId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,6 +69,10 @@ function CreateTestPage(): React.JSX.Element {
       setError("Vyberte alespoň jeden ročník, pro který je test určen.");
       return;
     }
+    if (!catalogTopicId) {
+      setError("Vyberte téma testu.");
+      return;
+    }
     setError(null);
     setLoading(true);
     try {
@@ -47,6 +83,7 @@ function CreateTestPage(): React.JSX.Element {
           status: "DRAFT",
           subjectId,
           allowedGrades,
+          catalogTopicId,
         },
       });
       const id = created && typeof created === "object" && "id" in created ? (created as { id: string }).id : null;
@@ -117,6 +154,34 @@ function CreateTestPage(): React.JSX.Element {
                 </option>
               ))}
             </select>
+          </label>
+          <label className="block space-y-2">
+            <span className="text-sm font-medium text-slate-700">Téma testu *</span>
+            <select
+              value={catalogTopicId}
+              onChange={(e) => setCatalogTopicId(e.target.value)}
+              required
+              disabled={!subjectId || topicsLoading}
+              className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm disabled:opacity-50"
+            >
+              <option value="">
+                {!subjectId
+                  ? "Nejdříve vyberte předmět"
+                  : topicsLoading
+                    ? "Načítám témata…"
+                    : topicOptions.length === 0
+                      ? "Žádná témata pro tento předmět"
+                      : "Vyberte téma"}
+              </option>
+              {topicOptions.map((t) => (
+                <option key={t.catalogTopicId} value={t.catalogTopicId}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-slate-500">
+              Téma určuje, jakou oblast znalostí test pokrývá – slouží pro diagnostiku žáků.
+            </p>
           </label>
           <fieldset className="space-y-2">
             <legend className="text-sm font-medium text-slate-700">Určeno pro ročníky *</legend>

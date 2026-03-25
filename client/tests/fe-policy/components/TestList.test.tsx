@@ -14,7 +14,8 @@ describe("TestList", () => {
         testTitle: "Matematika – čísla",
         subjectName: null,
         status: "done" as const,
-        lastScore: 0.85,
+        lastScore: 17,
+        lastMaxScore: 20,
       },
       {
         assignmentId: "a2",
@@ -30,7 +31,7 @@ describe("TestList", () => {
     expect(screen.getByText("Matematika – čísla")).toBeInTheDocument();
     expect(screen.getByText("Český jazyk – pravopis")).toBeInTheDocument();
     expect(screen.getByText("Splněno")).toBeInTheDocument();
-    expect(screen.getByText("85 %")).toBeInTheDocument();
+    expect(screen.getByText("17 / 20 (85 %)")).toBeInTheDocument();
     expect(screen.getByText("Otevřeno")).toBeInTheDocument();
     expect(screen.getByText("ČJ")).toBeInTheDocument();
   });
@@ -68,7 +69,8 @@ describe("TestList", () => {
             assignmentId: "a1",
             testTitle: "Test",
             status: "done",
-            lastScore: 0.9,
+            lastScore: 9,
+            lastMaxScore: 10,
           },
         ]}
         onViewResult={onViewResult}

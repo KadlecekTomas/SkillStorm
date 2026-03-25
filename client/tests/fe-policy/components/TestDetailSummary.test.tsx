@@ -10,14 +10,15 @@ describe("TestDetailSummary", () => {
     render(
       <TestDetailSummary
         testTitle="Test z matematiky"
-        score={0.78}
+        score={78}
+        maxScore={100}
         submittedAt="2025-02-01T12:00:00Z"
         attemptNo={2}
       />
     );
 
     expect(screen.getByText("Test z matematiky")).toBeInTheDocument();
-    expect(screen.getByText("78 %")).toBeInTheDocument();
+    expect(screen.getByText("78 / 100 (78 %)")).toBeInTheDocument();
     expect(screen.getByText("2")).toBeInTheDocument();
   });
 
@@ -41,7 +42,8 @@ describe("TestDetailSummary", () => {
       <TestDetailSummary
         testTitle="ČJ test"
         subjectName="Český jazyk"
-        score={0.9}
+        score={18}
+        maxScore={20}
         submittedAt={null}
         attemptNo={1}
       />

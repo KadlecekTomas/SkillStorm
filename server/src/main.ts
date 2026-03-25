@@ -161,6 +161,7 @@ export async function createApp(): Promise<INestApplication> {
       'x-csrf-token',
       'x-cid',
       'x-metrics-key',
+      'x-e2e-token',
       'x-request-id',
     ],
   });

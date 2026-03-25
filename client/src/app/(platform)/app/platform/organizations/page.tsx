@@ -7,7 +7,7 @@ import {
   usePlatformOrganizations,
   type PlatformOrganization,
 } from "@/hooks/use-platform-organizations";
-import { isPlatformAdmin } from "@/utils/permissions";
+import { canMutatePlatform } from "@/utils/permissions";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -46,7 +46,7 @@ export default function PlatformOrganizationsPage() {
   const previousItemsRef = useRef<PlatformOrganization[] | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const isSuperAdmin = isPlatformAdmin(user);
+  const isSuperAdmin = canMutatePlatform(user);
   const query = useMemo(() => {
     const trimmed = search.trim();
     return trimmed ? { q: trimmed } : {};
@@ -217,21 +217,6 @@ export default function PlatformOrganizationsPage() {
       <h1 className="text-2xl font-semibold text-gray-900">
         Platforma – organizace
       </h1>
-
-      {/* Informační panel: jak vznikají organizace (governance, bez error tónu) */}
-      <Card className="border-slate-200 bg-slate-50/80 px-4 py-4">
-        <h2 className="text-sm font-semibold text-slate-700">
-          Jak vznikají organizace?
-        </h2>
-        <p className="mt-1.5 text-sm text-slate-600">
-          Organizace ve SkillStorm vznikají výhradně během onboarding procesu
-          nového uživatele. Tento proces zajišťuje správné přiřazení vlastníka,
-          auditní stopu a konzistenci dat.
-        </p>
-        <p className="mt-2 text-xs text-slate-500">
-          Platforma slouží ke správě a dohledu nad existujícími organizacemi.
-        </p>
-      </Card>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-3">

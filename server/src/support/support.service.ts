@@ -5,16 +5,39 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { AuditEntityType, Prisma, SystemRole } from '@prisma/client';
+import {
+  AuditEntityType,
+  Prisma,
+  SupportTicketPriority,
+  SupportTicketStatus,
+  SystemRole,
+} from '@prisma/client';
 import { AuditService } from '@/audit/audit.service';
 import { PrismaService } from '@/prisma/prisma.service';
 import type { JwtPayload } from '@/auth/types/jwt-payload';
 import type { RequestWithUser } from '@/types/request-with-user';
 import { CreateTicketDto } from './dto/create-ticket.dto';
-import { ResolveTicketDto } from './dto/resolve-ticket.dto';
+import { UpdateTicketDto } from './dto/update-ticket.dto';
+import type { SupportTicketInternalDto } from './support-data-scope.service';
 
-const SUPPORT_STATUS_OPEN = 'OPEN';
-const SUPPORT_STATUS_RESOLVED = 'RESOLVED';
+type TicketListFilters = {
+  status?: SupportTicketStatus;
+  organizationId?: string;
+  category?: string;
+};
+
+type SupportOperatorRole = 'SUPERADMIN' | 'SUPPORT';
+
+const PLATFORM_READ_ROLES = new Set<SystemRole>([
+  SystemRole.SUPERADMIN,
+  SystemRole.SUPPORT,
+  SystemRole.DEVOPS,
+]);
+
+const SUPPORT_MUTATION_ROLES = new Set<SupportOperatorRole>([
+  SystemRole.SUPERADMIN,
+  SystemRole.SUPPORT,
+]);
 
 @Injectable()
 export class SupportService {
@@ -47,6 +70,19 @@ export class SupportService {
     return membership;
   }
 
+  private assertPlatformReader(user: JwtPayload) {
+    if (!user.systemRole || !PLATFORM_READ_ROLES.has(user.systemRole)) {
+      throw new ForbiddenException('Platform support inbox requires system role access.');
+    }
+  }
+
+  private assertSupportOperator(user: JwtPayload): SupportOperatorRole {
+    if (!user.systemRole || !SUPPORT_MUTATION_ROLES.has(user.systemRole as SupportOperatorRole)) {
+      throw new ForbiddenException('Support triage actions require SUPPORT or SUPERADMIN.');
+    }
+    return user.systemRole as SupportOperatorRole;
+  }
+
   private resolvePage(dto: CreateTicketDto, req: RequestWithUser): string | null {
     const headerPage =
       req.headers['x-skillstorm-page'] ??
@@ -63,7 +99,10 @@ export class SupportService {
     return normalizedDto ?? normalizedHeader;
   }
 
-  private buildMetadata(dto: CreateTicketDto, req: RequestWithUser): Prisma.InputJsonValue | undefined {
+  private buildMetadata(
+    dto: CreateTicketDto,
+    req: RequestWithUser,
+  ): Prisma.InputJsonValue | undefined {
     const metadata: Record<string, unknown> = {
       ...(dto.metadata ?? {}),
       page: this.resolvePage(dto, req),
@@ -71,6 +110,107 @@ export class SupportService {
     };
 
     return metadata as Prisma.InputJsonValue;
+  }
+
+  private mapTicket(
+    ticket: {
+      id: string;
+      organizationId: string;
+      category: string;
+      message: string;
+      page: string | null;
+      metadata: Prisma.JsonValue | null;
+      status: SupportTicketStatus;
+      priority: SupportTicketPriority;
+      internalNote: string | null;
+      resolutionNote: string | null;
+      resolvedAt: Date | null;
+      createdAt: Date;
+      updatedAt: Date;
+      organization: { id: string; name: string };
+      user: { id: string; name: string; email: string | null };
+      assignedTo: { id: string; name: string; email: string | null } | null;
+      resolvedBy: { id: string; name: string; email: string | null } | null;
+    },
+  ): SupportTicketInternalDto {
+    return {
+      id: ticket.id,
+      organizationId: ticket.organizationId,
+      category: ticket.category,
+      message: ticket.message,
+      page: ticket.page,
+      metadata:
+        ticket.metadata && typeof ticket.metadata === 'object' && !Array.isArray(ticket.metadata)
+          ? (ticket.metadata as SupportTicketInternalDto['metadata'])
+          : null,
+      status: ticket.status,
+      priority: ticket.priority,
+      internalNote: ticket.internalNote,
+      resolutionNote: ticket.resolutionNote,
+      resolvedAt: ticket.resolvedAt,
+      createdAt: ticket.createdAt,
+      updatedAt: ticket.updatedAt,
+      organization: ticket.organization,
+      user: ticket.user,
+      assignedTo: ticket.assignedTo,
+      resolvedBy: ticket.resolvedBy,
+    };
+  }
+
+  private async validateAssignee(
+    assignedToId: string | null | undefined,
+  ): Promise<{ id: string; name: string } | null> {
+    if (assignedToId === undefined) {
+      return null;
+    }
+    if (assignedToId === null) {
+      return null;
+    }
+
+    const assignee = await this.prisma.user.findFirst({
+      where: { id: assignedToId, deletedAt: null },
+      select: {
+        id: true,
+        name: true,
+        systemRole: true,
+        isPlatformAdmin: true,
+      },
+    });
+
+    if (!assignee) {
+      throw new NotFoundException('Assigned support operator not found.');
+    }
+
+    const role = assignee.systemRole;
+    const canOperate =
+      role === SystemRole.SUPERADMIN ||
+      role === SystemRole.SUPPORT ||
+      assignee.isPlatformAdmin === true;
+
+    if (!canOperate) {
+      throw new BadRequestException('Assigned user must be SUPPORT or SUPERADMIN.');
+    }
+
+    return { id: assignee.id, name: assignee.name };
+  }
+
+  private assertStatusTransition(
+    current: SupportTicketStatus,
+    next: SupportTicketStatus,
+  ) {
+    if (current === next) return;
+
+    const allowed =
+      (current === SupportTicketStatus.OPEN &&
+        (next === SupportTicketStatus.IN_REVIEW || next === SupportTicketStatus.RESOLVED)) ||
+      (current === SupportTicketStatus.IN_REVIEW &&
+        next === SupportTicketStatus.RESOLVED);
+
+    if (!allowed) {
+      throw new BadRequestException(
+        `Unsupported support ticket transition: ${current} -> ${next}.`,
+      );
+    }
   }
 
   async createTicket(dto: CreateTicketDto, user: JwtPayload, req: RequestWithUser) {
@@ -84,6 +224,7 @@ export class SupportService {
       category: dto.category.trim(),
       message: dto.message.trim(),
       page,
+      priority: dto.priority ?? SupportTicketPriority.MEDIUM,
     };
     if (metadata !== undefined) {
       data.metadata = metadata;
@@ -97,7 +238,9 @@ export class SupportService {
         message: true,
         page: true,
         status: true,
+        priority: true,
         createdAt: true,
+        updatedAt: true,
       },
     });
 
@@ -112,6 +255,7 @@ export class SupportService {
         category: ticket.category,
         page: ticket.page,
         status: ticket.status,
+        priority: ticket.priority,
       },
       ipAddress: req.ip ?? null,
       userAgent: req.get('user-agent') ?? null,
@@ -135,16 +279,25 @@ export class SupportService {
         message: true,
         page: true,
         status: true,
+        priority: true,
+        resolutionNote: true,
         resolvedAt: true,
         createdAt: true,
+        updatedAt: true,
       },
     });
   }
 
-  async listOpenTickets() {
-    return this.prisma.supportTicket.findMany({
-      where: { status: SUPPORT_STATUS_OPEN },
-      orderBy: { createdAt: 'desc' },
+  async listTickets(user: JwtPayload, filters: TicketListFilters) {
+    this.assertPlatformReader(user);
+
+    const tickets = await this.prisma.supportTicket.findMany({
+      where: {
+        ...(filters.status ? { status: filters.status } : {}),
+        ...(filters.organizationId ? { organizationId: filters.organizationId } : {}),
+        ...(filters.category ? { category: filters.category } : {}),
+      },
+      orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
       select: {
         id: true,
         organizationId: true,
@@ -153,23 +306,87 @@ export class SupportService {
         page: true,
         metadata: true,
         status: true,
+        priority: true,
+        internalNote: true,
+        resolutionNote: true,
+        resolvedAt: true,
         createdAt: true,
+        updatedAt: true,
         organization: {
           select: { id: true, name: true },
         },
         user: {
           select: { id: true, name: true, email: true },
         },
+        assignedTo: {
+          select: { id: true, name: true, email: true },
+        },
+        resolvedBy: {
+          select: { id: true, name: true, email: true },
+        },
       },
     });
+
+    return tickets.map((ticket) => this.mapTicket(ticket));
   }
 
-  async resolveTicket(id: string, dto: ResolveTicketDto, user: JwtPayload, req: RequestWithUser) {
-    if (user.systemRole !== SystemRole.SUPERADMIN) {
-      throw new ForbiddenException('Tuto akci smí provést jen SUPERADMIN.');
+  async getTicketById(id: string, user: JwtPayload) {
+    this.assertPlatformReader(user);
+
+    const ticket = await this.prisma.supportTicket.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        organizationId: true,
+        category: true,
+        message: true,
+        page: true,
+        metadata: true,
+        status: true,
+        priority: true,
+        internalNote: true,
+        resolutionNote: true,
+        resolvedAt: true,
+        createdAt: true,
+        updatedAt: true,
+        organization: {
+          select: { id: true, name: true },
+        },
+        user: {
+          select: { id: true, name: true, email: true },
+        },
+        assignedTo: {
+          select: { id: true, name: true, email: true },
+        },
+        resolvedBy: {
+          select: { id: true, name: true, email: true },
+        },
+      },
+    });
+
+    if (!ticket) {
+      throw new NotFoundException('Support ticket nebyl nalezen.');
     }
-    if (dto.status !== SUPPORT_STATUS_RESOLVED) {
-      throw new BadRequestException('Unsupported support ticket status.');
+
+    return this.mapTicket(ticket);
+  }
+
+  async updateTicket(
+    id: string,
+    dto: UpdateTicketDto,
+    user: JwtPayload,
+    req: RequestWithUser,
+  ) {
+    this.assertSupportOperator(user);
+
+    if (
+      dto.assignedToId === undefined &&
+      dto.status === undefined &&
+      dto.priority === undefined &&
+      dto.internalNote === undefined &&
+      dto.resolutionNote === undefined
+    ) {
+      throw new BadRequestException('Support ticket update payload is empty.');
     }
 
     const current = await this.prisma.supportTicket.findUnique({
@@ -178,6 +395,10 @@ export class SupportService {
         id: true,
         organizationId: true,
         status: true,
+        priority: true,
+        assignedToId: true,
+        internalNote: true,
+        resolutionNote: true,
       },
     });
 
@@ -185,40 +406,100 @@ export class SupportService {
       throw new NotFoundException('Support ticket nebyl nalezen.');
     }
 
-    const resolvedAt = new Date();
+    const nextStatus = dto.status ?? current.status;
+    this.assertStatusTransition(current.status, nextStatus);
+
+    if (
+      nextStatus === SupportTicketStatus.RESOLVED &&
+      !(dto.resolutionNote?.trim() || current.resolutionNote?.trim())
+    ) {
+      throw new BadRequestException('Resolving a support ticket requires a resolution note.');
+    }
+
+    const assignee =
+      dto.assignedToId === undefined
+        ? undefined
+        : await this.validateAssignee(dto.assignedToId);
+
+    const updateData: Prisma.SupportTicketUncheckedUpdateInput = {
+      ...(dto.priority ? { priority: dto.priority } : {}),
+      ...(dto.internalNote !== undefined ? { internalNote: dto.internalNote } : {}),
+      ...(dto.resolutionNote !== undefined ? { resolutionNote: dto.resolutionNote } : {}),
+      ...(dto.assignedToId !== undefined ? { assignedToId: assignee?.id ?? null } : {}),
+    };
+
+    let action = 'UPDATED';
+
+    if (nextStatus !== current.status) {
+      updateData.status = nextStatus;
+      action = nextStatus === SupportTicketStatus.RESOLVED ? 'RESOLVED' : 'IN_REVIEW';
+    }
+
+    if (nextStatus === SupportTicketStatus.RESOLVED) {
+      updateData.resolvedAt = new Date();
+      updateData.resolvedById = user.userId;
+    }
+
+    if (dto.assignedToId !== undefined && action === 'UPDATED') {
+      action = dto.assignedToId ? 'ASSIGNED' : 'UNASSIGNED';
+    }
+
     const ticket = await this.prisma.supportTicket.update({
       where: { id },
-      data: {
-        status: SUPPORT_STATUS_RESOLVED,
-        resolvedAt,
-        resolvedById: user.userId,
-      },
+      data: updateData,
       select: {
         id: true,
         organizationId: true,
         category: true,
+        message: true,
+        page: true,
+        metadata: true,
         status: true,
+        priority: true,
+        internalNote: true,
+        resolutionNote: true,
         resolvedAt: true,
-        resolvedById: true,
+        createdAt: true,
+        updatedAt: true,
+        organization: {
+          select: { id: true, name: true },
+        },
+        user: {
+          select: { id: true, name: true, email: true },
+        },
+        assignedTo: {
+          select: { id: true, name: true, email: true },
+        },
+        resolvedBy: {
+          select: { id: true, name: true, email: true },
+        },
       },
     });
 
     await this.auditService.log({
-      action: 'RESOLVED',
+      action,
       entityType: AuditEntityType.SUPPORT_TICKET,
       entityId: ticket.id,
       userId: user.userId,
       organizationId: current.organizationId,
       systemRole: user.systemRole ?? null,
       metadata: {
-        status: ticket.status,
+        fromStatus: current.status,
+        toStatus: ticket.status,
+        priority: ticket.priority,
+        assignedToId: ticket.assignedTo?.id ?? null,
+        assignedToName: ticket.assignedTo?.name ?? null,
+        resolverId: ticket.resolvedBy?.id ?? null,
+        resolverName: ticket.resolvedBy?.name ?? null,
+        resolutionNote: ticket.resolutionNote ?? null,
+        hasInternalNote: Boolean(ticket.internalNote?.trim()),
         resolvedAt: ticket.resolvedAt?.toISOString() ?? null,
       },
       ipAddress: req.ip ?? null,
       userAgent: req.get('user-agent') ?? null,
     });
 
-    this.logger.log(`Support ticket resolved: ${ticket.id}`);
-    return ticket;
+    this.logger.log(`Support ticket updated: ${ticket.id} (${action})`);
+    return this.mapTicket(ticket);
   }
 }

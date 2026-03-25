@@ -9,6 +9,8 @@ export type TestListItem = {
   subjectName?: string | null;
   status: "done" | "open";
   lastScore?: number | null;
+  lastMaxScore?: number | null;
+  lastPercentage?: number | null;
 };
 
 export type TestListProps = {
@@ -38,6 +40,8 @@ export function TestList({
           subjectName={item.subjectName ?? null}
           status={item.status}
           lastScore={item.lastScore ?? null}
+          lastMaxScore={item.lastMaxScore ?? null}
+          lastPercentage={item.lastPercentage ?? null}
           {...(onOpenTest !== undefined ? { onOpen: onOpenTest } : {})}
           {...(onViewResult !== undefined ? { onViewResult } : {})}
         />
