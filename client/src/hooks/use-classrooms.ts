@@ -171,6 +171,7 @@ export const useClassrooms = ({
         "/classrooms",
         {
           query: {
+            yearId: selectedYearId ?? undefined,
             limit,
             ...(targetCursor ? { cursor: targetCursor, direction: targetDirection } : {}),
             ...(grade ? { grade } : {}),
@@ -200,7 +201,7 @@ export const useClassrooms = ({
 
       return { data, meta };
     },
-    [grade, search, teacherId, limit],
+    [selectedYearId, grade, search, teacherId, limit],
   );
 
   const refetch = useCallback(async (options?: { bypassCache?: boolean; skipFetch?: boolean }): Promise<boolean> => {

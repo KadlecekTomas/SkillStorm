@@ -541,15 +541,24 @@ export function ClassroomsPageContent(): React.JSX.Element {
         (!gradeFilter || created.grade === gradeFilter) &&
         !teacherFilter &&
         (!searchTerm || resolvedLabel.includes(searchTerm.toLowerCase()));
+      const hiddenByFilters = !matchesFilters;
 
-      if (matchesFilters) {
-        if (cursor) {
-          await refetchClassrooms({ bypassCache: true, skipFetch: true });
+      await refetchClassrooms({ bypassCache: true });
+
+      if (cursor) {
+        if (matchesFilters) {
           updateQuery({ cursor: null, dir: null, highlight: created.id });
         } else {
-          updateQuery({ highlight: created.id });
-          await refetchClassrooms({ bypassCache: true });
+          updateQuery({ cursor: null, dir: null, highlight: null });
         }
+      } else if (matchesFilters) {
+        updateQuery({ highlight: created.id });
+      }
+
+      if (hiddenByFilters) {
+        showToastOnce("Třída byla vytvořena, ale aktuální filtry ji skrývají.", {
+          type: "info",
+        });
       }
 
       showToastOnce("Třída vytvořena", { type: "success" });

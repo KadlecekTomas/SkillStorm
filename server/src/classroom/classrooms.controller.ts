@@ -48,18 +48,16 @@ export class ClassroomsController {
     if (!ctx.activeAcademicYearId) {
       throw new BadRequestException('Missing active academic year');
     }
-    if (
-      (q.yearId && q.yearId !== ctx.activeAcademicYearId) ||
-      (q.academicYearId && q.academicYearId !== ctx.activeAcademicYearId)
-    ) {
-      throw new BadRequestException('yearId/academicYearId query is not allowed');
+    if (q.yearId && q.academicYearId && q.yearId !== q.academicYearId) {
+      throw new BadRequestException('academicYearId a yearId se musí shodovat.');
     }
+    const requestedYearId = q.yearId ?? q.academicYearId ?? ctx.activeAcademicYearId;
     return ok(
       this.service.findAll(
         {
           ...q,
-          yearId: ctx.activeAcademicYearId,
-          academicYearId: ctx.activeAcademicYearId,
+          yearId: requestedYearId,
+          academicYearId: requestedYearId,
         },
         req.user,
       ),

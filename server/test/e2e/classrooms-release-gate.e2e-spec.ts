@@ -3,7 +3,7 @@
  *
  * Ověřuje invarianty:
  * - POST /classrooms bez yearId → 400
- * - GET /classrooms bez yearId → 400
+ * - GET /classrooms bez yearId → 200 a použije aktivní rok
  * - POST bez aktivního roku v org → 409 NO_ACTIVE_ACADEMIC_YEAR
  * - POST s yearId OK → 201, vrací id + yearId
  * - yearId musí patřit org uživatele
@@ -15,6 +15,7 @@ import * as bcrypt from 'bcryptjs';
 import { AppModule } from '../../src/app.module';
 import { PrismaService } from '@/prisma/prisma.service';
 import { OrganizationRole, OrganizationStatus } from '@prisma/client';
+import { login } from 'test/helpers';
 
 function unwrap(res: request.Response) {
   return res?.body?.data ?? res?.body;
@@ -89,13 +90,11 @@ describe('Classrooms Release Gate (e2e)', () => {
       data: { lastActiveMembershipId: membership.id },
     });
 
-    const loginRes = await request(app.getHttpServer())
-      .post('/auth/login')
-      .send({ email: user.email, password: TEST_PASSWORD })
-      .expect(201);
-    const loginData = unwrap(loginRes) ?? loginRes.body;
-    const token = loginData?.sessionToken ?? loginRes.body?.sessionToken;
-    if (!token) throw new Error('Missing token');
+    const token = await login(app, {
+      email: user.email!,
+      password: TEST_PASSWORD,
+      organizationId: org.id,
+    });
 
     director = { token, orgId: org.id };
   });
@@ -106,7 +105,7 @@ describe('Classrooms Release Gate (e2e)', () => {
   });
 
   describe('POST /classrooms', () => {
-    it('400 when yearId and academicYearId are both missing', async () => {
+    it('201 when yearId and academicYearId are both missing and defaults to current year', async () => {
       const res = await request(app.getHttpServer())
         .post('/classrooms')
         .set('Authorization', `Bearer ${director.token}`)
@@ -114,10 +113,13 @@ describe('Classrooms Release Gate (e2e)', () => {
           grade: 'GRADE_7',
           section: 'A',
         })
-        .expect(400);
+        .expect(201);
 
-      expect(res.body).toBeDefined();
-      expect(res.body.message || res.body.error).toBeDefined();
+      const data = unwrap(res);
+      expect(data).toHaveProperty('id');
+      expect(data).toHaveProperty('yearId', yearId);
+      expect(data).toHaveProperty('grade', 'GRADE_7');
+      expect(data).toHaveProperty('section', 'A');
     });
 
     it('201 with yearId, returns id and yearId', async () => {
@@ -186,11 +188,19 @@ describe('Classrooms Release Gate (e2e)', () => {
   });
 
   describe('GET /classrooms', () => {
-    it('400 when yearId/academicYearId is missing in query', async () => {
-      await request(app.getHttpServer())
+    it('200 when yearId/academicYearId is missing in query and defaults to current year', async () => {
+      const res = await request(app.getHttpServer())
         .get('/classrooms')
         .set('Authorization', `Bearer ${director.token}`)
-        .expect(400);
+        .expect(200);
+
+      const raw = unwrap(res);
+      const items = Array.isArray(raw) ? raw : (raw?.data ?? []);
+      expect(Array.isArray(items)).toBe(true);
+      items.forEach((item: { id?: string; yearId?: string }) => {
+        expect(item).toHaveProperty('id');
+        expect(item).toHaveProperty('yearId', yearId);
+      });
     });
 
     it('200 with yearId in query, returns data array', async () => {
@@ -428,12 +438,11 @@ describe('Classrooms Release Gate (e2e)', () => {
         data: { lastActiveMembershipId: membershipNoActive.id },
       });
 
-      const loginRes = await request(app.getHttpServer())
-        .post('/auth/login')
-        .send({ email: userNoActive.email, password: TEST_PASSWORD })
-        .expect(201);
-      const token = (unwrap(loginRes) ?? loginRes.body)?.sessionToken;
-      if (!token) throw new Error('Missing token for no-active org');
+      const token = await login(app, {
+        email: userNoActive.email!,
+        password: TEST_PASSWORD,
+        organizationId: orgNoActive.id,
+      });
 
       const res = await request(app.getHttpServer())
         .post('/classrooms')
