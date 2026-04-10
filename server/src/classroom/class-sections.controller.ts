@@ -51,9 +51,6 @@ export class ClassSectionsController {
   @Post()
   @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'Create class section' })
-  @InvalidateScopes(({ result, req }) =>
-    [result?.orgId ?? req?.user?.organizationId].filter(Boolean),
-  )
   async create(@Body() dto: CreateClassSectionDto, @Req() req: RequestWithUser) {
     const ctx = await this.orgContext.get(req);
     if (!ctx.activeAcademicYearId) {
@@ -141,7 +138,6 @@ export class ClassSectionsController {
   @Patch(':id')
   @ApiOperation({ summary: 'Úprava třídy' })
   @Permission(PermissionKey.MANAGE_TEACHERS)
-  @InvalidateScopes(({ result }) => (result?.orgId ? [result.orgId] : []))
   update(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() dto: UpdateClassroomDto,
@@ -153,7 +149,6 @@ export class ClassSectionsController {
   @Delete(':id')
   @ApiOperation({ summary: 'Smazání třídy' })
   @Permission(PermissionKey.MANAGE_TEACHERS)
-  @InvalidateScopes(({ result }) => (result?.orgId ? [result.orgId] : []))
   remove(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Req() req: RequestWithUser,
@@ -164,9 +159,6 @@ export class ClassSectionsController {
   @Patch(':id/homeroom')
   @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'Nastavit/odstranit třídnictví (homeroom teacher)' })
-  @InvalidateScopes(({ result, req }) =>
-    [result?.academicYear?.orgId ?? req?.user?.organizationId].filter(Boolean),
-  )
   setHomeroom(
     @Param('id', new ParseUUIDPipe()) classSectionId: string,
     @Body() dto: SetHomeroomDto,
@@ -178,7 +170,6 @@ export class ClassSectionsController {
   @Post(':id/teachers')
   @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'Assign teacher to class section (explicit teaching role)' })
-  @InvalidateScopes(({ req }) => [req?.user?.organizationId].filter(Boolean))
   async assignTeacher(
     @Param('id', new ParseUUIDPipe()) classSectionId: string,
     @Body() dto: AssignTeacherDto,
@@ -193,7 +184,6 @@ export class ClassSectionsController {
   @Delete(':id/teachers/:teacherId')
   @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'Remove teacher from class section (soft-delete assignment)' })
-  @InvalidateScopes(({ req }) => [req?.user?.organizationId].filter(Boolean))
   async removeTeacher(
     @Param('id', new ParseUUIDPipe()) classSectionId: string,
     @Param('teacherId', new ParseUUIDPipe()) teacherId: string,

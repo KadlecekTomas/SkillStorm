@@ -42,7 +42,7 @@ export class ClassroomsController {
   @Get()
   @Permission(PermissionKey.MANAGE_STUDENTS, PermissionKey.VIEW_RESULTS)
   @ApiOperation({ summary: 'List classrooms by academic year' })
-  @CacheTTL(0) // vypnout HTTP response cache – používáme verzovanou cache v service
+  @CacheTTL(0)
   async list(@Req() req: RequestWithUser, @Query() q: QueryClassSectionsDto) {
     const ctx = await this.orgContext.get(req);
     if (!ctx.activeAcademicYearId) {

@@ -29,8 +29,6 @@ import { AssignSubjectsDto } from './dto/assign-subjects.dto';
 import { Permission } from '@/modules/rbac/permission.decorator';
 import { PermissionKey } from '@prisma/client';
 
-import { InvalidateScopes } from '@/common/cache/invalidate.decorator';
-
 @ApiTags('Teachers')
 @ApiBearerAuth()
 @Controller('teachers')
@@ -41,7 +39,6 @@ export class TeachersController {
   @Post()
   @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'Create teacher (director or superadmin)' })
-  @InvalidateScopes(({ req }) => [req.body?.organizationId].filter(Boolean))
   create(@Body() dto: CreateTeacherDto, @Req() req: RequestWithUser) {
     return this.service.create(dto, req.user);
   }
@@ -51,7 +48,7 @@ export class TeachersController {
   @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'List teachers (org‑scoped for director)' })
   @ApiQuery({ name: 'organizationId', required: false, type: String })
-  @CacheTTL(0) // čtecí endpoint: vypnout HTTP response cache, používáme verzovanou cache v service
+  @CacheTTL(0)
   findAll(@Req() req: RequestWithUser, @Query() q: QueryTeachersDto) {
     return this.service.findAll(req.user, q);
   }
@@ -72,9 +69,6 @@ export class TeachersController {
   @Patch(':id')
   @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'Update teacher (director or superadmin)' })
-  @InvalidateScopes(({ result }) =>
-    result?.organizationId ? [result.organizationId] : [],
-  )
   update(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() dto: UpdateTeacherDto,
@@ -87,9 +81,6 @@ export class TeachersController {
   @Delete(':id')
   @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'Soft delete teacher (director or superadmin)' })
-  @InvalidateScopes(({ result }) =>
-    result?.organizationId ? [result.organizationId] : [],
-  )
   remove(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Req() req: RequestWithUser,
@@ -101,9 +92,6 @@ export class TeachersController {
   @Post(':id/subjects')
   @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'Přiřadit předměty učiteli (bulk add/replace)' })
-  @InvalidateScopes(({ result }) =>
-    result?.organizationId ? [result.organizationId] : [],
-  )
   assignSubjects(
     @Param('id', new ParseUUIDPipe()) teacherId: string,
     @Body() dto: AssignSubjectsDto,
@@ -116,9 +104,6 @@ export class TeachersController {
   @Delete(':id/subjects/:subjectId')
   @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'Odebrat jedno přiřazení předmětu učiteli' })
-  @InvalidateScopes(({ result }) =>
-    result?.organizationId ? [result.organizationId] : [],
-  )
   removeSubject(
     @Param('id', new ParseUUIDPipe()) teacherId: string,
     @Param('subjectId', new ParseUUIDPipe()) subjectId: string,

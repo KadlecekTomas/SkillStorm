@@ -26,7 +26,6 @@ import { ExportStudentsDto } from './dto/export-students.dto';
 import { Response } from 'express';
 import { RequestWithUser } from '@/types/request-with-user';
 
-import { InvalidateScopes } from '@/common/cache/invalidate.decorator';
 import { Permission } from '@/modules/rbac/permission.decorator';
 import { RequireCurrentAcademicYearGuard } from '@/academic-years/require-current-academic-year.guard';
 import { AcademicYearExpiredGuard } from '@/academic-years/academic-year-expired.guard';
@@ -80,7 +79,6 @@ export class StudentsController {
   @Post()
   @Permission(PermissionKey.MANAGE_STUDENTS)
   @ApiOperation({ summary: 'Create new student' })
-  @InvalidateScopes(({ result }) => (result?.orgId ? [result.orgId] : []))
   create(@Body() dto: CreateStudentDto, @Req() req: RequestWithUser) {
     return this.service.create(dto, req.user);
   }
@@ -138,7 +136,6 @@ export class StudentsController {
   @Patch(':id')
   @Permission(PermissionKey.MANAGE_STUDENTS)
   @ApiOperation({ summary: 'Update student by ID' })
-  @InvalidateScopes(({ result }) => (result?.orgId ? [result.orgId] : []))
   update(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() dto: UpdateStudentDto,
@@ -151,7 +148,6 @@ export class StudentsController {
   @Delete(':id')
   @Permission(SystemRole.SUPERADMIN, OrganizationRole.OWNER, OrganizationRole.DIRECTOR)
   @ApiOperation({ summary: 'Soft delete student by ID' })
-  @InvalidateScopes(({ result }) => (result?.orgId ? [result.orgId] : []))
   remove(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Req() req: RequestWithUser,
