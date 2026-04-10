@@ -616,7 +616,6 @@ model Subject {
   catalogSubject    CatalogSubject?    @relation(fields: [catalogSubjectId], references: [id], onDelete: Restrict)
   teachers          TeacherSubject[]
 
-  @@unique([name])
   @@index([catalogSubjectId])
   @@map("subjects")
 }

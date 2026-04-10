@@ -204,7 +204,7 @@ describe('Organizations (e2e)', () => {
 
       const regBody = unwrapBody(regRes);
       const userId = regBody?.user?.id as string;
-      const token = regBody?.sessionToken as string;
+      const token = await login(app, { email, password });
       expect(userId).toBeDefined();
       expect(token).toBeDefined();
 
@@ -237,9 +237,6 @@ describe('Organizations (e2e)', () => {
       });
       expect(user?.lastActiveMembershipId).toBe(membership?.id);
 
-      await prisma.auditLog.deleteMany({
-        where: { OR: [{ userId }, { organizationId: orgId }] },
-      });
       await prisma.membership.deleteMany({ where: { organizationId: orgId } });
       await prisma.organization.delete({ where: { id: orgId } });
       await prisma.refreshToken.deleteMany({ where: { userId } });
@@ -265,7 +262,7 @@ describe('Organizations (e2e)', () => {
 
       const regBody = unwrapBody(regRes);
       const userId = regBody?.user?.id as string;
-      const token = regBody?.sessionToken as string;
+      const token = await login(app, { email, password });
 
       const body = { name: `Idempotent School ${tag}`, type: OrganizationType.SCHOOL };
       const firstRes = await request(app.getHttpServer())
@@ -296,9 +293,6 @@ describe('Organizations (e2e)', () => {
       });
       expect(requestCount).toBe(1);
 
-      await prisma.auditLog.deleteMany({
-        where: { OR: [{ userId }, { organizationId: firstOrgId }] },
-      });
       await prisma.idempotencyKey.deleteMany({ where: { userId } });
       await prisma.orgSubject.deleteMany({ where: { organizationId: firstOrgId } });
       await prisma.academicYear.deleteMany({ where: { orgId: firstOrgId } });
@@ -327,7 +321,7 @@ describe('Organizations (e2e)', () => {
 
       const regBody = unwrapBody(regRes);
       const userId = regBody?.user?.id as string;
-      const token = regBody?.sessionToken as string;
+      const token = await login(app, { email, password });
       const payload = {
         name: `Double Submit School ${tag}`,
         type: OrganizationType.SCHOOL,
@@ -358,14 +352,73 @@ describe('Organizations (e2e)', () => {
       expect(organizations).toHaveLength(1);
 
       const orgId = organizations[0]?.id as string;
-      await prisma.auditLog.deleteMany({
-        where: { OR: [{ userId }, { organizationId: orgId }] },
-      });
       await prisma.idempotencyKey.deleteMany({ where: { userId } });
       await prisma.orgSubject.deleteMany({ where: { organizationId: orgId } });
       await prisma.academicYear.deleteMany({ where: { orgId } });
       await prisma.membership.deleteMany({ where: { organizationId: orgId } });
       await prisma.organization.delete({ where: { id: orgId } });
+      await prisma.refreshToken.deleteMany({ where: { userId } });
+      await prisma.user.delete({ where: { id: userId } });
+    });
+
+    it('does not fail bootstrap when multiple catalog subjects share the same name', async () => {
+      const tag = `dup_subject_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
+      const email = `${tag}@example.com`;
+      const password = 'Password123!';
+      const duplicateName = `Duplicate Subject ${tag}`;
+
+      const regRes = await request(app.getHttpServer())
+        .post('/auth/register')
+        .send({
+          name: `Duplicate Subject ${tag}`,
+          email,
+          password,
+          username: tag.slice(0, 20),
+          mode: RegisterMode.INDIVIDUAL,
+        })
+        .expect(201);
+
+      const regBody = unwrapBody(regRes);
+      const userId = regBody?.user?.id as string;
+      const token = await login(app, { email, password });
+
+      const catalogA = await prisma.catalogSubject.create({
+        data: { code: `${tag}_A`, name: duplicateName },
+      });
+      const catalogB = await prisma.catalogSubject.create({
+        data: { code: `${tag}_B`, name: duplicateName },
+      });
+
+      const createRes = await request(app.getHttpServer())
+        .post('/organizations')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ name: `Duplicate Subject Org ${tag}`, type: OrganizationType.SCHOOL })
+        .expect(201);
+
+      const orgId = (unwrapBody(createRes)?.id ?? createRes.body?.id) as string;
+      expect(orgId).toBeDefined();
+
+      const createdSubjects = await prisma.subject.findMany({
+        where: { catalogSubjectId: { in: [catalogA.id, catalogB.id] } },
+        select: { id: true, catalogSubjectId: true, name: true },
+      });
+      expect(createdSubjects).toHaveLength(2);
+      expect(createdSubjects.every((subject) => subject.name === duplicateName)).toBe(true);
+
+      await prisma.orgSubject.deleteMany({ where: { organizationId: orgId } });
+      await prisma.idempotencyKey.deleteMany({ where: { userId } });
+      await prisma.membership.deleteMany({ where: { organizationId: orgId } });
+      await prisma.academicYear.deleteMany({ where: { orgId } });
+      await prisma.organization.delete({ where: { id: orgId } });
+      await prisma.subjectLevel.deleteMany({
+        where: { subjectId: { in: createdSubjects.map((subject) => subject.id) } },
+      });
+      await prisma.subject.deleteMany({
+        where: { id: { in: createdSubjects.map((subject) => subject.id) } },
+      });
+      await prisma.catalogSubject.deleteMany({
+        where: { id: { in: [catalogA.id, catalogB.id] } },
+      });
       await prisma.refreshToken.deleteMany({ where: { userId } });
       await prisma.user.delete({ where: { id: userId } });
     });

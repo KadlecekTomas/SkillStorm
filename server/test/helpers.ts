@@ -2,7 +2,11 @@
 import * as request from 'supertest';
 import { INestApplication } from '@nestjs/common';
 import { OrganizationRole, SystemRole } from '@prisma/client';
-import { CSRF_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE } from '@/auth/token-cookies';
+import {
+  ACCESS_TOKEN_COOKIE,
+  CSRF_TOKEN_COOKIE,
+  REFRESH_TOKEN_COOKIE,
+} from '@/auth/token-cookies';
 import { PrismaService } from '@/prisma/prisma.service';
 import { RegisterMode } from '@/auth/dto/register.dto';
 
@@ -33,6 +37,17 @@ function getCookie(res: request.Response, name: string): string | null {
     if (match) return match[1];
   }
   return null;
+}
+
+function getAuthToken(res: request.Response): string | null {
+  return (
+    getCookie(res, ACCESS_TOKEN_COOKIE) ??
+    res?.body?.data?.sessionToken ??
+    res?.body?.sessionToken ??
+    res?.body?.data?.accessToken ??
+    res?.body?.accessToken ??
+    null
+  );
 }
 
 type AuthAsResult = {
@@ -98,9 +113,24 @@ export async function authAs(
   const regData = unwrapBody(reg);
   const prisma = app.get(PrismaService);
   if (payload.mode === RegisterMode.CREATE_ORG && !regData?.organization) {
+    const bootstrapLoginRes = await agent
+      .post('/auth/login')
+      .set('X-Forwarded-For', uniqueIp())
+      .send({ email, password });
+    if (bootstrapLoginRes.status !== 201) {
+      throw new Error(
+        `authAs bootstrap login failed: ${bootstrapLoginRes.status} ${JSON.stringify(
+          bootstrapLoginRes.body,
+        )}`,
+      );
+    }
+    const bootstrapAccessToken = getAuthToken(bootstrapLoginRes);
+    if (!bootstrapAccessToken) {
+      throw new Error('authAs bootstrap login failed: missing access token');
+    }
     const orgRes = await agent
       .post('/organizations')
-      .set('Authorization', `Bearer ${regData.sessionToken}`)
+      .set('Authorization', `Bearer ${bootstrapAccessToken}`)
       .send({ name: `Org ${tag}` });
     if (orgRes.status !== 201) {
       throw new Error(
@@ -139,9 +169,13 @@ export async function authAs(
     );
   }
   const loginData = unwrapBody(loginRes);
+  const accessToken = getAuthToken(loginRes);
+  if (!accessToken) {
+    throw new Error('authAs login failed: missing access token');
+  }
 
   return {
-    accessToken: loginData?.sessionToken,
+    accessToken,
     refreshToken: getCookie(loginRes, REFRESH_TOKEN_COOKIE),
     csrfToken: getCookie(loginRes, CSRF_TOKEN_COOKIE),
     user: loginData?.user,
@@ -218,8 +252,9 @@ export async function login(
   if (res.status !== 201) {
     throw new Error(`login failed: ${res.status}`);
   }
-  const data = unwrapBody(res);
-  return data?.sessionToken as string;
+  const token = getAuthToken(res);
+  if (!token) throw new Error('login failed: missing access token');
+  return token;
 }
 
 /**
@@ -246,8 +281,7 @@ export async function useOrg(
     .set('X-Forwarded-For', uniqueIp())
     .send({ orgId })
     .expect(201);
-  const data = unwrapBody(res);
-  const token = data?.sessionToken;
+  const token = getAuthToken(res);
   if (!token) throw new Error('useOrg: missing sessionToken in response');
   return token;
 }

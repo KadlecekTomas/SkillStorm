@@ -5,10 +5,17 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { CreateOrganizationOnboardingScreen } from "@/components/onboarding/CreateOrganizationOnboardingScreen";
 
-const replaceMock = vi.fn();
-const postMock = vi.fn();
-const syncProfileMock = vi.fn();
-const switchToOrganizationByOrgIdMock = vi.fn();
+const {
+  replaceMock,
+  postMock,
+  syncProfileMock,
+  switchToOrganizationByOrgIdMock,
+} = vi.hoisted(() => ({
+  replaceMock: vi.fn(),
+  postMock: vi.fn(),
+  syncProfileMock: vi.fn(),
+  switchToOrganizationByOrgIdMock: vi.fn(),
+}));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: replaceMock }),

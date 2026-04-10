@@ -90,6 +90,7 @@ export const CreateOrganizationOnboardingScreen = (): React.JSX.Element => {
     const requestKey =
       createRequestKeyRef.current ?? createCorrelationId();
     createRequestKeyRef.current = requestKey;
+    let createdOrgId: string | null = null;
     try {
       const res = await httpClient.post<unknown>("/organizations", {
         name: trimmedName,
@@ -107,6 +108,7 @@ export const CreateOrganizationOnboardingScreen = (): React.JSX.Element => {
         setError("Organizace byla vytvořena, ale server nevrátil ID. Zkus obnovit stránku.");
         return;
       }
+      createdOrgId = orgId;
 
       const newContext = await switchToOrganizationByOrgId(orgId);
       // Contract: redirect and success toast ONLY when context.mode === "organization".
@@ -128,6 +130,13 @@ export const CreateOrganizationOnboardingScreen = (): React.JSX.Element => {
         err instanceof HttpError && err.data && typeof err.data === "object" && "code" in err.data
           ? (err.data as { code?: string }).code
           : null;
+      if (createdOrgId) {
+        if (await recoverCreatedOrganization(type)) {
+          return;
+        }
+        setError("Organizace byla vytvořena, ale nepodařilo se přepnout kontext organizace. Zkus obnovit stránku.");
+        return;
+      }
       if (code === ORG_OWNER_LIMIT_REACHED) {
         if (await recoverCreatedOrganization(type)) {
           return;

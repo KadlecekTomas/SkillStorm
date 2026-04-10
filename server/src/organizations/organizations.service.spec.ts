@@ -166,7 +166,7 @@ describe('OrganizationsService', () => {
         upsert: jest.fn(),
       },
     };
-    prisma.$transaction.mockImplementation(async (fn: (tx: typeof tx) => unknown) => fn(tx));
+    prisma.$transaction.mockImplementation(async (fn: (tx: any) => unknown) => fn(tx));
 
     const result = await service.create(
       { name: 'Audit Failure Org', type: OrganizationType.SCHOOL },
@@ -228,7 +228,7 @@ describe('OrganizationsService', () => {
         upsert: jest.fn(),
       },
     };
-    prisma.$transaction.mockImplementation(async (fn: (tx: typeof tx) => unknown) => fn(tx));
+    prisma.$transaction.mockImplementation(async (fn: (tx: any) => unknown) => fn(tx));
 
     await expect(
       service.create(
@@ -291,7 +291,7 @@ describe('OrganizationsService', () => {
       },
     };
     (bumpOrgVersion as jest.Mock).mockRejectedValueOnce(new Error('cache offline'));
-    prisma.$transaction.mockImplementation(async (fn: (tx: typeof tx) => unknown) => fn(tx));
+    prisma.$transaction.mockImplementation(async (fn: (tx: any) => unknown) => fn(tx));
 
     await expect(
       service.create(

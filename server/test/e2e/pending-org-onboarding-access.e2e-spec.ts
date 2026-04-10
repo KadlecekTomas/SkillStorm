@@ -85,7 +85,7 @@ describe('Pending Org Onboarding Access (e2e)', () => {
     });
 
     const token = await login(app, {
-      email: user.email ?? undefined,
+      email: user.email!,
       password,
       organizationId: org.id,
     });
