@@ -5,10 +5,8 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { PrismaService } from '@/prisma/prisma.service';
 import { OrganizationStatus } from '@prisma/client';
-import type { RequestWithUser } from '@/types/request-with-user';
-import { ALLOW_ANY_ORG_STATUS } from '@/common/decorators/allow-any-org-status.decorator';
+import { OrgAccessPolicy } from './org-access-policy.service';
 
 /**
  * Application Readiness Guard – domain invariant enforcement.
@@ -34,43 +32,32 @@ export const READINESS_ERROR_CODES = {
 @Injectable()
 export class ApplicationReadinessGuard implements CanActivate {
   constructor(
-    private readonly prisma: PrismaService,
     private readonly reflector: Reflector,
+    private readonly accessPolicy: OrgAccessPolicy,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const allowAny = this.reflector.getAllAndOverride<boolean>(ALLOW_ANY_ORG_STATUS, [
-      context.getHandler(),
-      context.getClass(),
-    ]);
-    if (allowAny) return true;
+    const access = await this.accessPolicy.resolve(this.reflector, context);
+    if (access.allowAny || access.allowPending) return true;
 
-    const req = context.switchToHttp().getRequest<RequestWithUser>();
-    const orgId = req?.user?.organizationId ?? null;
+    const orgId = access.orgId;
     if (!orgId) return true;
+    if (!access.orgStatus) return true;
 
-    const org = await this.prisma.organization.findUnique({
-      where: { id: orgId },
-      select: { status: true },
-    });
-    if (!org) return true;
-
-    if (org.status === OrganizationStatus.SUSPENDED) {
+    if (access.orgStatus === OrganizationStatus.SUSPENDED) {
       throw new ConflictException({
         message: 'Organization is suspended',
         meta: { code: READINESS_ERROR_CODES.ORG_SUSPENDED },
       });
     }
-    if (org.status === OrganizationStatus.PENDING) {
+    if (access.orgStatus === OrganizationStatus.PENDING) {
       throw new ConflictException({
         message: 'Organization is not yet active',
         meta: { code: READINESS_ERROR_CODES.ORG_PENDING },
       });
     }
 
-    const currentCount = await this.prisma.academicYear.count({
-      where: { orgId, isCurrent: true },
-    });
+    const currentCount = await this.accessPolicy.countCurrentAcademicYears(orgId);
     if (currentCount === 0) {
       throw new ConflictException({
         message: 'Current academic year is not configured for this organization.',

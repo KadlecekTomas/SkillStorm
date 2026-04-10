@@ -10,6 +10,7 @@ import { AuditModule } from '@/audit/audit.module';
 import { AcademicYearsModule } from '@/academic-years/academic-years.module';
 import { SystemRoleGuard } from '@/common/guards/system-role.guard';
 import { PlatformAccessGuard } from '@/common/guards/platform-access.guard';
+import { OrgAccessPolicy } from './org-access-policy.service';
 
 @Module({
   imports: [PrismaModule, AuditModule, AcademicYearsModule],
@@ -20,8 +21,10 @@ import { PlatformAccessGuard } from '@/common/guards/platform-access.guard';
     PlatformMutationAuditInterceptor,
     PlatformHealthService,
     CatalogSyncService,
+    OrgAccessPolicy,
     SystemRoleGuard,
     PlatformAccessGuard,
   ],
+  exports: [OrgAccessPolicy],
 })
 export class PlatformModule {}

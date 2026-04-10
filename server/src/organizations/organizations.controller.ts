@@ -4,6 +4,8 @@ import {
   Get,
   Post,
   Body,
+  Headers,
+  InternalServerErrorException,
   Patch,
   Param,
   Delete,
@@ -50,10 +52,25 @@ export class OrganizationsController {
   @InvalidateScopes(() => ['ALL']) // globální list → invaliduj ALL
   async create(
     @Body() dto: CreateOrganizationDto,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Headers('x-test-fail-before-academic-year')
+    testFailBeforeAcademicYear: string | undefined,
+    @Headers('x-test-fail-after-commit')
+    testFailAfterCommit: string | undefined,
     @Req() req: RequestWithUser,
   ) {
     const userId = req.user?.userId;
-    return ok(this.service.create(dto, userId));
+    const allowTestSimulation = process.env.NODE_ENV !== 'production';
+    const created = await this.service.create(dto, userId, idempotencyKey, {
+      failBeforeAcademicYear:
+        allowTestSimulation && testFailBeforeAcademicYear === '1',
+    });
+    if (allowTestSimulation && testFailAfterCommit === '1') {
+      throw new InternalServerErrorException(
+        'Simulated failure after create-organization commit',
+      );
+    }
+    return ok(created);
   }
 
   @Get()

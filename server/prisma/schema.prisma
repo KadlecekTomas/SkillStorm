@@ -34,6 +34,7 @@ model User {
   resolvedSupportTickets SupportTicket[] @relation("SupportResolvedBy")
   materialPurchases MaterialPurchase[]
   memberships       Membership[]
+  idempotencyKeys IdempotencyKey[]
   refreshTokens       RefreshToken[]
   revokedTokens      RevokedToken[]
   passwordResetTokens PasswordResetToken[]
@@ -106,6 +107,22 @@ model OrganizationSettings {
   organization           Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
   @@map("organization_settings")
+}
+
+model IdempotencyKey {
+  id          String   @id @default(uuid()) @map("idempotency_key_id")
+  userId      String   @map("user_id")
+  key         String   @map("key") @db.VarChar(255)
+  operation   String   @db.VarChar(100)
+  requestHash String   @map("request_hash") @db.VarChar(64)
+  result      Json?    @map("result")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, operation, key])
+  @@index([userId, operation, createdAt])
+  @@map("idempotency_keys")
 }
 
 model Membership {

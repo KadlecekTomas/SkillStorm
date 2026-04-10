@@ -93,11 +93,6 @@ export class OrgContextService {
       if (error instanceof NotFoundException || error instanceof ForbiddenException) {
         throw error;
       }
-      this.yearCache.set(organizationId, {
-        yearId: null,
-        endsAt: null,
-        expiresAt: now + YEAR_CACHE_TTL_MS,
-      });
       return { yearId: null, endsAt: null };
     }
   }

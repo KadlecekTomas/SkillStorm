@@ -245,6 +245,130 @@ describe('Organizations (e2e)', () => {
       await prisma.refreshToken.deleteMany({ where: { userId } });
       await prisma.user.delete({ where: { id: userId } });
     });
+
+    it('replays the same idempotency key to the same organization instead of failing owner-limit', async () => {
+      const tag = `idem_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
+      const email = `${tag}@example.com`;
+      const password = 'Password123!';
+      const idempotencyKey = `org-create-${tag}`;
+
+      const regRes = await request(app.getHttpServer())
+        .post('/auth/register')
+        .send({
+          name: `Idempotent E2E ${tag}`,
+          email,
+          password,
+          username: tag.slice(0, 20),
+          mode: RegisterMode.INDIVIDUAL,
+        })
+        .expect(201);
+
+      const regBody = unwrapBody(regRes);
+      const userId = regBody?.user?.id as string;
+      const token = regBody?.sessionToken as string;
+
+      const body = { name: `Idempotent School ${tag}`, type: OrganizationType.SCHOOL };
+      const firstRes = await request(app.getHttpServer())
+        .post('/organizations')
+        .set('Authorization', `Bearer ${token}`)
+        .set('Idempotency-Key', idempotencyKey)
+        .send(body)
+        .expect(201);
+
+      const secondRes = await request(app.getHttpServer())
+        .post('/organizations')
+        .set('Authorization', `Bearer ${token}`)
+        .set('Idempotency-Key', idempotencyKey)
+        .send(body)
+        .expect(201);
+
+      const firstOrgId = (unwrapBody(firstRes)?.id ?? firstRes.body?.id) as string;
+      const secondOrgId = (unwrapBody(secondRes)?.id ?? secondRes.body?.id) as string;
+      expect(secondOrgId).toBe(firstOrgId);
+
+      const membershipCount = await prisma.membership.count({
+        where: { organizationId: firstOrgId },
+      });
+      expect(membershipCount).toBe(1);
+
+      const requestCount = await prisma.idempotencyKey.count({
+        where: { userId },
+      });
+      expect(requestCount).toBe(1);
+
+      await prisma.auditLog.deleteMany({
+        where: { OR: [{ userId }, { organizationId: firstOrgId }] },
+      });
+      await prisma.idempotencyKey.deleteMany({ where: { userId } });
+      await prisma.orgSubject.deleteMany({ where: { organizationId: firstOrgId } });
+      await prisma.academicYear.deleteMany({ where: { orgId: firstOrgId } });
+      await prisma.membership.deleteMany({ where: { organizationId: firstOrgId } });
+      await prisma.organization.delete({ where: { id: firstOrgId } });
+      await prisma.refreshToken.deleteMany({ where: { userId } });
+      await prisma.user.delete({ where: { id: userId } });
+    });
+
+    it('handles double-submit with the same idempotency key safely', async () => {
+      const tag = `dbl_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
+      const email = `${tag}@example.com`;
+      const password = 'Password123!';
+      const idempotencyKey = `org-create-${tag}`;
+
+      const regRes = await request(app.getHttpServer())
+        .post('/auth/register')
+        .send({
+          name: `Double Submit ${tag}`,
+          email,
+          password,
+          username: tag.slice(0, 20),
+          mode: RegisterMode.INDIVIDUAL,
+        })
+        .expect(201);
+
+      const regBody = unwrapBody(regRes);
+      const userId = regBody?.user?.id as string;
+      const token = regBody?.sessionToken as string;
+      const payload = {
+        name: `Double Submit School ${tag}`,
+        type: OrganizationType.SCHOOL,
+      };
+
+      const [resA, resB] = await Promise.all([
+        request(app.getHttpServer())
+          .post('/organizations')
+          .set('Authorization', `Bearer ${token}`)
+          .set('Idempotency-Key', idempotencyKey)
+          .send(payload)
+          .expect(201),
+        request(app.getHttpServer())
+          .post('/organizations')
+          .set('Authorization', `Bearer ${token}`)
+          .set('Idempotency-Key', idempotencyKey)
+          .send(payload)
+          .expect(201),
+      ]);
+
+      const orgIdA = (unwrapBody(resA)?.id ?? resA.body?.id) as string;
+      const orgIdB = (unwrapBody(resB)?.id ?? resB.body?.id) as string;
+      expect(orgIdA).toBe(orgIdB);
+
+      const organizations = await prisma.organization.findMany({
+        where: { ownerUserId: userId, deletedAt: null },
+      });
+      expect(organizations).toHaveLength(1);
+
+      const orgId = organizations[0]?.id as string;
+      await prisma.auditLog.deleteMany({
+        where: { OR: [{ userId }, { organizationId: orgId }] },
+      });
+      await prisma.idempotencyKey.deleteMany({ where: { userId } });
+      await prisma.orgSubject.deleteMany({ where: { organizationId: orgId } });
+      await prisma.academicYear.deleteMany({ where: { orgId } });
+      await prisma.membership.deleteMany({ where: { organizationId: orgId } });
+      await prisma.organization.delete({ where: { id: orgId } });
+      await prisma.refreshToken.deleteMany({ where: { userId } });
+      await prisma.user.delete({ where: { id: userId } });
+    });
   });
 
   // --- FIND ALL (only SUPERADMIN) ---

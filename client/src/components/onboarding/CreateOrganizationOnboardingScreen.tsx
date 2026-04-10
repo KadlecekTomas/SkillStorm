@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { httpClient, HttpError } from "@/lib/http/client";
+import { createCorrelationId, httpClient, HttpError } from "@/lib/http/client";
 import { useAuth } from "@/hooks/use-auth";
 import { showToastOnce } from "@/utils/toast";
 import { ORG_OWNER_LIMIT_REACHED } from "@/lib/org-state";
@@ -34,7 +34,7 @@ function parseOrgId(res: unknown): string | null {
 
 function formatCreateOrgError(err: unknown): string {
   if (err instanceof Error && err.message === "USE_ORG_FAILED_OR_BAD_CONTEXT") {
-    return "Přepnutí na novou organizaci selhalo. Zkus obnovit stránku nebo se odhlásit a přihlásit.";
+    return "Organizace byla vytvořena, ale nepodařilo se přepnout kontext organizace.";
   }
   if (err instanceof HttpError && err.data && typeof err.data === "object") {
     const d = err.data as { message?: string; code?: string };
@@ -50,6 +50,24 @@ export const CreateOrganizationOnboardingScreen = (): React.JSX.Element => {
   const [type, setType] = useState<OrganizationType>(DEFAULT_TYPE);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const createRequestKeyRef = useRef<string | null>(null);
+
+  const recoverCreatedOrganization = async (
+    fallbackType: OrganizationType,
+  ): Promise<boolean> => {
+    try {
+      const profile = await syncProfile({ force: true });
+      const org = profile.organization ?? profile.org ?? null;
+      if (!org?.id) return false;
+      showToastOnce("Organizace byla vytvořena. Obnovili jsme stav účtu.", {
+        type: "info",
+      });
+      router.replace(fallbackType === "SCHOOL" ? "/onboarding/pending" : "/onboarding/academic-year");
+      return true;
+    } catch {
+      return false;
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -69,10 +87,17 @@ export const CreateOrganizationOnboardingScreen = (): React.JSX.Element => {
     }
     setIsSubmitting(true);
     setError(null);
+    const requestKey =
+      createRequestKeyRef.current ?? createCorrelationId();
+    createRequestKeyRef.current = requestKey;
     try {
       const res = await httpClient.post<unknown>("/organizations", {
         name: trimmedName,
         type,
+      }, {
+        headers: {
+          "Idempotency-Key": requestKey,
+        },
       });
       const orgId = parseOrgId(res);
       if (!orgId) {
@@ -86,7 +111,10 @@ export const CreateOrganizationOnboardingScreen = (): React.JSX.Element => {
       const newContext = await switchToOrganizationByOrgId(orgId);
       // Contract: redirect and success toast ONLY when context.mode === "organization".
       if (!newContext || newContext.mode !== "organization") {
-        setError("Přepnutí na novou organizaci selhalo. Zkus obnovit stránku nebo se odhlásit a přihlásit.");
+        if (await recoverCreatedOrganization(type)) {
+          return;
+        }
+        setError("Organizace byla vytvořena, ale nepodařilo se přepnout kontext organizace. Zkus obnovit stránku.");
         return;
       }
 
@@ -101,10 +129,9 @@ export const CreateOrganizationOnboardingScreen = (): React.JSX.Element => {
           ? (err.data as { code?: string }).code
           : null;
       if (code === ORG_OWNER_LIMIT_REACHED) {
-        await syncProfile({ force: true });
-        showToastOnce("Organizace již existuje. Dokonči nastavení.", { type: "info" });
-        router.replace("/onboarding/academic-year");
-        return;
+        if (await recoverCreatedOrganization(type)) {
+          return;
+        }
       }
       if (process.env.NODE_ENV === "development") {
         console.warn("[onboarding] create-org or switch failed:", err);

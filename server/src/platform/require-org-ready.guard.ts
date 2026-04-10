@@ -4,13 +4,11 @@ import { Reflector } from '@nestjs/core';
 import { PrismaService } from '@/prisma/prisma.service';
 import { deriveOrgReadiness, OrgReadinessState } from '@/shared/org-readiness-v2';
 import { createOrgReadinessError } from '@/shared/errors/org-readiness.error';
-import type { RequestWithUser } from '@/types/request-with-user';
-import { ALLOW_PENDING_ORG } from '@/common/decorators/allow-pending-org.decorator';
-import { ALLOW_ANY_ORG_STATUS } from '@/common/decorators/allow-any-org-status.decorator';
 import {
   ORG_OPERATION_KEY,
   OrgOperationType,
 } from '@/common/decorators/org-operation.decorator';
+import { OrgAccessPolicy } from './org-access-policy.service';
 
 /**
  * Organization Readiness Guard
@@ -30,22 +28,14 @@ export class RequireOrgReadyGuard implements CanActivate {
   constructor(
     private readonly prisma: PrismaService,
     private readonly reflector: Reflector,
+    private readonly accessPolicy: OrgAccessPolicy,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const allowPending = this.reflector.getAllAndOverride<boolean>(ALLOW_PENDING_ORG, [
-      context.getHandler(),
-      context.getClass(),
-    ]);
-    if (allowPending) return true;
-    const allowAny = this.reflector.getAllAndOverride<boolean>(ALLOW_ANY_ORG_STATUS, [
-      context.getHandler(),
-      context.getClass(),
-    ]);
-    if (allowAny) return true;
+    const access = await this.accessPolicy.resolve(this.reflector, context);
+    if (access.allowAny || access.allowPending) return true;
 
-    const req = context.switchToHttp().getRequest<RequestWithUser>();
-    const orgId = req?.user?.organizationId ?? null;
+    const orgId = access.orgId;
     if (!orgId) return true;
 
     const operationType =
