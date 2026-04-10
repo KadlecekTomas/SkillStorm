@@ -6,7 +6,10 @@ import {
   ConflictException,
   ForbiddenException,
   Logger,
+  Inject,
 } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import type { Cache } from 'cache-manager';
 import { EnrollmentStatus, PermissionKey, PublishStatus } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
 import type { Assignment, Prisma } from '@prisma/client';
@@ -26,6 +29,9 @@ import {
   assertTenantWhere,
   withOrg,
 } from '@/common/prisma/tenant-scope';
+import {
+  invalidateResourcesFailSafe,
+} from '@/shared/cache/org-cache.utils';
 
 const ALLOWED_TARGET_TYPES = new Set(['CLASS', 'STUDENTS']);
 
@@ -74,7 +80,20 @@ export class AssignmentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly rbac: RbacService,
+    @Inject(CACHE_MANAGER) private readonly cache: Cache,
   ) {}
+
+  private async invalidateAssignmentReads(
+    scopeId: string,
+    mutation: string,
+  ) {
+    await invalidateResourcesFailSafe(this.cache, {
+      scopeId,
+      resources: ['assignments', 'dashboard'],
+      mutation,
+      logger: this.logger,
+    });
+  }
 
   private async ensureTestAssignable(testId: string): Promise<void> {
     const test = await this.prisma.test.findUnique({
@@ -321,7 +340,7 @@ export class AssignmentsService {
     void _ignoredCreatedBy;
     const yearId = ctx.activeAcademicYearId;
     if (dto.targetType === 'STUDENTS') {
-      return this.prisma.assignment.create({
+      const created = await this.prisma.assignment.create({
         data: {
           ...rest,
           organizationId: ctx.organizationId,
@@ -332,10 +351,12 @@ export class AssignmentsService {
           },
         },
       });
+      await this.invalidateAssignmentReads(ctx.organizationId, 'assignments.create');
+      return created;
     } else {
       const { studentIds: _unused } = dto;
       void _unused;
-      return this.prisma.assignment.create({
+      const created = await this.prisma.assignment.create({
         data: {
           ...rest,
           organizationId: ctx.organizationId,
@@ -343,6 +364,8 @@ export class AssignmentsService {
           yearId,
         },
       });
+      await this.invalidateAssignmentReads(ctx.organizationId, 'assignments.create');
+      return created;
     }
   }
 
@@ -507,10 +530,12 @@ export class AssignmentsService {
     if (dto.shuffle !== undefined) data.shuffle = dto.shuffle;
     if (dto.showExplain !== undefined) data.showExplain = dto.showExplain;
 
-    return this.prisma.assignment.update({
+    const updated = await this.prisma.assignment.update({
       where: { id },
       data,
     });
+    await this.invalidateAssignmentReads(current.organizationId, 'assignments.update');
+    return updated;
   }
 
   // ------- DELETE ------------------------------------------------------------
@@ -525,8 +550,10 @@ export class AssignmentsService {
       throw new ConflictException('Assignment má navázané submissions.');
     }
     // Bez submissions je hard delete bezpečný (konfigurační záznam bez historie).
-    await this.findOneOrThrowScoped(id, ctx);
-    return this.prisma.assignment.delete({ where: { id } });
+    const current = await this.findOneOrThrowScoped(id, ctx);
+    const deleted = await this.prisma.assignment.delete({ where: { id } });
+    await this.invalidateAssignmentReads(current.organizationId, 'assignments.remove');
+    return deleted;
   }
 
   // ------- STUDENT OVERVIEW -------------------------------------------------

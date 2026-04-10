@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
   Inject,
+  Logger,
 } from '@nestjs/common';
 import { createHash } from 'crypto';
 import { PrismaService } from '@/prisma/prisma.service';
@@ -21,24 +22,17 @@ import type { JwtPayload } from '@/auth/types/jwt-payload';
 import {
   buildVersionedListKey,
   cacheGetOrSet,
-  getOrgVersion,
+  getResourceVersion,
 } from '@/shared/cache/org-cache.utils';
 import type { StatsOverviewResponse } from './dto/overview.dto';
 import { RiskService } from '@/risk/risk.service';
 
 const DASHBOARD_SUBMISSION_LIMIT = 2_000;
-const DIRECTOR_DASHBOARD_CACHE_TTL_MS = 30_000;
-const directorDashboardCache = new Map<
-  string,
-  { expiresAt: number; value: unknown }
->();
-
-export function invalidateDirectorDashboardCache(organizationId: string): void {
-  directorDashboardCache.delete(organizationId);
-}
+export function invalidateDirectorDashboardCache(_organizationId: string): void {}
 
 @Injectable()
 export class StatsService {
+  private readonly logger = new Logger(StatsService.name);
   /**
    * Centrální service pro dashboardové statistiky a přehledy podle role.
    *
@@ -120,23 +114,6 @@ export class StatsService {
     return Math.floor(ms / (24 * 60 * 60 * 1000));
   }
 
-  private getDirectorDashboardCache<T>(organizationId: string): T | null {
-    const cached = directorDashboardCache.get(organizationId);
-    if (!cached) return null;
-    if (cached.expiresAt <= Date.now()) {
-      directorDashboardCache.delete(organizationId);
-      return null;
-    }
-    return cached.value as T;
-  }
-
-  private setDirectorDashboardCache(organizationId: string, value: unknown) {
-    directorDashboardCache.set(organizationId, {
-      expiresAt: Date.now() + DIRECTOR_DASHBOARD_CACHE_TTL_MS,
-      value,
-    });
-  }
-
   // ===== ORG OVERVIEW ========================================================
   async getOrgOverview(
     organizationId: string | null,
@@ -157,7 +134,7 @@ export class StatsService {
     const useCache = !isTestEnv;
 
     const scopeId = organizationId ?? 'GLOBAL';
-    const ver = await getOrgVersion(this.cache, scopeId);
+    const ver = await getResourceVersion(this.cache, scopeId, 'dashboard');
     const baseTestWhere: Prisma.TestWhereInput = {
       deletedAt: null,
       ...(organizationId ? { organizationId } : {}),
@@ -376,7 +353,7 @@ export class StatsService {
 
     // Caching
     const scopeId = ids.organizationId ?? 'GLOBAL';
-    const ver = await getOrgVersion(this.cache, scopeId);
+    const ver = await getResourceVersion(this.cache, scopeId, 'dashboard');
     const cacheKey = buildVersionedListKey({
       namespace: 'dashboard:student',
       scopeId,
@@ -500,16 +477,22 @@ export class StatsService {
                 membership: { select: { user: { select: { name: true } } } },
               },
             },
-            enrollments: {
-              where: { status: EnrollmentStatus.ACTIVE },
-              select: { id: true },
+            _count: {
+              select: {
+                enrollments: {
+                  where: { status: EnrollmentStatus.ACTIVE },
+                },
+              },
             },
           },
         }),
-        // All teacher memberships for this org
-        this.prisma.membership.findMany({
-          where: { organizationId, role: OrganizationRole.TEACHER, deletedAt: null },
-          select: { id: true, user: { select: { name: true } } },
+        // Same teacher source as GET /teachers so homepage and teacher manager stay aligned.
+        this.prisma.teacher.findMany({
+          where: { organizationId, deletedAt: null },
+          select: {
+            membershipId: true,
+            membership: { select: { id: true, user: { select: { name: true } } } },
+          },
         }),
       ]);
 
@@ -598,7 +581,7 @@ export class StatsService {
           id: c.id,
           label: c.label ?? `${c.grade}.${c.section}`,
           teacherName: c.teacher?.membership?.user?.name ?? null,
-          studentCount: c.enrollments.length,
+          studentCount: c._count.enrollments,
           avgScore: avgScore !== null ? Math.round(avgScore) : null,
           submissionsThisWeek: weekSubs,
           lastActivityAt: stats?.lastAt?.toISOString() ?? null,
@@ -608,7 +591,7 @@ export class StatsService {
       .sort((a, b) => a.label.localeCompare(b.label));
 
     // ── Per-teacher activity ──────────────────────────────────────────────────
-    const teacherIds = teacherMemberships.map((m) => m.id);
+    const teacherIds = teacherMemberships.map((m) => m.membershipId);
     const [teacherTestCounts, teacherWeekSubs] = await Promise.all([
       this.prisma.test.groupBy({
         by: ['creatorId'],
@@ -642,12 +625,12 @@ export class StatsService {
     }
     const teachersResult = teacherMemberships
       .map((m) => ({
-        membershipId: m.id,
-        name: m.user?.name ?? '—',
-        testsCreated: testCountByTeacher.get(m.id) ?? 0,
-        submissionsThisWeek: weekSubCountByTeacher.get(m.id) ?? 0,
-        lastActivityAt: lastSubByTeacher.get(m.id)?.toISOString() ?? null,
-        activeThisWeek: weekSubCountByTeacher.has(m.id),
+        membershipId: m.membershipId,
+        name: m.membership?.user?.name ?? '—',
+        testsCreated: testCountByTeacher.get(m.membershipId) ?? 0,
+        submissionsThisWeek: weekSubCountByTeacher.get(m.membershipId) ?? 0,
+        lastActivityAt: lastSubByTeacher.get(m.membershipId)?.toISOString() ?? null,
+        activeThisWeek: weekSubCountByTeacher.has(m.membershipId),
       }))
       .sort((a, b) => b.submissionsThisWeek - a.submissionsThisWeek);
 
@@ -747,15 +730,7 @@ export class StatsService {
       throw new ForbiddenException('Organization context required.');
     }
 
-    const cached = this.getDirectorDashboardCache<
-      Awaited<ReturnType<StatsService['buildDirectorDashboard']>>
-    >(organizationId);
-    if (cached) {
-      return cached;
-    }
-
     const dashboard = await this.buildDirectorDashboard(organizationId);
-    this.setDirectorDashboardCache(organizationId, dashboard);
     return dashboard;
   }
 
@@ -777,7 +752,7 @@ export class StatsService {
     });
 
     const scopeId = organizationId ?? 'GLOBAL';
-    const ver = await getOrgVersion(this.cache, scopeId);
+    const ver = await getResourceVersion(this.cache, scopeId, 'dashboard');
     const cacheKey = buildVersionedListKey({
       namespace: 'dashboard:teacher',
       scopeId,

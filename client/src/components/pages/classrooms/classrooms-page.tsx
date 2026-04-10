@@ -32,6 +32,7 @@ import { isYearWriteBlocked } from "@/lib/academic-year/write-gate";
 import { ReportIssueButton } from "@/components/support/report-issue-button";
 import { ArrowUp, ArrowDown, ChevronDown, ChevronRight, Minus, Star } from "lucide-react";
 import { cn } from "@/utils/cn";
+import { queryClient } from "@/lib/query-client";
 
 function getApiErrorMessage(err: unknown): string {
   if (err instanceof HttpError) {
@@ -327,7 +328,7 @@ export function ClassroomsPageContent(): React.JSX.Element {
     ? (isTeacherView ? teacherAllClasses : classrooms).some((item) => item.id === selectedId)
     : false;
   const effectiveSelectedId = selectedInList ? selectedId : null;
-  const { detail, loading: detailLoading, refetch: refetchDetail } = useClassroomDetail(effectiveSelectedId);
+  const { detail, loading: detailLoading } = useClassroomDetail(effectiveSelectedId);
   const {
     subjects: classOrgSubjects,
     loading: classOrgSubjectsLoading,
@@ -375,7 +376,7 @@ export function ClassroomsPageContent(): React.JSX.Element {
         yearLabel: cls.academicYear?.label ?? selectedYear?.name ?? "—",
         displayName: `${cls.label ?? `${gradeLabel(cls.grade)}.${cls.section}`} (${cls.academicYear?.label ?? selectedYear?.name ?? "—"})`,
         teacherName: cls.teacher?.membership?.user?.name ?? "—",
-        studentsCount: cls._count?.enrollments ?? cls.enrollments?.length ?? 0,
+        studentsCount: cls.studentCount ?? 0,
       })),
     [classrooms, selectedYear?.name],
   );
@@ -470,6 +471,17 @@ export function ClassroomsPageContent(): React.JSX.Element {
     });
   };
 
+  const invalidateConsistencyQueries = useCallback((classroomId?: string | null) => {
+    queryClient.invalidateQueries(["classrooms"]);
+    queryClient.invalidateQueries(["students"]);
+    queryClient.invalidateQueries(["teachers"]);
+    queryClient.invalidateQueries(["dashboard"]);
+    queryClient.invalidateQueries(["students", "available"]);
+    if (classroomId) {
+      queryClient.invalidateQueries(["classroom-detail", classroomId]);
+    }
+  }, []);
+
   const handleSetHomeroom = async (classSectionId: string, teacherId: string | null) => {
     if (homeroomSaving) return;
     setHomeroomSaving(true);
@@ -478,10 +490,7 @@ export function ClassroomsPageContent(): React.JSX.Element {
       await fetchWithAuth("PATCH", `/class-sections/${classSectionId}/homeroom`, {
         body: { teacherId },
       });
-      await Promise.all([
-        refetchDetail(),
-        refetchClassrooms({ bypassCache: true }),
-      ]);
+      invalidateConsistencyQueries(classSectionId);
     } catch (err) {
       setHomeroomSaveError(getApiErrorMessage(err));
     } finally {
@@ -543,7 +552,7 @@ export function ClassroomsPageContent(): React.JSX.Element {
         (!searchTerm || resolvedLabel.includes(searchTerm.toLowerCase()));
       const hiddenByFilters = !matchesFilters;
 
-      await refetchClassrooms({ bypassCache: true });
+      invalidateConsistencyQueries(created.id);
 
       if (cursor) {
         if (matchesFilters) {
@@ -718,8 +727,7 @@ export function ClassroomsPageContent(): React.JSX.Element {
     }
 
     setBulkResult({ enrolled, createdUsers: 0, errors });
-    await refetchDetail();
-    await refetchClassrooms({ bypassCache: true });
+    invalidateConsistencyQueries(effectiveSelectedId);
 
     if (errors.length === 0) {
       setAddOpen(false);
@@ -774,8 +782,7 @@ export function ClassroomsPageContent(): React.JSX.Element {
       });
 
       setBulkResult(result);
-      await refetchDetail();
-      await refetchClassrooms({ bypassCache: true });
+      invalidateConsistencyQueries(effectiveSelectedId);
 
       if (!result.errors.length) {
         setAddOpen(false);
@@ -1244,7 +1251,7 @@ export function ClassroomsPageContent(): React.JSX.Element {
                         {section.items.map((cls) => {
                           const classLabel = cls.label ?? `${gradeLabel(cls.grade)}.${cls.section}`;
                           const teacherName = cls.homeroomTeacherName ?? cls.teacher?.membership?.user?.name ?? "—";
-                          const studentsCount = cls.studentCount ?? cls._count?.enrollments ?? 0;
+                          const studentsCount = cls.studentCount ?? 0;
                           return (
                             <button
                               key={cls.id}

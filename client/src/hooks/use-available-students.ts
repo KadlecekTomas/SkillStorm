@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useMemo } from "react";
 import { fetchWithAuth } from "@/lib/http/client";
+import { useQuery } from "@/lib/query-client";
 
 export type AvailableStudent = {
   id: string;
@@ -22,27 +23,25 @@ export const useAvailableStudents = ({
   students: AvailableStudent[];
   loading: boolean;
 } => {
-  const [students, setStudents] = useState<AvailableStudent[]>([]);
-  const [loading, setLoading] = useState(false);
+  const query = useQuery<{ data?: AvailableStudent[] }>({
+    queryKey: ["students", "available", classSectionId, yearId],
+    enabled: enabled && !!classSectionId && !!yearId,
+    staleTime: 15_000,
+    queryFn: () =>
+      fetchWithAuth<{ data?: AvailableStudent[] }>("GET", "/students", {
+        query: {
+          availableForClassSectionId: classSectionId ?? undefined,
+          availableForYearId: yearId ?? undefined,
+          limit: "200",
+        },
+      }),
+  });
 
-  useEffect(() => {
-    if (!enabled || !classSectionId || !yearId) {
-      setStudents([]);
-      return;
-    }
-    setLoading(true);
-    setStudents([]);
-    fetchWithAuth<{ data?: AvailableStudent[] }>("GET", "/students", {
-      query: {
-        availableForClassSectionId: classSectionId,
-        availableForYearId: yearId,
-        limit: "200",
-      },
-    })
-      .then((res) => setStudents(res?.data ?? []))
-      .catch(() => setStudents([]))
-      .finally(() => setLoading(false));
-  }, [enabled, classSectionId, yearId]);
-
-  return { students, loading };
+  return useMemo(
+    () => ({
+      students: query.data?.data ?? [],
+      loading: query.isLoading,
+    }),
+    [query.data, query.isLoading],
+  );
 };

@@ -5,6 +5,7 @@ import {
   Injectable,
   NotFoundException,
   Logger,
+  Inject,
 } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
 import {
@@ -17,15 +18,36 @@ import {
 import type { JwtPayload } from '@/auth/types/jwt-payload';
 import { hasAtLeastRole } from '@/shared/access.utils';
 import { AuditService } from '@/audit/audit.service';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
+import {
+  buildAuthzScopeKey,
+  buildVersionedListKey,
+  cacheGetOrSet,
+  cacheScopeForUser,
+  getResourceVersion,
+  invalidateResourcesFailSafe,
+} from '@/shared/cache/org-cache.utils';
 
 @Injectable()
 export class EnrollmentsService {
   private readonly logger = new Logger(EnrollmentsService.name);
+  private static readonly ENROLLMENTS_CACHE_TTL_MS = 10_000;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
+    @Inject(CACHE_MANAGER) private readonly cache: Cache,
   ) {}
+
+  private async invalidateEnrollmentReads(scopeId: string, mutation: string) {
+    await invalidateResourcesFailSafe(this.cache, {
+      scopeId,
+      resources: ['enrollments', 'classrooms', 'students', 'dashboard'],
+      mutation,
+      logger: this.logger,
+    });
+  }
 
   private async assertValidAcademicYear(orgId: string, yearId: string) {
     const year = await this.prisma.academicYear.findFirst({
@@ -145,6 +167,10 @@ export class EnrollmentsService {
         organizationId: classSection.orgId,
         metadata: { enrollmentId: enrollment.id, classSectionId: classSection.id, yearId: classSection.yearId },
       });
+      await this.invalidateEnrollmentReads(
+        cacheScopeForUser(user.systemRole, classSection.orgId),
+        'enrollments.create',
+      );
       return enrollment;
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
@@ -167,6 +193,10 @@ export class EnrollmentsService {
             organizationId: classSection.orgId,
             metadata: { enrollmentId: existing.id, classSectionId: classSection.id, yearId: classSection.yearId },
           });
+          await this.invalidateEnrollmentReads(
+            cacheScopeForUser(user.systemRole, classSection.orgId),
+            'enrollments.reactivate',
+          );
           return reactivated;
         }
         if (existing.classSectionId === classSection.id) return existing;
@@ -413,7 +443,10 @@ export class EnrollmentsService {
         });
       }
     }
-
+    await this.invalidateEnrollmentReads(
+      cacheScopeForUser(user.systemRole, classSection.orgId),
+      'enrollments.bulk-create',
+    );
     return results;
   }
 
@@ -431,8 +464,8 @@ export class EnrollmentsService {
       throw new BadRequestException('Školní rok neodpovídá třídě.');
     }
 
-    if (user.systemRole === SystemRole.SUPERADMIN) {
-      return this.prisma.enrollment.findMany({
+    const queryEnrollments = () =>
+      this.prisma.enrollment.findMany({
         where: { classSectionId, status: { not: EnrollmentStatus.LEFT } },
         include: {
           student: {
@@ -443,6 +476,29 @@ export class EnrollmentsService {
             },
           },
         },
+      });
+    const scopeId = cacheScopeForUser(user.systemRole, classSection.orgId);
+    const version = await getResourceVersion(this.cache, scopeId, 'enrollments');
+    const authzKey = buildAuthzScopeKey({
+      userId: user.userId,
+      systemRole: user.systemRole ?? null,
+      organizationRole: user.organizationRole ?? null,
+    });
+    const cacheKey = buildVersionedListKey({
+      namespace: 'enrollments',
+      scopeId,
+      version,
+      authz: authzKey,
+      filters: {
+        classSectionId,
+        academicYearId,
+      },
+    });
+
+    if (user.systemRole === SystemRole.SUPERADMIN) {
+      return cacheGetOrSet(this.cache, cacheKey, EnrollmentsService.ENROLLMENTS_CACHE_TTL_MS, queryEnrollments, {
+        scopeId,
+        resource: 'enrollments',
       });
     }
 
@@ -461,38 +517,16 @@ export class EnrollmentsService {
       if (!teacher || classSection.teacherId !== teacher.id) {
         throw new ForbiddenException('Teacher has no access to this class.');
       }
-      return this.prisma.enrollment.findMany({
-        where: {
-          classSectionId,
-          status: { not: EnrollmentStatus.LEFT },
-        },
-        include: {
-          student: {
-            include: {
-              membership: {
-                include: { user: { select: { id: true, name: true, email: true } } },
-              },
-            },
-          },
-        },
+      return cacheGetOrSet(this.cache, cacheKey, EnrollmentsService.ENROLLMENTS_CACHE_TTL_MS, queryEnrollments, {
+        scopeId,
+        resource: 'enrollments',
       });
     }
 
     if (role && hasAtLeastRole(role, OrganizationRole.DIRECTOR)) {
-      return this.prisma.enrollment.findMany({
-        where: {
-          classSectionId,
-          status: { not: EnrollmentStatus.LEFT },
-        },
-        include: {
-          student: {
-            include: {
-              membership: {
-                include: { user: { select: { id: true, name: true, email: true } } },
-              },
-            },
-          },
-        },
+      return cacheGetOrSet(this.cache, cacheKey, EnrollmentsService.ENROLLMENTS_CACHE_TTL_MS, queryEnrollments, {
+        scopeId,
+        resource: 'enrollments',
       });
     }
 
@@ -584,6 +618,10 @@ export class EnrollmentsService {
         yearId: enrollment.classSection.yearId,
       },
     });
+    await this.invalidateEnrollmentReads(
+      cacheScopeForUser(user.systemRole, enrollment.classSection.orgId),
+      'enrollments.transfer',
+    );
     return updated;
   }
 
@@ -624,6 +662,10 @@ export class EnrollmentsService {
         yearId: enrollment.classSection.yearId,
       },
     });
+    await this.invalidateEnrollmentReads(
+      cacheScopeForUser(user.systemRole, enrollment.classSection.orgId),
+      'enrollments.soft-delete',
+    );
     return updated;
   }
 }

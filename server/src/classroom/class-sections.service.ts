@@ -40,18 +40,19 @@ import type {
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import {
-  buildVersionedListKey,
   buildAuthzScopeKey,
+  buildVersionedListKey,
   cacheGetOrSet,
   cacheScopeForUser,
-  getOrgVersion,
-  bumpOrgVersion,
+  getResourceVersion,
+  invalidateResourcesFailSafe,
 } from '@/shared/cache/org-cache.utils';
 
 @Injectable()
 export class ClassSectionsService {
   private readonly logger = new Logger(ClassSectionsService.name);
   private hasLoggedPageDeprecation = false;
+  private static readonly CLASSROOMS_CACHE_TTL_MS = 10_000;
 
   private static readonly SCHOOL_GRADE_TO_NUM: Record<SchoolGrade, number> = {
     [SchoolGrade.GRADE_1]: 1,
@@ -198,6 +199,15 @@ export class ClassSectionsService {
     }
   }
 
+  private async invalidateClassroomReads(scopeId: string, mutation: string) {
+    await invalidateResourcesFailSafe(this.cache, {
+      scopeId,
+      resources: ['classrooms', 'dashboard'],
+      mutation,
+      logger: this.logger,
+    });
+  }
+
   // -------------------------
   // CREATE
   // -------------------------
@@ -282,12 +292,13 @@ export class ClassSectionsService {
         return section;
       });
 
-      await bumpOrgVersion(
-        this.cache,
+      await this.invalidateClassroomReads(
         cacheScopeForUser(user.systemRole, resolvedYear.orgId),
+        'classrooms.create',
       );
       return {
         id: created.id,
+        orgId: created.orgId,
         academicYearId: created.yearId,
         yearId: created.yearId,
         label: created.label,
@@ -477,14 +488,12 @@ export class ClassSectionsService {
       systemRole: user.systemRole ?? null,
       organizationRole: role ?? null,
     });
-
-    // org‑scoped verzovaná cache
-    const scope = cacheScopeForUser(user.systemRole, resolvedYear.orgId);
-    const ver = await getOrgVersion(this.cache, scope);
+    const scopeId = cacheScopeForUser(user.systemRole, resolvedYear.orgId);
+    const version = await getResourceVersion(this.cache, scopeId, 'classrooms');
     const cacheKey = buildVersionedListKey({
       namespace: 'classSections',
-      scopeId: scope,
-      version: ver,
+      scopeId,
+      version,
       authz: authzKey,
       limit: safeLimit,
       search: q.search ?? '',
@@ -498,7 +507,7 @@ export class ClassSectionsService {
       },
     });
 
-    return cacheGetOrSet(this.cache, cacheKey, 600_000, async () => {
+    return cacheGetOrSet(this.cache, cacheKey, ClassSectionsService.CLASSROOMS_CACHE_TTL_MS, async () => {
       const take = safeLimit + 1;
       const rows = await this.prisma.classSection.findMany({
         where,
@@ -539,8 +548,12 @@ export class ClassSectionsService {
 
       const hasMoreInRequestedDirection = rows.length > safeLimit;
       const sliced = hasMoreInRequestedDirection ? rows.slice(0, safeLimit) : rows;
-      const data =
+      const pageRows =
         effectiveDirection === 'prev' ? [...sliced].reverse() : sliced;
+      const data = pageRows.map((row) => ({
+        ...row,
+        studentCount: row._count.enrollments,
+      }));
 
       if (data.length === 0) {
         return {
@@ -590,6 +603,9 @@ export class ClassSectionsService {
           prevCursor,
         },
       };
+    }, {
+      scopeId,
+      resource: 'classrooms',
     });
   }
 
@@ -779,10 +795,12 @@ export class ClassSectionsService {
       });
     }
 
-    await bumpOrgVersion(
-      this.cache,
-      cacheScopeForUser(user.systemRole, classSection.orgId),
-    );
+    await invalidateResourcesFailSafe(this.cache, {
+      scopeId: cacheScopeForUser(user.systemRole, classSection.orgId),
+      resources: ['classrooms'],
+      mutation: 'classrooms.assign-subjects',
+      logger: this.logger,
+    });
     return this.listOrgSubjectsByClassSectionId(classSectionId);
   }
 
@@ -893,13 +911,6 @@ export class ClassSectionsService {
       take: Math.min(5000, safeLimit * 50),
     });
 
-    console.log('RISK INPUT:', {
-      classroomId,
-      classYearId: classSection.yearId,
-      membershipIds,
-      submissions,
-    });
-
     const byMembershipId = new Map<
       string,
       { score: number | null; submittedAt: Date | null; maxScore: number }[]
@@ -929,18 +940,6 @@ export class ClassSectionsService {
         daysSinceLastActivity: risk.daysSinceLastActivity,
         trendPercent: risk.trendPercent,
       };
-      console.log('RISK COMPUTED:', {
-        classroomId,
-        membershipId,
-        studentId: student.id,
-        displayName,
-        earnedPoints: rawSubs.map((submission) => submission.score),
-        maxPoints: rawSubs.map((submission) => submission.maxScore),
-        score: risk.averageScorePercent,
-        submissions: rawSubs,
-        averageScorePercent: risk.averageScorePercent,
-        finalRiskFlags: this.riskService.getStudentRiskFlags(riskInput),
-      });
       students.push({
         studentId: student.id,
         displayName,
@@ -1199,9 +1198,9 @@ export class ClassSectionsService {
         data: updateData,
       });
 
-      await bumpOrgVersion(
-        this.cache,
+      await this.invalidateClassroomReads(
         cacheScopeForUser(user.systemRole, classSection.orgId),
+        'classrooms.update',
       );
       return updated; // controller použije orgId pro invalidaci
     } catch (e) {
@@ -1235,9 +1234,9 @@ export class ClassSectionsService {
 
     const deleted = await this.prisma.classSection.delete({ where: { id } });
 
-    await bumpOrgVersion(
-      this.cache,
+    await this.invalidateClassroomReads(
       cacheScopeForUser(user.systemRole, classSection.orgId),
+      'classrooms.remove',
     );
     return deleted;
   }
@@ -1335,7 +1334,7 @@ export class ClassSectionsService {
     });
 
     const scope = cacheScopeForUser(user.systemRole, cls.orgId);
-    await bumpOrgVersion(this.cache, scope);
+    await this.invalidateClassroomReads(scope, 'classrooms.set-homeroom');
 
     return updated;
   }
@@ -1372,6 +1371,11 @@ export class ClassSectionsService {
       select: { id: true, teacherId: true, classSectionId: true, createdAt: true },
     });
 
+    await this.invalidateClassroomReads(
+      cacheScopeForUser(undefined, orgId),
+      'classrooms.assign-teacher',
+    );
+
     return record;
   }
 
@@ -1400,6 +1404,11 @@ export class ClassSectionsService {
       where: { id: record.id },
       data: { deletedAt: new Date() },
     });
+
+    await this.invalidateClassroomReads(
+      cacheScopeForUser(undefined, orgId),
+      'classrooms.remove-teacher',
+    );
 
     return { success: true };
   }

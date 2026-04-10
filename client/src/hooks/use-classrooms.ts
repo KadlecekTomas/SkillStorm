@@ -1,17 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useReducer, useRef } from "react";
+import { useCallback, useMemo } from "react";
 import { fetchWithAuth } from "@/lib/http/client";
-
-/* =======================
-   Types
-======================= */
+import { useQuery } from "@/lib/query-client";
 
 export type ClassroomListItem = {
   id: string;
   label?: string | null;
   grade: string;
   section: string;
+  studentCount?: number;
   teacher?: {
     id?: string;
     membership?: {
@@ -41,13 +39,6 @@ export type ClassroomsState =
   | { status: "READY_WITH_DATA"; classrooms: ClassroomListItem[]; meta: ClassroomsMeta }
   | { status: "ERROR"; error: Error };
 
-type ClassroomsAction =
-  | { type: "AUTH_LOADING" }
-  | { type: "INIT_ORG" }
-  | { type: "FETCHING" }
-  | { type: "READY"; classrooms: ClassroomListItem[]; meta: ClassroomsMeta }
-  | { type: "ERROR"; error: Error };
-
 type OrgBootstrapForInit = {
   hasClassrooms?: boolean;
   hasClassroomsInCurrentYear?: boolean;
@@ -69,45 +60,9 @@ type UseClassroomsParams = {
   limit?: number;
 };
 
-/* =======================
-   Reducer
-======================= */
-
-const reducer = (state: ClassroomsState, action: ClassroomsAction): ClassroomsState => {
-  switch (action.type) {
-    case "AUTH_LOADING":
-      return { status: "AUTH_LOADING" };
-
-    case "INIT_ORG":
-      return { status: "INIT_ORG" };
-
-    case "FETCHING":
-      return { status: "FETCHING" };
-
-    case "READY":
-      return action.classrooms.length === 0
-        ? { status: "READY_EMPTY", classrooms: action.classrooms, meta: action.meta }
-        : { status: "READY_WITH_DATA", classrooms: action.classrooms, meta: action.meta };
-
-    case "ERROR":
-      return { status: "ERROR", error: action.error };
-
-    default:
-      return state;
-  }
-};
-
-/* =======================
-   Helpers
-======================= */
-
 const isRepairState = (b: OrgBootstrapForInit) =>
   b?.hasClassrooms === true &&
   (b?.hasClassroomsInCurrentYear === false || (b?.hasClassroomsInCurrentYear !== true && b?.hasClassroomsInActiveYear === false));
-
-/* =======================
-   Hook
-======================= */
 
 export type ClassroomsResult = ClassroomsState & {
   refetch: (options?: { bypassCache?: boolean; skipFetch?: boolean }) => Promise<boolean>;
@@ -132,205 +87,127 @@ export const useClassrooms = ({
   direction = "next",
   limit = 20,
 }: UseClassroomsParams): ClassroomsResult => {
-  const [state, dispatch] = useReducer(reducer, { status: "AUTH_LOADING" });
-  const abortRef = useRef<AbortController | null>(null);
-  const prefetchAbortRef = useRef<AbortController | null>(null);
-  const cacheRef = useRef<Map<string, FetchResult>>(new Map());
-  const prefetchInFlightRef = useRef<Set<string>>(new Set());
-
   const isInitOrg =
     orgStatus === "ACTIVE" &&
     orgReadiness === "NOT_READY" &&
     !isRepairState(bootstrap);
 
-  const buildQueryKey = useCallback(
-    (targetCursor: string | null, targetDirection: "next" | "prev") =>
-      JSON.stringify({
-        yearId: selectedYearId ?? "",
-        grade: grade ?? "",
-        search: search ?? "",
-        teacherId: teacherId ?? "",
-        cursor: targetCursor ?? "",
-        direction: targetDirection,
+  const effectiveDirection = cursor ? direction ?? "next" : "next";
+  const queryKey = useMemo(
+    () =>
+      [
+        "classrooms",
+        selectedYearId,
+        grade ?? null,
+        search ?? null,
+        teacherId ?? null,
+        cursor,
+        effectiveDirection,
         limit,
-      }),
-    [selectedYearId, grade, search, teacherId, limit],
+      ] as const,
+    [selectedYearId, grade, search, teacherId, cursor, effectiveDirection, limit],
   );
 
-  const fetchPage = useCallback(
-    async (
-      targetCursor: string | null,
-      targetDirection: "next" | "prev",
-      signal: AbortSignal,
-    ): Promise<FetchResult> => {
+  const query = useQuery<FetchResult>({
+    queryKey,
+    enabled:
+      !isAuthLoading &&
+      isAuthenticated &&
+      !(isInitOrg && !selectedYearId) &&
+      !!selectedYearId,
+    staleTime: 10_000,
+    queryFn: async () => {
       const response = await fetchWithAuth<
         | { data?: ClassroomListItem[]; meta?: ClassroomsMeta }
         | ClassroomListItem[]
-      >(
-        "GET",
-        "/classrooms",
-        {
-          query: {
-            yearId: selectedYearId ?? undefined,
-            limit,
-            ...(targetCursor ? { cursor: targetCursor, direction: targetDirection } : {}),
-            ...(grade ? { grade } : {}),
-            ...(search ? { search } : {}),
-            ...(teacherId ? { teacherId } : {}),
-          },
-          signal,
+      >("GET", "/classrooms", {
+        query: {
+          yearId: selectedYearId ?? undefined,
+          limit,
+          ...(cursor ? { cursor, direction: effectiveDirection } : {}),
+          ...(grade ? { grade } : {}),
+          ...(search ? { search } : {}),
+          ...(teacherId ? { teacherId } : {}),
         },
-      );
+      });
 
       const data = Array.isArray(response) ? response : response?.data ?? [];
       const meta = Array.isArray(response)
         ? {
-          limit,
-          hasNextPage: false,
-          hasPrevPage: false,
-          nextCursor: null,
-          prevCursor: null,
-        }
+            limit,
+            hasNextPage: false,
+            hasPrevPage: false,
+            nextCursor: null,
+            prevCursor: null,
+          }
         : response?.meta ?? {
-          limit,
-          hasNextPage: false,
-          hasPrevPage: false,
-          nextCursor: null,
-          prevCursor: null,
-        };
+            limit,
+            hasNextPage: false,
+            hasPrevPage: false,
+            nextCursor: null,
+            prevCursor: null,
+          };
 
       return { data, meta };
     },
-    [selectedYearId, grade, search, teacherId, limit],
-  );
+  });
 
-  const refetch = useCallback(async (options?: { bypassCache?: boolean; skipFetch?: boolean }): Promise<boolean> => {
-    const bypassCache = options?.bypassCache === true;
-    const skipFetch = options?.skipFetch === true;
+  const refetch = useCallback(async (options?: { bypassCache?: boolean; skipFetch?: boolean }) => {
+    if (options?.skipFetch) return true;
+    if (isAuthLoading || !isAuthenticated) return false;
+    if (isInitOrg && !selectedYearId) return false;
+    if (!selectedYearId) return false;
+    return !!(await query.refetch());
+  }, [isAuthLoading, isAuthenticated, isInitOrg, selectedYearId, query]);
 
-    /* 1️⃣ Auth gate */
-    if (isAuthLoading || !isAuthenticated) {
-      dispatch({ type: "AUTH_LOADING" });
-      return false;
-    }
+  if (isAuthLoading || !isAuthenticated) {
+    return { status: "AUTH_LOADING", refetch };
+  }
 
-    /* 2️⃣ Init org gate: show INIT_ORG only when no year selected (so after create + refetch we always fetch when year is set) */
-    if (isInitOrg && !selectedYearId) {
-      dispatch({ type: "INIT_ORG" });
-      return false;
-    }
+  if (isInitOrg && !selectedYearId) {
+    return { status: "INIT_ORG", refetch };
+  }
 
-    /* 3️⃣ No year selected → empty but READY */
-    if (!selectedYearId) {
-      dispatch({
-        type: "READY",
-        classrooms: [],
-        meta: {
-          limit,
-          hasNextPage: false,
-          hasPrevPage: false,
-          nextCursor: null,
-          prevCursor: null,
-        },
-      });
-      return false;
-    }
-
-    const effectiveDirection = cursor ? direction ?? "next" : "next";
-    const queryKey = buildQueryKey(cursor, effectiveDirection);
-    if (bypassCache) {
-      cacheRef.current.clear();
-      prefetchInFlightRef.current.clear();
-      prefetchAbortRef.current?.abort();
-      if (skipFetch) {
-        return true;
-      }
-    } else {
-      const cached = cacheRef.current.get(queryKey);
-      if (cached) {
-        dispatch({ type: "READY", classrooms: cached.data, meta: cached.meta });
-        return true;
-      }
-    }
-
-    /* 4️⃣ Real fetch */
-    abortRef.current?.abort();
-    const ac = new AbortController();
-    abortRef.current = ac;
-
-    dispatch({ type: "FETCHING" });
-
-    try {
-      const fetched = await fetchPage(cursor, effectiveDirection, ac.signal);
-      if (ac.signal.aborted) return false;
-      cacheRef.current.set(queryKey, fetched);
-      dispatch({ type: "READY", classrooms: fetched.data, meta: fetched.meta });
-      return true;
-    } catch (error) {
-      if (ac.signal.aborted) return false;
-
-      if (process.env.NODE_ENV !== "production") {
-        console.error("Classrooms API error:", error);
-      }
-
-      const err = new Error("Nelze načíst seznam tříd. Zkuste stránku obnovit.");
-      dispatch({ type: "ERROR", error: err });
-      return false;
-    }
-  }, [
-    isAuthLoading,
-    isAuthenticated,
-    isInitOrg,
-    selectedYearId,
-    cursor,
-    direction,
-    limit,
-    buildQueryKey,
-    fetchPage,
-  ]);
-
-  useEffect(() => {
-    void refetch();
-    return () => {
-      abortRef.current?.abort();
-      prefetchAbortRef.current?.abort();
+  if (!selectedYearId) {
+    return {
+      status: "READY_EMPTY",
+      classrooms: [],
+      meta: {
+        limit,
+        hasNextPage: false,
+        hasPrevPage: false,
+        nextCursor: null,
+        prevCursor: null,
+      },
+      refetch,
     };
-  }, [refetch]);
+  }
 
-  useEffect(() => {
-    cacheRef.current.clear();
-    prefetchInFlightRef.current.clear();
-    prefetchAbortRef.current?.abort();
-  }, [selectedYearId, grade, search, teacherId, limit]);
+  if (query.isLoading && !query.data) {
+    return { status: "FETCHING", refetch };
+  }
 
-  useEffect(() => {
-    if (state.status !== "READY_EMPTY" && state.status !== "READY_WITH_DATA") return;
-    if (!selectedYearId) return;
-    if (!state.meta.hasNextPage || !state.meta.nextCursor) return;
+  if (query.error) {
+    return {
+      status: "ERROR",
+      error:
+        query.error instanceof Error
+          ? query.error
+          : new Error("Nelze načíst seznam tříd. Zkuste stránku obnovit."),
+      refetch,
+    };
+  }
 
-    const nextCursor = state.meta.nextCursor;
-    const nextKey = buildQueryKey(nextCursor, "next");
-    if (cacheRef.current.has(nextKey) || prefetchInFlightRef.current.has(nextKey)) {
-      return;
-    }
+  const classrooms = query.data?.data ?? [];
+  const meta = query.data?.meta ?? {
+    limit,
+    hasNextPage: false,
+    hasPrevPage: false,
+    nextCursor: null,
+    prevCursor: null,
+  };
 
-    prefetchAbortRef.current?.abort();
-    const ac = new AbortController();
-    prefetchAbortRef.current = ac;
-    prefetchInFlightRef.current.add(nextKey);
-
-    void fetchPage(nextCursor, "next", ac.signal)
-      .then((fetched) => {
-        if (ac.signal.aborted) return;
-        cacheRef.current.set(nextKey, fetched);
-      })
-      .catch(() => {
-        // Prefetch is best-effort only.
-      })
-      .finally(() => {
-        prefetchInFlightRef.current.delete(nextKey);
-      });
-  }, [state, selectedYearId, buildQueryKey, fetchPage]);
-
-  return { ...state, refetch };
+  return classrooms.length === 0
+    ? { status: "READY_EMPTY", classrooms, meta, refetch }
+    : { status: "READY_WITH_DATA", classrooms, meta, refetch };
 };

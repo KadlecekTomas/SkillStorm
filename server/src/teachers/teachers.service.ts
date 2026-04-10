@@ -23,10 +23,10 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import {
   buildVersionedListKey,
-  bumpOrgVersion,
   cacheGetOrSet,
   cacheScopeForUser,
-  getOrgVersion,
+  getResourceVersion,
+  invalidateResourcesFailSafe,
 } from '@/shared/cache/org-cache.utils';
 import type { AssignSubjectsDto } from './dto/assign-subjects.dto';
 
@@ -51,10 +51,20 @@ function teacherSearch(search?: string): Prisma.TeacherWhereInput | undefined {
 
 @Injectable()
 export class TeachersService {
+  private static readonly TEACHERS_CACHE_TTL_MS = 15_000;
+
   constructor(
     private prisma: PrismaService,
     @Inject(CACHE_MANAGER) private cache: Cache,
   ) {}
+
+  private async invalidateTeacherReads(scopeId: string, mutation: string) {
+    await invalidateResourcesFailSafe(this.cache, {
+      scopeId,
+      resources: ['teachers', 'dashboard'],
+      mutation,
+    });
+  }
 
   // ---------- Audit ----------
   private audit(opts: {
@@ -152,9 +162,9 @@ export class TeachersService {
       changedFields: dto as any,
     });
 
-    await bumpOrgVersion(
-      this.cache,
+    await this.invalidateTeacherReads(
       cacheScopeForUser(user.systemRole, dto.organizationId),
+      'teachers.create',
     );
     return created;
   }
@@ -215,21 +225,20 @@ export class TeachersService {
 
     const include = this.teacherListInclude();
 
-    // 4) Cache klíč (verzujeme podle org)
-    const scopeId = effectiveOrgId!;
-    const ver = await getOrgVersion(this.cache, scopeId);
+    const scopeId = cacheScopeForUser(user.systemRole, effectiveOrgId);
+    const version = await getResourceVersion(this.cache, scopeId, 'teachers');
     const cacheKey = buildVersionedListKey({
       namespace: 'teachers',
       scopeId,
-      version: ver,
+      version,
       page,
       limit,
       search: q.search ?? '',
       order: [{ membership: { user: { name: 'asc' } } }, { id: 'asc' }],
-      filters: null,
+      filters: { organizationId: effectiveOrgId },
     });
 
-    return cacheGetOrSet(this.cache, cacheKey, 600_000, async () => {
+    return cacheGetOrSet(this.cache, cacheKey, TeachersService.TEACHERS_CACHE_TTL_MS, async () => {
       const [total, items] = await this.prisma.$transaction([
         this.prisma.teacher.count({ where }),
         this.prisma.teacher.findMany({
@@ -250,6 +259,9 @@ export class TeachersService {
           pages: Math.max(1, Math.ceil(total / limit)),
         },
       };
+    }, {
+      scopeId,
+      resource: 'teachers',
     });
   }
 
@@ -332,9 +344,9 @@ export class TeachersService {
       changedFields: dto as any,
     });
 
-    await bumpOrgVersion(
-      this.cache,
+    await this.invalidateTeacherReads(
       cacheScopeForUser(user.systemRole, current.organizationId),
+      'teachers.update',
     );
     return updated;
   }
@@ -373,9 +385,9 @@ export class TeachersService {
       entityId: id,
     });
 
-    await bumpOrgVersion(
-      this.cache,
+    await this.invalidateTeacherReads(
       cacheScopeForUser(user.systemRole, teacher.organizationId),
+      'teachers.remove',
     );
     return deleted;
   }
@@ -482,8 +494,10 @@ export class TeachersService {
       metadata: { subjectIds: uniqueIds, replaceAll: !!dto.replaceAll },
     });
 
-    // 7) Cache invalidace – stačí bumpnout verzi organizace
-    await bumpOrgVersion(this.cache, teacher.organizationId);
+    await this.invalidateTeacherReads(
+      cacheScopeForUser(user.systemRole, teacher.organizationId),
+      'teachers.assign-subjects',
+    );
 
     // 8) Vrať aktuální stav – přes centrální findOne (musí includovat subjects)
     return this.findOne(teacherId, user);
@@ -540,7 +554,7 @@ export class TeachersService {
     });
 
     const scope = cacheScopeForUser(user.systemRole, teacher.organizationId);
-    await bumpOrgVersion(this.cache, scope); // teachers i subjects sdílí scope
+    await this.invalidateTeacherReads(scope, 'teachers.remove-subject');
 
     return { ok: true };
   }

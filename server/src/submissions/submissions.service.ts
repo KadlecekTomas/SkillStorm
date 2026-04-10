@@ -27,8 +27,10 @@ import { GamificationService } from '@/gamification/gamification.service';
 import type { JwtPayload } from '@/auth/types/jwt-payload';
 import type { OrgContext } from '@/common/org-context/org-context.types';
 import { assertTenantWhere, withOrg } from '@/common/prisma/tenant-scope';
-import { bumpOrgVersion } from '@/shared/cache/org-cache.utils';
-import { invalidateDirectorDashboardCache } from '@/stats/stats.service';
+import {
+  bumpOrgVersion,
+  invalidateResourcesFailSafe,
+} from '@/shared/cache/org-cache.utils';
 
 type JwtUser = JwtPayload;
 
@@ -230,9 +232,15 @@ export class SubmissionsService {
 
   private async invalidateSubmissionDerivedCaches(
     organizationId: string,
+    mutation: string,
   ): Promise<void> {
     await bumpOrgVersion(this.cache, organizationId);
-    invalidateDirectorDashboardCache(organizationId);
+    await invalidateResourcesFailSafe(this.cache, {
+      scopeId: organizationId,
+      resources: ['dashboard'],
+      mutation,
+      logger: this.logger,
+    });
   }
 
   // ---- API methods ---------------------------------------------------------
@@ -355,7 +363,10 @@ export class SubmissionsService {
           },
         });
       });
-      await this.invalidateSubmissionDerivedCaches(assignment.organizationId);
+      await this.invalidateSubmissionDerivedCaches(
+        assignment.organizationId,
+        'submissions.create',
+      );
       return created;
     } catch (e) {
       if (
@@ -733,7 +744,10 @@ export class SubmissionsService {
         submissionId: finished.id,
       },
     );
-    await this.invalidateSubmissionDerivedCaches(organizationId);
+    await this.invalidateSubmissionDerivedCaches(
+      organizationId,
+      'submissions.finish',
+    );
 
     const durationMs = Date.now() - startMs;
     this.logger.log(

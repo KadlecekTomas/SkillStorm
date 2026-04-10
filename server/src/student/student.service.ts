@@ -38,10 +38,10 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import {
   buildVersionedListKey,
-  bumpOrgVersion,
   cacheGetOrSet,
   cacheScopeForUser,
-  getOrgVersion,
+  getResourceVersion,
+  invalidateResourcesFailSafe,
 } from '@/shared/cache/org-cache.utils';
 
 function toPrismaSearch(search?: string): Prisma.StudentWhereInput | undefined {
@@ -203,11 +203,21 @@ function resolveExportOptions(q: ExportStudentsDto): {
 
 @Injectable()
 export class StudentsService {
+  private static readonly STUDENTS_CACHE_TTL_MS = 15_000;
+
   constructor(
     private prisma: PrismaService,
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
     private readonly auditService: AuditService,
   ) {}
+
+  private async invalidateStudentReads(scopeId: string, mutation: string) {
+    await invalidateResourcesFailSafe(this.cache, {
+      scopeId,
+      resources: ['students', 'classrooms', 'dashboard'],
+      mutation,
+    });
+  }
 
   private async audit(opts: {
     userId?: string;
@@ -318,9 +328,9 @@ export class StudentsService {
     });
 
     // 🔔 invalidace org‑scoped cache (listy studentů)
-    await bumpOrgVersion(
-      this.cache,
+    await this.invalidateStudentReads(
       cacheScopeForUser(user.systemRole, orgId),
+      'students.create',
     );
 
     return created;
@@ -358,14 +368,12 @@ export class StudentsService {
       ...(availableFor ?? {}),
     };
 
-    // verze podle scope (superadmin → 'ALL', jinak orgId)
     const scopeId = cacheScopeForUser(user.systemRole, user.organizationId);
-    const ver = await getOrgVersion(this.cache, scopeId);
-
+    const version = await getResourceVersion(this.cache, scopeId, 'students');
     const cacheKey = buildVersionedListKey({
       namespace: 'students',
       scopeId,
-      version: ver,
+      version,
       page,
       limit,
       search: q.search ?? '',
@@ -379,7 +387,7 @@ export class StudentsService {
       },
     });
 
-    return cacheGetOrSet(this.cache, cacheKey, 300_000, async () => {
+    return cacheGetOrSet(this.cache, cacheKey, StudentsService.STUDENTS_CACHE_TTL_MS, async () => {
       const [total, data] = await this.prisma.$transaction([
         this.prisma.student.count({ where }),
         this.prisma.student.findMany({
@@ -426,6 +434,9 @@ export class StudentsService {
           pages: Math.max(1, Math.ceil(total / limit)),
         },
       };
+    }, {
+      scopeId,
+      resource: 'students',
     });
   }
 
@@ -497,9 +508,9 @@ export class StudentsService {
       changedFields: dto as any,
     });
 
-    await bumpOrgVersion(
-      this.cache,
+    await this.invalidateStudentReads(
       cacheScopeForUser(user.systemRole, student.orgId),
+      'students.update',
     );
     return updated;
   }
@@ -534,9 +545,9 @@ export class StudentsService {
       metadata: { studentId: deleted.id },
     });
 
-    await bumpOrgVersion(
-      this.cache,
+    await this.invalidateStudentReads(
       cacheScopeForUser(user.systemRole, deleted.orgId),
+      'students.remove',
     );
     return deleted;
   }

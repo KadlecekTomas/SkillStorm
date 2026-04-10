@@ -24,6 +24,8 @@ import { fetchWithAuth } from "@/lib/http/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useAcademicYears } from "@/hooks/use-academic-years";
 import { DashboardGreeting } from "./DashboardGreeting";
+import { useTeachers } from "@/hooks/use-teachers";
+import { useQuery } from "@/lib/query-client";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -239,37 +241,48 @@ const PREPARATION_WINDOW_DAYS = 60;
 export function DirectorCommandCenter(): React.JSX.Element {
   const { user } = useAuth();
   const { activeYear, refresh: refreshYears } = useAcademicYears({ enabled: true });
-
-  const [data, setData] = useState<DirectorDashboardResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { teachers: teacherRoster } = useTeachers();
+  const dashboardQuery = useQuery<DirectorDashboardResponse>({
+    queryKey: ["dashboard", "director", user?.organizationId ?? null],
+    enabled: !!user?.organizationId,
+    staleTime: 10_000,
+    queryFn: getDashboardDirector,
+  });
+  const data = dashboardQuery.data ?? null;
+  const loading = dashboardQuery.isLoading;
+  const error = dashboardQuery.error instanceof Error
+    ? dashboardQuery.error.message
+    : dashboardQuery.error
+      ? "Nepodařilo se načíst data."
+      : null;
 
   // Next year banner: shown when cron pre-created the next year and activation is needed.
   const [preparedNextYear, setPreparedNextYear] = useState<{ id: string; label: string } | null>(null);
   const [activating, setActivating] = useState(false);
   const [bannerDismissed, setBannerDismissed] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    getDashboardDirector()
-      .then((res) => {
-        if (!cancelled) setData(res);
+  const homepageTeachers = (() => {
+    const activityByMembershipId = new Map(
+      (data?.teachers ?? []).map((teacher) => [teacher.membershipId, teacher]),
+    );
+    return teacherRoster
+      .map((teacher) => {
+        const membershipId = teacher.membership?.id;
+        const activity = membershipId ? activityByMembershipId.get(membershipId) : undefined;
+        return {
+          membershipId: membershipId ?? teacher.id,
+          name:
+            teacher.membership?.user?.name?.trim() ||
+            teacher.membership?.user?.email ||
+            "—",
+          testsCreated: activity?.testsCreated ?? 0,
+          submissionsThisWeek: activity?.submissionsThisWeek ?? 0,
+          lastActivityAt: activity?.lastActivityAt ?? null,
+          activeThisWeek: activity?.activeThisWeek ?? false,
+        };
       })
-      .catch((err) => {
-        if (!cancelled)
-          setError(
-            err instanceof Error ? err.message : "Nepodařilo se načíst data."
-          );
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+      .sort((a, b) => b.submissionsThisWeek - a.submissionsThisWeek || a.name.localeCompare(b.name, "cs"));
+  })();
 
   // Check if the cron prepared a next year when the active year is within the 60-day window.
   useEffect(() => {
@@ -385,7 +398,7 @@ export function DirectorCommandCenter(): React.JSX.Element {
       ) : (
         <div className="grid gap-6 lg:grid-cols-2">
           <ClassRiskTable classes={data?.classes ?? []} />
-          <TeacherActivityList teachers={data?.teachers ?? []} />
+          <TeacherActivityList teachers={homepageTeachers} />
         </div>
       )}
 

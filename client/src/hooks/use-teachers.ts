@@ -1,14 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { httpClient, HttpError } from "@/lib/http/client";
 import { useAuth } from "@/hooks/use-auth";
 import type { OrganizationRole } from "@/types";
+import { useQuery } from "@/lib/query-client";
 
 export type TeacherListItem = {
   id: string;
   createdAt?: string;
   membership?: {
+    id?: string;
     role?: OrganizationRole | null;
     user?: {
       name?: string | null;
@@ -37,62 +39,42 @@ export type UseTeachersResult = {
 };
 
 const resolveErrorMessage = (error: unknown): string => {
-  if (error instanceof HttpError) {
-    return error.message;
-  }
-  if (error instanceof Error) {
-    return error.message;
-  }
+  if (error instanceof HttpError) return error.message;
+  if (error instanceof Error) return error.message;
   return "Nepodařilo se načíst učitele.";
 };
 
 export const useTeachers = (): UseTeachersResult => {
   const { org } = useAuth();
   const orgId = org?.id ?? null;
-  const [teachers, setTeachers] = useState<TeacherListItem[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchTeachers = useCallback(async () => {
-    if (!orgId) {
-      setTeachers([]);
-      setTotal(0);
-      setLoading(false);
-      setError("Chybí aktivní organizace.");
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await httpClient.get<TeacherListResponse>("/teachers", {
+  const query = useQuery<TeacherListResponse>({
+    queryKey: ["teachers", orgId],
+    enabled: !!orgId,
+    staleTime: 15_000,
+    queryFn: async () => {
+      if (!orgId) {
+        return {
+          items: [],
+          meta: { page: 1, limit: 50, total: 0, pages: 1 },
+        };
+      }
+      return httpClient.get<TeacherListResponse>("/teachers", {
         query: { organizationId: orgId, page: 1, limit: 50 },
       });
-      setTeachers(response.items ?? []);
-      setTotal(response.meta?.total ?? response.items?.length ?? 0);
-    } catch (err) {
-      setTeachers([]);
-      setTotal(0);
-      setError(resolveErrorMessage(err));
-    } finally {
-      setLoading(false);
-    }
-  }, [orgId]);
-
-  useEffect(() => {
-    fetchTeachers();
-  }, [fetchTeachers]);
+    },
+  });
 
   return useMemo(
     () => ({
-      teachers,
-      total,
-      loading,
-      error,
-      refresh: fetchTeachers,
+      teachers: query.data?.items ?? [],
+      total: query.data?.meta?.total ?? query.data?.items?.length ?? 0,
+      loading: query.isLoading,
+      error: !orgId ? "Chybí aktivní organizace." : query.error ? resolveErrorMessage(query.error) : null,
+      refresh: async () => {
+        await query.refetch();
+      },
       orgId,
     }),
-    [teachers, total, loading, error, fetchTeachers, orgId],
+    [orgId, query],
   );
 };
