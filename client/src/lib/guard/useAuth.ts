@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { fetchWithAuth } from "@/lib/http/client";
 import { useAuthStore, type OrganizationContext, type AuthPhase } from "@/store/use-auth-store";
 import { useAcademicYearStore } from "@/store/use-academic-year-store";
+import { useCurrentAcademicYearState } from "@/store/use-current-academic-year-state";
 import { deriveOrgState, type OrgState } from "@/lib/org-state";
 import {
   clearClientSessionArtifacts,
@@ -379,6 +380,11 @@ export const useAuth = (): UseAuthResult => {
         });
         if (previousOrgId) {
           useAcademicYearStore.getState().clearOrg(previousOrgId);
+          useCurrentAcademicYearState.getState().resetOrg(previousOrgId);
+        }
+        const nextOrgId = res?.organization?.id ?? res?.org?.id ?? null;
+        if (nextOrgId) {
+          useCurrentAcademicYearState.getState().resetOrg(nextOrgId);
         }
         if (typeof window !== "undefined") {
           window.localStorage.setItem("skillstorm_activeMembershipId", membershipId);
@@ -438,6 +444,10 @@ export const useAuth = (): UseAuthResult => {
         }
         if (previousOrgId) {
           useAcademicYearStore.getState().clearOrg(previousOrgId);
+          useCurrentAcademicYearState.getState().resetOrg(previousOrgId);
+        }
+        if (orgId) {
+          useCurrentAcademicYearState.getState().resetOrg(orgId);
         }
         return effectiveContext;
       } finally {
