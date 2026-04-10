@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { fetchCurrentAcademicYear } from "@/lib/api/academic-years";
 import { HttpError } from "@/lib/http/client";
+import { useCurrentAcademicYearState } from "@/store/use-current-academic-year-state";
 import type { AppState } from "./app-state";
 
 /** Timeout for GET /academic-years/current. Prevents infinite BOOTSTRAPPING. */
@@ -21,6 +22,9 @@ export function useAppState(): {
   const { user, org, orgState, hasOrganization, isLoading: authLoading } = useAuth();
   const [state, setState] = useState<AppState>({ code: "BOOTSTRAPPING" });
   const resolveInFlightRef = useRef(false);
+  const markMissingCurrentYear = useCurrentAcademicYearState((store) => store.markMissing);
+  const markCurrentYearAvailable = useCurrentAcademicYearState((store) => store.markAvailable);
+  const resetCurrentYearOrg = useCurrentAcademicYearState((store) => store.resetOrg);
 
   const resolveState = useCallback(async () => {
     if (authLoading || !user) {
@@ -30,6 +34,9 @@ export function useAppState(): {
     if (!hasOrganization || !org) {
       setState({ code: "BOOTSTRAPPING" });
       return;
+    }
+    if (org.id) {
+      resetCurrentYearOrg(org.id);
     }
     if (org?.bootstrap?.hasAcademicYear === false) {
       setState({ code: "BOOTSTRAPPING" });
@@ -78,6 +85,9 @@ export function useAppState(): {
         "ACTIVE_YEAR_FETCH_TIMEOUT",
       );
       resolveInFlightRef.current = false;
+      if (org.id) {
+        markCurrentYearAvailable(org.id);
+      }
       setState({
         code: "READY",
         currentYearName: current?.name ?? null,
@@ -88,6 +98,11 @@ export function useAppState(): {
       const code = data?.meta?.code ?? data?.code ?? (err as { code?: string })?.code ?? null;
 
       if (err instanceof HttpError && err.status === 409) {
+        if (org.id) {
+          markMissingCurrentYear(org.id, {
+            errorCode: code ?? "NO_CURRENT_ACADEMIC_YEAR",
+          });
+        }
         setState({
           code: "ORG_NOT_READY",
           errorCode: code ?? "NO_CURRENT_ACADEMIC_YEAR",

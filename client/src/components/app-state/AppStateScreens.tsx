@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { InfoAlert } from "@/components/ui/alert";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { PendingOrganizationOnboardingScreen } from "@/components/onboarding/PendingOrganizationOnboardingScreen";
+import { CurrentAcademicYearRequiredScreen } from "@/components/academic-years/CurrentAcademicYearRequiredScreen";
 import type { AppState } from "@/lib/app-state/app-state";
 import { BACKEND_STATE_CODES } from "@/lib/app-state/app-state";
 import Link from "next/link";
@@ -141,6 +142,17 @@ export function AppStateScreens({ state, onRetry }: AppStateScreensProps): React
             </div>
           </Card>
         </div>
+      );
+    }
+
+    if (
+      state.errorCode === BACKEND_STATE_CODES.NO_CURRENT_ACADEMIC_YEAR ||
+      state.errorCode === BACKEND_STATE_CODES.NO_ACTIVE_ACADEMIC_YEAR
+    ) {
+      return (
+        <CurrentAcademicYearRequiredScreen
+          {...(onRetry ? { onRecovered: onRetry } : {})}
+        />
       );
     }
 

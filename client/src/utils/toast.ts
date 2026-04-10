@@ -61,7 +61,12 @@ export function resolveToastFromHttpError(err: HttpError): ResolvedToast {
   const { status, code, message } = extractErrorMeta(err);
 
   // Stavové kódy – onboarding state machine, NE chyby.
-  if (code === "ORG_PENDING" || code === "ORG_NOT_READY") {
+  if (
+    code === "ORG_PENDING" ||
+    code === "ORG_NOT_READY" ||
+    code === "NO_CURRENT_ACADEMIC_YEAR" ||
+    code === "NO_ACTIVE_ACADEMIC_YEAR"
+  ) {
     return { showToast: false };
   }
 
@@ -121,4 +126,3 @@ export function showHttpErrorToastOnce(err: unknown): void {
   if (!resolved.showToast || !resolved.message) return;
   showToastOnce(resolved.message, { type: resolved.type ?? "error" });
 }
-

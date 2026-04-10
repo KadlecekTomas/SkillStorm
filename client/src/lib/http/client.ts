@@ -9,6 +9,7 @@ import {
   markLogoutNavigationInProgress,
 } from "@/lib/auth-session";
 import { useAcademicYearStore } from "@/store/use-academic-year-store";
+import { useCurrentAcademicYearState } from "@/store/use-current-academic-year-state";
 
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
@@ -49,6 +50,43 @@ export class ForbiddenError extends HttpError {
     this.name = "ForbiddenError";
   }
 }
+
+const extractBackendCode = (data: unknown): string | null => {
+  if (!data || typeof data !== "object") return null;
+  const record = data as { code?: unknown; meta?: { code?: unknown } };
+  if (typeof record.code === "string" && record.code.trim().length > 0) {
+    return record.code.trim();
+  }
+  if (typeof record.meta?.code === "string" && record.meta.code.trim().length > 0) {
+    return record.meta.code.trim();
+  }
+  return null;
+};
+
+const isMissingCurrentAcademicYearCode = (code: string | null): boolean =>
+  code === "NO_CURRENT_ACADEMIC_YEAR" || code === "NO_ACTIVE_ACADEMIC_YEAR";
+
+const currentPathForRecovery = (): string | null => {
+  if (typeof window === "undefined") return null;
+  return `${window.location.pathname}${window.location.search}${window.location.hash}`;
+};
+
+const markMissingCurrentAcademicYear = (data: unknown): void => {
+  const code = extractBackendCode(data);
+  if (!isMissingCurrentAcademicYearCode(code)) return;
+  const orgId = useAuthStore.getState().org?.id;
+  if (!orgId) return;
+  useCurrentAcademicYearState.getState().markMissing(orgId, {
+    errorCode: code,
+    returnPath: currentPathForRecovery(),
+  });
+};
+
+const clearMissingCurrentAcademicYear = (): void => {
+  const orgId = useAuthStore.getState().org?.id;
+  if (!orgId) return;
+  useCurrentAcademicYearState.getState().markAvailable(orgId);
+};
 
 const extractErrorMessage = (data: unknown, fallback: string): string => {
   const normalizeMessageValue = (value: unknown): string | null => {
@@ -241,6 +279,7 @@ const logoutAndRedirect = (): void => {
   markLogoutNavigationInProgress();
   useAuthStore.getState().clearAuthState();
   useAcademicYearStore.getState().clearAll();
+  useCurrentAcademicYearState.getState().clearAll();
   clearClientSessionArtifacts();
 
   if (typeof window !== "undefined") {
@@ -444,6 +483,7 @@ export const request = async <TResponse = unknown, TBody = unknown>(
 
   if (response.status === 403) {
     const data = await parseResponse<unknown>(response);
+    markMissingCurrentAcademicYear(data);
     throw new ForbiddenError(
       extractErrorMessage(data, "Nedostatečná oprávnění"),
       data,
@@ -452,6 +492,7 @@ export const request = async <TResponse = unknown, TBody = unknown>(
 
   if (!response.ok) {
     const data = await parseResponse<unknown>(response);
+    markMissingCurrentAcademicYear(data);
     throw new HttpError(
       extractErrorMessage(data, "HTTP error"),
       response.status,
@@ -468,7 +509,24 @@ export const request = async <TResponse = unknown, TBody = unknown>(
     if (envelope.success === false) {
       throw new HttpError(envelope.error ?? "API error", response.status, envelope.meta);
     }
+    if (
+      path.startsWith("/academic-years/current") ||
+      path.startsWith("/academic-years/active") ||
+      (method === "POST" && path.startsWith("/academic-years")) ||
+      (method === "PATCH" && /\/academic-years\/[^/]+\/activate$/.test(path))
+    ) {
+      clearMissingCurrentAcademicYear();
+    }
     return (envelope as { success: true; data: TResponse }).data;
+  }
+
+  if (
+    path.startsWith("/academic-years/current") ||
+    path.startsWith("/academic-years/active") ||
+    (method === "POST" && path.startsWith("/academic-years")) ||
+    (method === "PATCH" && /\/academic-years\/[^/]+\/activate$/.test(path))
+  ) {
+    clearMissingCurrentAcademicYear();
   }
 
   return parsed as TResponse;
