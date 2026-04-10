@@ -1,5 +1,13 @@
 import { defineConfig } from '@playwright/test';
 
+function withDefinedEnv(
+  values: Record<string, string | undefined>,
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(values).filter(([, value]) => value !== undefined),
+  ) as Record<string, string>;
+}
+
 export default defineConfig({
   testDir: './tests/e2e',
 
@@ -17,7 +25,7 @@ export default defineConfig({
       url: 'http://127.0.0.1:4200/health',
       reuseExistingServer: true,
       timeout: 180_000,
-      env: {
+      env: withDefinedEnv({
         ...process.env,
         NODE_ENV: process.env.NODE_ENV || 'development',
         PORT: '4200',
@@ -28,7 +36,7 @@ export default defineConfig({
         DISABLE_CSRF: '1',
         DISABLE_THROTTLE: '1',
         E2E_TEST_TOKEN: process.env.E2E_TEST_TOKEN || 'skillstorm-e2e-token',
-      },
+      }),
     },
     {
       command:
@@ -36,11 +44,11 @@ export default defineConfig({
       url: 'http://127.0.0.1:3001',
       reuseExistingServer: true,
       timeout: 180_000,
-      env: {
+      env: withDefinedEnv({
         ...process.env,
         PORT: '3001',
         API_PROXY_TARGET: process.env.API_PROXY_TARGET || 'http://127.0.0.1:4200',
-      },
+      }),
     },
   ],
 

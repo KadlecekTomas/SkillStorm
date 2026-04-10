@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
 import "./globals.css";
 import { Suspense } from "react";
 import { AppErrorBoundary } from "@/components/layout/app-error-boundary";
@@ -8,11 +7,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { MswLoader } from "@/components/dev/msw-loader";
-
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-inter",
-});
 
 export const metadata: Metadata = {
   title: "SkillStorm · EduTo Platform",
@@ -27,7 +21,7 @@ export default function RootLayout({
 }>): React.JSX.Element {
   return (
     <html lang="en">
-      <body className={`${inter.variable} bg-secondary text-slate-900`}>
+      <body className="bg-secondary text-slate-900">
         <AppErrorBoundary>
           <TooltipProvider>
             <MswLoader />
