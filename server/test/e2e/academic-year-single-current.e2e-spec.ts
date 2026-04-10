@@ -126,4 +126,18 @@ describe('Academic year — single current year enforcement (e2e)', () => {
     });
     expect(activeCount).toBe(1);
   });
+
+  it('8c — GET /academic-years/current returns 409 NO_CURRENT_ACADEMIC_YEAR when no current year exists', async () => {
+    await prisma.academicYear.updateMany({
+      where: { orgId, deletedAt: null },
+      data: { isCurrent: false },
+    });
+
+    const res = await request(app.getHttpServer())
+      .get('/academic-years/current')
+      .set('Authorization', `Bearer ${directorToken}`)
+      .expect(409);
+
+    expect(res.body?.meta?.code ?? res.body?.code).toBe('NO_CURRENT_ACADEMIC_YEAR');
+  });
 });

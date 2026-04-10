@@ -20,7 +20,7 @@ export const CURRENT_YEAR_ALREADY_EXISTS = 'CURRENT_YEAR_ALREADY_EXISTS';
 
 /** Canonical: no academic year with isCurrent=true for the org. */
 export const NO_CURRENT_ACADEMIC_YEAR = 'NO_CURRENT_ACADEMIC_YEAR';
-/** Canonical: more than one academic year with isCurrent=true (guard/service check). */
+/** @deprecated Kept for backward compatibility in error-code consumers; DB now enforces at-most-one. */
 export const MULTIPLE_CURRENT_ACADEMIC_YEARS = 'MULTIPLE_CURRENT_ACADEMIC_YEARS';
 /** Deprecated alias; emit alongside new code for one release. */
 export const NO_ACTIVE_ACADEMIC_YEAR_DEPRECATED = 'NO_ACTIVE_ACADEMIC_YEAR';
@@ -109,14 +109,14 @@ export class AcademicYearsService {
       // Invariant: at most one current year per org. Set others to isCurrent=false before setting one to true.
       created = await this.prisma.$transaction(async (tx) => {
         const existingCurrent = await tx.academicYear.findFirst({
-          where: { orgId, isCurrent: true },
+          where: { orgId, isCurrent: true, deletedAt: null },
           select: { id: true },
         });
 
         const shouldSetCurrent = dto.isActive === true || !existingCurrent;
         if (shouldSetCurrent) {
           await tx.academicYear.updateMany({
-            where: { orgId, isCurrent: true },
+            where: { orgId, isCurrent: true, deletedAt: null },
             data: { isCurrent: false },
           });
         }
@@ -175,7 +175,7 @@ export class AcademicYearsService {
       // This transaction is safe due to DB partial unique index (academic_years_one_current_per_org).
       updated = await this.prisma.$transaction(async (tx) => {
         await tx.academicYear.updateMany({
-          where: { orgId, isCurrent: true },
+          where: { orgId, isCurrent: true, deletedAt: null },
           data: { isCurrent: false },
         });
         return tx.academicYear.update({
@@ -212,7 +212,8 @@ export class AcademicYearsService {
 
   async getCurrentForOrg(orgId: string) {
     const year = await this.prisma.academicYear.findFirst({
-      where: { orgId, isCurrent: true },
+      where: { orgId, isCurrent: true, deletedAt: null },
+      orderBy: { startsAt: 'desc' },
       select: { id: true, orgId: true, isCurrent: true },
     });
     if (!year) {
@@ -225,36 +226,18 @@ export class AcademicYearsService {
     if (!orgId) {
       throw new ForbiddenException('Missing organization context.');
     }
-    const years = await this.prisma.academicYear.findMany({
-      where: { orgId, isCurrent: true },
+    const year = await this.prisma.academicYear.findFirst({
+      where: { orgId, isCurrent: true, deletedAt: null },
       orderBy: { startsAt: 'desc' },
     });
 
-    if (years.length === 0) {
+    if (!year) {
       throw new ConflictException({
         message: 'Current academic year is not configured for this organization.',
         meta: {
           code: NO_CURRENT_ACADEMIC_YEAR,
           deprecatedCode: NO_ACTIVE_ACADEMIC_YEAR_DEPRECATED,
         },
-      });
-    }
-
-    if (years.length > 1) {
-      throw new ConflictException({
-        message: 'Multiple academic years are marked as current.',
-        meta: {
-          code: MULTIPLE_CURRENT_ACADEMIC_YEARS,
-          deprecatedCode: MULTIPLE_ACTIVE_ACADEMIC_YEARS_DEPRECATED,
-        },
-      });
-    }
-
-    const year = years[0];
-    if (!year) {
-      throw new ConflictException({
-        message: 'Current academic year is not configured for this organization.',
-        meta: { code: 'ACADEMIC_YEAR_INVARIANT_BROKEN' },
       });
     }
 
@@ -262,37 +245,12 @@ export class AcademicYearsService {
   }
 
   async assertOrgHasExactlyOneCurrentYear(orgId: string | null) {
-    if (!orgId) {
-      throw new ForbiddenException('Missing organization context.');
-    }
-    const count = await this.prisma.academicYear.count({
-      where: { orgId, isCurrent: true },
-    });
-
-    if (count === 0) {
-      throw new ConflictException({
-        message: 'Current academic year is not configured for this organization.',
-        meta: {
-          code: NO_CURRENT_ACADEMIC_YEAR,
-          deprecatedCode: NO_ACTIVE_ACADEMIC_YEAR_DEPRECATED,
-        },
-      });
-    }
-
-    if (count > 1) {
-      throw new ConflictException({
-        message: 'Multiple academic years are marked as current.',
-        meta: {
-          code: MULTIPLE_CURRENT_ACADEMIC_YEARS,
-          deprecatedCode: MULTIPLE_ACTIVE_ACADEMIC_YEARS_DEPRECATED,
-        },
-      });
-    }
+    await this.getCurrentForOrgOrFail(orgId);
   }
 
   async createDefaultAcademicYearIfMissing(orgId: string): Promise<void> {
     const existingCurrent = await this.prisma.academicYear.findFirst({
-      where: { orgId, isCurrent: true },
+      where: { orgId, isCurrent: true, deletedAt: null },
       select: { id: true },
     });
     if (existingCurrent) return;
@@ -309,13 +267,13 @@ export class AcademicYearsService {
 
     await this.prisma.$transaction(async (tx) => {
       const currentInTx = await tx.academicYear.findFirst({
-        where: { orgId, isCurrent: true },
+        where: { orgId, isCurrent: true, deletedAt: null },
         select: { id: true },
       });
       if (currentInTx) return;
 
       await tx.academicYear.updateMany({
-        where: { orgId },
+        where: { orgId, deletedAt: null },
         data: { isCurrent: false },
       });
 

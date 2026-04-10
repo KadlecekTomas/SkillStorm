@@ -3,13 +3,16 @@ import { Test } from '@nestjs/testing';
 import { ConflictException } from '@nestjs/common';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { PrismaService } from '@/prisma/prisma.service';
-import { AcademicYearsService, MULTIPLE_CURRENT_YEARS_FOR_ORG } from './academic-years.service';
+import {
+  AcademicYearsService,
+  MULTIPLE_CURRENT_YEARS_FOR_ORG,
+  NO_CURRENT_ACADEMIC_YEAR,
+} from './academic-years.service';
 
 describe('AcademicYearsService', () => {
   let service: AcademicYearsService;
   const prismaMock = {
     academicYear: {
-      count: jest.fn(),
       findUnique: jest.fn(),
       findFirst: jest.fn(),
       updateMany: jest.fn(),
@@ -33,15 +36,38 @@ describe('AcademicYearsService', () => {
     service = module.get<AcademicYearsService>(AcademicYearsService);
   });
 
-  it('throws conflict when multiple current academic years exist (assertOrgHasExactlyOneCurrentYear)', async () => {
-    prismaMock.academicYear.count.mockResolvedValue(2);
+  it('throws conflict when no current academic year exists', async () => {
+    prismaMock.academicYear.findFirst.mockResolvedValue(null);
 
     await expect(
-      service.assertOrgHasExactlyOneCurrentYear('org-1'),
+      service.getCurrentForOrgOrFail('org-1'),
     ).rejects.toMatchObject({
       response: {
-        meta: { code: 'MULTIPLE_CURRENT_ACADEMIC_YEARS' },
+        meta: { code: NO_CURRENT_ACADEMIC_YEAR },
       },
+    });
+  });
+
+  it('returns the current non-deleted academic year deterministically', async () => {
+    const currentYear = {
+      id: 'year-2',
+      orgId: 'org-1',
+      label: '2026/2027',
+      startsAt: new Date('2026-09-01T00:00:00.000Z'),
+      endsAt: new Date('2027-08-31T00:00:00.000Z'),
+      isCurrent: true,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    };
+    prismaMock.academicYear.findFirst.mockResolvedValue(currentYear);
+
+    await expect(service.getCurrentForOrgOrFail('org-1')).resolves.toMatchObject({
+      id: currentYear.id,
+      organizationId: currentYear.orgId,
+      isActive: true,
+    });
+    expect(prismaMock.academicYear.findFirst).toHaveBeenCalledWith({
+      where: { orgId: 'org-1', isCurrent: true, deletedAt: null },
+      orderBy: { startsAt: 'desc' },
     });
   });
 
