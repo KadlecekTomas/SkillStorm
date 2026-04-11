@@ -69,5 +69,17 @@ export function useOrgSubjects(options: UseOrgSubjectsOptions = {}): {
 }
 
 export function subjectLabel(s: OrgSubjectOption): string {
-  return `${s.subject.name} (${s.subject.gradeFrom}–${s.subject.gradeTo})`;
+  const name =
+    typeof s.subject?.name === "string" && s.subject.name.trim().length > 0
+      ? s.subject.name.trim()
+      : "Předmět";
+  const gradeFrom =
+    typeof s.subject?.gradeFrom === "number" || typeof s.subject?.gradeFrom === "string"
+      ? String(s.subject.gradeFrom)
+      : "—";
+  const gradeTo =
+    typeof s.subject?.gradeTo === "number" || typeof s.subject?.gradeTo === "string"
+      ? String(s.subject.gradeTo)
+      : "—";
+  return `${name} (${gradeFrom}–${gradeTo})`;
 }

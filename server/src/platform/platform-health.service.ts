@@ -419,7 +419,7 @@ export class PlatformHealthService {
         this.prisma.$queryRaw<OrgCountRow[]>`
           SELECT organization_id, COUNT(DISTINCT creator_id)::int AS count
           FROM tests
-          WHERE organization_id = ANY(${orgIds}::uuid[])
+          WHERE organization_id = ANY(${orgIds}::text[])
             AND created_at >= ${from} AND created_at < ${to}
             AND deleted_at IS NULL
           GROUP BY organization_id
@@ -428,7 +428,7 @@ export class PlatformHealthService {
         this.prisma.$queryRaw<OrgCountRow[]>`
           SELECT organization_id, COUNT(DISTINCT created_by_id)::int AS count
           FROM assignments
-          WHERE organization_id = ANY(${orgIds}::uuid[])
+          WHERE organization_id = ANY(${orgIds}::text[])
             AND created_at >= ${from} AND created_at < ${to}
           GROUP BY organization_id
         `.catch(countFallback('graders')),
@@ -436,7 +436,7 @@ export class PlatformHealthService {
         this.prisma.$queryRaw<OrgCountRow[]>`
           SELECT organization_id, COUNT(DISTINCT student_id)::int AS count
           FROM submissions
-          WHERE organization_id = ANY(${orgIds}::uuid[])
+          WHERE organization_id = ANY(${orgIds}::text[])
             AND created_at >= ${from} AND created_at < ${to}
             AND deleted_at IS NULL
           GROUP BY organization_id
@@ -445,7 +445,7 @@ export class PlatformHealthService {
         this.prisma.$queryRaw<OrgCountRow[]>`
           SELECT organization_id, COUNT(*)::bigint AS count
           FROM tests
-          WHERE organization_id = ANY(${orgIds}::uuid[])
+          WHERE organization_id = ANY(${orgIds}::text[])
             AND created_at >= ${from} AND created_at < ${to}
             AND deleted_at IS NULL
           GROUP BY organization_id
@@ -454,7 +454,7 @@ export class PlatformHealthService {
         this.prisma.$queryRaw<OrgCountRow[]>`
           SELECT organization_id, COUNT(*)::bigint AS count
           FROM submissions
-          WHERE organization_id = ANY(${orgIds}::uuid[])
+          WHERE organization_id = ANY(${orgIds}::text[])
             AND created_at >= ${from} AND created_at < ${to}
             AND deleted_at IS NULL
           GROUP BY organization_id
@@ -463,7 +463,7 @@ export class PlatformHealthService {
         this.prisma.$queryRaw<OrgCountRow[]>`
           SELECT organization_id, COUNT(*)::bigint AS count
           FROM submissions
-          WHERE organization_id = ANY(${orgIds}::uuid[])
+          WHERE organization_id = ANY(${orgIds}::text[])
             AND status = 'APPROVED'
             AND created_at >= ${from} AND created_at < ${to}
             AND deleted_at IS NULL
@@ -476,7 +476,7 @@ export class PlatformHealthService {
                  COALESCE(SUM(max_uses), 0)::bigint   AS max_uses,
                  COUNT(*)::bigint                     AS cnt
           FROM invites
-          WHERE organization_id = ANY(${orgIds}::uuid[])
+          WHERE organization_id = ANY(${orgIds}::text[])
             AND created_at >= ${from} AND created_at < ${to}
           GROUP BY organization_id
         `.catch(inviteFallback),
@@ -540,15 +540,15 @@ export class PlatformHealthService {
         await Promise.all([
           this.prisma.$queryRaw<OrgCountRow[]>`
             SELECT COUNT(DISTINCT creator_id)::int AS count FROM tests
-            WHERE organization_id = ${orgId}::uuid AND created_at >= ${from} AND created_at < ${to} AND deleted_at IS NULL
+            WHERE organization_id = ${orgId}::text AND created_at >= ${from} AND created_at < ${to} AND deleted_at IS NULL
           `,
           this.prisma.$queryRaw<OrgCountRow[]>`
             SELECT COUNT(DISTINCT created_by_id)::int AS count FROM assignments
-            WHERE organization_id = ${orgId}::uuid AND created_at >= ${from} AND created_at < ${to}
+            WHERE organization_id = ${orgId}::text AND created_at >= ${from} AND created_at < ${to}
           `,
           this.prisma.$queryRaw<OrgCountRow[]>`
             SELECT COUNT(DISTINCT student_id)::int AS count FROM submissions
-            WHERE organization_id = ${orgId}::uuid AND created_at >= ${from} AND created_at < ${to} AND deleted_at IS NULL
+            WHERE organization_id = ${orgId}::text AND created_at >= ${from} AND created_at < ${to} AND deleted_at IS NULL
           `,
           this.prisma.test.count({ where: { organizationId: orgId, createdAt: { gte: from, lt: to }, deletedAt: null } }),
           this.prisma.submission.count({ where: { organizationId: orgId, createdAt: { gte: from, lt: to }, deletedAt: null } }),

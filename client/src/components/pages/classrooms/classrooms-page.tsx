@@ -58,6 +58,21 @@ function parsePositiveInt(value: string | null): number | null {
   return parsed;
 }
 
+function toSafeArray<T>(value: T[] | null | undefined): T[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function toSafeText(value: unknown, fallback = "—"): string {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : fallback;
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  return fallback;
+}
+
 const GRADE_OPTIONS = [
   { value: "GRADE_1", label: "1" },
   { value: "GRADE_2", label: "2" },
@@ -141,7 +156,7 @@ export function ClassroomsPageContent(): React.JSX.Element {
     refresh: refreshYears,
   } = useAcademicYears({ enabled: true });
   const allowedLimits = useMemo(() => new Set([5, 10, 20, 50]), []);
-  const yearIds = useMemo(() => new Set(years.map((year) => year.id)), [years]);
+  const yearIds = useMemo(() => new Set(toSafeArray(years).map((year) => year.id)), [years]);
   const parsedLimit = parsePositiveInt(rawLimit);
   const cursor = rawCursor && rawCursor.trim().length > 0 ? rawCursor.trim() : null;
   const direction = rawDirection === "prev" ? "prev" : "next";
@@ -392,28 +407,34 @@ export function ClassroomsPageContent(): React.JSX.Element {
 
   const summary = useMemo(
     () =>
-      classrooms.map((cls) => ({
-        ...cls,
-        classLabel: cls.label ?? `${gradeLabel(cls.grade)}.${cls.section}`,
-        yearLabel: cls.academicYear?.label ?? selectedYear?.name ?? "—",
-        displayName: `${cls.label ?? `${gradeLabel(cls.grade)}.${cls.section}`} (${cls.academicYear?.label ?? selectedYear?.name ?? "—"})`,
-        teacherName: cls.teacher?.membership?.user?.name ?? "—",
-        studentsCount: cls.studentCount ?? 0,
-      })),
+      toSafeArray(classrooms).map((cls) => {
+        const fallbackClassLabel = `${gradeLabel(cls.grade)}.${cls.section}`;
+        const classLabel = toSafeText(cls.label, fallbackClassLabel);
+        const yearLabel = toSafeText(cls.academicYear?.label, toSafeText(selectedYear?.name));
+        return {
+          ...cls,
+          classLabel,
+          yearLabel,
+          displayName: `${classLabel} (${yearLabel})`,
+          teacherName: toSafeText(cls.teacher?.membership?.user?.name),
+          studentsCount: cls.studentCount ?? 0,
+        };
+      }),
     [classrooms, selectedYear?.name],
   );
 
   const selectedSummary = summary.find((item) => item.id === effectiveSelectedId) ?? null;
   const visibleClassSubjects = useMemo(
-    () => classOrgSubjects.slice(0, 6),
+    () => toSafeArray(classOrgSubjects).slice(0, 6),
     [classOrgSubjects],
   );
-  const hiddenClassSubjectsCount = Math.max(0, classOrgSubjects.length - visibleClassSubjects.length);
+  const hiddenClassSubjectsCount = Math.max(0, toSafeArray(classOrgSubjects).length - visibleClassSubjects.length);
   const filteredOrgSubjects = useMemo(() => {
     const term = subjectSearchInput.trim().toLowerCase();
-    if (!term) return orgSubjects;
-    return orgSubjects.filter((subject) =>
-      `${subject.subject.name} ${subject.subject.gradeFrom} ${subject.subject.gradeTo}`
+    const safeSubjects = toSafeArray(orgSubjects);
+    if (!term) return safeSubjects;
+    return safeSubjects.filter((subject) =>
+      `${toSafeText(subject.subject?.name, "")} ${toSafeText(subject.subject?.gradeFrom, "")} ${toSafeText(subject.subject?.gradeTo, "")}`
         .toLowerCase()
         .includes(term),
     );
@@ -431,12 +452,12 @@ export function ClassroomsPageContent(): React.JSX.Element {
 
   const teacherOptions = useMemo(
     () =>
-      teachers
+      toSafeArray(teachers)
         .map((teacher) => ({
           id: teacher.id,
           label:
-            teacher.membership?.user?.name?.trim() ||
-            teacher.membership?.user?.email ||
+            toSafeText(teacher.membership?.user?.name, "").trim() ||
+            toSafeText(teacher.membership?.user?.email, "") ||
             "Učitel",
         }))
         .sort((a, b) => a.label.localeCompare(b.label, "cs")),
@@ -478,7 +499,7 @@ export function ClassroomsPageContent(): React.JSX.Element {
 
   useEffect(() => {
     if (!subjectsModalOpen) return;
-    setSelectedOrgSubjectIds(new Set(classOrgSubjects.map((subject) => subject.id)));
+    setSelectedOrgSubjectIds(new Set(toSafeArray(classOrgSubjects).map((subject) => subject.id)));
     setSubjectSearchInput("");
     setSubjectSaveError(null);
   }, [subjectsModalOpen, classOrgSubjects]);
@@ -1301,9 +1322,11 @@ export function ClassroomsPageContent(): React.JSX.Element {
                       ) : null
                     ) : (
                       <div className="space-y-2">
-                        {section.items.map((cls) => {
-                          const classLabel = cls.label ?? `${gradeLabel(cls.grade)}.${cls.section}`;
-                          const teacherName = cls.homeroomTeacherName ?? cls.teacher?.membership?.user?.name ?? "—";
+                        {toSafeArray(section.items).map((cls) => {
+                          const classLabel = toSafeText(cls.label, `${gradeLabel(cls.grade)}.${cls.section}`);
+                          const teacherName = toSafeText(
+                            cls.homeroomTeacherName ?? cls.teacher?.membership?.user?.name,
+                          );
                           const studentsCount = cls.studentCount ?? 0;
                           return (
                             <button
@@ -1464,8 +1487,7 @@ export function ClassroomsPageContent(): React.JSX.Element {
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <h2 className="text-xl font-semibold text-slate-900">
-                      {(detail.label ?? `${gradeLabel(detail.grade)}.${detail.section}`) +
-                        ` (${detail.academicYear?.label ?? selectedYear?.name ?? "—"})`}
+                      {`${toSafeText(detail.label, `${gradeLabel(detail.grade)}.${detail.section}`)} (${toSafeText(detail.academicYear?.label, toSafeText(selectedYear?.name))})`}
                     </h2>
                     {canManageClasses ? (
                       <div className="mt-1 flex flex-wrap items-center gap-2">
@@ -1493,7 +1515,7 @@ export function ClassroomsPageContent(): React.JSX.Element {
                       </div>
                     ) : (
                       <p className="text-sm text-slate-500">
-                        Třídní učitel: {detail.teacher?.membership?.user?.name ?? "Neuveden"}
+                        Třídní učitel: {toSafeText(detail.teacher?.membership?.user?.name, "Neuveden")}
                       </p>
                     )}
                   </div>
@@ -1526,7 +1548,7 @@ export function ClassroomsPageContent(): React.JSX.Element {
                   </div>
                   {classOrgSubjectsLoading ? (
                     <p className="text-sm text-slate-500">Načítám předměty…</p>
-                  ) : classOrgSubjects.length > 0 ? (
+                  ) : toSafeArray(classOrgSubjects).length > 0 ? (
                     <div className="flex flex-wrap gap-2">
                       {visibleClassSubjects.map((subject) => (
                         <Badge key={subject.id} variant="info">
@@ -1572,7 +1594,7 @@ export function ClassroomsPageContent(): React.JSX.Element {
                                 </tr>
                               </thead>
                               <tbody>
-                                {riskOverview.students.map((s) => (
+                                {toSafeArray(riskOverview.students).map((s) => (
                                   <tr key={s.studentId} className="border-b border-slate-100 last:border-0">
                                     <td className="px-4 py-2 font-medium text-slate-900">
                                       {canViewStudentDetail ? (
@@ -1580,10 +1602,10 @@ export function ClassroomsPageContent(): React.JSX.Element {
                                           href={`/app/students/${s.studentId}`}
                                           className="text-sky-600 hover:text-sky-800 hover:underline"
                                         >
-                                          {s.displayName}
+                                          {toSafeText(s.displayName)}
                                         </Link>
                                       ) : (
-                                        s.displayName
+                                        toSafeText(s.displayName)
                                       )}
                                     </td>
                                     <td className="px-4 py-2 text-right text-slate-700">{s.averageScorePercent.toFixed(1)} %</td>
@@ -1638,10 +1660,10 @@ export function ClassroomsPageContent(): React.JSX.Element {
                             </tr>
                           </thead>
                           <tbody>
-                            {subjectPerformance.subjects.map((s) => (
+                            {toSafeArray(subjectPerformance.subjects).map((s) => (
                               <tr key={s.subjectId} className="border-b border-slate-100 last:border-0">
                                 <td className="px-4 py-2 font-medium text-slate-900">
-                                  {s.name}
+                                  {toSafeText(s.name)}
                                 </td>
                                 <td className="px-4 py-2 text-right">
                                   <span
@@ -1674,11 +1696,11 @@ export function ClassroomsPageContent(): React.JSX.Element {
 
                 <div className="space-y-2">
                   <p className="text-sm font-medium text-slate-700">Zapsaní žáci</p>
-                  {detail.enrollments && detail.enrollments.length > 0 ? (
+                  {toSafeArray(detail.enrollments).length > 0 ? (
                     <div className="space-y-2">
-                      {detail.enrollments.map((enrollment) => {
+                      {toSafeArray(detail.enrollments).map((enrollment) => {
                         const name = enrollment.student
-                          ? enrollment.student.membership?.user?.name ?? "Neznámý uživatel"
+                          ? toSafeText(enrollment.student.membership?.user?.name, "Neznámý uživatel")
                           : "Student nenačten";
                         return (
                           <div
@@ -1825,8 +1847,11 @@ export function ClassroomsPageContent(): React.JSX.Element {
                 </p>
               ) : (
                 <div className="max-h-48 overflow-y-auto rounded-2xl border border-slate-200 p-2">
-                  {availableStudents.map((s) => {
-                    const name = s.membership?.user?.name ?? s.membership?.user?.email ?? "Student";
+                  {toSafeArray(availableStudents).map((s) => {
+                    const name =
+                      toSafeText(s.membership?.user?.name, "").trim() ||
+                      toSafeText(s.membership?.user?.email, "") ||
+                      "Student";
                     const checked = selectedStudentIds.has(s.id);
                     return (
                       <label
@@ -1998,7 +2023,7 @@ export function ClassroomsPageContent(): React.JSX.Element {
         <div className="space-y-4">
           {orgSubjectsLoading ? (
             <p className="text-sm text-slate-500">Načítám předměty organizace…</p>
-          ) : orgSubjects.length === 0 ? (
+          ) : toSafeArray(orgSubjects).length === 0 ? (
             <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-4 py-5">
               <p className="text-sm text-slate-700">
                 Pro tuto školu zatím nejsou vytvořené žádné předměty.
@@ -2027,7 +2052,7 @@ export function ClassroomsPageContent(): React.JSX.Element {
                 <p className="text-sm text-slate-500">Žádné předměty pro tento filtr.</p>
               ) : (
                 <div className="max-h-64 overflow-y-auto rounded-2xl border border-slate-200 p-2">
-                  {filteredOrgSubjects.map((subject) => {
+                  {toSafeArray(filteredOrgSubjects).map((subject) => {
                     const checked = selectedOrgSubjectIds.has(subject.id);
                     return (
                       <label
@@ -2074,7 +2099,7 @@ export function ClassroomsPageContent(): React.JSX.Element {
             <Button variant="outline" onClick={() => setSubjectsModalOpen(false)}>
               Zrušit
             </Button>
-            {orgSubjects.length > 0 && (
+            {toSafeArray(orgSubjects).length > 0 && (
               <Button
                 onClick={() => void handleSaveClassSubjects()}
                 disabled={classOrgSubjectsSaving}

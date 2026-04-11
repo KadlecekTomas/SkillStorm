@@ -3,7 +3,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { ClassroomsPageContent } from "@/components/pages/classrooms/classrooms-page";
+import type { ReactNode } from "react";
 import { fetchWithAuth } from "@/lib/http/client";
 import { showToastOnce } from "@/utils/toast";
 import { recordPolicyCheck } from "../fePolicyScore";
@@ -24,8 +24,15 @@ vi.mock("../fePolicyScore", () => ({
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
-    replace: replaceMock,
-    push: vi.fn(),
+    replace: (target: string) => {
+      replaceMock(target);
+      const query = target.split("?")[1] ?? "";
+      searchParamsState.current = new URLSearchParams(query);
+    },
+    push: (target: string) => {
+      const query = target.split("?")[1] ?? "";
+      searchParamsState.current = new URLSearchParams(query);
+    },
     refresh: vi.fn(),
   }),
   useSearchParams: () => searchParamsState.current,
@@ -149,7 +156,78 @@ vi.mock("@/utils/toast", () => ({
   showToastOnce: vi.fn(),
 }));
 
+vi.mock("@/components/modals/base-modal", () => ({
+  BaseModal: ({
+    open,
+    title,
+    description,
+    children,
+  }: {
+    open: boolean;
+    title: string;
+    description?: string;
+    children: ReactNode;
+  }) =>
+    open ? (
+      <div data-testid={`modal-${title}`}>
+        <h2>{title}</h2>
+        {description ? <p>{description}</p> : null}
+        <div>{children}</div>
+      </div>
+    ) : null,
+}));
+
+vi.mock("@/components/ui/select", () => {
+  const Select = ({
+    value,
+    onValueChange,
+    children,
+    disabled,
+  }: {
+    value?: string;
+    onValueChange?: (value: string) => void;
+    children: ReactNode;
+    disabled?: boolean;
+  }) => (
+    <select
+      data-testid="mock-select"
+      value={value}
+      disabled={disabled}
+      onChange={(event) => onValueChange?.(event.target.value)}
+    >
+      {children}
+    </select>
+  );
+
+  const SelectItem = ({
+    value,
+    children,
+  }: {
+    value: string;
+    children: ReactNode;
+  }) => <option value={value}>{children}</option>;
+
+  const passthrough = ({ children }: { children: ReactNode }) => <>{children}</>;
+
+  return {
+    Select,
+    SelectContent: passthrough,
+    SelectItem,
+    SelectTrigger: passthrough,
+    SelectValue: () => null,
+  };
+});
+
+vi.mock("@/components/support/report-issue-button", () => ({
+  ReportIssueButton: () => <button type="button">Report issue</button>,
+}));
+
 describe("ClassroomsPageContent", () => {
+  const renderPage = async () => {
+    const { ClassroomsPageContent } = await import("@/components/pages/classrooms/classrooms-page");
+    return render(<ClassroomsPageContent />);
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
     searchParamsState.current = new URLSearchParams();
@@ -169,7 +247,7 @@ describe("ClassroomsPageContent", () => {
       return [];
     });
 
-    render(<ClassroomsPageContent />);
+    await renderPage();
 
     await waitFor(() => {
       expect(screen.getByText(/zatím.*žádné třídy/i)).toBeInTheDocument();
@@ -205,7 +283,7 @@ describe("ClassroomsPageContent", () => {
       return [];
     });
 
-    render(<ClassroomsPageContent />);
+    await renderPage();
 
     await waitFor(() => {
       expect(screen.getByText(/^read-only$/i)).toBeInTheDocument();
@@ -227,7 +305,7 @@ describe("ClassroomsPageContent", () => {
       return [];
     });
 
-    const { rerender } = render(<ClassroomsPageContent />);
+    const { rerender } = await renderPage();
 
     await waitFor(() => {
       expect(fetchWithAuth).toHaveBeenCalledWith(
@@ -243,6 +321,7 @@ describe("ClassroomsPageContent", () => {
     academicYearsState.selectedYearId = "year-2";
     academicYearsState.isReadOnly = true;
 
+    const { ClassroomsPageContent } = await import("@/components/pages/classrooms/classrooms-page");
     rerender(<ClassroomsPageContent />);
 
     await waitFor(() => {
@@ -282,7 +361,7 @@ describe("ClassroomsPageContent", () => {
       return [];
     });
 
-    render(<ClassroomsPageContent />);
+    await renderPage();
 
     await waitFor(() => {
       expect(fetchWithAuth).toHaveBeenCalledWith(
@@ -331,5 +410,57 @@ describe("ClassroomsPageContent", () => {
       expect.objectContaining({ type: "success" }),
     );
     expect(replaceMock).not.toHaveBeenCalledWith(expect.stringContaining("highlight=class-new"));
+  });
+
+  it("renders fallback text and keeps valid rows visible when classrooms API returns malformed row fields", async () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    vi.mocked(fetchWithAuth).mockImplementation(async (method, url) => {
+      if (method === "GET" && url === "/classrooms") {
+        return {
+          data: [
+            {
+              id: "class-bad",
+              grade: "GRADE_5",
+              section: "A",
+              label: { unexpected: true },
+              teacher: {
+                membership: {
+                  user: {
+                    name: { broken: true },
+                  },
+                },
+              },
+              students: { invalid: true },
+              enrollments: { invalid: true },
+            },
+            {
+              id: "class-good",
+              grade: "GRADE_6",
+              section: "B",
+              label: "6.B",
+              teacher: { membership: { user: { name: "Učitel B" } } },
+              enrollments: [],
+              studentCount: 3,
+            },
+          ],
+        };
+      }
+      return [];
+    });
+
+    await renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("5.A")).toBeInTheDocument();
+      expect(screen.getByText("6.B")).toBeInTheDocument();
+      expect(screen.getByText("Učitel B")).toBeInTheDocument();
+    });
+
+    expect(screen.getByText("—")).toBeInTheDocument();
+    expect(screen.queryByText(/something went wrong/i)).not.toBeInTheDocument();
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
+
+    consoleErrorSpy.mockRestore();
   });
 });

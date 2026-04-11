@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 export type QueryKeyPart = string | number | boolean | null | undefined;
 export type QueryKey = readonly QueryKeyPart[];
@@ -115,6 +115,10 @@ export const queryClient = {
   },
 
   isFresh,
+
+  clear() {
+    queryEntries.clear();
+  },
 };
 
 export function useQuery<T>({
@@ -130,6 +134,7 @@ export function useQuery<T>({
 }) {
   const keyString = useMemo(() => serializeKey(queryKey), [queryKey]);
   const key = useMemo(() => JSON.parse(keyString) as QueryKey, [keyString]);
+  const queryFnRef = useRef(queryFn);
   const [state, setState] = useState<QueryState<T>>(() => {
     const entry = queryClient.getSnapshot<T>(key);
     return {
@@ -139,50 +144,97 @@ export function useQuery<T>({
     };
   });
 
+  useEffect(() => {
+    queryFnRef.current = queryFn;
+  }, [queryFn]);
+
   const syncFromCache = useCallback(() => {
     const entry = queryClient.getSnapshot<T>(key);
-    setState({
-      data: entry.data,
-      error: entry.error,
-      isLoading: enabled && entry.data === undefined && !!entry.promise,
+    const nextIsLoading = enabled && entry.data === undefined && !!entry.promise;
+    setState((current) => {
+      if (
+        current.data === entry.data &&
+        current.error === entry.error &&
+        current.isLoading === nextIsLoading
+      ) {
+        return current;
+      }
+      return {
+        data: entry.data,
+        error: entry.error,
+        isLoading: nextIsLoading,
+      };
     });
   }, [enabled, key]);
 
   const load = useCallback(
     async (force = false) => {
       if (!enabled) {
-        setState({ data: undefined, error: undefined, isLoading: false });
+        setState((current) => {
+          if (
+            current.data === undefined &&
+            current.error === undefined &&
+            current.isLoading === false
+          ) {
+            return current;
+          }
+          return { data: undefined, error: undefined, isLoading: false };
+        });
         return undefined;
       }
-      setState((current) => ({
-        ...current,
-        isLoading: current.data === undefined || force,
-      }));
+      setState((current) => {
+        const nextIsLoading = current.data === undefined || force;
+        if (current.isLoading === nextIsLoading) {
+          return current;
+        }
+        return {
+          ...current,
+          isLoading: nextIsLoading,
+        };
+      });
       try {
         const result = await queryClient.fetchQuery<T>({
           queryKey: key,
-          queryFn,
+          queryFn: () => queryFnRef.current(),
           staleTime,
           force,
         });
         const entry = queryClient.getSnapshot<T>(key);
-        setState({
-          data: result,
-          error: entry.error,
-          isLoading: false,
+        setState((current) => {
+          if (
+            current.data === result &&
+            current.error === entry.error &&
+            current.isLoading === false
+          ) {
+            return current;
+          }
+          return {
+            data: result,
+            error: entry.error,
+            isLoading: false,
+          };
         });
         return result;
       } catch (error) {
         const entry = queryClient.getSnapshot<T>(key);
-        setState({
-          data: entry.data,
-          error,
-          isLoading: false,
+        setState((current) => {
+          if (
+            current.data === entry.data &&
+            current.error === error &&
+            current.isLoading === false
+          ) {
+            return current;
+          }
+          return {
+            data: entry.data,
+            error,
+            isLoading: false,
+          };
         });
         return undefined;
       }
     },
-    [enabled, key, queryFn, staleTime],
+    [enabled, key, staleTime],
   );
 
   useEffect(() => {
