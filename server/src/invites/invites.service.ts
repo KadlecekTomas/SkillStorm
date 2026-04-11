@@ -16,7 +16,11 @@ import type { CreateInviteDto } from './dto/create-invite.dto';
 import type { AcceptInviteDto } from './dto/accept-invite.dto';
 import type { InvitePreviewResponse } from './dto/preview-invite-response.dto';
 import type { JwtPayload } from '@/auth/types/jwt-payload';
-import { bumpOrgVersion } from '@/shared/cache/org-cache.utils';
+import {
+  cacheScopeForUser,
+  invalidateResourcesFailSafe,
+  type CachedResource,
+} from '@/shared/cache/org-cache.utils';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 import { AuditEntityType } from '@prisma/client';
@@ -44,6 +48,30 @@ type FailedEntry = { count: number; firstAt: number };
 @Injectable()
 export class InvitesService {
   private readonly logger = new Logger(InvitesService.name);
+
+  private async invalidateInviteJoinReads(
+    orgId: string,
+    role: OrganizationRole,
+    inviteType: InvitationType,
+  ) {
+    const resources = new Set<CachedResource>(['dashboard']);
+    if (role === OrganizationRole.TEACHER) {
+      resources.add('teachers');
+    }
+    if (role === OrganizationRole.STUDENT) {
+      resources.add('students');
+      if (inviteType === InvitationType.STUDENT_CLASS) {
+        resources.add('classrooms');
+        resources.add('enrollments');
+      }
+    }
+
+    await invalidateResourcesFailSafe(this.cache, {
+      scopeId: cacheScopeForUser(undefined, orgId),
+      resources: Array.from(resources),
+      mutation: 'invites.accept',
+    });
+  }
 
   /**
    * In-memory failed-attempt tracker keyed by `${ip}:${tokenPrefix}`.
@@ -452,7 +480,7 @@ export class InvitesService {
       return { membership, idempotent: false };
     });
 
-    await bumpOrgVersion(this.cache, orgId);
+    await this.invalidateInviteJoinReads(orgId, targetRole, invite.type);
 
     const org =
       invite.organization ??

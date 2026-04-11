@@ -389,6 +389,18 @@ export function ClassroomsPageContent(): React.JSX.Element {
     yearId: effectiveYearFilterId,
   });
 
+  const hasDatasetFilters = !!(gradeFilter || teacherFilter || searchTerm);
+  const isCursorPage = !!cursor;
+  const isStalePagePosition =
+    !isTeacherView &&
+    isCursorPage &&
+    classroomsState.status === "READY_EMPTY";
+
+  useEffect(() => {
+    if (!isStalePagePosition) return;
+    updateQuery({ cursor: null, dir: null, highlight: null });
+  }, [isStalePagePosition, updateQuery]);
+
   useEffect(() => {
     if (!highlightId) return;
     if (classroomsState.status !== "READY_EMPTY" && classroomsState.status !== "READY_WITH_DATA") {
@@ -494,8 +506,6 @@ export function ClassroomsPageContent(): React.JSX.Element {
       return left - right;
     });
   }, [summary]);
-
-  const hasFilters = !!(gradeFilter || teacherFilter || searchTerm);
 
   useEffect(() => {
     if (!subjectsModalOpen) return;
@@ -932,9 +942,12 @@ export function ClassroomsPageContent(): React.JSX.Element {
           : "needs-selection";
   const hasYear = yearUiState === "selected";
   const isInitializingYear = yearUiState === "loading";
-  const emptyState =
-    !isTeacherView && classroomsState.status === "READY_EMPTY" && hasYear && summary.length === 0;
-  const emptyStateMessage = hasFilters
+  const isTrueEmptyDataset =
+    !isTeacherView &&
+    classroomsState.status === "READY_EMPTY" &&
+    hasYear &&
+    !isCursorPage;
+  const emptyStateMessage = hasDatasetFilters
     ? "Žádné třídy neodpovídají filtrům."
     : "Zatím nemáte žádné třídy.";
   const needsYearSelection = yearUiState === "needs-selection";
@@ -1228,10 +1241,14 @@ export function ClassroomsPageContent(): React.JSX.Element {
           </div>
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm text-slate-500">
             <span>
-              {summary.length === 0 ? "0 tříd" : `Zobrazuji až ${meta.limit} tříd`}
+              {isStalePagePosition
+                ? "Obnovuji seznam tříd…"
+                : summary.length === 0
+                  ? "0 tříd"
+                  : `Zobrazuji až ${meta.limit} tříd`}
               {meta.hasNextPage ? " · další stránka je k dispozici" : ""}
             </span>
-            {hasFilters && (
+            {hasDatasetFilters && (
               <Button variant="outline" size="sm" onClick={handleClearFilters}>
                 Vyčistit filtry
               </Button>
@@ -1290,7 +1307,15 @@ export function ClassroomsPageContent(): React.JSX.Element {
         </div>
       )}
 
-      {emptyState && (
+      {isStalePagePosition && (
+        <Card className="border-dashed p-6">
+          <p className="text-sm text-slate-600">
+            Aktuální stránka už není k dispozici. Vracíme se na začátek seznamu…
+          </p>
+        </Card>
+      )}
+
+      {isTrueEmptyDataset && (
         <Card className="border-dashed p-6">
           <p className="text-sm text-slate-600">{emptyStateMessage}</p>
         </Card>

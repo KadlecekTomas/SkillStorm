@@ -45,7 +45,11 @@ import { hashToken, matchesTokenHash } from './token.util';
 import { isUUID } from 'class-validator';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
-import { bumpOrgVersion } from '@/shared/cache/org-cache.utils';
+import {
+  cacheScopeForUser,
+  invalidateResourcesFailSafe,
+  type CachedResource,
+} from '@/shared/cache/org-cache.utils';
 import { getOrgBootstrap, getOrgReadiness, type OrgBootstrap, type OrgReadiness } from '@/shared/org-readiness.utils';
 import {
   deriveOrgReadiness,
@@ -763,6 +767,12 @@ export class AuthService {
               inviteId: invite.id,
             },
           });
+
+          await this.invalidateInviteJoinReads(
+            invite.organizationId,
+            invite.role,
+            invite.type,
+          );
 
           this.logger.log(
             `Registration complete for ${result.user.email} (mode=${mode}, org=${invite.organizationId})`,
@@ -1492,6 +1502,29 @@ export class AuthService {
       entityId: row.userId,
       ipAddress: ctx?.ipAddress ?? null,
       userAgent: ctx?.userAgent ?? null,
+    });
+  }
+  private async invalidateInviteJoinReads(
+    orgId: string,
+    role: OrganizationRole,
+    inviteType: InvitationType,
+  ) {
+    const resources = new Set<CachedResource>(['dashboard']);
+    if (role === OrganizationRole.TEACHER) {
+      resources.add('teachers');
+    }
+    if (role === OrganizationRole.STUDENT) {
+      resources.add('students');
+      if (inviteType === InvitationType.STUDENT_CLASS) {
+        resources.add('classrooms');
+        resources.add('enrollments');
+      }
+    }
+
+    await invalidateResourcesFailSafe(this.cache, {
+      scopeId: cacheScopeForUser(undefined, orgId),
+      resources: Array.from(resources),
+      mutation: 'auth.register-join-org',
     });
   }
 }

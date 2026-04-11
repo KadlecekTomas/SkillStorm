@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { fetchWithAuth } from "@/lib/http/client";
+import { queryClient } from "@/lib/query-client";
 import { showToastOnce } from "@/utils/toast";
 import { recordPolicyCheck } from "../fePolicyScore";
 
@@ -230,6 +231,7 @@ describe("ClassroomsPageContent", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    queryClient.clear();
     searchParamsState.current = new URLSearchParams();
     academicYearsState.status = "ready";
     academicYearsState.selectedYear = { id: "year-1", name: "2024/25", isActive: true };
@@ -340,6 +342,64 @@ describe("ClassroomsPageContent", () => {
       true,
       "Changing academic year reloads classrooms for the selected year.",
     );
+  });
+
+  it("normalizes stale cursor pages before showing an empty-state message", async () => {
+    searchParamsState.current = new URLSearchParams("year=year-1&limit=20&cursor=stale-cursor&dir=next");
+
+    vi.mocked(fetchWithAuth).mockImplementation(async (method, url, config) => {
+      if (method === "GET" && url === "/classrooms") {
+        if (config?.query?.cursor === "stale-cursor") {
+          return {
+            data: [],
+            meta: {
+              limit: 20,
+              hasNextPage: false,
+              hasPrevPage: true,
+              nextCursor: null,
+              prevCursor: "prev-cursor",
+            },
+          };
+        }
+
+        return {
+          data: [
+            {
+              id: "class-1",
+              grade: "GRADE_5",
+              section: "A",
+              label: "5.A",
+              enrollments: [],
+              teacher: { membership: { user: { name: "Učitel A" } } },
+            },
+          ],
+          meta: {
+            limit: 20,
+            hasNextPage: false,
+            hasPrevPage: false,
+            nextCursor: null,
+            prevCursor: null,
+          },
+        };
+      }
+      return [];
+    });
+
+    const { rerender } = await renderPage();
+
+    await waitFor(() => {
+      expect(replaceMock).toHaveBeenCalledWith("/app/classrooms?year=year-1&limit=20");
+    });
+
+    expect(screen.getByText(/vracíme se na začátek seznamu/i)).toBeInTheDocument();
+    expect(screen.queryByText(/zatím.*žádné třídy/i)).not.toBeInTheDocument();
+
+    const { ClassroomsPageContent } = await import("@/components/pages/classrooms/classrooms-page");
+    rerender(<ClassroomsPageContent />);
+
+    await waitFor(() => {
+      expect(screen.getByText("5.A")).toBeInTheDocument();
+    });
   });
 
   it("shows explicit feedback when created classroom is hidden by active filters", async () => {
