@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { Reflector } from '@nestjs/core';
 import { TeachersController } from '@/teachers/teachers.controller';
 import { OrgSubjectController } from '@/org-subject/org-subject.controller';
+import { AnalyticsController } from '@/analytics/analytics.controller';
 import {
   ORG_OPERATION_KEY,
   OrgOperationType,
@@ -19,6 +20,15 @@ describe('classrooms optional endpoints readiness classification', () => {
   it('marks OrgSubjectController as AUTHORING so optional classroom support data is allowed in NOT_READY repair flow', () => {
     expect(
       reflector.get<OrgOperationType>(ORG_OPERATION_KEY, OrgSubjectController),
+    ).toBe(OrgOperationType.AUTHORING);
+  });
+
+  it('marks AnalyticsController.log as AUTHORING so optional page-view logging is allowed in NOT_READY repair flow', () => {
+    expect(
+      reflector.getAllAndOverride<OrgOperationType>(ORG_OPERATION_KEY, [
+        AnalyticsController.prototype.log,
+        AnalyticsController,
+      ]),
     ).toBe(OrgOperationType.AUTHORING);
   });
 });

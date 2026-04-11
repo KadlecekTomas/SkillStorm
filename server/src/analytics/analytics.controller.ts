@@ -16,7 +16,10 @@ import { PermissionKey } from '@prisma/client';
 import { RequestWithUser } from '@/types/request-with-user';
 import { JwtAuthGuard } from '@/auth/guards/jwt-auth.guard';
 import { RequireCurrentAcademicYearGuard } from '@/academic-years/require-current-academic-year.guard';
-import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
+import {
+  OrgOperation,
+  OrgOperationType,
+} from '@/common/decorators/org-operation.decorator';
 import { OrgContextService } from '@/common/org-context/org-context.service';
 
 @Controller('analytics')
@@ -28,6 +31,7 @@ export class AnalyticsController {
   ) {}
 
   @Post('log')
+  @OrgOperation(OrgOperationType.AUTHORING)
   async log(
     @Body() dto: LogAnalyticsEventDto,
     @Req() req: RequestWithUser,
@@ -74,10 +78,7 @@ export class AnalyticsController {
   @Get('class-heatmap')
   @UseGuards(JwtAuthGuard, RequireCurrentAcademicYearGuard)
   @Permission(PermissionKey.VIEW_ANALYTICS)
-  classHeatmap(
-    @Query('yearId') yearId: string,
-    @Req() req: RequestWithUser,
-  ) {
+  classHeatmap(@Query('yearId') yearId: string, @Req() req: RequestWithUser) {
     return this.orgContext.get(req).then((ctx) => {
       if (!ctx.activeAcademicYearId) {
         throw new BadRequestException('Missing active academic year');
@@ -95,10 +96,7 @@ export class AnalyticsController {
   @Get('student/errors')
   @UseGuards(JwtAuthGuard, RequireCurrentAcademicYearGuard)
   @Permission(PermissionKey.VIEW_RESULTS)
-  studentErrors(
-    @Query('yearId') yearId: string,
-    @Req() req: RequestWithUser,
-  ) {
+  studentErrors(@Query('yearId') yearId: string, @Req() req: RequestWithUser) {
     return this.orgContext.get(req).then((ctx) => {
       if (!ctx.activeAcademicYearId) {
         throw new BadRequestException('Missing active academic year');
@@ -106,17 +104,17 @@ export class AnalyticsController {
       if (yearId && yearId !== ctx.activeAcademicYearId) {
         throw new BadRequestException('yearId query is not allowed');
       }
-      return this.analytics.studentErrorOverview(ctx.activeAcademicYearId, req.user);
+      return this.analytics.studentErrorOverview(
+        ctx.activeAcademicYearId,
+        req.user,
+      );
     });
   }
 
   @Get('student/topics')
   @UseGuards(JwtAuthGuard, RequireCurrentAcademicYearGuard)
   @Permission(PermissionKey.VIEW_RESULTS)
-  studentTopics(
-    @Query('yearId') yearId: string,
-    @Req() req: RequestWithUser,
-  ) {
+  studentTopics(@Query('yearId') yearId: string, @Req() req: RequestWithUser) {
     return this.orgContext.get(req).then((ctx) => {
       if (!ctx.activeAcademicYearId) {
         throw new BadRequestException('Missing active academic year');
@@ -124,7 +122,10 @@ export class AnalyticsController {
       if (yearId && yearId !== ctx.activeAcademicYearId) {
         throw new BadRequestException('yearId query is not allowed');
       }
-      return this.analytics.studentTopicOverview(ctx.activeAcademicYearId, req.user);
+      return this.analytics.studentTopicOverview(
+        ctx.activeAcademicYearId,
+        req.user,
+      );
     });
   }
 

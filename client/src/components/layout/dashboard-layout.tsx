@@ -38,7 +38,7 @@ export const DashboardLayout = ({ children }: DashboardLayoutProps): React.JSX.E
 
   useEffect(() => {
     if (!pathname) return;
-    logEvent("navigation", "page_view", { path: pathname });
+    void logEvent("navigation", "page_view", { path: pathname }).catch(() => {});
   }, [pathname, logEvent]);
 
   useEffect(() => {
