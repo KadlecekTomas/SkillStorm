@@ -37,6 +37,7 @@ export function useClassSectionOrgSubjects(
       );
       setSubjects(Array.isArray(data) ? data : []);
     } catch (e) {
+      console.warn("[classrooms] optional class org-subjects request failed", e);
       setSubjects([]);
       setError(e instanceof Error ? e.message : "Nepodařilo se načíst předměty třídy.");
     } finally {

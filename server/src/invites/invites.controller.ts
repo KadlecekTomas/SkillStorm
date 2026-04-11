@@ -16,10 +16,12 @@ import {
   setCsrfCookie,
   generateCsrfToken,
 } from '@/auth/token-cookies';
+import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
 
 @ApiTags('Invites')
 @ApiStandardResponses()
 @Controller('invites')
+@OrgOperation(OrgOperationType.AUTHORING)
 export class InvitesController {
   constructor(private readonly service: InvitesService) {}
 

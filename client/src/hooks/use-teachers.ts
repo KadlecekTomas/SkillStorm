@@ -27,6 +27,7 @@ export type TeacherListResponse = {
     total: number;
     pages: number;
   };
+  warning?: string | null;
 };
 
 export type UseTeachersResult = {
@@ -38,29 +39,46 @@ export type UseTeachersResult = {
   orgId: string | null;
 };
 
+type UseTeachersOptions = {
+  enabled?: boolean;
+  softFail?: boolean;
+  warningContext?: string;
+};
+
 const resolveErrorMessage = (error: unknown): string => {
   if (error instanceof HttpError) return error.message;
   if (error instanceof Error) return error.message;
   return "Nepodařilo se načíst učitele.";
 };
 
-export const useTeachers = (): UseTeachersResult => {
+export const useTeachers = (options: UseTeachersOptions = {}): UseTeachersResult => {
   const { org } = useAuth();
   const orgId = org?.id ?? null;
+  const enabled = options.enabled ?? true;
+  const softFail = options.softFail ?? false;
+  const warningContext = options.warningContext ?? "teachers";
   const query = useQuery<TeacherListResponse>({
     queryKey: ["teachers", orgId],
-    enabled: !!orgId,
+    enabled: enabled && !!orgId,
     staleTime: 15_000,
     queryFn: async () => {
-      if (!orgId) {
+      const empty = {
+        items: [],
+        meta: { page: 1, limit: 50, total: 0, pages: 1 },
+      };
+      if (!orgId) return empty;
+      try {
+        return await httpClient.get<TeacherListResponse>("/teachers", {
+          query: { organizationId: orgId, page: 1, limit: 50 },
+        });
+      } catch (error) {
+        if (!softFail) throw error;
+        console.warn(`[${warningContext}] optional teachers request failed`, error);
         return {
-          items: [],
-          meta: { page: 1, limit: 50, total: 0, pages: 1 },
+          ...empty,
+          warning: resolveErrorMessage(error),
         };
       }
-      return httpClient.get<TeacherListResponse>("/teachers", {
-        query: { organizationId: orgId, page: 1, limit: 50 },
-      });
     },
   });
 
@@ -69,12 +87,19 @@ export const useTeachers = (): UseTeachersResult => {
       teachers: query.data?.items ?? [],
       total: query.data?.meta?.total ?? query.data?.items?.length ?? 0,
       loading: query.isLoading,
-      error: !orgId ? "Chybí aktivní organizace." : query.error ? resolveErrorMessage(query.error) : null,
+      error:
+        !orgId
+          ? "Chybí aktivní organizace."
+          : softFail
+            ? query.data?.warning ?? null
+            : query.error
+              ? resolveErrorMessage(query.error)
+              : null,
       refresh: async () => {
         await query.refetch();
       },
       orgId,
     }),
-    [orgId, query],
+    [orgId, query, softFail],
   );
 };

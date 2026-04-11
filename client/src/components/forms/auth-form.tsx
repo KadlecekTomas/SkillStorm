@@ -8,12 +8,12 @@ import { httpClient, HttpError } from "@/lib/http/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { type JSX, useState } from "react";
+import { type FormEvent, type JSX, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { Loader2 } from "lucide-react";
 import { showToastOnce } from "@/utils/toast";
 
-const registerModeOptions = ["INDIVIDUAL", "CREATE_ORG", "JOIN_ORG"] as const;
+const registerModeOptions = ["CREATE_ORG", "JOIN_ORG"] as const;
 type RegisterMode = (typeof registerModeOptions)[number];
 
 const registerModeDetails: Array<{
@@ -21,12 +21,6 @@ const registerModeDetails: Array<{
   label: string;
   description: string;
 }> = [
-  {
-    value: "INDIVIDUAL",
-    label: "Individual",
-    description:
-      "Individuální účet bez školy. Kdykoliv můžeš školu založit nebo se připojit.",
-  },
   {
     value: "CREATE_ORG",
     label: "Create org",
@@ -84,7 +78,7 @@ export const AuthForm = ({
   const [registering, setRegistering] = useState(false);
 
   const schema = mode === "login" ? loginSchema : registerSchema;
-  const defaultRegisterMode = initialMode ?? "INDIVIDUAL";
+  const defaultRegisterMode = initialMode ?? "CREATE_ORG";
 
   const form = useForm<LoginValues | RegisterValues>({
     resolver: zodResolver(schema),
@@ -105,8 +99,8 @@ export const AuthForm = ({
 
   const registerMode =
     mode === "register"
-      ? ((form.watch("mode") as RegisterMode) ?? "INDIVIDUAL")
-      : "INDIVIDUAL";
+      ? ((form.watch("mode") as RegisterMode) ?? "CREATE_ORG")
+      : "CREATE_ORG";
   const activeMode = registerModeDetails.find(
     (item) => item.value === registerMode,
   );
@@ -130,7 +124,7 @@ export const AuthForm = ({
       // Explicit payload – only fields allowed by backend RegisterDto (forbidNonWhitelisted).
       const selectedRegisterMode = registerModeOptions.includes(registerValues.mode)
         ? registerValues.mode
-        : "INDIVIDUAL";
+        : "CREATE_ORG";
       const payload: {
         name: string;
         email: string;
@@ -229,7 +223,7 @@ export const AuthForm = ({
   };
 
   // 🔹 bezpečné obalení s preventDefault
-  const handleFormSubmit = (e: React.FormEvent) => {
+  const handleFormSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     form.handleSubmit(handleSubmit)(e);
   };

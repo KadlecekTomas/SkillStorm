@@ -30,10 +30,12 @@ import { MaterializeSubjectDto } from './dto/materialize-subject.dto';
 import { MaterializeTopicDto } from './dto/materialize-topic.dto';
 import { MaterializeTopicsBulkDto } from './dto/materialize-topics-bulk.dto';
 import { CatalogService } from './catalog.service';
+import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
 
 @ApiTags('Catalog')
 @ApiBearerAuth()
 @Controller('catalog')
+@OrgOperation(OrgOperationType.AUTHORING)
 export class CatalogController {
   constructor(private readonly service: CatalogService) {}
 

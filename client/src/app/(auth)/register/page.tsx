@@ -21,10 +21,10 @@ export default function RegisterPage(): JSX.Element {
       searchParams.get("token") ||
       searchParams.get("code")
     ) return "JOIN_ORG";
-    if (modeParam === "INDIVIDUAL" || modeParam === "CREATE_ORG" || modeParam === "JOIN_ORG") {
-      return modeParam as "INDIVIDUAL" | "CREATE_ORG" | "JOIN_ORG";
+    if (modeParam === "CREATE_ORG" || modeParam === "JOIN_ORG") {
+      return modeParam as "CREATE_ORG" | "JOIN_ORG";
     }
-    return "INDIVIDUAL";
+    return "CREATE_ORG";
   }, [searchParams]);
   const initialJoinCode = useMemo(
     () =>

@@ -4,8 +4,10 @@ import { GamificationService } from './gamification.service';
 import { AddXpEventDto } from './dto/add-xp-event.dto';
 import { Permission } from '@/modules/rbac/permission.decorator';
 import { PermissionKey } from '@prisma/client';
+import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
 
 @Controller('gamification')
+@OrgOperation(OrgOperationType.EXECUTION)
 export class GamificationController {
   constructor(private readonly gamification: GamificationService) {}
 

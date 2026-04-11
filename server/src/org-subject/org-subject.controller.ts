@@ -19,6 +19,7 @@ import { ok } from '@/common/http/envelope';
 import { ApiStandardResponses } from '@/common/http/api-standard-responses.decorator';
 import { InvalidateScopes } from '@/common/cache/invalidate.decorator';
 import { NoHttpCache } from '@/common/cache/no-http-cache.decorator';
+import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
 import { OrgSubjectService } from './org-subject.service';
 import { CreateOrgSubjectDto } from './dto/create-org-subject.dto';
 import { UpdateOrgSubjectDto } from './dto/update-org-subject.dto';
@@ -28,6 +29,7 @@ import { QueryOrgSubjectsDto } from './dto/query-org-subjects.dto';
 @ApiStandardResponses()
 @ApiBearerAuth()
 @Controller('org-subjects')
+@OrgOperation(OrgOperationType.AUTHORING)
 export class OrgSubjectController {
   constructor(private readonly service: OrgSubjectService) {}
 

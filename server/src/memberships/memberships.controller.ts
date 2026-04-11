@@ -26,10 +26,12 @@ import { QueryMembershipsDto } from './dto/query-memberships.dto';
 import { CacheTTL } from '@nestjs/cache-manager';
 import { InvalidateScopes } from '@/common/cache/invalidate.decorator';
 import { Permission } from '@/modules/rbac/permission.decorator';
+import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
 
 @ApiTags('memberships')
 @ApiBearerAuth()
 @Controller('memberships')
+@OrgOperation(OrgOperationType.AUTHORING)
 export class MembershipsController {
   constructor(private readonly service: MembershipsService) {}
 

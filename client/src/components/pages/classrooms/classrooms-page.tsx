@@ -165,6 +165,11 @@ export function ClassroomsPageContent(): React.JSX.Element {
     [years, effectiveYearFilterId],
   );
   const isReadOnly = selectedYear ? !selectedYear.isActive : false;
+  const optionalDataEnabled =
+    isAuthenticated &&
+    !authLoading &&
+    academicYearBootstrapState === "READY" &&
+    !!effectiveYearFilterId;
 
   const selectedId = highlightId;
   const highlightedCardRef = useRef<HTMLButtonElement | null>(null);
@@ -203,12 +208,21 @@ export function ClassroomsPageContent(): React.JSX.Element {
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [homeroomSaving, setHomeroomSaving] = useState(false);
   const [homeroomSaveError, setHomeroomSaveError] = useState<string | null>(null);
-  const { teachers, loading: teachersLoading } = useTeachers();
+  const {
+    teachers,
+    loading: teachersLoading,
+    error: teachersError,
+  } = useTeachers({
+    enabled: optionalDataEnabled,
+    softFail: true,
+    warningContext: "classrooms",
+  });
   const {
     data: classroomStructure,
     loading: structureLoading,
+    error: classroomStructureError,
   } = useClassroomStructure({
-    enabled: isTeacherView && isAuthenticated && !authLoading && !!effectiveYearFilterId,
+    enabled: isTeacherView && optionalDataEnabled,
   });
 
   const updateQuery = useCallback(
@@ -335,19 +349,27 @@ export function ClassroomsPageContent(): React.JSX.Element {
     saving: classOrgSubjectsSaving,
     error: classOrgSubjectsError,
     attach: attachClassOrgSubjects,
-  } = useClassSectionOrgSubjects(effectiveSelectedId, !!effectiveSelectedId);
-  const { subjects: orgSubjects, loading: orgSubjectsLoading } = useOrgSubjects();
+  } = useClassSectionOrgSubjects(effectiveSelectedId, optionalDataEnabled && !!effectiveSelectedId);
+  const {
+    subjects: orgSubjects,
+    loading: orgSubjectsLoading,
+    errorMessage: orgSubjectsError,
+  } = useOrgSubjects({
+    enabled: optionalDataEnabled,
+    softFail: true,
+    warningContext: "classrooms",
+  });
   const { data: riskOverview, loading: riskOverviewLoading } = useClassroomRiskOverview(
     effectiveSelectedId,
-    !!effectiveSelectedId && canViewStudentDetail,
+    optionalDataEnabled && !!effectiveSelectedId && canViewStudentDetail,
   );
   const { data: subjectPerformance, loading: subjectPerformanceLoading } = useClassroomSubjectPerformance(
     effectiveSelectedId,
     effectiveYearFilterId ?? null,
-    !!effectiveSelectedId && canViewStudentDetail,
+    optionalDataEnabled && !!effectiveSelectedId && canViewStudentDetail,
   );
   const { students: availableStudents, loading: availableStudentsLoading } = useAvailableStudents({
-    enabled: addOpen && addMode === "EXISTING",
+    enabled: optionalDataEnabled && addOpen && addMode === "EXISTING",
     classSectionId: effectiveSelectedId,
     yearId: effectiveYearFilterId,
   });
@@ -420,6 +442,8 @@ export function ClassroomsPageContent(): React.JSX.Element {
         .sort((a, b) => a.label.localeCompare(b.label, "cs")),
     [teachers],
   );
+  const teacherFilterDisabled = !effectiveYearFilterId || teachersLoading || !optionalDataEnabled || !!teachersError;
+  const teachersUnavailable = !teachersLoading && teacherOptions.length === 0;
 
   const gradeGroups = useMemo(() => {
     const order = new Map(GRADE_OPTIONS.map((option, index) => [option.value, index]));
@@ -1041,6 +1065,27 @@ export function ClassroomsPageContent(): React.JSX.Element {
         </div>
       </div>
 
+      {teachersError && (
+        <WarningAlert
+          title="Učitele se nepodařilo načíst"
+          description="Filtr učitelů je dočasně prázdný. Třídy zůstávají dostupné."
+        />
+      )}
+
+      {orgSubjectsError && (
+        <WarningAlert
+          title="Předměty se nepodařilo načíst"
+          description="Přiřazení předmětů zobrazí prázdný stav, dokud se data znovu nenačtou."
+        />
+      )}
+
+      {isTeacherView && classroomStructureError && (
+        <WarningAlert
+          title="Vedlejší přehled tříd se nepodařilo načíst"
+          description="Stránka zůstává dostupná, ale učitelský přehled je dočasně prázdný."
+        />
+      )}
+
       {years.length > 0 && (
         <Card className="border-slate-200 p-4">
           <div className="grid gap-3 md:grid-cols-5">
@@ -1112,10 +1157,10 @@ export function ClassroomsPageContent(): React.JSX.Element {
                     highlight: null,
                   })
                 }
-                disabled={!hasYear || teachersLoading}
+                disabled={teacherFilterDisabled}
               >
                 <SelectTrigger className="rounded-2xl">
-                  <SelectValue placeholder="Všichni učitelé" />
+                  <SelectValue placeholder={teachersUnavailable ? "Učitelé nejsou k dispozici" : "Všichni učitelé"} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ALL">Všichni učitelé</SelectItem>
@@ -1227,6 +1272,14 @@ export function ClassroomsPageContent(): React.JSX.Element {
       {emptyState && (
         <Card className="border-dashed p-6">
           <p className="text-sm text-slate-600">{emptyStateMessage}</p>
+        </Card>
+      )}
+
+      {isTeacherView && hasYear && !structureLoading && !classroomStructure && (
+        <Card className="border-dashed p-6">
+          <p className="text-sm text-slate-600">
+            Přehled tříd učitele není momentálně k dispozici.
+          </p>
         </Card>
       )}
 

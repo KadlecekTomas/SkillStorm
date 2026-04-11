@@ -13,6 +13,7 @@ import {
   setCsrfCookie,
   generateCsrfToken,
 } from '@/auth/token-cookies';
+import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
 import { ApiProperty } from '@nestjs/swagger';
 import { IsString } from 'class-validator';
 
@@ -30,6 +31,7 @@ class AcceptInvitationDto {
 @ApiTags('Invitations')
 @ApiStandardResponses()
 @Controller('invitations')
+@OrgOperation(OrgOperationType.AUTHORING)
 export class InvitationsController {
   constructor(private readonly service: InvitesService) {}
 

@@ -41,6 +41,7 @@ import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { AllowAnyOrgStatus } from '@/common/decorators/allow-any-org-status.decorator';
 import { ApiStandardResponses } from '@/common/http/api-standard-responses.decorator';
+import { NoHttpCache } from '@/common/cache/no-http-cache.decorator';
 
 @ApiTags('auth')
 @ApiStandardResponses()
@@ -184,8 +185,19 @@ export class AuthController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @AllowAnyOrgStatus()
+  @NoHttpCache()
   @ApiOperation({ summary: 'Get current user profile (auth context)' })
-  async me(@Req() req: RequestWithUser) {
+  async me(
+    @Req() req: RequestWithUser,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    res.setHeader(
+      'Cache-Control',
+      'no-store, no-cache, must-revalidate, private',
+    );
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+
     const ctx = await this.authService.getMeContext(req.user.userId, {
       membershipId: req.user.membershipId ?? null,
       organizationId: req.user.organizationId ?? null,

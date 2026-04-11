@@ -34,11 +34,13 @@ import { Permission } from '@/modules/rbac/permission.decorator';
 import { ok } from '@/common/http/envelope';
 import { AllowAnyOrgStatus } from '@/common/decorators/allow-any-org-status.decorator';
 import { ApiStandardResponses } from '@/common/http/api-standard-responses.decorator';
+import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
 
 @ApiTags('organizations')
 @ApiStandardResponses()
 @ApiBearerAuth()
 @Controller('organizations')
+@OrgOperation(OrgOperationType.AUTHORING)
 export class OrganizationsController {
   constructor(private readonly service: OrganizationsService) {}
 

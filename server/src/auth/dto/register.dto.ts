@@ -13,7 +13,6 @@ import { Transform } from 'class-transformer';
 import { StrongPassword, PASSWORD_POLICY_MESSAGE } from '@/common/validators/password.validator';
 
 export enum RegisterMode {
-  INDIVIDUAL = 'INDIVIDUAL',
   CREATE_ORG = 'CREATE_ORG',
   JOIN_ORG = 'JOIN_ORG',
 }
@@ -64,9 +63,9 @@ export class RegisterDto {
 
   @ApiProperty({
     description:
-      'Režim registrace. INDIVIDUAL = účet bez organizace, CREATE_ORG = založení vlastní školy, JOIN_ORG = registrace s následným připojením ke škole.',
+      'Režim registrace. CREATE_ORG = založení vlastní školy, JOIN_ORG = registrace s následným připojením ke škole.',
     enum: RegisterMode,
-    example: RegisterMode.INDIVIDUAL,
+    example: RegisterMode.CREATE_ORG,
   })
   @Transform(({ value }) =>
     typeof value === 'string' && value.length ? value.toUpperCase() : undefined,

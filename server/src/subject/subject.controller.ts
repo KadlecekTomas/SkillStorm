@@ -26,10 +26,12 @@ import { ToggleSubjectLevelDto } from './dto/toggle-subject-level.dto';
 import { SubjectsService } from './subject.service';
 
 import { InvalidateScopes } from '@/common/cache/invalidate.decorator';
+import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
 
 @ApiTags('Subjects')
 @ApiBearerAuth()
 @Controller('subjects')
+@OrgOperation(OrgOperationType.AUTHORING)
 export class SubjectsController {
   constructor(private readonly service: SubjectsService) {}
 

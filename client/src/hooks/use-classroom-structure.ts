@@ -52,6 +52,7 @@ export const useClassroomStructure = ({
       setState({ status: "READY", data });
     } catch (error) {
       if (signal.aborted) return;
+      console.warn("[classrooms] optional classroom structure request failed", error);
       setState({
         status: "ERROR",
         error: error instanceof Error ? error : new Error("Nepodařilo se načíst strukturu tříd"),

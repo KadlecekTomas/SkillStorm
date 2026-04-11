@@ -28,10 +28,12 @@ import { AssignSubjectsDto } from './dto/assign-subjects.dto';
 
 import { Permission } from '@/modules/rbac/permission.decorator';
 import { PermissionKey } from '@prisma/client';
+import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
 
 @ApiTags('Teachers')
 @ApiBearerAuth()
 @Controller('teachers')
+@OrgOperation(OrgOperationType.AUTHORING)
 export class TeachersController {
   constructor(private readonly service: TeachersService) {}
 

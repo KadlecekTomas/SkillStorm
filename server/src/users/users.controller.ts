@@ -32,11 +32,13 @@ import { NoHttpCache } from '@/common/cache/no-http-cache.decorator';
 import { Permission } from '@/modules/rbac/permission.decorator';
 import { ok } from '@/common/http/envelope';
 import { ApiStandardResponses } from '@/common/http/api-standard-responses.decorator';
+import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
 
 @ApiTags('users')
 @ApiStandardResponses()
 @ApiBearerAuth()
 @Controller('users')
+@OrgOperation(OrgOperationType.AUTHORING)
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 

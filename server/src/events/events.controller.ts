@@ -7,6 +7,7 @@ import { EventsService } from './events.service';
 import { JwtAuthGuard } from '@/auth/guards/jwt-auth.guard';
 import { RequestWithUser } from '@/types/request-with-user';
 import { Sse } from '@nestjs/common';
+import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
 
 /**
  * Server-Sent Events controller.
@@ -19,6 +20,7 @@ import { Sse } from '@nestjs/common';
  */
 @ApiTags('Events')
 @Controller('events')
+@OrgOperation(OrgOperationType.AUTHORING)
 export class EventsController {
   constructor(private readonly eventsService: EventsService) {}
 
