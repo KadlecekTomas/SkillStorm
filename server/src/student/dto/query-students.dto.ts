@@ -3,6 +3,12 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsInt, IsOptional, IsString, IsUUID, Min } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 
+const optionalTrimmed = ({ value }: { value: unknown }) => {
+  if (typeof value !== 'string') return value;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+};
+
 export class QueryStudentsDto {
   @ApiPropertyOptional({ example: 1 })
   @IsOptional()
@@ -23,7 +29,7 @@ export class QueryStudentsDto {
     example: 'Novák',
   })
   @IsOptional()
-  @Transform(({ value }) => value?.trim())
+  @Transform(optionalTrimmed)
   @IsString()
   search?: string;
 
@@ -32,6 +38,7 @@ export class QueryStudentsDto {
     example: 'academic-year-uuid',
   })
   @IsOptional()
+  @Transform(optionalTrimmed)
   @IsUUID()
   yearId?: string;
 
@@ -40,6 +47,7 @@ export class QueryStudentsDto {
     example: 'class-section-uuid',
   })
   @IsOptional()
+  @Transform(optionalTrimmed)
   @IsUUID()
   classSectionId?: string;
 
@@ -48,6 +56,7 @@ export class QueryStudentsDto {
     example: 'class-section-uuid',
   })
   @IsOptional()
+  @Transform(optionalTrimmed)
   @IsUUID()
   availableForClassSectionId?: string;
 
@@ -56,6 +65,7 @@ export class QueryStudentsDto {
     example: 'academic-year-uuid',
   })
   @IsOptional()
+  @Transform(optionalTrimmed)
   @IsUUID()
   availableForYearId?: string;
 }

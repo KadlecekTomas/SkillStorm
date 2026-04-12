@@ -32,11 +32,10 @@ import { isYearWriteBlocked } from "@/lib/academic-year/write-gate";
 import { ReportIssueButton } from "@/components/support/report-issue-button";
 import { ArrowUp, ArrowDown, ChevronDown, ChevronRight, Minus, Star } from "lucide-react";
 import { cn } from "@/utils/cn";
-import { queryClient } from "@/lib/query-client";
 import {
-  normalizeClassroomsFilters,
-  normalizeClassroomsQueryParam,
-} from "@/lib/classrooms/list-filters";
+  normalizeListFilters,
+  refreshListAfterMutation,
+} from "@/lib/list-query";
 
 function getApiErrorMessage(err: unknown): string {
   if (err instanceof HttpError) {
@@ -162,11 +161,11 @@ export function ClassroomsPageContent(): React.JSX.Element {
   const allowedLimits = useMemo(() => new Set([5, 10, 20, 50]), []);
   const yearIds = useMemo(() => new Set(toSafeArray(years).map((year) => year.id)), [years]);
   const parsedLimit = parsePositiveInt(rawLimit);
-  const normalizedRawYear = normalizeClassroomsQueryParam(rawYear);
-  const normalizedSearch = normalizeClassroomsQueryParam(rawSearch);
+  const normalizedRawYear = typeof rawYear === "string" ? rawYear.trim() || null : null;
+  const normalizedSearch = typeof rawSearch === "string" ? rawSearch.trim() || null : null;
   const normalizedFilters = useMemo(
     () =>
-      normalizeClassroomsFilters({
+      normalizeListFilters({
         selectedYearId: normalizedRawYear,
         grade: rawGrade,
         search: normalizedSearch,
@@ -177,13 +176,13 @@ export function ClassroomsPageContent(): React.JSX.Element {
       }),
     [allowedLimits, normalizedRawYear, normalizedSearch, parsedLimit, rawCursor, rawDirection, rawGrade, rawTeacher],
   );
-  const cursor = normalizedFilters.cursor;
-  const direction = normalizedFilters.direction;
   const limit = parsedLimit && allowedLimits.has(parsedLimit) ? parsedLimit : 20;
+  const cursor = typeof normalizedFilters.cursor === "string" ? normalizedFilters.cursor : null;
+  const direction = normalizedFilters.direction === "prev" ? "prev" : "next";
   const yearFilterId = normalizedRawYear ? (yearIds.has(normalizedRawYear) ? normalizedRawYear : null) : currentYearId ?? null;
-  const gradeFilter = normalizedFilters.grade;
-  const teacherFilter = normalizedFilters.teacherId;
-  const searchTerm = normalizedFilters.search ?? "";
+  const gradeFilter = typeof normalizedFilters.grade === "string" ? normalizedFilters.grade : null;
+  const teacherFilter = typeof normalizedFilters.teacherId === "string" ? normalizedFilters.teacherId : null;
+  const searchTerm = typeof normalizedFilters.search === "string" ? normalizedFilters.search : "";
   const { can } = usePermissions();
   const canManageClasses = can(PermissionKey.MANAGE_TEACHERS);
   const canManageEnrollments = can(PermissionKey.MANAGE_STUDENTS);
@@ -573,16 +572,25 @@ export function ClassroomsPageContent(): React.JSX.Element {
   };
 
   const invalidateConsistencyQueries = useCallback(async (classroomId?: string | null) => {
-    queryClient.invalidateQueries(["classrooms"]);
-    queryClient.invalidateQueries(["students"]);
-    queryClient.invalidateQueries(["teachers"]);
-    queryClient.invalidateQueries(["dashboard"]);
-    queryClient.invalidateQueries(["students", "available"]);
-    queryClient.invalidateQueries(["classroom-structure"]);
+    await refreshListAfterMutation({
+      resource: "classrooms",
+      invalidatePrefixes: [
+        ["students"],
+        ["teachers"],
+        ["dashboard"],
+        ["students", "available"],
+        ["classroom-structure"],
+      ],
+    });
     if (classroomId) {
-      queryClient.invalidateQueries(["classroom-detail", classroomId]);
-      queryClient.invalidateQueries(["classroom-risk-overview", classroomId]);
-      queryClient.invalidateQueries(["classroom-subject-performance", classroomId]);
+      await refreshListAfterMutation({
+        resource: "classrooms",
+        invalidatePrefixes: [
+          ["classroom-detail", classroomId],
+          ["classroom-risk-overview", classroomId],
+          ["classroom-subject-performance", classroomId],
+        ],
+      });
     }
 
     if (classroomId && classroomId === effectiveSelectedId) {

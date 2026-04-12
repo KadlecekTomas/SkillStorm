@@ -20,9 +20,8 @@ import type { Subject } from "@/types";
 import { formatPercent, formatInt } from "@/utils/format";
 import { ALL_SCHOOL_GRADES, gradeLabel, normalizeAllowedGrades } from "@/lib/grades";
 import { Loader2, Pencil, Send, Users, Archive, Eye } from "lucide-react";
-
-/** API can return items with creator for director filter */
-type TestListItem = TestSummary & { creator?: { user?: { name?: string | null } } };
+import { useTestsList, type TestListItem } from "@/hooks/use-tests-list";
+import { refreshListAfterMutation } from "@/lib/list-query";
 
 type EffectiveAssignmentStatus = "UPCOMING" | "OPEN" | "IN_PROGRESS" | "SUBMITTED" | "CLOSED" | "NO_ATTEMPTS_LEFT";
 
@@ -202,9 +201,6 @@ const studentColumns: Column<TestSummary>[] = [
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 function TestsPage(): React.JSX.Element {
-  const [tests, setTests] = useState<TestListItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [fetchError, setFetchError] = useState(false);
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [assignModalOpen, setAssignModalOpen] = useState(false);
   const [assignTestId, setAssignTestId] = useState<string | null>(null);
@@ -221,40 +217,20 @@ function TestsPage(): React.JSX.Element {
   const isDirector = user?.organizationRole === "DIRECTOR" || user?.organizationRole === "OWNER";
   const isStudent = user?.organizationRole === "STUDENT";
 
-  const fetchTests = useCallback(async () => {
-    try {
-      const data = await fetchWithAuth<{ items?: TestListItem[] } | TestListItem[]>("GET", "/tests", {
-        query: {
-          ...(subjectFilterId ? { subjectId: subjectFilterId } : {}),
-          ...(gradeFilter ? { grade: gradeFilter } : {}),
-          ...(selectedYearId ? { academicYearId: selectedYearId } : {}),
-        },
-      });
-      const list = data && typeof data === "object" && "items" in data
-        ? (data as { items: TestListItem[] }).items ?? []
-        : Array.isArray(data) ? data : [];
-      setTests(
-        (Array.isArray(list) ? list : []).map((item) => ({
-          ...item,
-          allowedGrades: normalizeAllowedGrades(item.allowedGrades),
-        })),
-      );
-      setFetchError(false);
-    } catch {
-      setTests([]);
-      setFetchError(true);
-    } finally {
-      setLoading(false);
-    }
-  }, [gradeFilter, selectedYearId, subjectFilterId]);
+  const {
+    tests,
+    loading,
+    error: testsError,
+    refetch: refetchTests,
+  } = useTestsList({
+    enabled: !!org?.id,
+    organizationId: org?.id ?? null,
+    academicYearId: selectedYearId,
+    subjectId: subjectFilterId,
+    grade: gradeFilter,
+  });
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setFetchError(false);
-    fetchTests().then(() => { if (cancelled) return; });
-    return () => { cancelled = true; };
-  }, [org?.id, fetchTests]);
+  const fetchError = !!testsError;
 
   useEffect(() => {
     if (!isStudent || !org?.id) return;
@@ -317,7 +293,11 @@ function TestsPage(): React.JSX.Element {
     setLoadingId(id);
     try {
       await fetchWithAuth("PATCH", `/tests/${id}`, { body: { status: "PUBLISHED" } });
-      await fetchTests();
+      await refreshListAfterMutation({
+        resource: "tests",
+        refetch: refetchTests,
+        invalidatePrefixes: [["dashboard"]],
+      });
     } finally {
       setLoadingId(null);
     }
@@ -327,7 +307,11 @@ function TestsPage(): React.JSX.Element {
     setLoadingId(id);
     try {
       await fetchWithAuth("PATCH", `/tests/${id}`, { body: { status: "ARCHIVED" } });
-      await fetchTests();
+      await refreshListAfterMutation({
+        resource: "tests",
+        refetch: refetchTests,
+        invalidatePrefixes: [["dashboard"]],
+      });
     } finally {
       setLoadingId(null);
     }
@@ -357,7 +341,7 @@ function TestsPage(): React.JSX.Element {
         <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
           <p className="font-medium text-red-600">Chyba načítání</p>
           <p className="mt-0.5 text-slate-600">Seznam testů se nepovedlo načíst.</p>
-          <Button variant="outline" size="sm" className="mt-2" onClick={() => void fetchTests()}>
+          <Button variant="outline" size="sm" className="mt-2" onClick={() => void refetchTests()}>
             Zkusit znovu
           </Button>
         </div>
@@ -542,7 +526,7 @@ function TestsPage(): React.JSX.Element {
         subjectId={tests.find((item) => item.id === assignTestId)?.subject?.id ?? null}
         allowedGrades={normalizeAllowedGrades(tests.find((item) => item.id === assignTestId)?.allowedGrades)}
         yearId={selectedYearId}
-        onSuccess={fetchTests}
+        onSuccess={() => void refetchTests()}
       />
     </div>
   );

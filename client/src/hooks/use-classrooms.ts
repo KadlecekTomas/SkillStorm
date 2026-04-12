@@ -3,7 +3,7 @@
 import { useCallback, useMemo } from "react";
 import { fetchWithAuth } from "@/lib/http/client";
 import { useQuery } from "@/lib/query-client";
-import { normalizeClassroomsFilters } from "@/lib/classrooms/list-filters";
+import { buildListQueryKey, buildListRequestParams, normalizeListFilters } from "@/lib/list-query";
 
 export type ClassroomListItem = {
   id: string;
@@ -103,7 +103,7 @@ export const useClassrooms = ({
     !isRepairState(bootstrap);
   const normalizedFilters = useMemo(
     () =>
-      normalizeClassroomsFilters({
+      normalizeListFilters({
         selectedYearId,
         grade,
         search,
@@ -114,24 +114,37 @@ export const useClassrooms = ({
       }),
     [selectedYearId, grade, search, teacherId, cursor, direction, limit],
   );
+  const typedFilters = useMemo(
+    () => ({
+      selectedYearId:
+        typeof normalizedFilters.selectedYearId === "string"
+          ? normalizedFilters.selectedYearId
+          : null,
+      grade:
+        typeof normalizedFilters.grade === "string" ? normalizedFilters.grade : null,
+      search:
+        typeof normalizedFilters.search === "string" ? normalizedFilters.search : null,
+      teacherId:
+        typeof normalizedFilters.teacherId === "string"
+          ? normalizedFilters.teacherId
+          : null,
+      cursor:
+        typeof normalizedFilters.cursor === "string" ? normalizedFilters.cursor : null,
+      direction:
+        normalizedFilters.direction === "prev" ? "prev" : "next",
+      limit:
+        typeof normalizedFilters.limit === "number" ? normalizedFilters.limit : limit,
+    }),
+    [limit, normalizedFilters],
+  );
   const defaultMeta = useMemo(
-    () => buildDefaultMeta(normalizedFilters.limit),
-    [normalizedFilters.limit],
+    () => buildDefaultMeta(typedFilters.limit),
+    [typedFilters.limit],
   );
 
   const queryKey = useMemo(
-    () =>
-      [
-        "classrooms",
-        normalizedFilters.selectedYearId,
-        normalizedFilters.grade,
-        normalizedFilters.search,
-        normalizedFilters.teacherId,
-        normalizedFilters.cursor,
-        normalizedFilters.direction,
-        normalizedFilters.limit,
-      ] as const,
-    [normalizedFilters],
+    () => buildListQueryKey("classrooms", typedFilters),
+    [typedFilters],
   );
 
   const query = useQuery<FetchResult>({
@@ -139,27 +152,27 @@ export const useClassrooms = ({
     enabled:
       !isAuthLoading &&
       isAuthenticated &&
-      !(isInitOrg && !normalizedFilters.selectedYearId) &&
-      !!normalizedFilters.selectedYearId,
+      !(isInitOrg && !typedFilters.selectedYearId) &&
+      !!typedFilters.selectedYearId,
     staleTime: 10_000,
     queryFn: async () => {
       const response = await fetchWithAuth<
         | { data?: ClassroomListItem[]; meta?: ClassroomsMeta }
         | ClassroomListItem[]
       >("GET", "/classrooms", {
-        query: {
-          yearId: normalizedFilters.selectedYearId ?? undefined,
-          limit: normalizedFilters.limit,
-          ...(normalizedFilters.cursor
+        query: buildListRequestParams({
+          yearId: typedFilters.selectedYearId ?? undefined,
+          limit: typedFilters.limit,
+          ...(typedFilters.cursor
             ? {
-                cursor: normalizedFilters.cursor,
-                direction: normalizedFilters.direction,
+                cursor: typedFilters.cursor,
+                direction: typedFilters.direction,
               }
             : {}),
-          ...(normalizedFilters.grade ? { grade: normalizedFilters.grade } : {}),
-          ...(normalizedFilters.search ? { search: normalizedFilters.search } : {}),
-          ...(normalizedFilters.teacherId ? { teacherId: normalizedFilters.teacherId } : {}),
-        },
+          ...(typedFilters.grade ? { grade: typedFilters.grade } : {}),
+          ...(typedFilters.search ? { search: typedFilters.search } : {}),
+          ...(typedFilters.teacherId ? { teacherId: typedFilters.teacherId } : {}),
+        }),
       });
 
       const data = Array.isArray(response) ? response : response?.data ?? EMPTY_CLASSROOMS;
@@ -175,20 +188,20 @@ export const useClassrooms = ({
   const refetch = useCallback(async (options?: { bypassCache?: boolean; skipFetch?: boolean }) => {
     if (options?.skipFetch) return true;
     if (isAuthLoading || !isAuthenticated) return false;
-    if (isInitOrg && !normalizedFilters.selectedYearId) return false;
-    if (!normalizedFilters.selectedYearId) return false;
+    if (isInitOrg && !typedFilters.selectedYearId) return false;
+    if (!typedFilters.selectedYearId) return false;
     return !!(await queryRefetch());
-  }, [isAuthLoading, isAuthenticated, isInitOrg, normalizedFilters.selectedYearId, queryRefetch]);
+  }, [isAuthLoading, isAuthenticated, isInitOrg, queryRefetch, typedFilters.selectedYearId]);
 
   if (isAuthLoading || !isAuthenticated) {
     return { status: "AUTH_LOADING", refetch };
   }
 
-  if (isInitOrg && !normalizedFilters.selectedYearId) {
+  if (isInitOrg && !typedFilters.selectedYearId) {
     return { status: "INIT_ORG", refetch };
   }
 
-  if (!normalizedFilters.selectedYearId) {
+  if (!typedFilters.selectedYearId) {
     return {
       status: "READY_EMPTY",
       classrooms: EMPTY_CLASSROOMS,

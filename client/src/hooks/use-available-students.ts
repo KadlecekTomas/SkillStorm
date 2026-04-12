@@ -1,8 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { fetchWithAuth } from "@/lib/http/client";
-import { useQuery } from "@/lib/query-client";
+import { useStudentsList } from "@/hooks/use-students-list";
 
 export type AvailableStudent = {
   id: string;
@@ -25,25 +24,20 @@ export const useAvailableStudents = ({
   students: AvailableStudent[];
   loading: boolean;
 } => {
-  const query = useQuery<{ data?: AvailableStudent[] }>({
-    queryKey: ["students", "available", classSectionId, yearId],
+  const studentsQuery = useStudentsList({
     enabled: enabled && !!classSectionId && !!yearId,
-    staleTime: 15_000,
-    queryFn: () =>
-      fetchWithAuth<{ data?: AvailableStudent[] }>("GET", "/students", {
-        query: {
-          availableForClassSectionId: classSectionId ?? undefined,
-          availableForYearId: yearId ?? undefined,
-          limit: "200",
-        },
-      }),
+    query: {
+      availableForClassSectionId: classSectionId,
+      availableForYearId: yearId,
+      limit: 200,
+    },
   });
 
   return useMemo(
     () => ({
-      students: query.data?.data ?? EMPTY_AVAILABLE_STUDENTS,
-      loading: query.isLoading,
+      students: (studentsQuery.students as AvailableStudent[]) ?? EMPTY_AVAILABLE_STUDENTS,
+      loading: studentsQuery.loading,
     }),
-    [query.data, query.isLoading],
+    [studentsQuery.loading, studentsQuery.students],
   );
 };

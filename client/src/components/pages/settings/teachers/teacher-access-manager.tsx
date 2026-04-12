@@ -14,10 +14,10 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { fetchWithAuth } from "@/lib/http/client";
-import { queryClient } from "@/lib/query-client";
 import { showToastOnce } from "@/utils/toast";
 import type { TeacherListItem } from "@/hooks/use-teachers";
 import { useTeacherAccess, type TeacherAccessItem, type TeacherAccessLevel } from "@/hooks/use-teacher-access";
+import { refreshListAfterMutation } from "@/lib/list-query";
 
 type ClassroomOption = {
   id: string;
@@ -95,12 +95,16 @@ export function TeacherAccessManager({ teacher, classrooms }: Props): React.JSX.
     return `${accessQuery.items.length} přístupů`;
   }, [accessQuery.items.length, accessQuery.loading]);
 
-  const invalidate = () => {
-    queryClient.invalidateQueries(["teacher-access", teacherId]);
-    queryClient.invalidateQueries(["teachers"]);
-    queryClient.invalidateQueries(["classrooms"]);
-    queryClient.invalidateQueries(["classroom-detail"]);
-    queryClient.invalidateQueries(["dashboard"]);
+  const invalidate = async () => {
+    await refreshListAfterMutation({
+      resource: "teachers",
+      invalidatePrefixes: [
+        ["teacher-access", teacherId],
+        ["classrooms"],
+        ["classroom-detail"],
+        ["dashboard"],
+      ],
+    });
   };
 
   const createAccess = async () => {
@@ -119,7 +123,7 @@ export function TeacherAccessManager({ teacher, classrooms }: Props): React.JSX.
           ...(toIsoDate(validTo) ? { validTo: toIsoDate(validTo) } : {}),
         },
       });
-      invalidate();
+      await invalidate();
       await accessQuery.refetch();
       setValidFrom("");
       setValidTo("");
@@ -143,7 +147,7 @@ export function TeacherAccessManager({ teacher, classrooms }: Props): React.JSX.
           validTo: draft.validTo ? toIsoDate(draft.validTo) : null,
         },
       });
-      invalidate();
+      await invalidate();
       await accessQuery.refetch();
       showToastOnce("Přístup byl upraven.", { type: "success" });
     } catch (error) {
@@ -157,7 +161,7 @@ export function TeacherAccessManager({ teacher, classrooms }: Props): React.JSX.
     setSaving(true);
     try {
       await fetchWithAuth("DELETE", `/teacher-access/${accessId}`);
-      invalidate();
+      await invalidate();
       await accessQuery.refetch();
       showToastOnce("Přístup byl odebrán.", { type: "success" });
     } catch (error) {

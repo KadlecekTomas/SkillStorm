@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useMemo } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { fetchWithAuth } from "@/lib/http/client";
@@ -10,6 +10,8 @@ import { withGuard } from "@/lib/guard/withGuard";
 import { PermissionKey } from "@/types";
 import { useAuth } from "@/lib/guard/useAuth";
 import { formatDate } from "@/lib/format-date";
+import { useQuery } from "@/lib/query-client";
+import { buildListQueryKey } from "@/lib/list-query";
 
 type AssignmentRow = {
   id: string;
@@ -32,26 +34,16 @@ function assignmentTargetHref(assignment: AssignmentRow): string {
 }
 
 function AssignmentsPage() {
-  const [items, setItems] = useState<AssignmentRow[]>([]);
-  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
   const { roles } = useAuth();
   const isStudent = roles.includes("STUDENT");
-
-  useEffect(() => {
-    fetchWithAuth<AssignmentRow[]>("GET", "/assignments/my")
-      .then((data) => {
-        const nextItems = data ?? [];
-        nextItems.forEach((item) => {
-          console.log("assignment.openAt raw:", item.openAt);
-        });
-        setItems(nextItems);
-      })
-      .catch((e: unknown) => {
-        const message = e instanceof Error ? e.message : "Nelze načíst assignmenty";
-        setError(message);
-      });
-  }, []);
+  const assignmentsQuery = useQuery<AssignmentRow[]>({
+    queryKey: buildListQueryKey("assignments-my", {}),
+    staleTime: 10_000,
+    queryFn: async () => (await fetchWithAuth<AssignmentRow[]>("GET", "/assignments/my")) ?? [],
+  });
+  const items = useMemo(() => assignmentsQuery.data ?? [], [assignmentsQuery.data]);
+  const error = assignmentsQuery.error instanceof Error ? assignmentsQuery.error.message : null;
 
   return (
     <div className="space-y-4">

@@ -5,6 +5,11 @@ import { httpClient, HttpError } from "@/lib/http/client";
 import { useAuth } from "@/hooks/use-auth";
 import type { OrganizationRole } from "@/types";
 import { useQuery } from "@/lib/query-client";
+import {
+  buildListQueryKey,
+  buildListRequestParams,
+  normalizeListFilters,
+} from "@/lib/list-query";
 
 export type TeacherListItem = {
   id: string;
@@ -43,6 +48,12 @@ type UseTeachersOptions = {
   enabled?: boolean;
   softFail?: boolean;
   warningContext?: string;
+  query?: {
+    organizationId?: string | null;
+    page?: number;
+    limit?: number;
+    search?: string | null;
+  };
 };
 
 const EMPTY_TEACHERS: TeacherListItem[] = [];
@@ -59,19 +70,34 @@ export const useTeachers = (options: UseTeachersOptions = {}): UseTeachersResult
   const enabled = options.enabled ?? true;
   const softFail = options.softFail ?? false;
   const warningContext = options.warningContext ?? "teachers";
+  const normalizedFilters = useMemo(
+    () =>
+      normalizeListFilters({
+        organizationId: options.query?.organizationId ?? orgId,
+        page: options.query?.page ?? 1,
+        limit: options.query?.limit ?? 50,
+        search: options.query?.search ?? null,
+      }),
+    [options.query?.limit, options.query?.organizationId, options.query?.page, options.query?.search, orgId],
+  );
   const query = useQuery<TeacherListResponse>({
-    queryKey: ["teachers", orgId],
-    enabled: enabled && !!orgId,
+    queryKey: buildListQueryKey("teachers", normalizedFilters),
+    enabled: enabled && !!normalizedFilters.organizationId,
     staleTime: 15_000,
     queryFn: async () => {
       const empty = {
         items: [],
-        meta: { page: 1, limit: 50, total: 0, pages: 1 },
+        meta: {
+          page: typeof normalizedFilters.page === "number" ? normalizedFilters.page : 1,
+          limit: typeof normalizedFilters.limit === "number" ? normalizedFilters.limit : 50,
+          total: 0,
+          pages: 1,
+        },
       };
-      if (!orgId) return empty;
+      if (!normalizedFilters.organizationId) return empty;
       try {
         return await httpClient.get<TeacherListResponse>("/teachers", {
-          query: { organizationId: orgId, page: 1, limit: 50 },
+          query: buildListRequestParams(normalizedFilters),
         });
       } catch (error) {
         if (!softFail) throw error;
@@ -96,6 +122,8 @@ export const useTeachers = (options: UseTeachersOptions = {}): UseTeachersResult
       error:
         !orgId
           ? "Chybí aktivní organizace."
+          : !normalizedFilters.organizationId
+          ? "Chybí aktivní organizace."
           : softFail
             ? data?.warning ?? null
             : error
@@ -111,6 +139,7 @@ export const useTeachers = (options: UseTeachersOptions = {}): UseTeachersResult
       error,
       isLoading,
       orgId,
+      normalizedFilters.organizationId,
       refetch,
       softFail,
     ],

@@ -11,6 +11,19 @@ import {
 import { PublishStatus, SchoolGrade } from '@prisma/client';
 import { Type, Transform } from 'class-transformer';
 
+const optionalTrimmed = ({ value }: { value: unknown }) => {
+  if (typeof value !== 'string') return value;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+};
+
+const optionalTrimmedGrade = ({ value }: { value: unknown }) => {
+  if (typeof value !== 'string') return value;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === 'ALL') return undefined;
+  return trimmed;
+};
+
 export class QueryTestsDto {
   @ApiPropertyOptional({ example: 1 })
   @IsOptional()
@@ -28,7 +41,7 @@ export class QueryTestsDto {
 
   @ApiPropertyOptional({ example: 'zlomky' })
   @IsOptional()
-  @Transform(({ value }) => value?.trim())
+  @Transform(optionalTrimmed)
   @IsString()
   search?: string;
 
@@ -39,21 +52,25 @@ export class QueryTestsDto {
 
   @ApiPropertyOptional({ example: 'uuid' })
   @IsOptional()
+  @Transform(optionalTrimmed)
   @IsUUID()
   organizationId?: string;
 
   @ApiPropertyOptional({ description: 'Filter by Subject UUID' })
   @IsOptional()
+  @Transform(optionalTrimmed)
   @IsUUID()
   subjectId?: string;
 
   @ApiPropertyOptional({ description: 'Filter by AcademicYear UUID' })
   @IsOptional()
+  @Transform(optionalTrimmed)
   @IsUUID()
   academicYearId?: string;
 
   @ApiPropertyOptional({ description: 'Filter by pedagogical grade', enum: SchoolGrade })
   @IsOptional()
+  @Transform(optionalTrimmedGrade)
   @IsEnum(SchoolGrade)
   grade?: SchoolGrade;
 }
