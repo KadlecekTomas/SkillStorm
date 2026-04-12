@@ -4,6 +4,7 @@ import type { ExecutionContext } from '@nestjs/common';
 import { Injectable } from '@nestjs/common';
 import type { Request } from 'express';
 import { NO_HTTP_CACHE } from './no-http-cache.decorator';
+import { applyNoStoreHeaders } from '@/common/http/no-store-headers';
 
 @Injectable()
 export class UserScopedCacheInterceptor extends CacheInterceptor {
@@ -12,7 +13,11 @@ export class UserScopedCacheInterceptor extends CacheInterceptor {
     const noCache =
       this.reflector?.get<boolean>(NO_HTTP_CACHE, context.getHandler()) ??
       this.reflector?.get<boolean>(NO_HTTP_CACHE, context.getClass());
-    if (noCache) return undefined;
+    if (noCache) {
+      const http = context.switchToHttp();
+      applyNoStoreHeaders(http.getResponse(), http.getRequest<Request>());
+      return undefined;
+    }
 
     const req = context.switchToHttp().getRequest<Request>();
     if (!req) return super.trackBy(context);

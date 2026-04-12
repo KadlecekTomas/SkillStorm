@@ -29,6 +29,8 @@ import { AuditDataScopeService } from '@/audit/audit-data-scope.service';
 import { PlatformHealthService } from './platform-health.service';
 import { CatalogSyncService } from './catalog-sync.service';
 import type { AuditEntityType } from '@prisma/client';
+import { NoHttpCache } from '@/common/cache/no-http-cache.decorator';
+import { applyNoStoreHeaders } from '@/common/http/no-store-headers';
 
 // NEVER return raw Prisma entities in the platform layer.
 // All organization data must pass through PlatformDataScopeService
@@ -69,6 +71,7 @@ export class PlatformController {
 
   @Get('users')
   @ApiOperation({ summary: 'Global users list (READ — SUPERADMIN | DEVOPS | SUPPORT)' })
+  @NoHttpCache()
   async listUsers(
     @Req() req: RequestWithUser,
     @Query('search') search?: string,
@@ -93,6 +96,7 @@ export class PlatformController {
 
   @Get('organizations')
   @ApiOperation({ summary: 'List organizations (READ — SUPERADMIN | DEVOPS | SUPPORT)' })
+  @NoHttpCache()
   async listOrganizations(
     @Req() req: RequestWithUser,
     @Res({ passthrough: true }) res: Response,
@@ -100,11 +104,7 @@ export class PlatformController {
     @Query('limit') limit?: string,
     @Query('q') search?: string,
   ) {
-    // Platform data must always be fresh — no caching for any system role
-    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
-    res.setHeader('Surrogate-Control', 'no-store');
+    applyNoStoreHeaders(res);
 
     const opts: { page?: number; limit?: number; search?: string } = {};
     if (page) opts.page = parseInt(page, 10);

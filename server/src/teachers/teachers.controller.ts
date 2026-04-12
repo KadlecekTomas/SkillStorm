@@ -29,6 +29,7 @@ import { AssignSubjectsDto } from './dto/assign-subjects.dto';
 import { Permission } from '@/modules/rbac/permission.decorator';
 import { PermissionKey } from '@prisma/client';
 import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
+import { NoHttpCache } from '@/common/cache/no-http-cache.decorator';
 
 @ApiTags('Teachers')
 @ApiBearerAuth()
@@ -50,6 +51,7 @@ export class TeachersController {
   @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'List teachers (org‑scoped for director)' })
   @ApiQuery({ name: 'organizationId', required: false, type: String })
+  @NoHttpCache()
   @CacheTTL(0)
   findAll(@Req() req: RequestWithUser, @Query() q: QueryTeachersDto) {
     return this.service.findAll(req.user, q);

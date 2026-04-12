@@ -33,6 +33,7 @@ import { StudentAccessGuard } from './guards/student-access.guard';
 import { Throttle } from '@nestjs/throttler';
 import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
 import { StudentDiagnosticService } from '@/analytics/student-diagnostic.service';
+import { NoHttpCache } from '@/common/cache/no-http-cache.decorator';
 
 @ApiTags('Students')
 @ApiBearerAuth()
@@ -88,6 +89,7 @@ export class StudentsController {
   @Get()
   @Permission(SystemRole.SUPERADMIN, OrganizationRole.OWNER, OrganizationRole.DIRECTOR)
   @ApiOperation({ summary: 'List students (pagination + filters)' })
+  @NoHttpCache()
   @CacheTTL(0)
   findAll(@Req() req: RequestWithUser, @Query() q: QueryStudentsDto) {
     return this.service.findAll(req.user, q);

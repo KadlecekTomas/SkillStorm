@@ -26,6 +26,7 @@ import { AllowPendingOrg } from '@/common/decorators/allow-pending-org.decorator
 import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
 import { OrgContextService } from '@/common/org-context/org-context.service';
 import { AcademicYearExpiredGuard } from '@/academic-years/academic-year-expired.guard';
+import { NoHttpCache } from '@/common/cache/no-http-cache.decorator';
 
 @ApiTags('Classrooms')
 @ApiStandardResponses()
@@ -42,6 +43,7 @@ export class ClassroomsController {
   @Get()
   @Permission(PermissionKey.MANAGE_STUDENTS, PermissionKey.VIEW_RESULTS)
   @ApiOperation({ summary: 'List classrooms by academic year' })
+  @NoHttpCache()
   @CacheTTL(0)
   async list(@Req() req: RequestWithUser, @Query() q: QueryClassSectionsDto) {
     const ctx = await this.orgContext.get(req);

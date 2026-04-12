@@ -135,6 +135,7 @@ export async function createApp(): Promise<INestApplication> {
     options.logger = false;
   }
   const app = await NestFactory.create(AppModule, options);
+  app.getHttpAdapter().getInstance().set('etag', false);
   app.use(cookieParser());
 
   // Request correlation id (generate if missing; log on errors)

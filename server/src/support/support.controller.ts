@@ -56,7 +56,7 @@ export class SupportController {
   @ApiOperation({ summary: 'List current user support tickets in active organization' })
   @NoHttpCache()
   @CacheTTL(0)
-  @Header('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+  @Header('Cache-Control', 'no-store, no-cache, must-revalidate, private')
   listMyTickets(@Req() req: RequestWithUser) {
     return ok(this.supportService.listMyTickets(req.user));
   }
@@ -67,7 +67,7 @@ export class SupportController {
   @ApiOperation({ summary: 'List support tickets for platform triage (READ — SUPERADMIN | DEVOPS | SUPPORT)' })
   @NoHttpCache()
   @CacheTTL(0)
-  @Header('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+  @Header('Cache-Control', 'no-store, no-cache, must-revalidate, private')
   async listTickets(
     @Req() req: RequestWithUser,
     @Query('status', new ParseEnumPipe(SupportTicketStatus, { optional: true }))

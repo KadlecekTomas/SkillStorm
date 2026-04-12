@@ -21,6 +21,7 @@ import { TeacherAccessService } from './teacher-access.service';
 import { QueryTeacherAccessDto } from './dto/query-teacher-access.dto';
 import { CreateTeacherAccessDto } from './dto/create-teacher-access.dto';
 import { UpdateTeacherAccessDto } from './dto/update-teacher-access.dto';
+import { NoHttpCache } from '@/common/cache/no-http-cache.decorator';
 
 @ApiTags('TeacherAccess')
 @ApiBearerAuth()
@@ -32,6 +33,7 @@ export class TeacherAccessController {
   @Get()
   @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'List teacher classroom access by teacher' })
+  @NoHttpCache()
   @CacheTTL(0)
   findAll(@Req() req: RequestWithUser, @Query() q: QueryTeacherAccessDto) {
     return ok(this.service.findAll(req.user, q));
