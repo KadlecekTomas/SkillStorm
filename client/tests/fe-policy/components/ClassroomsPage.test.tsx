@@ -232,6 +232,7 @@ describe("ClassroomsPageContent", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     queryClient.clear();
+    Element.prototype.scrollIntoView = vi.fn();
     searchParamsState.current = new URLSearchParams();
     academicYearsState.status = "ready";
     academicYearsState.selectedYear = { id: "year-1", name: "2024/25", isActive: true };
@@ -459,7 +460,7 @@ describe("ClassroomsPageContent", () => {
     });
 
     await waitFor(() => {
-      expect(fetchWithAuth).toHaveBeenCalledTimes(3);
+      expect(vi.mocked(fetchWithAuth).mock.calls.length).toBeGreaterThanOrEqual(4);
     });
 
     expect(showToastOnce).toHaveBeenCalledWith(
@@ -470,6 +471,185 @@ describe("ClassroomsPageContent", () => {
       "Třída vytvořena",
       expect.objectContaining({ type: "success" }),
     );
+  });
+
+  it("shows a newly created classroom in unfiltered list, filtered list, and after clearing filters", async () => {
+    const classrooms: Array<{
+      id: string;
+      grade: string;
+      section: string;
+      label: string;
+      enrollments: Array<unknown>;
+      teacher: { membership: { user: { name: string } } };
+    }> = [];
+
+    vi.mocked(fetchWithAuth).mockImplementation(async (method, url, config) => {
+      if (method === "GET" && url === "/classrooms") {
+        const grade = typeof config?.query?.grade === "string" ? config.query.grade : undefined;
+        return {
+          data: grade ? classrooms.filter((cls) => cls.grade === grade) : [...classrooms],
+          meta: {
+            limit: 20,
+            hasNextPage: false,
+            hasPrevPage: false,
+            nextCursor: null,
+            prevCursor: null,
+          },
+        };
+      }
+
+      if (method === "POST" && url === "/classrooms") {
+        const created = {
+          id: "class-new",
+          grade: "GRADE_5",
+          section: "A",
+          label: "5.A",
+          enrollments: [],
+          teacher: { membership: { user: { name: "Učitel A" } } },
+        };
+        classrooms.push(created);
+        return {
+          id: created.id,
+          yearId: "year-1",
+          grade: created.grade,
+          section: created.section,
+          label: created.label,
+        };
+      }
+
+      return [];
+    });
+
+    const { rerender } = await renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("0 tříd")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId("create-classroom-btn"));
+    fireEvent.change(screen.getByPlaceholderText("A"), {
+      target: { value: "A" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^vytvořit$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("classroom-item-class-new")).toBeInTheDocument();
+    });
+
+    searchParamsState.current = new URLSearchParams("year=year-1&grade=GRADE_5");
+    const { ClassroomsPageContent } = await import("@/components/pages/classrooms/classrooms-page");
+    rerender(<ClassroomsPageContent />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("classroom-item-class-new")).toBeInTheDocument();
+      expect(fetchWithAuth).toHaveBeenLastCalledWith(
+        "GET",
+        "/classrooms",
+        expect.objectContaining({
+          query: expect.objectContaining({ yearId: "year-1", grade: "GRADE_5" }),
+        }),
+      );
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /vyčistit filtry/i }));
+    rerender(<ClassroomsPageContent />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("classroom-item-class-new")).toBeInTheDocument();
+    });
+  });
+
+  it("omits empty grade params from unfiltered classroom requests", async () => {
+    searchParamsState.current = new URLSearchParams("year=year-1&grade=");
+
+    vi.mocked(fetchWithAuth).mockImplementation(async (method, url, config) => {
+      if (method === "GET" && url === "/classrooms") {
+        expect(config?.query).toEqual(
+          expect.objectContaining({
+            yearId: "year-1",
+            limit: 20,
+          }),
+        );
+        expect(config?.query).not.toHaveProperty("grade");
+        return {
+          data: [
+            {
+              id: "class-1",
+              grade: "GRADE_5",
+              section: "A",
+              label: "5.A",
+              enrollments: [],
+              teacher: { membership: { user: { name: "Učitel A" } } },
+            },
+          ],
+        };
+      }
+      return [];
+    });
+
+    await renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("classroom-item-class-1")).toBeInTheDocument();
+    });
+  });
+
+  it("invalidates and refetches classrooms after create", async () => {
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+    let listReads = 0;
+    const classrooms: Array<{
+      id: string;
+      grade: string;
+      section: string;
+      label: string;
+      enrollments: Array<unknown>;
+      teacher: { membership: { user: { name: string } } };
+    }> = [];
+
+    vi.mocked(fetchWithAuth).mockImplementation(async (method, url) => {
+      if (method === "GET" && url === "/classrooms") {
+        listReads += 1;
+        return { data: [...classrooms] };
+      }
+
+      if (method === "POST" && url === "/classrooms") {
+        classrooms.push({
+          id: "class-new",
+          grade: "GRADE_5",
+          section: "A",
+          label: "5.A",
+          enrollments: [],
+          teacher: { membership: { user: { name: "Učitel A" } } },
+        });
+        return {
+          id: "class-new",
+          yearId: "year-1",
+          grade: "GRADE_5",
+          section: "A",
+          label: "5.A",
+        };
+      }
+
+      return [];
+    });
+
+    await renderPage();
+
+    await waitFor(() => {
+      expect(listReads).toBe(1);
+    });
+
+    fireEvent.click(screen.getByTestId("create-classroom-btn"));
+    fireEvent.change(screen.getByPlaceholderText("A"), {
+      target: { value: "A" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^vytvořit$/i }));
+
+    await waitFor(() => {
+      expect(invalidateSpy).toHaveBeenCalledWith(["classrooms"]);
+      expect(listReads).toBeGreaterThanOrEqual(2);
+      expect(screen.getByTestId("classroom-item-class-new")).toBeInTheDocument();
+    });
   });
 
   it("renders fallback text and keeps valid rows visible when classrooms API returns malformed row fields", async () => {

@@ -3,6 +3,7 @@
 import { useCallback, useMemo } from "react";
 import { fetchWithAuth } from "@/lib/http/client";
 import { useQuery } from "@/lib/query-client";
+import { normalizeClassroomsFilters } from "@/lib/classrooms/list-filters";
 
 export type ClassroomListItem = {
   id: string;
@@ -100,22 +101,37 @@ export const useClassrooms = ({
     orgStatus === "ACTIVE" &&
     orgReadiness === "NOT_READY" &&
     !isRepairState(bootstrap);
-  const defaultMeta = useMemo(() => buildDefaultMeta(limit), [limit]);
+  const normalizedFilters = useMemo(
+    () =>
+      normalizeClassroomsFilters({
+        selectedYearId,
+        grade,
+        search,
+        teacherId,
+        cursor,
+        direction,
+        limit,
+      }),
+    [selectedYearId, grade, search, teacherId, cursor, direction, limit],
+  );
+  const defaultMeta = useMemo(
+    () => buildDefaultMeta(normalizedFilters.limit),
+    [normalizedFilters.limit],
+  );
 
-  const effectiveDirection = cursor ? direction ?? "next" : "next";
   const queryKey = useMemo(
     () =>
       [
         "classrooms",
-        selectedYearId,
-        grade ?? null,
-        search ?? null,
-        teacherId ?? null,
-        cursor,
-        effectiveDirection,
-        limit,
+        normalizedFilters.selectedYearId,
+        normalizedFilters.grade,
+        normalizedFilters.search,
+        normalizedFilters.teacherId,
+        normalizedFilters.cursor,
+        normalizedFilters.direction,
+        normalizedFilters.limit,
       ] as const,
-    [selectedYearId, grade, search, teacherId, cursor, effectiveDirection, limit],
+    [normalizedFilters],
   );
 
   const query = useQuery<FetchResult>({
@@ -123,8 +139,8 @@ export const useClassrooms = ({
     enabled:
       !isAuthLoading &&
       isAuthenticated &&
-      !(isInitOrg && !selectedYearId) &&
-      !!selectedYearId,
+      !(isInitOrg && !normalizedFilters.selectedYearId) &&
+      !!normalizedFilters.selectedYearId,
     staleTime: 10_000,
     queryFn: async () => {
       const response = await fetchWithAuth<
@@ -132,12 +148,17 @@ export const useClassrooms = ({
         | ClassroomListItem[]
       >("GET", "/classrooms", {
         query: {
-          yearId: selectedYearId ?? undefined,
-          limit,
-          ...(cursor ? { cursor, direction: effectiveDirection } : {}),
-          ...(grade ? { grade } : {}),
-          ...(search ? { search } : {}),
-          ...(teacherId ? { teacherId } : {}),
+          yearId: normalizedFilters.selectedYearId ?? undefined,
+          limit: normalizedFilters.limit,
+          ...(normalizedFilters.cursor
+            ? {
+                cursor: normalizedFilters.cursor,
+                direction: normalizedFilters.direction,
+              }
+            : {}),
+          ...(normalizedFilters.grade ? { grade: normalizedFilters.grade } : {}),
+          ...(normalizedFilters.search ? { search: normalizedFilters.search } : {}),
+          ...(normalizedFilters.teacherId ? { teacherId: normalizedFilters.teacherId } : {}),
         },
       });
 
@@ -154,20 +175,20 @@ export const useClassrooms = ({
   const refetch = useCallback(async (options?: { bypassCache?: boolean; skipFetch?: boolean }) => {
     if (options?.skipFetch) return true;
     if (isAuthLoading || !isAuthenticated) return false;
-    if (isInitOrg && !selectedYearId) return false;
-    if (!selectedYearId) return false;
+    if (isInitOrg && !normalizedFilters.selectedYearId) return false;
+    if (!normalizedFilters.selectedYearId) return false;
     return !!(await queryRefetch());
-  }, [isAuthLoading, isAuthenticated, isInitOrg, selectedYearId, queryRefetch]);
+  }, [isAuthLoading, isAuthenticated, isInitOrg, normalizedFilters.selectedYearId, queryRefetch]);
 
   if (isAuthLoading || !isAuthenticated) {
     return { status: "AUTH_LOADING", refetch };
   }
 
-  if (isInitOrg && !selectedYearId) {
+  if (isInitOrg && !normalizedFilters.selectedYearId) {
     return { status: "INIT_ORG", refetch };
   }
 
-  if (!selectedYearId) {
+  if (!normalizedFilters.selectedYearId) {
     return {
       status: "READY_EMPTY",
       classrooms: EMPTY_CLASSROOMS,

@@ -33,6 +33,10 @@ import { ReportIssueButton } from "@/components/support/report-issue-button";
 import { ArrowUp, ArrowDown, ChevronDown, ChevronRight, Minus, Star } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { queryClient } from "@/lib/query-client";
+import {
+  normalizeClassroomsFilters,
+  normalizeClassroomsQueryParam,
+} from "@/lib/classrooms/list-filters";
 
 function getApiErrorMessage(err: unknown): string {
   if (err instanceof HttpError) {
@@ -158,13 +162,28 @@ export function ClassroomsPageContent(): React.JSX.Element {
   const allowedLimits = useMemo(() => new Set([5, 10, 20, 50]), []);
   const yearIds = useMemo(() => new Set(toSafeArray(years).map((year) => year.id)), [years]);
   const parsedLimit = parsePositiveInt(rawLimit);
-  const cursor = rawCursor && rawCursor.trim().length > 0 ? rawCursor.trim() : null;
-  const direction = rawDirection === "prev" ? "prev" : "next";
+  const normalizedRawYear = normalizeClassroomsQueryParam(rawYear);
+  const normalizedSearch = normalizeClassroomsQueryParam(rawSearch);
+  const normalizedFilters = useMemo(
+    () =>
+      normalizeClassroomsFilters({
+        selectedYearId: normalizedRawYear,
+        grade: rawGrade,
+        search: normalizedSearch,
+        teacherId: rawTeacher,
+        cursor: rawCursor,
+        direction: rawDirection === "prev" ? "prev" : "next",
+        limit: parsedLimit && allowedLimits.has(parsedLimit) ? parsedLimit : 20,
+      }),
+    [allowedLimits, normalizedRawYear, normalizedSearch, parsedLimit, rawCursor, rawDirection, rawGrade, rawTeacher],
+  );
+  const cursor = normalizedFilters.cursor;
+  const direction = normalizedFilters.direction;
   const limit = parsedLimit && allowedLimits.has(parsedLimit) ? parsedLimit : 20;
-  const yearFilterId = rawYear ? (yearIds.has(rawYear) ? rawYear : null) : currentYearId ?? null;
-  const gradeFilter = rawGrade && rawGrade !== "ALL" ? rawGrade : null;
-  const teacherFilter = rawTeacher && rawTeacher !== "ALL" ? rawTeacher : null;
-  const searchTerm = rawSearch.trim();
+  const yearFilterId = normalizedRawYear ? (yearIds.has(normalizedRawYear) ? normalizedRawYear : null) : currentYearId ?? null;
+  const gradeFilter = normalizedFilters.grade;
+  const teacherFilter = normalizedFilters.teacherId;
+  const searchTerm = normalizedFilters.search ?? "";
   const { can } = usePermissions();
   const canManageClasses = can(PermissionKey.MANAGE_TEACHERS);
   const canManageEnrollments = can(PermissionKey.MANAGE_STUDENTS);
@@ -290,11 +309,24 @@ export function ClassroomsPageContent(): React.JSX.Element {
       updates.dir = null;
     }
 
-    if (!rawYear && currentYearId) {
+    if (rawGrade !== null && gradeFilter === null) {
+      updates.grade = null;
+    }
+    if (rawTeacher !== null && teacherFilter === null) {
+      updates.teacher = null;
+    }
+    if (rawSearch !== searchTerm) {
+      updates.search = searchTerm || null;
+    }
+    if (rawCursor !== null && cursor === null) {
+      updates.cursor = null;
+    }
+
+    if (!normalizedRawYear && currentYearId) {
       updates.year = currentYearId;
     }
 
-    if (rawYear && years.length > 0 && !yearIds.has(rawYear)) {
+    if (normalizedRawYear && years.length > 0 && !yearIds.has(normalizedRawYear)) {
       updates.year = currentYearId ?? null;
       updates.cursor = null;
       updates.dir = null;
@@ -307,11 +339,19 @@ export function ClassroomsPageContent(): React.JSX.Element {
   }, [
     rawLimit,
     rawYear,
+    normalizedRawYear,
+    rawGrade,
+    rawTeacher,
+    rawSearch,
+    rawCursor,
     parsedLimit,
     allowedLimits,
     rawDirection,
     cursor,
     limit,
+    gradeFilter,
+    teacherFilter,
+    searchTerm,
     currentYearId,
     years,
     yearIds,
@@ -636,6 +676,7 @@ export function ClassroomsPageContent(): React.JSX.Element {
       const hiddenByFilters = !matchesFilters;
 
       await invalidateConsistencyQueries(created.id);
+      await refetchClassrooms({ bypassCache: true });
       
       setSearchInput("");
       updateQuery({
