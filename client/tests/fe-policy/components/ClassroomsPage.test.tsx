@@ -434,6 +434,11 @@ describe("ClassroomsPageContent", () => {
         }),
       );
     });
+    const syncCallsBeforeCreate = syncProfileMock.mock.calls.length;
+
+    await waitFor(() => {
+      expect(screen.getByTestId("create-classroom-btn")).toBeInTheDocument();
+    });
 
     fireEvent.click(screen.getByTestId("create-classroom-btn"));
     fireEvent.change(screen.getByPlaceholderText("A"), {
@@ -455,13 +460,10 @@ describe("ClassroomsPageContent", () => {
       );
     });
 
-    await waitFor(() => {
-      expect(syncProfileMock).toHaveBeenCalledWith({ force: true });
-    });
-
-    await waitFor(() => {
-      expect(vi.mocked(fetchWithAuth).mock.calls.length).toBeGreaterThanOrEqual(4);
-    });
+    expect(syncProfileMock.mock.calls.length).toBe(syncCallsBeforeCreate);
+    expect(searchParamsState.current.get("teacher")).toBe("teacher-1");
+    expect(searchParamsState.current.get("search")).toBeNull();
+    expect(searchParamsState.current.get("grade")).toBeNull();
 
     expect(showToastOnce).toHaveBeenCalledWith(
       "Třída byla vytvořena, ale aktuální filtry ji skrývají.",
@@ -646,10 +648,93 @@ describe("ClassroomsPageContent", () => {
     fireEvent.click(screen.getByRole("button", { name: /^vytvořit$/i }));
 
     await waitFor(() => {
-      expect(invalidateSpy).toHaveBeenCalledWith(["classrooms"]);
-      expect(listReads).toBeGreaterThanOrEqual(2);
+      expect(invalidateSpy).toHaveBeenCalledWith(
+        ["classrooms"],
+        expect.objectContaining({
+          exclude: expect.any(Array),
+          notify: false,
+        }),
+      );
+      expect(listReads).toBe(2);
       expect(screen.getByTestId("classroom-item-class-new")).toBeInTheDocument();
     });
+  });
+
+  it("creates a classroom without reloading auth/bootstrap state and keeps filters selected", async () => {
+    searchParamsState.current = new URLSearchParams("year=year-1&grade=GRADE_5");
+    let listReads = 0;
+    const classrooms = [
+      {
+        id: "class-1",
+        grade: "GRADE_5",
+        section: "A",
+        label: "5.A",
+        enrollments: [],
+        teacher: { membership: { user: { name: "Učitel A" } } },
+      },
+    ];
+
+    vi.mocked(fetchWithAuth).mockImplementation(async (method, url, config) => {
+      if (method === "GET" && url === "/classrooms") {
+        listReads += 1;
+        const grade = typeof config?.query?.grade === "string" ? config.query.grade : null;
+        return {
+          data: grade ? classrooms.filter((cls) => cls.grade === grade) : classrooms,
+          meta: {
+            limit: 20,
+            hasNextPage: false,
+            hasPrevPage: false,
+            nextCursor: null,
+            prevCursor: null,
+          },
+        };
+      }
+
+      if (method === "POST" && url === "/classrooms") {
+        const created = {
+          id: "class-new",
+          grade: "GRADE_5",
+          section: "B",
+          label: "5.B",
+          enrollments: [],
+          teacher: { membership: { user: { name: "Učitel B" } } },
+        };
+        classrooms.push(created);
+        return {
+          id: created.id,
+          yearId: "year-1",
+          grade: created.grade,
+          section: created.section,
+          label: created.label,
+        };
+      }
+
+      throw new Error(`Unexpected request: ${method} ${url}`);
+    });
+
+    await renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("classroom-item-class-1")).toBeInTheDocument();
+    });
+    const syncCallsBeforeCreate = syncProfileMock.mock.calls.length;
+
+    fireEvent.click(screen.getByTestId("create-classroom-btn"));
+    fireEvent.change(screen.getByPlaceholderText("A"), {
+      target: { value: "B" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^vytvořit$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("classroom-item-class-new")).toBeInTheDocument();
+    });
+
+    expect(syncProfileMock.mock.calls.length).toBe(syncCallsBeforeCreate);
+    expect(academicYearsState.refresh).not.toHaveBeenCalled();
+    expect(listReads).toBe(2);
+    expect(searchParamsState.current.get("grade")).toBe("GRADE_5");
+    expect(searchParamsState.current.get("highlight")).toBe("class-new");
+    expect(replaceMock).not.toHaveBeenCalledWith("/app/classrooms");
   });
 
   it("renders fallback text and keeps valid rows visible when classrooms API returns malformed row fields", async () => {

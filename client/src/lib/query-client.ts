@@ -92,14 +92,43 @@ export const queryClient = {
     return entry.promise;
   },
 
-  invalidateQueries(prefix: QueryKey) {
+  invalidateQueries(
+    prefix: QueryKey,
+    options?: { exclude?: QueryKey[]; notify?: boolean },
+  ) {
+    const excluded = new Set(
+      (options?.exclude ?? []).map((queryKey) => serializeKey(queryKey)),
+    );
     for (const [serializedKey, entry] of queryEntries.entries()) {
+      if (excluded.has(serializedKey)) continue;
       const queryKey = JSON.parse(serializedKey) as QueryKey;
       if (!matchesPrefix(queryKey, prefix)) continue;
       entry.updatedAt = 0;
       entry.promise = null;
-      notify(queryKey);
+      if (options?.notify !== false) {
+        notify(queryKey);
+      }
     }
+  },
+
+  setQueryData<T>(
+    queryKey: QueryKey,
+    updater: T | ((current: T | undefined) => T | undefined),
+  ) {
+    const entry = ensureEntry<T>(queryKey);
+    const nextValue =
+      typeof updater === "function"
+        ? (updater as (current: T | undefined) => T | undefined)(entry.data)
+        : updater;
+    if (nextValue === undefined) {
+      delete entry.data;
+    } else {
+      entry.data = nextValue;
+    }
+    entry.error = undefined;
+    entry.updatedAt = nextValue === undefined ? 0 : Date.now();
+    entry.promise = null;
+    notify(queryKey);
   },
 
   subscribe(queryKey: QueryKey, listener: () => void) {

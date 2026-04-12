@@ -33,9 +33,11 @@ import { ReportIssueButton } from "@/components/support/report-issue-button";
 import { ArrowUp, ArrowDown, ChevronDown, ChevronRight, Minus, Star } from "lucide-react";
 import { cn } from "@/utils/cn";
 import {
+  buildListQueryKey,
   normalizeListFilters,
   refreshListAfterMutation,
 } from "@/lib/list-query";
+import { queryClient } from "@/lib/query-client";
 
 function getApiErrorMessage(err: unknown): string {
   if (err instanceof HttpError) {
@@ -377,6 +379,19 @@ export function ClassroomsPageContent(): React.JSX.Element {
     limit,
   });
   const refetchClassrooms = classroomsState.refetch;
+  const currentClassroomsQueryKey = useMemo(
+    () =>
+      buildListQueryKey("classrooms", {
+        selectedYearId: effectiveYearFilterId,
+        grade: gradeFilter,
+        search: searchTerm,
+        teacherId: teacherFilter,
+        cursor,
+        direction,
+        limit,
+      }),
+    [cursor, direction, effectiveYearFilterId, gradeFilter, limit, searchTerm, teacherFilter],
+  );
   const classrooms = useMemo(
     () =>
       classroomsState.status === "READY_EMPTY" || classroomsState.status === "READY_WITH_DATA"
@@ -613,6 +628,40 @@ export function ClassroomsPageContent(): React.JSX.Element {
     refetchSubjectPerformance,
   ]);
 
+  const refreshAfterClassroomCreate = useCallback(
+    async (args: {
+      createdId: string;
+      yearId: string;
+      visibleInCurrentList: boolean;
+    }) => {
+      queryClient.invalidateQueries(["classrooms"], {
+        exclude: [currentClassroomsQueryKey],
+        notify: false,
+      });
+
+      if (!args.visibleInCurrentList) {
+        return;
+      }
+
+      if (cursor) {
+        updateQuery({
+          cursor: null,
+          dir: null,
+          highlight: args.createdId,
+          year: args.yearId,
+        });
+        return;
+      }
+
+      await refetchClassrooms({ bypassCache: true });
+      updateQuery({
+        highlight: args.createdId,
+        year: args.yearId,
+      });
+    },
+    [cursor, currentClassroomsQueryKey, refetchClassrooms, updateQuery],
+  );
+
   const handleSetHomeroom = async (classSectionId: string, teacherId: string | null) => {
     if (homeroomSaving) return;
     setHomeroomSaving(true);
@@ -673,7 +722,6 @@ export function ClassroomsPageContent(): React.JSX.Element {
         setCreateSubmitting(false);
         return;
       }
-      await syncProfile({ force: true });
       const resolvedLabel =
         (created.label ?? `${gradeLabel(created.grade)}.${created.section ?? ""}`).toLowerCase();
       const matchesFilters =
@@ -683,18 +731,17 @@ export function ClassroomsPageContent(): React.JSX.Element {
         (!searchTerm || resolvedLabel.includes(searchTerm.toLowerCase()));
       const hiddenByFilters = !matchesFilters;
 
-      await invalidateConsistencyQueries(created.id);
-      await refetchClassrooms({ bypassCache: true });
-      
-      setSearchInput("");
-      updateQuery({
-        search: null,
-        grade: null,
-        teacher: null,
-        cursor: null,
-        dir: null,
-        highlight: created.id,
-        year: yearId
+      setCreateOpen(false);
+      setCreateForm((current) => ({ grade: current.grade, section: "", label: "" }));
+
+      if (org?.readiness === "NOT_READY" || org?.bootstrap?.hasClassrooms === false) {
+        await syncProfile({ force: true });
+      }
+
+      await refreshAfterClassroomCreate({
+        createdId: created.id,
+        yearId,
+        visibleInCurrentList: matchesFilters,
       });
 
       if (hiddenByFilters) {
@@ -704,8 +751,6 @@ export function ClassroomsPageContent(): React.JSX.Element {
       }
 
       showToastOnce("Třída vytvořena", { type: "success" });
-      setCreateOpen(false);
-      setCreateForm({ grade: createForm.grade, section: "", label: "" });
     } catch (err) {
       if (isNoCurrentAcademicYear(err)) {
         setCreateOpen(false);
