@@ -96,6 +96,19 @@ export class ClassSectionsService {
     };
   }
 
+  private activeEnrollmentCondition(yearId: string): Prisma.EnrollmentWhereInput {
+    return {
+      yearId,
+      status: { not: EnrollmentStatus.LEFT },
+      student: {
+        deletedAt: null,
+        membership: {
+          deletedAt: null,
+        },
+      },
+    };
+  }
+
   private async getCurrentAcademicYear(orgId: string) {
     const current = await this.prisma.academicYear.findFirst({
       where: { orgId, isCurrent: true },
@@ -481,9 +494,8 @@ export class ClassSectionsService {
       }
       where.enrollments = {
         some: {
+          ...this.activeEnrollmentCondition(resolvedYear.id),
           studentId: student.id,
-          yearId: resolvedYear.id,
-          status: { not: EnrollmentStatus.LEFT },
         },
       };
     } else if (q.teacherId) {
@@ -592,9 +604,7 @@ export class ClassSectionsService {
           },
           _count: {
             select: {
-              enrollments: {
-                where: { status: { not: EnrollmentStatus.LEFT } },
-              },
+              enrollments: { where: this.activeEnrollmentCondition(resolvedYear.id) },
             },
           },
           academicYear: { select: { id: true, label: true, isCurrent: true } },
@@ -668,6 +678,12 @@ export class ClassSectionsService {
   // DETAIL
   // -------------------------
   async findOne(id: string, user: JwtPayload) {
+    const classSectionMeta = await this.prisma.classSection.findUnique({
+      where: { id },
+      select: { yearId: true },
+    });
+    if (!classSectionMeta) throw new NotFoundException('Třída nebyla nalezena');
+
     const classSection = await this.prisma.classSection.findUnique({
       where: { id },
       include: {
@@ -679,7 +695,11 @@ export class ClassSectionsService {
           },
         },
         enrollments: {
-          where: { status: { not: EnrollmentStatus.LEFT } },
+          where: this.activeEnrollmentCondition(classSectionMeta.yearId),
+          orderBy: [
+            { student: { membership: { user: { name: 'asc' } } } },
+            { id: 'asc' },
+          ],
           include: {
             student: {
               include: {
@@ -743,7 +763,7 @@ export class ClassSectionsService {
           : null;
         const isEnrolled = student
           ? classSection.enrollments.some(
-              (enrollment) => enrollment.studentId === student.id,
+              (enrollment: { studentId: string }) => enrollment.studentId === student.id,
             )
           : false;
         if (!isEnrolled) {

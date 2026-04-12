@@ -119,6 +119,7 @@ export class ClassroomsController {
   @Get(':id')
   @Permission(PermissionKey.MANAGE_STUDENTS, PermissionKey.VIEW_RESULTS)
   @CacheTTL(0)
+  @NoHttpCache()
   @ApiOperation({ summary: 'Classroom detail' })
   detail(
     @Param('id', new ParseUUIDPipe()) id: string,
