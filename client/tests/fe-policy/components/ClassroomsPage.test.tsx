@@ -470,7 +470,6 @@ describe("ClassroomsPageContent", () => {
       "Třída vytvořena",
       expect.objectContaining({ type: "success" }),
     );
-    expect(replaceMock).not.toHaveBeenCalledWith(expect.stringContaining("highlight=class-new"));
   });
 
   it("renders fallback text and keeps valid rows visible when classrooms API returns malformed row fields", async () => {

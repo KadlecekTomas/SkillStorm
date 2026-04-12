@@ -17,6 +17,7 @@ export interface AuditEventInput {
   /** Caller's systemRole at time of action — stored for compliance attribution. */
   systemRole?: string | null;
   metadata?: Prisma.InputJsonValue;
+  changedFields?: Prisma.InputJsonValue;
   ipAddress?: string | null;
   userAgent?: string | null;
 }
@@ -81,6 +82,15 @@ export class AuditService {
       const sanitizedMetadata = sanitizeAuditMetadata(event.metadata ?? null);
       if (sanitizedMetadata !== null && sanitizedMetadata !== undefined) {
         data.metadata = sanitizedMetadata as Prisma.InputJsonValue;
+      }
+      const sanitizedChangedFields = sanitizeAuditMetadata(
+        event.changedFields ?? null,
+      );
+      if (
+        sanitizedChangedFields !== null &&
+        sanitizedChangedFields !== undefined
+      ) {
+        data.changedFields = sanitizedChangedFields as Prisma.InputJsonValue;
       }
       await this.prisma.auditLog.create({ data });
     } catch (error) {

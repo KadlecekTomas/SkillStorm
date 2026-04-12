@@ -198,7 +198,6 @@ export function ClassroomsPageContent(): React.JSX.Element {
   const [createSubmitting, setCreateSubmitting] = useState(false);
   const [createYearSubmitting, setCreateYearSubmitting] = useState(false);
   const [createYearError, setCreateYearError] = useState<string | null>(null);
-  const [pendingCreatedHighlightId, setPendingCreatedHighlightId] = useState<string | null>(null);
 
   const [addOpen, setAddOpen] = useState(false);
   const [addMode, setAddMode] = useState<"PASTE" | "CSV" | "INVITE" | "EXISTING">("EXISTING");
@@ -229,7 +228,7 @@ export function ClassroomsPageContent(): React.JSX.Element {
     loading: teachersLoading,
     error: teachersError,
   } = useTeachers({
-    enabled: optionalDataEnabled,
+    enabled: optionalDataEnabled && canManageClasses,
     softFail: true,
     warningContext: "classrooms",
   });
@@ -403,35 +402,19 @@ export function ClassroomsPageContent(): React.JSX.Element {
   }, [isStalePagePosition, updateQuery]);
 
   useEffect(() => {
-    if (!highlightId) {
-      if (pendingCreatedHighlightId) {
-        setPendingCreatedHighlightId(null);
+    if (!highlightId) return;
+
+    if (classroomsState.status === "FETCHING" || classroomsState.status === "AUTH_LOADING") {
+      return;
+    }
+
+    if (classroomsState.status === "READY_WITH_DATA" || classroomsState.status === "READY_EMPTY") {
+      const exists = classrooms.some((item) => item.id === highlightId);
+      if (!exists) {
+        updateQuery({ highlight: null });
       }
-      return;
     }
-    if (classroomsState.status === "FETCHING") {
-      return;
-    }
-    if (classroomsState.status !== "READY_EMPTY" && classroomsState.status !== "READY_WITH_DATA") {
-      return;
-    }
-
-    const exists = classrooms.some((item) => item.id === highlightId);
-    if (exists) {
-      if (pendingCreatedHighlightId === highlightId) {
-        setPendingCreatedHighlightId(null);
-      }
-      return;
-    }
-
-    if (pendingCreatedHighlightId === highlightId) {
-      return;
-    }
-
-    if (!exists) {
-      updateQuery({ highlight: null });
-    }
-  }, [classrooms, highlightId, classroomsState.status, updateQuery, pendingCreatedHighlightId]);
+  }, [classrooms, highlightId, classroomsState.status, updateQuery]);
 
   useEffect(() => {
     if (highlightId && highlightedCardRef.current) {
@@ -652,22 +635,18 @@ export function ClassroomsPageContent(): React.JSX.Element {
         (!searchTerm || resolvedLabel.includes(searchTerm.toLowerCase()));
       const hiddenByFilters = !matchesFilters;
 
-  await invalidateConsistencyQueries(created.id);
-      if (matchesFilters) {
-        setPendingCreatedHighlightId(created.id);
-      } else {
-        setPendingCreatedHighlightId(null);
-      }
-
-      if (cursor) {
-        if (matchesFilters) {
-          updateQuery({ cursor: null, dir: null, highlight: created.id });
-        } else {
-          updateQuery({ cursor: null, dir: null, highlight: null });
-        }
-      } else if (matchesFilters) {
-        updateQuery({ highlight: created.id });
-      }
+      await invalidateConsistencyQueries(created.id);
+      
+      setSearchInput("");
+      updateQuery({
+        search: null,
+        grade: null,
+        teacher: null,
+        cursor: null,
+        dir: null,
+        highlight: created.id,
+        year: yearId
+      });
 
       if (hiddenByFilters) {
         showToastOnce("Třída byla vytvořena, ale aktuální filtry ji skrývají.", {
@@ -1174,7 +1153,7 @@ export function ClassroomsPageContent(): React.JSX.Element {
 
       {years.length > 0 && (
         <Card className="border-slate-200 p-4">
-          <div className="grid gap-3 md:grid-cols-5">
+          <div className={`grid gap-3 ${isTeacherView ? "md:grid-cols-1" : "md:grid-cols-5"}`}>
             <label className="space-y-1 text-sm text-slate-600">
               Školní rok
               {isTeacherView ? (
@@ -1204,108 +1183,112 @@ export function ClassroomsPageContent(): React.JSX.Element {
                 </Select>
               )}
             </label>
-            <label className="space-y-1 text-sm text-slate-600">
-              Ročník
-              <Select
-                value={gradeFilter ?? "ALL"}
-                onValueChange={(value) =>
-                  updateQuery({
-                    grade: value === "ALL" ? null : value,
-                    cursor: null,
-                    dir: null,
-                    highlight: null,
-                  })
-                }
-                disabled={!hasYear}
-              >
-                <SelectTrigger className="rounded-2xl">
-                  <SelectValue placeholder="Všechny" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ALL">Všechny ročníky</SelectItem>
-                  {GRADE_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </label>
-            <label className="space-y-1 text-sm text-slate-600">
-              Učitel
-              <Select
-                value={teacherFilter ?? "ALL"}
-                onValueChange={(value) =>
-                  updateQuery({
-                    teacher: value === "ALL" ? null : value,
-                    cursor: null,
-                    dir: null,
-                    highlight: null,
-                  })
-                }
-                disabled={teacherFilterDisabled}
-              >
-                <SelectTrigger className="rounded-2xl">
-                  <SelectValue placeholder={teachersUnavailable ? "Učitelé nejsou k dispozici" : "Všichni učitelé"} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ALL">Všichni učitelé</SelectItem>
-                  {teacherOptions.map((teacher) => (
-                    <SelectItem key={teacher.id} value={teacher.id}>
-                      {teacher.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </label>
-            <label className="space-y-1 text-sm text-slate-600">
-              Hledat
-              <Input
-                value={searchInput}
-                onChange={(event) => setSearchInput(event.target.value)}
-                placeholder="5.A, 6.B..."
-                disabled={!hasYear}
-              />
-            </label>
             {!isTeacherView && (
-              <label className="space-y-1 text-sm text-slate-600">
-                Počet na stránku
-                <Select
-                  value={String(limit)}
-                  onValueChange={(value) =>
-                    updateQuery({ limit: value, cursor: null, dir: null, highlight: null })
-                  }
-                  disabled={!hasYear}
-                >
-                  <SelectTrigger className="rounded-2xl">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {[5, 10, 20, 50].map((size) => (
-                      <SelectItem key={size} value={String(size)}>
-                        {size}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </label>
+              <>
+                <label className="space-y-1 text-sm text-slate-600">
+                  Ročník
+                  <Select
+                    value={gradeFilter ?? "ALL"}
+                    onValueChange={(value) =>
+                      updateQuery({
+                        grade: value === "ALL" ? null : value,
+                        cursor: null,
+                        dir: null,
+                        highlight: null,
+                      })
+                    }
+                    disabled={!hasYear}
+                  >
+                    <SelectTrigger className="rounded-2xl">
+                      <SelectValue placeholder="Všechny" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ALL">Všechny ročníky</SelectItem>
+                      {GRADE_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </label>
+                <label className="space-y-1 text-sm text-slate-600">
+                  Učitel
+                  <Select
+                    value={teacherFilter ?? "ALL"}
+                    onValueChange={(value) =>
+                      updateQuery({
+                        teacher: value === "ALL" ? null : value,
+                        cursor: null,
+                        dir: null,
+                        highlight: null,
+                      })
+                    }
+                    disabled={teacherFilterDisabled}
+                  >
+                    <SelectTrigger className="rounded-2xl">
+                      <SelectValue placeholder={teachersUnavailable ? "Učitelé nejsou k dispozici" : "Všichni učitelé"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ALL">Všichni učitelé</SelectItem>
+                      {teacherOptions.map((teacher) => (
+                        <SelectItem key={teacher.id} value={teacher.id}>
+                          {teacher.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </label>
+                <label className="space-y-1 text-sm text-slate-600">
+                  Hledat
+                  <Input
+                    value={searchInput}
+                    onChange={(event) => setSearchInput(event.target.value)}
+                    placeholder="5.A, 6.B..."
+                    disabled={!hasYear}
+                  />
+                </label>
+                <label className="space-y-1 text-sm text-slate-600">
+                  Počet na stránku
+                  <Select
+                    value={String(limit)}
+                    onValueChange={(value) =>
+                      updateQuery({ limit: value, cursor: null, dir: null, highlight: null })
+                    }
+                    disabled={!hasYear}
+                  >
+                    <SelectTrigger className="rounded-2xl">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[5, 10, 20, 50].map((size) => (
+                        <SelectItem key={size} value={String(size)}>
+                          {size}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </label>
+              </>
             )}
           </div>
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm text-slate-500">
-            <span>
-              {isStalePagePosition
-                ? "Obnovuji seznam tříd…"
-                : summary.length === 0
-                  ? "0 tříd"
-                  : `Zobrazuji až ${meta.limit} tříd`}
-              {meta.hasNextPage ? " · další stránka je k dispozici" : ""}
-            </span>
-            {hasDatasetFilters && (
-              <Button variant="outline" size="sm" onClick={handleClearFilters}>
-                Vyčistit filtry
-              </Button>
-            )}
-          </div>
+          {!isTeacherView && (
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm text-slate-500">
+              <span>
+                {isStalePagePosition
+                  ? "Obnovuji seznam tříd…"
+                  : summary.length === 0
+                    ? "0 tříd"
+                    : `Zobrazuji až ${meta.limit} tříd`}
+                {meta.hasNextPage ? " · další stránka je k dispozici" : ""}
+              </span>
+              {hasDatasetFilters && (
+                <Button variant="outline" size="sm" onClick={handleClearFilters}>
+                  Vyčistit filtry
+                </Button>
+              )}
+            </div>
+          )}
         </Card>
       )}
 

@@ -588,12 +588,18 @@ model Enrollment {
 }
 
 model CatalogSubject {
-  id       String         @id @default(uuid()) @map("catalog_subject_id")
-  code     String         @unique
-  name     String
-  topics   CatalogTopic[]
-  subjects Subject[]
+  id        String         @id @default(uuid()) @map("catalog_subject_id")
+  code      String         @unique
+  name      String
+  isActive  Boolean        @default(true) @map("is_active")
+  deletedAt DateTime?      @map("deleted_at")
+  createdAt DateTime       @default(now()) @map("created_at")
+  updatedAt DateTime       @updatedAt @map("updated_at")
+  topics    CatalogTopic[]
+  subjects  Subject[]
 
+  @@index([isActive, deletedAt])
+  @@index([name])
   @@map("catalog_subjects")
 }
 
@@ -601,10 +607,16 @@ model CatalogTopic {
   id          String         @id @default(uuid()) @map("catalog_topic_id")
   subjectId   String         @map("catalog_subject_id")
   name        String
+  order       Int?
+  isActive    Boolean        @default(true) @map("is_active")
+  deletedAt   DateTime?      @map("deleted_at")
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
   subject     CatalogSubject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
   topicLevels TopicLevel[]
 
   @@unique([subjectId, name])
+  @@index([subjectId, isActive, deletedAt, order])
   @@map("catalog_topics")
 }
 
@@ -1170,6 +1182,8 @@ enum AuditEntityType {
   PERMISSION
   STUDENT
   SUPPORT_TICKET
+  CATALOG_SUBJECT
+  CATALOG_TOPIC
 }
 
 enum SupportTicketStatus {

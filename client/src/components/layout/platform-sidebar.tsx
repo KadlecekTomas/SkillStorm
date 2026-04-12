@@ -10,6 +10,7 @@ import {
   ShieldCheck,
   LogOut,
   LifeBuoy,
+  BookCopy,
 } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { useAuth } from "@/hooks/use-auth";
@@ -36,6 +37,11 @@ export const PLATFORM_NAV_ITEMS: PlatformNavItem[] = [
     label: "Global Users",
     icon: <Users className="h-4 w-4" />,
     href: "/app/platform/users",
+  },
+  {
+    label: "Catalog",
+    icon: <BookCopy className="h-4 w-4" />,
+    href: "/app/platform/catalog",
   },
   {
     label: "Audit Logs",

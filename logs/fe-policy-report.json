@@ -3,27 +3,33 @@
     {
       "id": "login-form-validation",
       "passed": true,
-      "timestamp": "2026-04-12T12:56:27.030Z",
+      "timestamp": "2026-04-12T14:04:35.585Z",
       "description": "Login form blocks empty submission."
     },
     {
       "id": "login-form-submit",
       "passed": true,
-      "timestamp": "2026-04-12T12:56:27.056Z",
+      "timestamp": "2026-04-12T14:04:35.624Z",
       "description": "Login form triggers hook with credentials."
+    },
+    {
+      "id": "redirect-unauthenticated",
+      "passed": true,
+      "timestamp": "2026-04-12T15:50:30.541Z",
+      "description": "Unauthenticated user is redirected to login."
     }
   ],
   "RBAC": [
     {
       "id": "guard-allows-view-results",
       "passed": true,
-      "timestamp": "2026-04-12T12:56:25.269Z",
+      "timestamp": "2026-04-12T14:04:33.540Z",
       "description": "Teacher with VIEW_RESULTS can access module."
     },
     {
       "id": "guard-denies-manage-teachers",
       "passed": true,
-      "timestamp": "2026-04-12T12:56:25.291Z",
+      "timestamp": "2026-04-12T14:04:33.560Z",
       "description": "Student without MANAGE_TEACHERS is blocked."
     }
   ],
@@ -32,7 +38,7 @@
     {
       "id": "test-detail-validation",
       "passed": true,
-      "timestamp": "2026-04-12T12:56:26.625Z",
+      "timestamp": "2026-04-12T14:04:35.183Z",
       "description": "Test detail enforces validation on policy questions."
     }
   ],
@@ -40,13 +46,13 @@
     {
       "id": "submission-page-loading-state",
       "passed": true,
-      "timestamp": "2026-04-12T12:56:25.008Z",
+      "timestamp": "2026-04-12T14:04:33.108Z",
       "description": "Submission page shows loading state while fetching assignment."
     },
     {
       "id": "submission-page-error-handling",
       "passed": true,
-      "timestamp": "2026-04-12T12:56:25.046Z",
+      "timestamp": "2026-04-12T14:04:33.127Z",
       "description": "Submission page handles missing assignment gracefully."
     }
   ],
