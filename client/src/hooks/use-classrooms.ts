@@ -73,6 +73,15 @@ type FetchResult = {
   meta: ClassroomsMeta;
 };
 
+const EMPTY_CLASSROOMS: ClassroomListItem[] = [];
+const buildDefaultMeta = (limit: number): ClassroomsMeta => ({
+  limit,
+  hasNextPage: false,
+  hasPrevPage: false,
+  nextCursor: null,
+  prevCursor: null,
+});
+
 export const useClassrooms = ({
   isAuthLoading,
   isAuthenticated,
@@ -91,6 +100,7 @@ export const useClassrooms = ({
     orgStatus === "ACTIVE" &&
     orgReadiness === "NOT_READY" &&
     !isRepairState(bootstrap);
+  const defaultMeta = useMemo(() => buildDefaultMeta(limit), [limit]);
 
   const effectiveDirection = cursor ? direction ?? "next" : "next";
   const queryKey = useMemo(
@@ -131,34 +141,23 @@ export const useClassrooms = ({
         },
       });
 
-      const data = Array.isArray(response) ? response : response?.data ?? [];
+      const data = Array.isArray(response) ? response : response?.data ?? EMPTY_CLASSROOMS;
       const meta = Array.isArray(response)
-        ? {
-            limit,
-            hasNextPage: false,
-            hasPrevPage: false,
-            nextCursor: null,
-            prevCursor: null,
-          }
-        : response?.meta ?? {
-            limit,
-            hasNextPage: false,
-            hasPrevPage: false,
-            nextCursor: null,
-            prevCursor: null,
-          };
+        ? defaultMeta
+        : response?.meta ?? defaultMeta;
 
       return { data, meta };
     },
   });
+  const queryRefetch = query.refetch;
 
   const refetch = useCallback(async (options?: { bypassCache?: boolean; skipFetch?: boolean }) => {
     if (options?.skipFetch) return true;
     if (isAuthLoading || !isAuthenticated) return false;
     if (isInitOrg && !selectedYearId) return false;
     if (!selectedYearId) return false;
-    return !!(await query.refetch());
-  }, [isAuthLoading, isAuthenticated, isInitOrg, selectedYearId, query]);
+    return !!(await queryRefetch());
+  }, [isAuthLoading, isAuthenticated, isInitOrg, selectedYearId, queryRefetch]);
 
   if (isAuthLoading || !isAuthenticated) {
     return { status: "AUTH_LOADING", refetch };
@@ -171,14 +170,8 @@ export const useClassrooms = ({
   if (!selectedYearId) {
     return {
       status: "READY_EMPTY",
-      classrooms: [],
-      meta: {
-        limit,
-        hasNextPage: false,
-        hasPrevPage: false,
-        nextCursor: null,
-        prevCursor: null,
-      },
+      classrooms: EMPTY_CLASSROOMS,
+      meta: defaultMeta,
       refetch,
     };
   }
@@ -198,14 +191,8 @@ export const useClassrooms = ({
     };
   }
 
-  const classrooms = query.data?.data ?? [];
-  const meta = query.data?.meta ?? {
-    limit,
-    hasNextPage: false,
-    hasPrevPage: false,
-    nextCursor: null,
-    prevCursor: null,
-  };
+  const classrooms = query.data?.data ?? EMPTY_CLASSROOMS;
+  const meta = query.data?.meta ?? defaultMeta;
 
   return classrooms.length === 0
     ? { status: "READY_EMPTY", classrooms, meta, refetch }

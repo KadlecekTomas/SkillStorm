@@ -15,6 +15,8 @@ type UseAvailableStudentsParams = {
   yearId: string | null;
 };
 
+const EMPTY_AVAILABLE_STUDENTS: AvailableStudent[] = [];
+
 export const useAvailableStudents = ({
   enabled,
   classSectionId,
@@ -39,7 +41,7 @@ export const useAvailableStudents = ({
 
   return useMemo(
     () => ({
-      students: query.data?.data ?? [],
+      students: query.data?.data ?? EMPTY_AVAILABLE_STUDENTS,
       loading: query.isLoading,
     }),
     [query.data, query.isLoading],

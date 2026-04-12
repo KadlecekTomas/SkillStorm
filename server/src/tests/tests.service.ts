@@ -532,7 +532,7 @@ export class TestsService {
 
   /**
    * Returns all ClassSection IDs that the given teacher (by membershipId) is allowed
-   * to view results for: homeroom classes UNION explicitly assigned (TeacherClassSection).
+   * to view results for: homeroom classes UNION active scoped teacher access.
    */
   private async resolveTeacherAllowedClassSectionIds(
     membershipId: string,
@@ -544,6 +544,7 @@ export class TestsService {
       select: { id: true },
     });
     if (!teacher) return [];
+    const now = new Date();
 
     const [homeroom, taught] = await Promise.all([
       this.prisma.classSection.findMany({
@@ -555,6 +556,10 @@ export class TestsService {
           teacherId: teacher.id,
           deletedAt: null,
           classSection: { orgId, yearId: academicYearId },
+          AND: [
+            { OR: [{ validFrom: null }, { validFrom: { lte: now } }] },
+            { OR: [{ validTo: null }, { validTo: { gte: now } }] },
+          ],
         },
         select: { classSectionId: true },
       }),

@@ -37,13 +37,16 @@ export const useClassroomDetail = (
     staleTime: 10_000,
     queryFn: () => fetchWithAuth<ClassroomDetail>("GET", `/classrooms/${classroomId}`),
   });
+  const data = query.data;
+  const isLoading = query.isLoading;
+  const refetch = query.refetch;
 
   return useMemo(
     () => ({
-      detail: query.data ?? null,
-      loading: query.isLoading,
-      refetch: async () => !!(await query.refetch()),
+      detail: data ?? null,
+      loading: isLoading,
+      refetch: async () => !!(await refetch()),
     }),
-    [query],
+    [data, isLoading, refetch],
   );
 };

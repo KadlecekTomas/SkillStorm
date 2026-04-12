@@ -45,6 +45,8 @@ type UseTeachersOptions = {
   warningContext?: string;
 };
 
+const EMPTY_TEACHERS: TeacherListItem[] = [];
+
 const resolveErrorMessage = (error: unknown): string => {
   if (error instanceof HttpError) return error.message;
   if (error instanceof Error) return error.message;
@@ -81,25 +83,36 @@ export const useTeachers = (options: UseTeachersOptions = {}): UseTeachersResult
       }
     },
   });
+  const data = query.data;
+  const isLoading = query.isLoading;
+  const error = query.error;
+  const refetch = query.refetch;
 
   return useMemo(
     () => ({
-      teachers: query.data?.items ?? [],
-      total: query.data?.meta?.total ?? query.data?.items?.length ?? 0,
-      loading: query.isLoading,
+      teachers: data?.items ?? EMPTY_TEACHERS,
+      total: data?.meta?.total ?? data?.items?.length ?? 0,
+      loading: isLoading,
       error:
         !orgId
           ? "Chybí aktivní organizace."
           : softFail
-            ? query.data?.warning ?? null
-            : query.error
-              ? resolveErrorMessage(query.error)
+            ? data?.warning ?? null
+            : error
+              ? resolveErrorMessage(error)
               : null,
       refresh: async () => {
-        await query.refetch();
+        await refetch();
       },
       orgId,
     }),
-    [orgId, query, softFail],
+    [
+      data,
+      error,
+      isLoading,
+      orgId,
+      refetch,
+      softFail,
+    ],
   );
 };

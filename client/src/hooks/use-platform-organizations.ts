@@ -102,7 +102,17 @@ export const usePlatformOrganizations = (
   const metaRef = useRef<ListResponse["meta"] | null>(null);
   const aliveRef = useRef(true);
 
-  const stableQuery = useMemo(() => query ?? {}, [query]);
+  const queryEntries = Object.entries(query ?? {})
+    .filter(([, value]) => value !== undefined)
+    .sort(([left], [right]) => left.localeCompare(right));
+  const querySignature = JSON.stringify(queryEntries);
+  const stableQuery = useMemo(
+    () =>
+      Object.fromEntries(
+        JSON.parse(querySignature) as Array<[string, string | number | boolean]>,
+      ),
+    [querySignature],
+  );
 
   useEffect(() => {
     return () => {
@@ -175,7 +185,7 @@ export const usePlatformOrganizations = (
   useEffect(() => {
     if (!enabled) return;
     void refetch();
-  }, [enabled, refetch, stableQuery]);
+  }, [enabled, refetch]);
 
   return { state, meta: metaRef.current, refetch, setAll, upsert };
 };

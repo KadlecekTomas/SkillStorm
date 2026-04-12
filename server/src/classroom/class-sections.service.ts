@@ -25,10 +25,12 @@ import {
   EnrollmentStatus,
   AuditEntityType,
   SchoolGrade,
+  TeacherClassAccessLevel,
 } from '@prisma/client';
 import { hasAtLeastRole } from '@/shared/access.utils';
 import { AuditService } from '@/audit/audit.service';
 import { RiskService } from '@/risk/risk.service';
+import { TeacherAccessService } from '@/teacher-access/teacher-access.service';
 import { deriveStudentRiskMetrics } from './risk-overview.util';
 import type { ClassroomRiskOverviewResponseDto, ClassroomRiskOverviewStudentDto } from './dto/risk-overview.dto';
 import type {
@@ -75,7 +77,24 @@ export class ClassSectionsService {
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
     private readonly auditService: AuditService,
     private readonly riskService: RiskService,
+    private readonly teacherAccessService: TeacherAccessService,
   ) {}
+
+  private activeTeacherAccessCondition(
+    teacherId: string,
+    yearId: string,
+  ): Prisma.TeacherClassSectionWhereInput {
+    const now = new Date();
+    return {
+      teacherId,
+      yearId,
+      deletedAt: null,
+      AND: [
+        { OR: [{ validFrom: null }, { validFrom: { lte: now } }] },
+        { OR: [{ validTo: null }, { validTo: { gte: now } }] },
+      ],
+    };
+  }
 
   private async getCurrentAcademicYear(orgId: string) {
     const current = await this.prisma.academicYear.findFirst({
@@ -256,6 +275,19 @@ export class ClassSectionsService {
         throw new ForbiddenException(
           'Učitel není ze stejné organizace jako třída.',
         );
+      const existingHomeroom = await this.prisma.classSection.findFirst({
+        where: {
+          teacherId,
+          orgId: resolvedYear.orgId,
+          yearId: resolvedYear.id,
+        },
+        select: { id: true, label: true },
+      });
+      if (existingHomeroom) {
+        throw new ConflictException(
+          `Učitel již je třídní v jiné třídě (${existingHomeroom.label ?? 'neznámá'}).`,
+        );
+      }
     }
 
     try {
@@ -292,6 +324,15 @@ export class ClassSectionsService {
         return section;
       });
 
+      if (teacherId) {
+        await this.teacherAccessService.syncHomeroomFromClassSection(
+          created.id,
+          resolvedYear.orgId,
+          resolvedYear.id,
+          teacherId,
+          user.userId,
+        );
+      }
       await this.invalidateClassroomReads(
         cacheScopeForUser(user.systemRole, resolvedYear.orgId),
         'classrooms.create',
@@ -411,7 +452,14 @@ export class ClassSectionsService {
           },
         };
       }
-      where.teacherId = teacher.id;
+      where.OR = [
+        { teacherId: teacher.id },
+        {
+          teachers: {
+            some: this.activeTeacherAccessCondition(teacher.id, resolvedYear.id),
+          },
+        },
+      ];
     } else if (role === OrganizationRole.STUDENT) {
       const student = membership
         ? await this.prisma.student.findFirst({
@@ -439,7 +487,14 @@ export class ClassSectionsService {
         },
       };
     } else if (q.teacherId) {
-      where.teacherId = q.teacherId;
+      where.OR = [
+        { teacherId: q.teacherId },
+        {
+          teachers: {
+            some: this.activeTeacherAccessCondition(q.teacherId, resolvedYear.id),
+          },
+        },
+      ];
     } else if (
       role &&
       !hasAtLeastRole(role, OrganizationRole.DIRECTOR) &&
@@ -667,7 +722,16 @@ export class ClassSectionsService {
               select: { id: true },
             })
           : null;
-        if (!teacher || classSection.teacherId !== teacher.id) {
+        const hasScopedAccess = teacher
+          ? await this.prisma.teacherClassSection.findFirst({
+              where: {
+                classSectionId: classSection.id,
+                ...this.activeTeacherAccessCondition(teacher.id, classSection.yearId),
+              },
+              select: { id: true },
+            })
+          : null;
+        if (!teacher || (classSection.teacherId !== teacher.id && !hasScopedAccess)) {
           throw new ForbiddenException('Učitel nemá přístup k této třídě.');
         }
       } else if (role === OrganizationRole.STUDENT) {
@@ -1174,6 +1238,20 @@ export class ClassSectionsService {
           throw new ForbiddenException(
             'Učitel není ze stejné organizace jako třída.',
           );
+        const existingHomeroom = await this.prisma.classSection.findFirst({
+          where: {
+            teacherId,
+            orgId: classSection.orgId,
+            yearId: classSection.yearId,
+            id: { not: id },
+          },
+          select: { id: true, label: true },
+        });
+        if (existingHomeroom) {
+          throw new ConflictException(
+            `Učitel již je třídní v jiné třídě (${existingHomeroom.label ?? 'neznámá'}).`,
+          );
+        }
       }
     }
 
@@ -1198,6 +1276,15 @@ export class ClassSectionsService {
         data: updateData,
       });
 
+      if (teacherId !== undefined) {
+        await this.teacherAccessService.syncHomeroomFromClassSection(
+          id,
+          classSection.orgId,
+          classSection.yearId,
+          teacherId ?? null,
+          user.userId,
+        );
+      }
       await this.invalidateClassroomReads(
         cacheScopeForUser(user.systemRole, classSection.orgId),
         'classrooms.update',
@@ -1333,6 +1420,13 @@ export class ClassSectionsService {
       },
     });
 
+    await this.teacherAccessService.syncHomeroomFromClassSection(
+      classSectionId,
+      cls.orgId,
+      cls.yearId,
+      teacherId,
+      user.userId,
+    );
     const scope = cacheScopeForUser(user.systemRole, cls.orgId);
     await this.invalidateClassroomReads(scope, 'classrooms.set-homeroom');
 
@@ -1366,8 +1460,19 @@ export class ClassSectionsService {
 
     const record = await this.prisma.teacherClassSection.upsert({
       where: { teacherId_classSectionId: { teacherId, classSectionId } },
-      update: { deletedAt: null, yearId: classSection.yearId },
-      create: { teacherId, classSectionId, yearId: classSection.yearId },
+      update: {
+        deletedAt: null,
+        yearId: classSection.yearId,
+        accessLevel: TeacherClassAccessLevel.EDIT,
+        validFrom: null,
+        validTo: null,
+      },
+      create: {
+        teacherId,
+        classSectionId,
+        yearId: classSection.yearId,
+        accessLevel: TeacherClassAccessLevel.EDIT,
+      },
       select: { id: true, teacherId: true, classSectionId: true, createdAt: true },
     });
 
@@ -1393,7 +1498,12 @@ export class ClassSectionsService {
     }
 
     const record = await this.prisma.teacherClassSection.findFirst({
-      where: { teacherId, classSectionId, deletedAt: null },
+      where: {
+        teacherId,
+        classSectionId,
+        deletedAt: null,
+        accessLevel: { not: TeacherClassAccessLevel.HOMEROOM },
+      },
       select: { id: true },
     });
     if (!record) {
@@ -1474,26 +1584,32 @@ export class ClassSectionsService {
     };
 
     if (!teacher) {
-      const allClasses = await this.prisma.classSection.findMany({
-        where: { orgId, yearId },
-        include: classInclude,
-        orderBy: [{ grade: 'asc' }, { section: 'asc' }, { id: 'asc' }],
-      });
       return {
         homeroom: null,
         teachingClasses: [],
-        otherClasses: allClasses.map(mapClass),
+        otherClasses: [],
       };
     }
 
-    // Single query for all classes with this teacher's TeacherClassSection assignments.
+    // Only include classes this teacher can actually access.
     const allClasses = await this.prisma.classSection.findMany({
-      where: { orgId, yearId },
+      where: {
+        orgId,
+        yearId,
+        OR: [
+          { teacherId: teacher.id },
+          {
+            teachers: {
+              some: this.activeTeacherAccessCondition(teacher.id, yearId),
+            },
+          },
+        ],
+      },
       include: {
         ...classInclude,
         teachers: {
-          where: { teacherId: teacher.id, deletedAt: null, yearId },
-          select: { teacherId: true },
+          where: this.activeTeacherAccessCondition(teacher.id, yearId),
+          select: { teacherId: true, classSectionId: true, accessLevel: true },
         },
       },
       orderBy: [{ grade: 'asc' }, { section: 'asc' }, { id: 'asc' }],
@@ -1512,7 +1628,7 @@ export class ClassSectionsService {
     return {
       homeroom: homeroom ? mapClass(homeroom) : null,
       teachingClasses: allClasses.filter((cls) => teachingIds.has(cls.id)).map(mapClass),
-      otherClasses: allClasses.filter((cls) => cls.id !== homeroomId && !teachingIds.has(cls.id)).map(mapClass),
+      otherClasses: [],
     };
   }
 }

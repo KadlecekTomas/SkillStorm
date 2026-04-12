@@ -344,17 +344,16 @@ export function ClassroomsPageContent(): React.JSX.Element {
         : [],
     [classroomsState],
   );
-  const teacherAllClasses = useMemo(
+  const teacherVisibleClasses = useMemo(
     () => [
       ...(classroomStructure?.homeroom ? [classroomStructure.homeroom] : []),
       ...(classroomStructure?.teachingClasses ?? []),
-      ...(classroomStructure?.otherClasses ?? []),
     ],
     [classroomStructure],
   );
 
   const selectedInList = selectedId
-    ? (isTeacherView ? teacherAllClasses : classrooms).some((item) => item.id === selectedId)
+    ? (isTeacherView ? teacherVisibleClasses : classrooms).some((item) => item.id === selectedId)
     : false;
   const effectiveSelectedId = selectedInList ? selectedId : null;
   const { detail, loading: detailLoading } = useClassroomDetail(effectiveSelectedId);

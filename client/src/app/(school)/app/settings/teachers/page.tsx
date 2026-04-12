@@ -8,9 +8,25 @@ import { Badge } from "@/components/ui/badge";
 import { ErrorAlert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
+import { useQuery } from "@/lib/query-client";
+import { fetchWithAuth } from "@/lib/http/client";
+import { TeacherAccessManager } from "@/components/pages/settings/teachers/teacher-access-manager";
+
+const EMPTY_CLASSROOM_OPTIONS: Array<{ id: string; label?: string | null; grade: string; section: string }> = [];
 
 function TeacherManagerPage(): React.JSX.Element {
   const { teachers, loading, error, total } = useTeachers();
+  const classroomsQuery = useQuery<Array<{ id: string; label?: string | null; grade: string; section: string }>>({
+    queryKey: ["teacher-access", "classrooms-options"],
+    staleTime: 10_000,
+    queryFn: async () => {
+      const response = await fetchWithAuth<
+        | Array<{ id: string; label?: string | null; grade: string; section: string }>
+        | { data?: Array<{ id: string; label?: string | null; grade: string; section: string }> }
+      >("GET", "/class-sections");
+      return Array.isArray(response) ? response : response?.data ?? [];
+    },
+  });
 
   const emptyState = (
     <div className="space-y-3">
@@ -67,6 +83,16 @@ function TeacherManagerPage(): React.JSX.Element {
                 ? new Date(row.createdAt).toLocaleDateString("cs-CZ")
                 : "—",
             className: "text-slate-500",
+          },
+          {
+            key: "access",
+            label: "Přístupy ke třídám",
+            render: (row) => (
+              <TeacherAccessManager
+                teacher={row}
+                classrooms={classroomsQuery.data ?? EMPTY_CLASSROOM_OPTIONS}
+              />
+            ),
           },
         ]}
       />

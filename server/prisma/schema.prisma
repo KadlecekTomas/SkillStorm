@@ -525,20 +525,27 @@ model Teacher {
 }
 
 model TeacherClassSection {
-  id             String       @id @default(uuid()) @map("teacher_class_section_id")
-  teacherId      String       @map("teacher_id")
-  classSectionId String       @map("class_section_id")
-  yearId         String       @map("academic_year_id")
-  createdAt      DateTime     @default(now()) @map("created_at")
-  deletedAt      DateTime?    @map("deleted_at")
-  teacher        Teacher      @relation(fields: [teacherId], references: [id], onDelete: Cascade)
-  classSection   ClassSection @relation(fields: [classSectionId], references: [id], onDelete: Cascade)
-  academicYear   AcademicYear @relation(fields: [yearId], references: [id], onDelete: Cascade)
+  id             String                  @id @default(uuid()) @map("teacher_class_section_id")
+  teacherId      String                  @map("teacher_id")
+  classSectionId String                  @map("class_section_id")
+  yearId         String                  @map("academic_year_id")
+  accessLevel    TeacherClassAccessLevel @default(EDIT) @map("access_level")
+  validFrom      DateTime?               @map("valid_from")
+  validTo        DateTime?               @map("valid_to")
+  createdAt      DateTime                @default(now()) @map("created_at")
+  createdById    String?                 @map("created_by_id")
+  deletedAt      DateTime?               @map("deleted_at")
+  teacher        Teacher                 @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  classSection   ClassSection            @relation(fields: [classSectionId], references: [id], onDelete: Cascade)
+  academicYear   AcademicYear            @relation(fields: [yearId], references: [id], onDelete: Cascade)
 
   @@unique([teacherId, classSectionId])
   @@index([classSectionId])
   @@index([teacherId])
   @@index([teacherId, yearId])
+  @@index([classSectionId, accessLevel])
+  @@index([teacherId, accessLevel])
+  @@index([validFrom, validTo])
   @@map("teacher_class_sections")
 }
 
@@ -1050,6 +1057,12 @@ enum MaterialAccessLevel {
   FREE
   SCHOOL_ONLY
   PAID
+}
+
+enum TeacherClassAccessLevel {
+  VIEW
+  EDIT
+  HOMEROOM
 }
 
 enum OrganizationRole {
