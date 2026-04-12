@@ -11,6 +11,11 @@ import { recordPolicyCheck } from "../fePolicyScore";
 // Mock next/navigation
 vi.mock("next/navigation", () => ({
   useParams: vi.fn(),
+  useRouter: () => ({
+    replace: vi.fn(),
+    push: vi.fn(),
+    refresh: vi.fn(),
+  }),
 }));
 
 // Mock fetchWithAuth

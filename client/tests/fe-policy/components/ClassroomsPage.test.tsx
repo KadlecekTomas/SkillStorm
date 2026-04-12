@@ -307,7 +307,7 @@ describe("ClassroomsPageContent", () => {
       return [];
     });
 
-    const { rerender } = await renderPage();
+  const { rerender } = await renderPage();
 
     await waitFor(() => {
       expect(fetchWithAuth).toHaveBeenCalledWith(
@@ -319,9 +319,10 @@ describe("ClassroomsPageContent", () => {
       );
     });
 
+    searchParamsState.current = new URLSearchParams("year=year-2");
     academicYearsState.selectedYear = { id: "year-2", name: "2023/24", isActive: false };
     academicYearsState.selectedYearId = "year-2";
-    academicYearsState.isReadOnly = true;
+    academicYearsState.activeYear = { id: "year-1", name: "2024/25", isActive: true };
 
     const { ClassroomsPageContent } = await import("@/components/pages/classrooms/classrooms-page");
     rerender(<ClassroomsPageContent />);

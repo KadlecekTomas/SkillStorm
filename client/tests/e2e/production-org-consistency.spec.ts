@@ -73,7 +73,7 @@ async function createOrganization(
 ) {
   return api.post("/api/organizations", {
     data: { name, type: "SCHOOL" },
-    headers,
+    ...(headers ? { headers } : {}),
   });
 }
 

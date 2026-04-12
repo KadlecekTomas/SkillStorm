@@ -85,8 +85,14 @@ export default function SettingsPage(): React.JSX.Element {
     }
   }, []);
 
-  const canInviteStudents = can(PermissionKey.INVITE_STUDENTS);
-  const canInviteTeachers = can(PermissionKey.INVITE_TEACHERS);
+  const canInviteStudents = useMemo(
+    () => can(PermissionKey.INVITE_STUDENTS),
+    [can],
+  );
+  const canInviteTeachers = useMemo(
+    () => can(PermissionKey.INVITE_TEACHERS),
+    [can],
+  );
   const canInvite = hasOrganization && (canInviteStudents || canInviteTeachers);
   const inviteRoleOptions = useMemo<Array<{ value: "STUDENT" | "TEACHER"; label: string }>>(() => {
     const options: Array<{ value: "STUDENT" | "TEACHER"; label: string }> = [];
@@ -95,18 +101,14 @@ export default function SettingsPage(): React.JSX.Element {
     return options;
   }, [canInviteStudents, canInviteTeachers]);
 
-  useEffect(() => {
-    if (!inviteRoleOptions.length) {
-      setInviteRole(null);
-      return;
-    }
-    const firstOption = inviteRoleOptions[0];
-    if (!firstOption) {
-      return;
-    }
-    if (!inviteRole || !inviteRoleOptions.some((opt) => opt.value === inviteRole)) {
-      setInviteRole(firstOption.value);
-    }
+  // inviteRole is a user override only. Compute the effective role used for
+  // API calls/UI using the available options. This avoids storing derived
+  // state and prevents effects from mutating the user's choice.
+  const effectiveInviteRole = useMemo(() => {
+    if (!inviteRoleOptions.length) return null;
+    return inviteRole && inviteRoleOptions.some((opt) => opt.value === inviteRole)
+      ? inviteRole
+      : inviteRoleOptions[0]?.value ?? null;
   }, [inviteRole, inviteRoleOptions]);
 
   const inviteLink = inviteToken && origin
@@ -114,7 +116,7 @@ export default function SettingsPage(): React.JSX.Element {
     : "";
 
   const generateInvite = useCallback(async () => {
-    if (!inviteRole || !canInvite) {
+    if (!effectiveInviteRole || !canInvite) {
       setInviteCode("");
       setInviteToken("");
       setInviteError(null);
@@ -131,7 +133,7 @@ export default function SettingsPage(): React.JSX.Element {
       }>("POST", "/invites", {
         body: {
           type: "ORG_ONLY",
-          role: inviteRole,
+          role: effectiveInviteRole,
         },
       });
       setInviteCode(invite?.code ?? "");
@@ -145,12 +147,12 @@ export default function SettingsPage(): React.JSX.Element {
     } finally {
       setInviteLoading(false);
     }
-  }, [canInvite, inviteRole]);
+  }, [canInvite, effectiveInviteRole]);
 
   useEffect(() => {
-    if (!canInvite || !inviteRole) return;
+    if (!canInvite || !effectiveInviteRole) return;
     void generateInvite();
-  }, [canInvite, inviteRole, generateInvite]);
+  }, [canInvite, effectiveInviteRole, generateInvite]);
 
   const copyToClipboard = async (value: string, message: string) => {
     if (!value) {
@@ -173,7 +175,10 @@ export default function SettingsPage(): React.JSX.Element {
   };
 
   // ── Subjects management ──
-  const canManageSubjects = can(PermissionKey.MANAGE_TEACHERS);
+  const canManageSubjects = useMemo(
+    () => can(PermissionKey.MANAGE_TEACHERS),
+    [can],
+  );
   const [allSubjects, setAllSubjects] = useState<OrgSubjectOption[]>([]);
   const [curriculumSubjectsById, setCurriculumSubjectsById] = useState<Record<string, Subject>>({});
   const [subjectLevelsById, setSubjectLevelsById] = useState<Record<string, SubjectLevel[]>>({});
@@ -256,7 +261,10 @@ export default function SettingsPage(): React.JSX.Element {
   }, [selectedTopicSubjectId, topicManageableSubjects]);
 
   const selectedTopicSubject = curriculumSubjectsById[selectedTopicSubjectId] ?? null;
-  const selectedTopicLevels = subjectLevelsById[selectedTopicSubjectId] ?? [];
+  const selectedTopicLevels = useMemo(
+    () => subjectLevelsById[selectedTopicSubjectId] ?? [],
+    [subjectLevelsById, selectedTopicSubjectId],
+  );
   const enabledTopicLevels = useMemo(
     () => selectedTopicLevels.filter((level) => level.isEnabled),
     [selectedTopicLevels],
@@ -612,7 +620,7 @@ export default function SettingsPage(): React.JSX.Element {
               <div className="flex flex-wrap gap-2">
                 <select
                   className="min-w-[180px] rounded-2xl border border-slate-200 px-3 py-2 text-sm"
-                  value={inviteRole ?? ""}
+                  value={effectiveInviteRole ?? ""}
                   onChange={(event) =>
                     setInviteRole(event.target.value as "STUDENT" | "TEACHER")
                   }
@@ -659,7 +667,7 @@ export default function SettingsPage(): React.JSX.Element {
                   type="button"
                   variant="outline"
                   onClick={() => void generateInvite()}
-                  disabled={inviteLoading || !inviteRole}
+                  disabled={inviteLoading || !effectiveInviteRole}
                 >
                   Obnovit
                 </Button>

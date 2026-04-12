@@ -78,6 +78,10 @@ type SubmissionListItem = {
   id: string;
   assignmentId: string;
   status: string;
+  student?: {
+    id: string;
+    name: string | null;
+  } | null;
   score: number | null;
   earnedPoints: number | null;
   maxPoints: number | null;

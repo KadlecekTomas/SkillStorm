@@ -198,6 +198,7 @@ export function ClassroomsPageContent(): React.JSX.Element {
   const [createSubmitting, setCreateSubmitting] = useState(false);
   const [createYearSubmitting, setCreateYearSubmitting] = useState(false);
   const [createYearError, setCreateYearError] = useState<string | null>(null);
+  const [pendingCreatedHighlightId, setPendingCreatedHighlightId] = useState<string | null>(null);
 
   const [addOpen, setAddOpen] = useState(false);
   const [addMode, setAddMode] = useState<"PASTE" | "CSV" | "INVITE" | "EXISTING">("EXISTING");
@@ -236,6 +237,7 @@ export function ClassroomsPageContent(): React.JSX.Element {
     data: classroomStructure,
     loading: structureLoading,
     error: classroomStructureError,
+    refetch: refetchClassroomStructure,
   } = useClassroomStructure({
     enabled: isTeacherView && optionalDataEnabled,
   });
@@ -356,7 +358,7 @@ export function ClassroomsPageContent(): React.JSX.Element {
     ? (isTeacherView ? teacherVisibleClasses : classrooms).some((item) => item.id === selectedId)
     : false;
   const effectiveSelectedId = selectedInList ? selectedId : null;
-  const { detail, loading: detailLoading } = useClassroomDetail(effectiveSelectedId);
+  const { detail, loading: detailLoading, refetch: refetchClassroomDetail } = useClassroomDetail(effectiveSelectedId);
   const {
     subjects: classOrgSubjects,
     loading: classOrgSubjectsLoading,
@@ -373,11 +375,11 @@ export function ClassroomsPageContent(): React.JSX.Element {
     softFail: true,
     warningContext: "classrooms",
   });
-  const { data: riskOverview, loading: riskOverviewLoading } = useClassroomRiskOverview(
+  const { data: riskOverview, loading: riskOverviewLoading, refetch: refetchRiskOverview } = useClassroomRiskOverview(
     effectiveSelectedId,
     optionalDataEnabled && !!effectiveSelectedId && canViewStudentDetail,
   );
-  const { data: subjectPerformance, loading: subjectPerformanceLoading } = useClassroomSubjectPerformance(
+  const { data: subjectPerformance, loading: subjectPerformanceLoading, refetch: refetchSubjectPerformance } = useClassroomSubjectPerformance(
     effectiveSelectedId,
     effectiveYearFilterId ?? null,
     optionalDataEnabled && !!effectiveSelectedId && canViewStudentDetail,
@@ -401,14 +403,35 @@ export function ClassroomsPageContent(): React.JSX.Element {
   }, [isStalePagePosition, updateQuery]);
 
   useEffect(() => {
-    if (!highlightId) return;
+    if (!highlightId) {
+      if (pendingCreatedHighlightId) {
+        setPendingCreatedHighlightId(null);
+      }
+      return;
+    }
+    if (classroomsState.status === "FETCHING") {
+      return;
+    }
     if (classroomsState.status !== "READY_EMPTY" && classroomsState.status !== "READY_WITH_DATA") {
       return;
     }
-    if (!classrooms.some((item) => item.id === highlightId)) {
+
+    const exists = classrooms.some((item) => item.id === highlightId);
+    if (exists) {
+      if (pendingCreatedHighlightId === highlightId) {
+        setPendingCreatedHighlightId(null);
+      }
+      return;
+    }
+
+    if (pendingCreatedHighlightId === highlightId) {
+      return;
+    }
+
+    if (!exists) {
       updateQuery({ highlight: null });
     }
-  }, [classrooms, highlightId, classroomsState.status, updateQuery]);
+  }, [classrooms, highlightId, classroomsState.status, updateQuery, pendingCreatedHighlightId]);
 
   useEffect(() => {
     if (highlightId && highlightedCardRef.current) {
@@ -522,19 +545,42 @@ export function ClassroomsPageContent(): React.JSX.Element {
       cursor: null,
       dir: null,
       highlight: null,
+      year: rawYear ?? effectiveYearFilterId ?? currentYearId ?? null,
     });
   };
 
-  const invalidateConsistencyQueries = useCallback((classroomId?: string | null) => {
+  const invalidateConsistencyQueries = useCallback(async (classroomId?: string | null) => {
     queryClient.invalidateQueries(["classrooms"]);
     queryClient.invalidateQueries(["students"]);
     queryClient.invalidateQueries(["teachers"]);
     queryClient.invalidateQueries(["dashboard"]);
     queryClient.invalidateQueries(["students", "available"]);
+    queryClient.invalidateQueries(["classroom-structure"]);
     if (classroomId) {
       queryClient.invalidateQueries(["classroom-detail", classroomId]);
+      queryClient.invalidateQueries(["classroom-risk-overview", classroomId]);
+      queryClient.invalidateQueries(["classroom-subject-performance", classroomId]);
     }
-  }, []);
+
+    if (classroomId && classroomId === effectiveSelectedId) {
+      await Promise.allSettled([
+        refetchClassroomDetail(),
+        refetchRiskOverview(),
+        refetchSubjectPerformance(),
+      ]);
+    }
+
+    if (isTeacherView) {
+      refetchClassroomStructure();
+    }
+  }, [
+    effectiveSelectedId,
+    isTeacherView,
+    refetchClassroomDetail,
+    refetchClassroomStructure,
+    refetchRiskOverview,
+    refetchSubjectPerformance,
+  ]);
 
   const handleSetHomeroom = async (classSectionId: string, teacherId: string | null) => {
     if (homeroomSaving) return;
@@ -544,7 +590,7 @@ export function ClassroomsPageContent(): React.JSX.Element {
       await fetchWithAuth("PATCH", `/class-sections/${classSectionId}/homeroom`, {
         body: { teacherId },
       });
-      invalidateConsistencyQueries(classSectionId);
+      await invalidateConsistencyQueries(classSectionId);
     } catch (err) {
       setHomeroomSaveError(getApiErrorMessage(err));
     } finally {
@@ -606,7 +652,12 @@ export function ClassroomsPageContent(): React.JSX.Element {
         (!searchTerm || resolvedLabel.includes(searchTerm.toLowerCase()));
       const hiddenByFilters = !matchesFilters;
 
-      invalidateConsistencyQueries(created.id);
+  await invalidateConsistencyQueries(created.id);
+      if (matchesFilters) {
+        setPendingCreatedHighlightId(created.id);
+      } else {
+        setPendingCreatedHighlightId(null);
+      }
 
       if (cursor) {
         if (matchesFilters) {
@@ -781,7 +832,8 @@ export function ClassroomsPageContent(): React.JSX.Element {
     }
 
     setBulkResult({ enrolled, createdUsers: 0, errors });
-    invalidateConsistencyQueries(effectiveSelectedId);
+  await invalidateConsistencyQueries(effectiveSelectedId);
+  await refetchClassrooms({ bypassCache: true });
 
     if (errors.length === 0) {
       setAddOpen(false);
@@ -836,7 +888,8 @@ export function ClassroomsPageContent(): React.JSX.Element {
       });
 
       setBulkResult(result);
-      invalidateConsistencyQueries(effectiveSelectedId);
+      await invalidateConsistencyQueries(effectiveSelectedId);
+      await refetchClassrooms({ bypassCache: true });
 
       if (!result.errors.length) {
         setAddOpen(false);

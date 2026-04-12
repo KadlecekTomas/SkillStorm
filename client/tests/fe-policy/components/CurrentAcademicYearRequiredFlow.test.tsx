@@ -110,7 +110,7 @@ describe("Current academic year required UX", () => {
   });
 
   it("does not render children or fire child fetches before verification succeeds", async () => {
-    let resolveCurrentYear: (() => void) | null = null;
+    let resolveCurrentYear: (() => void) | undefined;
     const childFetchSpy = vi.fn();
     vi.mocked(fetchCurrentAcademicYear).mockImplementation(
       () =>
@@ -136,7 +136,9 @@ describe("Current academic year required UX", () => {
     expect(screen.queryByText("Protected content")).not.toBeInTheDocument();
     expect(childFetchSpy).not.toHaveBeenCalled();
 
-    resolveCurrentYear?.();
+    if (resolveCurrentYear) {
+      resolveCurrentYear();
+    }
 
     await waitFor(() => {
       expect(screen.getByText("Protected content")).toBeInTheDocument();
