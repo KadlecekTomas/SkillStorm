@@ -1,7 +1,7 @@
 "use client";
 
-import { type JSX, useCallback, useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { type JSX, useCallback, useEffect, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { AlertCircle, Building2, GraduationCap, CalendarDays, UserCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -43,10 +43,12 @@ async function acceptByToken(
 }
 
 export default function JoinPage(): JSX.Element {
+  const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isAuthenticated, hasOrganization, isLoading: authLoading, syncProfile } = useAuth();
   const clearOrg = useAcademicYearStore((s) => s.clearOrg);
+  const joinCodeInputRef = useRef<HTMLInputElement | null>(null);
 
   const tokenFromUrl = (searchParams.get("token") ?? searchParams.get("code") ?? "").trim();
   const [joinCode, setJoinCode] = useState(tokenFromUrl);
@@ -63,6 +65,11 @@ export default function JoinPage(): JSX.Element {
       setJoinCode(tokenFromUrl);
     }
   }, [tokenFromUrl]);
+
+  useEffect(() => {
+    if (joinStep !== "code" || tokenError || previewLoading || authLoading || !isAuthenticated) return;
+    joinCodeInputRef.current?.focus();
+  }, [authLoading, isAuthenticated, joinStep, previewLoading, tokenError]);
 
   // Persist join intent so login/register and PostAuthResolver can return here (survives 401 and register flow)
   useEffect(() => {
@@ -170,11 +177,21 @@ export default function JoinPage(): JSX.Element {
   };
 
   const handleJoinBack = () => {
+    const nextParams = new URLSearchParams(searchParams.toString());
+    nextParams.delete("token");
+    nextParams.delete("code");
+    const nextQuery = nextParams.toString();
+
     setJoinStep("code");
+    setJoinCode("");
     setPreview(null);
+    setPreviewLoading(false);
+    setJoinSubmitting(false);
     setJoinErrorMessage(null);
     setTokenError(null);
     setPreviewFetched(false);
+    clearAuthIntent();
+    router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname);
   };
 
   if (authLoading || !isAuthenticated) {
@@ -235,6 +252,7 @@ export default function JoinPage(): JSX.Element {
                 Kód nebo token pozvánky
               </label>
               <Input
+                ref={joinCodeInputRef}
                 id="join-code"
                 value={joinCode}
                 onChange={(e) => {

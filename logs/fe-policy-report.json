@@ -1,35 +1,35 @@
 {
   "Auth": [
     {
+      "id": "redirect-unauthenticated",
+      "passed": true,
+      "timestamp": "2026-04-12T18:34:58.445Z",
+      "description": "Unauthenticated user is redirected to login."
+    },
+    {
       "id": "login-form-validation",
       "passed": true,
-      "timestamp": "2026-04-12T14:04:35.585Z",
+      "timestamp": "2026-04-12T19:46:29.868Z",
       "description": "Login form blocks empty submission."
     },
     {
       "id": "login-form-submit",
       "passed": true,
-      "timestamp": "2026-04-12T14:04:35.624Z",
+      "timestamp": "2026-04-12T19:46:29.883Z",
       "description": "Login form triggers hook with credentials."
-    },
-    {
-      "id": "redirect-unauthenticated",
-      "passed": true,
-      "timestamp": "2026-04-12T15:50:30.541Z",
-      "description": "Unauthenticated user is redirected to login."
     }
   ],
   "RBAC": [
     {
       "id": "guard-allows-view-results",
       "passed": true,
-      "timestamp": "2026-04-12T14:04:33.540Z",
+      "timestamp": "2026-04-12T19:46:28.196Z",
       "description": "Teacher with VIEW_RESULTS can access module."
     },
     {
       "id": "guard-denies-manage-teachers",
       "passed": true,
-      "timestamp": "2026-04-12T14:04:33.560Z",
+      "timestamp": "2026-04-12T19:46:28.225Z",
       "description": "Student without MANAGE_TEACHERS is blocked."
     }
   ],
@@ -38,7 +38,7 @@
     {
       "id": "test-detail-validation",
       "passed": true,
-      "timestamp": "2026-04-12T14:04:35.183Z",
+      "timestamp": "2026-04-12T19:46:29.600Z",
       "description": "Test detail enforces validation on policy questions."
     }
   ],
@@ -46,13 +46,13 @@
     {
       "id": "submission-page-loading-state",
       "passed": true,
-      "timestamp": "2026-04-12T14:04:33.108Z",
+      "timestamp": "2026-04-12T19:46:27.936Z",
       "description": "Submission page shows loading state while fetching assignment."
     },
     {
       "id": "submission-page-error-handling",
       "passed": true,
-      "timestamp": "2026-04-12T14:04:33.127Z",
+      "timestamp": "2026-04-12T19:46:27.974Z",
       "description": "Submission page handles missing assignment gracefully."
     }
   ],
