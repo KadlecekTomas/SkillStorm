@@ -8,6 +8,7 @@ import {
 import { EnrollmentStatus, Prisma, SystemRole } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
 import type { JwtPayload } from '@/auth/types/jwt-payload';
+import { buildCompletedStudentSubmissionWhere } from '@/student/student-analytics-query.util';
 import type {
   StudentDiagnosticResponse,
   StudentDiagnosticStatus,
@@ -255,11 +256,11 @@ export class StudentDiagnosticService {
     const responses = await this.prisma.response.findMany({
       where: {
         isCorrect: { not: null },
-        submission: {
-          studentId: student.membershipId,
-          deletedAt: null,
-          ...(yearId ? { assignment: { yearId } } : {}),
-        },
+        submission: buildCompletedStudentSubmissionWhere({
+          membershipId: student.membershipId,
+          orgId: student.orgId,
+          ...(yearId ? { yearId } : {}),
+        }),
       },
       select: {
         givenText: true,

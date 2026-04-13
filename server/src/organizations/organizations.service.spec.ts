@@ -1,5 +1,6 @@
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Test } from '@nestjs/testing';
+import { BadRequestException } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
 import {
   OrganizationsService,
@@ -88,6 +89,18 @@ describe('OrganizationsService', () => {
     );
 
     expect(result).toEqual(existingOrg);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('rejects unsupported organization types during create', async () => {
+    await expect(
+      service.create(
+        { name: 'Community Org', type: OrganizationType.COMMUNITY },
+        'user-1',
+        'idem-community',
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
@@ -311,7 +324,7 @@ describe('OrganizationsService', () => {
     const createPromise = service.create(
       { name: 'Second Org', type: OrganizationType.SCHOOL },
       'user-1',
-      'different-key',
+      undefined,
     );
 
     await expect(createPromise).rejects.toMatchObject({

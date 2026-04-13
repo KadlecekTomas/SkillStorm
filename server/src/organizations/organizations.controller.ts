@@ -48,7 +48,7 @@ export class OrganizationsController {
   @AllowAnyOrgStatus()
   @ApiOperation({
     summary:
-      'Create organization (SCHOOL/PRIVATE/COMMUNITY: any authenticated user, status derived from type). ' +
+      'Create organization (currently SCHOOL only; unsupported types are rejected safely). ' +
       'Also the onboarding step for CREATE_ORG: name is required here (not in /auth/register).',
   })
   @InvalidateScopes(() => ['ALL']) // globální list → invaliduj ALL

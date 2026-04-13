@@ -100,6 +100,7 @@ export class StudentsController {
   @UseGuards(StudentAccessGuard)
   @Throttle({ default: { limit: 30, ttl: 60000 } })
   @ApiOperation({ summary: 'GDPR-minimal student detail' })
+  @NoHttpCache()
   @CacheTTL(0)
   getDetail(
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -113,6 +114,7 @@ export class StudentsController {
   @UseGuards(StudentAccessGuard)
   @Throttle({ default: { limit: 30, ttl: 60000 } })
   @ApiOperation({ summary: 'Deterministic student diagnostic summary' })
+  @NoHttpCache()
   @CacheTTL(0)
   getDiagnostic(
     @Param('id', new ParseUUIDPipe()) id: string,

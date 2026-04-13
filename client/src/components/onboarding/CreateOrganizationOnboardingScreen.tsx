@@ -20,6 +20,16 @@ import { ORG_OWNER_LIMIT_REACHED } from "@/lib/org-state";
 import type { OrganizationType } from "@/types";
 
 const DEFAULT_TYPE: OrganizationType = "SCHOOL";
+const ORGANIZATION_TYPE_OPTIONS: Array<{
+  value: OrganizationType;
+  label: string;
+  disabled?: boolean;
+  helper?: string;
+}> = [
+  { value: "SCHOOL", label: "Škola" },
+  { value: "COMMUNITY", label: "Komunita", disabled: true, helper: "Již brzy" },
+  { value: "PRIVATE", label: "Soukromá", disabled: true, helper: "Již brzy" },
+];
 
 /** Parse orgId from POST /organizations response (envelope unwrapped or raw). */
 function parseOrgId(res: unknown): string | null {
@@ -206,11 +216,28 @@ export const CreateOrganizationOnboardingScreen = (): React.JSX.Element => {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="SCHOOL">Škola</SelectItem>
-                  <SelectItem value="COMMUNITY">Komunita</SelectItem>
-                  <SelectItem value="PRIVATE">Soukromá</SelectItem>
+                  {ORGANIZATION_TYPE_OPTIONS.map((option) => (
+                    <SelectItem
+                      key={option.value}
+                      value={option.value}
+                      disabled={option.disabled === true}
+                      data-testid={`org-type-option-${option.value}`}
+                    >
+                      <div className="flex w-full items-center justify-between gap-3">
+                        <span>{option.label}</span>
+                        {option.helper ? (
+                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-slate-500">
+                            {option.helper}
+                          </span>
+                        ) : null}
+                      </div>
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
+              <p className="text-xs text-slate-500">
+                Momentálně je dostupný pouze typ <strong>Škola</strong>. Další typy přidáme již brzy.
+              </p>
             </div>
             {error && (
               <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-700">

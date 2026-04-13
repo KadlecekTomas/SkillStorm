@@ -32,6 +32,7 @@ import {
   computeStudentPerformance,
   type SubmissionForPerformance,
 } from './student-performance.util';
+import { buildCompletedStudentSubmissionWhere } from './student-analytics-query.util';
 import { AuditService } from '@/audit/audit.service';
 
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
@@ -623,16 +624,17 @@ export class StudentsService {
       '—';
 
     const submissions = await this.prisma.submission.findMany({
-      where: {
-        studentId: student.membershipId,
-        deletedAt: null,
-        ...(yearId ? { assignment: { yearId } } : {}),
-      },
+      where: buildCompletedStudentSubmissionWhere({
+        membershipId: student.membershipId,
+        orgId: student.orgId,
+        ...(yearId ? { yearId } : {}),
+      }),
       select: {
         earnedPoints: true,
         maxPoints: true,
         submittedAt: true,
         testId: true,
+        status: true,
         assignment: {
           select: {
             topicLevelId: true,

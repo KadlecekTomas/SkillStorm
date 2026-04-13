@@ -1,5 +1,5 @@
 // src/modules/organizations/organizations.service.ts
-import { Injectable, NotFoundException, ConflictException, Inject, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, Inject, Logger, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
 import type { CreateOrganizationDto } from './dto/create-organization.dto';
 import type { UpdateOrganizationDto } from './dto/update-organization.dto';
@@ -27,6 +27,9 @@ export const ORG_OWNER_LIMIT_REACHED = 'ORG_OWNER_LIMIT_REACHED';
 export const ORG_CREATE_IDEMPOTENCY_KEY_REUSED =
   'ORG_CREATE_IDEMPOTENCY_KEY_REUSED';
 const CREATE_ORGANIZATION_OPERATION = 'create_organization';
+const SUPPORTED_CREATE_ORGANIZATION_TYPES = new Set<OrganizationType>([
+  OrganizationType.SCHOOL,
+]);
 
 type CreateOrganizationTestOptions = {
   failBeforeAcademicYear?: boolean;
@@ -309,6 +312,11 @@ export class OrganizationsService {
     }
 
     const type = dto.type ?? OrganizationType.SCHOOL;
+    if (!SUPPORTED_CREATE_ORGANIZATION_TYPES.has(type)) {
+      throw new BadRequestException(
+        'Typ organizace zatím není podporován. Momentálně lze vytvořit pouze školu.',
+      );
+    }
     const status =
       type === OrganizationType.SCHOOL
         ? OrganizationStatus.PENDING

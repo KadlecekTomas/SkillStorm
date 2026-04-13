@@ -3,6 +3,8 @@
  */
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import type { ReactNode } from "react";
 import { CreateOrganizationOnboardingScreen } from "@/components/onboarding/CreateOrganizationOnboardingScreen";
 
 const {
@@ -48,6 +50,76 @@ vi.mock("@/lib/http/client", () => ({
 vi.mock("@/utils/toast", () => ({
   showToastOnce: vi.fn(),
 }));
+
+vi.mock("@/components/ui/select", () => {
+  const Select = ({
+    value,
+    onValueChange,
+    children,
+    disabled,
+  }: {
+    value?: string;
+    onValueChange?: (value: string) => void;
+    children: ReactNode;
+    disabled?: boolean;
+  }) => {
+    const options = Array.isArray(children) ? children : [children];
+    const enabledValues = options
+      .filter((child) => child?.props?.value && child?.props?.disabled !== true)
+      .map((child) => child.props.value as string);
+
+    const handleKeyDown = (event: React.KeyboardEvent<HTMLSelectElement>) => {
+      if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+      event.preventDefault();
+      const currentIndex = enabledValues.indexOf(value ?? "");
+      const fallbackIndex = currentIndex >= 0 ? currentIndex : 0;
+      const delta = event.key === "ArrowDown" ? 1 : -1;
+      const nextIndex =
+        (fallbackIndex + delta + enabledValues.length) % enabledValues.length;
+      const nextValue = enabledValues[nextIndex];
+      if (nextValue) onValueChange?.(nextValue);
+    };
+
+    return (
+      <select
+        aria-label="Typ organizace"
+        data-testid="org-type-select"
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onValueChange?.(event.target.value)}
+        onKeyDown={handleKeyDown}
+      >
+        {children}
+      </select>
+    );
+  };
+
+  const SelectItem = ({
+    value,
+    children,
+    disabled,
+    ...props
+  }: {
+    value: string;
+    children: ReactNode;
+    disabled?: boolean;
+    [key: string]: unknown;
+  }) => (
+    <option value={value} disabled={disabled} {...props}>
+      {children}
+    </option>
+  );
+
+  const passthrough = ({ children }: { children?: ReactNode }) => <>{children}</>;
+
+  return {
+    Select,
+    SelectContent: passthrough,
+    SelectItem,
+    SelectTrigger: passthrough,
+    SelectValue: () => null,
+  };
+});
 
 describe("CreateOrganizationOnboardingScreen", () => {
   beforeEach(() => {
@@ -95,5 +167,54 @@ describe("CreateOrganizationOnboardingScreen", () => {
     expect(
       screen.queryByText(/organizace byla vytvořena, ale nepodařilo se přepnout kontext/i),
     ).not.toBeInTheDocument();
+  });
+
+  it("shows unsupported organization types as disabled with 'Již brzy'", async () => {
+    render(<CreateOrganizationOnboardingScreen />);
+
+    const schoolOption = screen.getByTestId("org-type-option-SCHOOL");
+    const communityOption = screen.getByTestId("org-type-option-COMMUNITY");
+    const privateOption = screen.getByTestId("org-type-option-PRIVATE");
+
+    expect(schoolOption).not.toBeDisabled();
+    expect(communityOption).toBeDisabled();
+    expect(privateOption).toBeDisabled();
+    expect(screen.getAllByText("Již brzy")).toHaveLength(2);
+  });
+
+  it("submits the supported school option", async () => {
+    postMock.mockResolvedValue({ id: "org-1", type: "SCHOOL" });
+    switchToOrganizationByOrgIdMock.mockResolvedValue({ mode: "organization" });
+
+    render(<CreateOrganizationOnboardingScreen />);
+
+    fireEvent.change(screen.getByLabelText(/název organizace/i), {
+      target: { value: "Supported School" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /vytvořit organizaci/i }));
+
+    await waitFor(() => {
+      expect(postMock).toHaveBeenCalledWith(
+        "/organizations",
+        { name: "Supported School", type: "SCHOOL" },
+        expect.any(Object),
+      );
+    });
+  });
+
+  it("keyboard navigation skips disabled items", async () => {
+    const user = userEvent.setup();
+    render(<CreateOrganizationOnboardingScreen />);
+
+    const trigger = screen.getByTestId("org-type-select");
+    trigger.focus();
+
+    await user.keyboard("[ArrowDown]");
+    await user.keyboard("[ArrowDown]");
+    await user.keyboard("[Enter]");
+
+    expect(trigger).toHaveValue("SCHOOL");
+    expect(screen.getByTestId("org-type-option-COMMUNITY")).toBeDisabled();
+    expect(screen.getByTestId("org-type-option-PRIVATE")).toBeDisabled();
   });
 });

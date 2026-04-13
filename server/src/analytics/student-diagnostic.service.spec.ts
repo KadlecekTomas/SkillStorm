@@ -1,4 +1,6 @@
 import { buildStudentDiagnosticFromRecords } from './student-diagnostic.service';
+import { StudentDiagnosticService } from './student-diagnostic.service';
+import { PrismaService } from '@/prisma/prisma.service';
 
 describe('StudentDiagnosticService aggregation', () => {
   const baseRecord = {
@@ -196,5 +198,175 @@ describe('StudentDiagnosticService aggregation', () => {
     const result = buildStudentDiagnosticFromRecords('student-1', records);
     expect(result.subjects[0]?.topics[0]?.sampleMistakes).toHaveLength(5);
     expect(result.subjects[0]?.topics[0]?.sampleMistakes[0]?.questionId).toBe('q-5');
+  });
+});
+
+describe('StudentDiagnosticService', () => {
+  let service: StudentDiagnosticService;
+  let prisma: {
+    student: { findUnique: jest.Mock };
+    academicYear: { findFirst: jest.Mock };
+    response: { findMany: jest.Mock };
+  };
+
+  beforeEach(() => {
+    prisma = {
+      student: { findUnique: jest.fn() },
+      academicYear: { findFirst: jest.fn() },
+      response: { findMany: jest.fn() },
+    };
+    service = new StudentDiagnosticService(prisma as unknown as PrismaService);
+  });
+
+  it('uses the same completed submission scope and returns non-empty diagnostics for submitted work', async () => {
+    prisma.student.findUnique.mockResolvedValue({
+      id: 'student-1',
+      orgId: 'org-1',
+      membershipId: 'membership-1',
+      deletedAt: null,
+    });
+    prisma.academicYear.findFirst.mockResolvedValue({ id: 'year-1' });
+    prisma.response.findMany.mockResolvedValue([
+      {
+        givenText: '2/5',
+        isCorrect: false,
+        correctAnswerSnapshot: '5/6',
+        questionTextSnapshot: '1/2 + 1/3 = ?',
+        createdAt: new Date('2026-04-13T10:00:00.000Z'),
+        submission: {
+          submittedAt: new Date('2026-04-13T10:00:00.000Z'),
+          assignment: {
+            topicLevelId: 'topic-1',
+            topicLevel: {
+              id: 'topic-1',
+              name: 'Zlomky',
+              catalogTopic: { name: 'Zlomky' },
+              subjectLevel: {
+                subject: {
+                  id: 'subject-1',
+                  name: 'Matematika',
+                },
+              },
+            },
+          },
+          test: {
+            subject: {
+              id: 'subject-1',
+              name: 'Matematika',
+            },
+          },
+        },
+        question: {
+          id: 'question-1',
+          text: '1/2 + 1/3 = ?',
+          correctAnswer: '5/6',
+          correctAnswers: [],
+        },
+      },
+      {
+        givenText: '1/4',
+        isCorrect: true,
+        correctAnswerSnapshot: '1/4',
+        questionTextSnapshot: '3/4 - 1/2 = ?',
+        createdAt: new Date('2026-04-13T10:05:00.000Z'),
+        submission: {
+          submittedAt: new Date('2026-04-13T10:05:00.000Z'),
+          assignment: {
+            topicLevelId: 'topic-1',
+            topicLevel: {
+              id: 'topic-1',
+              name: 'Zlomky',
+              catalogTopic: { name: 'Zlomky' },
+              subjectLevel: {
+                subject: {
+                  id: 'subject-1',
+                  name: 'Matematika',
+                },
+              },
+            },
+          },
+          test: {
+            subject: {
+              id: 'subject-1',
+              name: 'Matematika',
+            },
+          },
+        },
+        question: {
+          id: 'question-2',
+          text: '3/4 - 1/2 = ?',
+          correctAnswer: '1/4',
+          correctAnswers: [],
+        },
+      },
+      {
+        givenText: '3/8',
+        isCorrect: false,
+        correctAnswerSnapshot: '3/4',
+        questionTextSnapshot: '1/2 + 1/4 = ?',
+        createdAt: new Date('2026-04-13T10:10:00.000Z'),
+        submission: {
+          submittedAt: new Date('2026-04-13T10:10:00.000Z'),
+          assignment: {
+            topicLevelId: 'topic-1',
+            topicLevel: {
+              id: 'topic-1',
+              name: 'Zlomky',
+              catalogTopic: { name: 'Zlomky' },
+              subjectLevel: {
+                subject: {
+                  id: 'subject-1',
+                  name: 'Matematika',
+                },
+              },
+            },
+          },
+          test: {
+            subject: {
+              id: 'subject-1',
+              name: 'Matematika',
+            },
+          },
+        },
+        question: {
+          id: 'question-3',
+          text: '1/2 + 1/4 = ?',
+          correctAnswer: '3/4',
+          correctAnswers: [],
+        },
+      },
+    ]);
+
+    const result = await service.getStudentDiagnostic(
+      'student-1',
+      {
+        userId: 'director-1',
+        organizationId: 'org-1',
+      } as never,
+      'year-1',
+    );
+
+    expect(prisma.response.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          isCorrect: { not: null },
+          submission: expect.objectContaining({
+            studentId: 'membership-1',
+            organizationId: 'org-1',
+            deletedAt: null,
+            submittedAt: { not: null },
+            assignment: expect.objectContaining({
+              organizationId: 'org-1',
+              yearId: 'year-1',
+            }),
+          }),
+        }),
+      }),
+    );
+    expect(result.summary.subjectsCount).toBe(1);
+    expect(result.summary.topicsEvaluated).toBe(1);
+    expect(result.subjects[0]?.subject).toBe('Matematika');
+    expect(result.subjects[0]?.topics[0]?.totalAnswers).toBe(3);
+    expect(result.subjects[0]?.topics[0]?.status).toBe('WEAK');
   });
 });
