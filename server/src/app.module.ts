@@ -50,6 +50,7 @@ import { OrgContextModule } from './common/org-context/org-context.module';
 import { SupportModule } from './support/support.module';
 import { TestingModule } from './testing/testing.module';
 import { TeacherAccessModule } from './teacher-access/teacher-access.module';
+import { ImportsModule } from './imports/imports.module';
 
 @Module({
   imports: [
@@ -116,6 +117,7 @@ import { TeacherAccessModule } from './teacher-access/teacher-access.module';
     SupportModule,
     TestingModule,
     TeacherAccessModule,
+    ImportsModule,
   ],
   providers: [
     { provide: APP_INTERCEPTOR, useClass: ResponseEnvelopeInterceptor },

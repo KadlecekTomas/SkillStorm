@@ -30,6 +30,7 @@ import { showToastOnce } from "@/utils/toast";
 import { isRepairStateClassrooms } from "@/lib/app-state/app-state";
 import { isYearWriteBlocked } from "@/lib/academic-year/write-gate";
 import { ReportIssueButton } from "@/components/support/report-issue-button";
+import { StudentImportPreviewDialog } from "@/components/students/student-import-preview-dialog";
 import { ArrowUp, ArrowDown, ChevronDown, ChevronRight, Minus, Star } from "lucide-react";
 import { cn } from "@/utils/cn";
 import {
@@ -38,6 +39,10 @@ import {
   refreshListAfterMutation,
 } from "@/lib/list-query";
 import { queryClient } from "@/lib/query-client";
+import type {
+  StudentImportCommitResponse,
+  StudentImportPreviewResponse,
+} from "@/lib/api/student-imports";
 
 function getApiErrorMessage(err: unknown): string {
   if (err instanceof HttpError) {
@@ -222,8 +227,12 @@ export function ClassroomsPageContent(): React.JSX.Element {
   const [addOpen, setAddOpen] = useState(false);
   const [addMode, setAddMode] = useState<"PASTE" | "CSV" | "INVITE" | "EXISTING">("EXISTING");
   const [pasteValue, setPasteValue] = useState("");
-  const [csvEntries, setCsvEntries] = useState<Array<{ name: string; email?: string }>>([]);
   const [csvFileName, setCsvFileName] = useState<string | null>(null);
+  const [studentImportPreview, setStudentImportPreview] = useState<StudentImportPreviewResponse | null>(null);
+  const [studentImportPreviewOpen, setStudentImportPreviewOpen] = useState(false);
+  const [studentImportPreviewLoading, setStudentImportPreviewLoading] = useState(false);
+  const [studentImportCommitPending, setStudentImportCommitPending] = useState(false);
+  const [studentImportError, setStudentImportError] = useState<string | null>(null);
   const [addError, setAddError] = useState<string | null>(null);
   const [addSubmitting, setAddSubmitting] = useState(false);
   const [bulkResult, setBulkResult] = useState<{
@@ -297,6 +306,14 @@ export function ClassroomsPageContent(): React.JSX.Element {
     }, 300);
     return () => clearTimeout(handle);
   }, [searchInput, searchTerm, updateQuery]);
+
+  useEffect(() => {
+    if (addOpen) return;
+    setCsvFileName(null);
+    setStudentImportPreview(null);
+    setStudentImportPreviewOpen(false);
+    setStudentImportError(null);
+  }, [addOpen]);
 
   useEffect(() => {
     const updates: Record<string, string | null> = {};
@@ -823,45 +840,77 @@ export function ClassroomsPageContent(): React.JSX.Element {
       .map((name) => ({ name }));
   };
 
-  const parseCsvEntries = (value: string) => {
-    const lines = value
-      .split(/\r?\n/g)
-      .map((line) => line.trim())
-      .filter(Boolean);
-    if (!lines.length) return [] as Array<{ name: string; email?: string }>;
-
-    const normalizeCell = (cell: string) => cell.replace(/^"|"$/g, "").trim();
-    const rows = lines.map((line) => line.split(",").map(normalizeCell));
-    const header = rows[0]?.map((cell) => cell.toLowerCase()) ?? [];
-    const hasHeader = header.includes("name") || header.includes("email");
-
-    const nameIndex = hasHeader ? header.indexOf("name") : 0;
-    const emailIndex = hasHeader ? header.indexOf("email") : 1;
-
-    const dataRows = hasHeader ? rows.slice(1) : rows;
-    return dataRows
-      .map((cols) => ({
-        name: (cols[nameIndex] ?? "").trim(),
-        email: (cols[emailIndex] ?? "").trim(),
-      }))
-      .map((entry) => ({
-        name: entry.name,
-        ...(entry.email ? { email: entry.email } : {}),
-      }))
-      .filter((entry) => entry.name.length > 0);
-  };
-
   const handleCsvFile = async (file: File | null) => {
     if (!file) {
-      setCsvEntries([]);
       setCsvFileName(null);
+      setStudentImportPreview(null);
+      setStudentImportPreviewOpen(false);
+      setStudentImportError(null);
       return;
     }
-    const text = await file.text();
-    const entries = parseCsvEntries(text);
-    setCsvEntries(entries);
-    setCsvFileName(file.name);
+    try {
+      setStudentImportPreviewLoading(true);
+      setStudentImportError(null);
+      const csv = await file.text();
+      const preview = await fetchWithAuth<StudentImportPreviewResponse>(
+        "POST",
+        "/imports/students/preview",
+        {
+          body: {
+            csv,
+            fileName: file.name,
+            ...(effectiveSelectedId ? { defaultClassSectionId: effectiveSelectedId } : {}),
+          },
+        },
+      );
+      setCsvFileName(file.name);
+      setStudentImportPreview(preview);
+      setStudentImportPreviewOpen(true);
+    } catch (err) {
+      setStudentImportPreview(null);
+      setStudentImportPreviewOpen(false);
+      setStudentImportError(getApiErrorMessage(err));
+    } finally {
+      setStudentImportPreviewLoading(false);
+    }
   };
+
+  const handleCommitStudentImport = useCallback(
+    async (
+      rows: Array<{ firstName: string; lastName: string; email?: string; class: string }>,
+    ): Promise<StudentImportCommitResponse | void> => {
+      try {
+        setStudentImportCommitPending(true);
+        setStudentImportError(null);
+        const result = await fetchWithAuth<StudentImportCommitResponse>(
+          "POST",
+          "/imports/students/commit",
+          {
+            body: {
+              rows,
+              fileName: csvFileName ?? undefined,
+              ...(effectiveSelectedId ? { defaultClassSectionId: effectiveSelectedId } : {}),
+            },
+          },
+        );
+
+        await invalidateConsistencyQueries(effectiveSelectedId);
+        await refetchClassrooms({ bypassCache: true });
+        setStudentImportPreviewOpen(false);
+        setStudentImportPreview(null);
+        setCsvFileName(null);
+        setAddOpen(false);
+        showToastOnce(`Importováno ${result.summary.importedRows} žáků.`, { type: "success" });
+        return result;
+      } catch (err) {
+        setStudentImportError(getApiErrorMessage(err));
+        return undefined;
+      } finally {
+        setStudentImportCommitPending(false);
+      }
+    },
+    [csvFileName, effectiveSelectedId, invalidateConsistencyQueries, refetchClassrooms],
+  );
 
   const handleEnrollExisting = async () => {
     if (!effectiveSelectedId || !effectiveYearFilterId) {
@@ -938,8 +987,6 @@ export function ClassroomsPageContent(): React.JSX.Element {
     let entries: Array<{ name: string; email?: string }> = [];
     if (addMode === "PASTE") {
       entries = parsePasteEntries(pasteValue);
-    } else if (addMode === "CSV") {
-      entries = csvEntries;
     }
 
     if (!entries.length) {
@@ -967,8 +1014,8 @@ export function ClassroomsPageContent(): React.JSX.Element {
       if (!result.errors.length) {
         setAddOpen(false);
         setPasteValue("");
-        setCsvEntries([]);
         setCsvFileName(null);
+        setStudentImportPreview(null);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Nepodařilo se zapsat studenty";
@@ -2057,22 +2104,31 @@ export function ClassroomsPageContent(): React.JSX.Element {
           {addMode === "CSV" && (
             <div className="space-y-2">
               <label className="space-y-1 text-sm text-slate-600">
-                CSV soubor (sloupce: name, email)
+                CSV soubor (sloupce: firstName, lastName, email, class)
                 <Input
                   type="file"
                   accept=".csv"
                   onChange={(event) => void handleCsvFile(event.target.files?.[0] ?? null)}
+                  disabled={studentImportPreviewLoading}
                 />
               </label>
               {csvFileName && (
                 <p className="text-xs text-slate-500">
-                  Soubor: {csvFileName} · Načteno {csvEntries.length} studentů
+                  Soubor: {csvFileName} · otevři kontrolu importu před potvrzením.
                 </p>
               )}
               {!csvFileName && (
                 <p className="text-xs text-slate-500">
-                  Příklad: <span className="font-medium">name,email</span>
+                  Příklad: <span className="font-medium">firstName,lastName,email,class</span>
                 </p>
+              )}
+              {studentImportPreviewLoading && (
+                <p className="text-xs text-slate-500">Zpracovávám CSV náhled…</p>
+              )}
+              {studentImportPreview && (
+                <Button type="button" variant="outline" className="w-fit" onClick={() => setStudentImportPreviewOpen(true)}>
+                  Otevřít kontrolu importu
+                </Button>
               )}
             </div>
           )}
@@ -2144,17 +2200,22 @@ export function ClassroomsPageContent(): React.JSX.Element {
           )}
 
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setAddOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setAddOpen(false);
+                setStudentImportPreviewOpen(false);
+              }}
+            >
               Zrušit
             </Button>
-            {addMode !== "INVITE" && (
+            {addMode !== "INVITE" && addMode !== "CSV" && (
               <Button
                 onClick={() => void handleBulkEnroll()}
                 disabled={
                   addSubmitting ||
                   (addMode === "EXISTING" ? selectedStudentIds.size === 0 : false) ||
-                  (addMode === "PASTE" ? !parsePasteEntries(pasteValue).length : false) ||
-                  (addMode === "CSV" ? !csvEntries.length : false)
+                  (addMode === "PASTE" ? !parsePasteEntries(pasteValue).length : false)
                 }
               >
                 Zapsat
@@ -2163,6 +2224,15 @@ export function ClassroomsPageContent(): React.JSX.Element {
           </div>
         </div>
       </BaseModal>
+
+      <StudentImportPreviewDialog
+        open={studentImportPreviewOpen}
+        preview={studentImportPreview}
+        pending={studentImportCommitPending}
+        error={studentImportError}
+        onOpenChange={setStudentImportPreviewOpen}
+        onCommit={handleCommitStudentImport}
+      />
 
       <BaseModal
         title="Upravit předměty"

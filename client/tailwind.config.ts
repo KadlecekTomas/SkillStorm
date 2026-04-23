@@ -31,7 +31,7 @@ const config: Config = {
         },
       },
       fontFamily: {
-        sans: ["var(--font-inter)", ...fontFamily.sans],
+        sans: ["Inter", "ui-sans-serif", "system-ui", "sans-serif", ...fontFamily.sans],
       },
       borderRadius: {
         xl: "1rem",
