@@ -410,6 +410,18 @@ describe('Submissions (e2e)', () => {
       expect(finishRes.body.score).toBeGreaterThan(0.9); // ~1.0
       expect(finishRes.body.score).toBeLessThanOrEqual(1.0);
     }
+
+    const badgesRes = await request(app.getHttpServer())
+      .get('/gamification/me/badges')
+      .set('Authorization', `Bearer ${studentToken}`)
+      .expect(200);
+
+    expect(Array.isArray(badgesRes.body?.data)).toBe(true);
+    const badgeCodes = new Set(
+      (badgesRes.body.data as Array<{ code?: string }>).map((item) => item.code),
+    );
+    expect(badgeCodes.has('FIRST_TEST_COMPLETED')).toBe(true);
+    expect(badgeCodes.has('PERFECT_SCORE')).toBe(true);
   });
 
   // ------------------------------------------------------------------

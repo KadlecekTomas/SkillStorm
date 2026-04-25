@@ -744,6 +744,10 @@ export class SubmissionsService {
         submissionId: finished.id,
       },
     );
+    await this.gamification.evaluateBadgesForSubmission(
+      submission.studentId,
+      finished.id,
+    );
     await this.invalidateSubmissionDerivedCaches(
       organizationId,
       'submissions.finish',

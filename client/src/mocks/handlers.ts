@@ -107,6 +107,7 @@ export const handlers = [
   http.post("*/analytics/log", () => respond(logAnalytics)),
 
   http.get("*/gamification/summary/me", () => respond(() => getGamificationSummary(MSW_SESSION))),
+  http.get("*/gamification/me/badges", () => respond(() => getGamificationSummary(MSW_SESSION).badges ?? [])),
 
   http.post("*/submissions", async ({ request }) => {
     const body = (await request.json()) as { testId: string };

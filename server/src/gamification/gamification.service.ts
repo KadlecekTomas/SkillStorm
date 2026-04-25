@@ -165,6 +165,21 @@ export class GamificationService {
     };
   }
 
+  async getMyBadges(actor: JwtPayload) {
+    const membership = await this.resolveMembership('me', actor);
+    return this.achievements.getMembershipBadges(membership.id);
+  }
+
+  async evaluateBadgesForSubmission(
+    membershipId: string,
+    submissionId: string,
+  ) {
+    return this.achievements.evaluateBadgesForSubmission(
+      membershipId,
+      submissionId,
+    );
+  }
+
   private async resolveLevel(totalXp: number) {
     return this.resolveLevelWithClient(this.prisma, totalXp);
   }
@@ -202,7 +217,11 @@ export class GamificationService {
     };
     if (membershipId === 'me') {
       const record = await this.prisma.membership.findFirst({
-        where: { ...(actor.userId ? { userId: actor.userId } : {}) },
+        where: {
+          ...(actor.membershipId ? { id: actor.membershipId } : {}),
+          ...(actor.userId ? { userId: actor.userId } : {}),
+          ...(actor.organizationId ? { organizationId: actor.organizationId } : {}),
+        },
         select: defaultSelect,
       });
       if (!record) throw new NotFoundException('Membership not found');

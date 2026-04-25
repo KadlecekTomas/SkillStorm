@@ -237,6 +237,15 @@ const gamificationSummary = {
   events: [
     { id: "evt-1", type: "submission", value: 50, description: "Student completed assessment", createdAt: new Date().toISOString() },
   ],
+  badges: [
+    {
+      code: "FIRST_TEST_COMPLETED",
+      name: "První dokončený test",
+      description: "Získáno za první odevzdaný test v organizaci.",
+      iconKey: "badge-first-test",
+      awardedAt: new Date().toISOString(),
+    },
+  ],
 };
 
 const GLOBAL_TOKEN = "__global__";

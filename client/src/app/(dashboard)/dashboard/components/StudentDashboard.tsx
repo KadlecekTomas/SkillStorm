@@ -7,7 +7,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useGamification } from "@/hooks/use-gamification";
+import { useBadges } from "@/hooks/use-badges";
 import { GamificationPanel } from "@/components/gamification/gamification-panel";
+import { BadgesPanel } from "@/components/gamification/badges-panel";
 import { LevelUpModal } from "@/components/gamification/level-up-modal";
 import {
   getDashboardStudent,
@@ -28,6 +30,7 @@ export function StudentDashboard(): React.JSX.Element {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { summary: gamification } = useGamification();
+  const { badges } = useBadges();
   const [levelModalOpen, setLevelModalOpen] = useState(false);
   const previousLevelRef = useRef<number | null>(null);
 
@@ -232,6 +235,8 @@ export function StudentDashboard(): React.JSX.Element {
             achievements={gamification.achievements}
           />
         )}
+
+        <BadgesPanel badges={badges} />
       </div>
       <LevelUpModal
         open={levelModalOpen}

@@ -142,6 +142,7 @@ model Membership {
   importedBatches    ImportBatch[]
   createdMaterials   LearningMaterial[]
   achievements       MembershipAchievement[]
+  badges            MembershipBadge[]
   organization       Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   user               User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
   lastActiveFor      User?                   @relation("LastActiveMembership")
@@ -205,6 +206,36 @@ model MembershipAchievement {
 
   @@unique([membershipId, achievementId])
   @@map("membership_achievements")
+}
+
+model BadgeDefinition {
+  id          String           @id @default(uuid()) @map("badge_definition_id")
+  code        String           @unique @db.VarChar(100)
+  name        String           @db.VarChar(150)
+  description String?          @db.VarChar(255)
+  iconKey     String?          @map("icon_key") @db.VarChar(100)
+  xpReward    Int?             @map("xp_reward")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+  awards      MembershipBadge[]
+
+  @@index([code])
+  @@map("badge_definitions")
+}
+
+model MembershipBadge {
+  id               String          @id @default(uuid()) @map("membership_badge_id")
+  membershipId     String          @map("membership_id")
+  badgeDefinitionId String         @map("badge_definition_id")
+  awardedAt        DateTime        @default(now()) @map("awarded_at")
+  metadata         Json?
+  badgeDefinition  BadgeDefinition @relation(fields: [badgeDefinitionId], references: [id], onDelete: Cascade)
+  membership       Membership      @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+
+  @@unique([membershipId, badgeDefinitionId])
+  @@index([membershipId, awardedAt])
+  @@index([badgeDefinitionId])
+  @@map("membership_badges")
 }
 
 model Permission {

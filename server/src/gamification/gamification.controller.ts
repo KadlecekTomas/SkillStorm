@@ -5,6 +5,7 @@ import { AddXpEventDto } from './dto/add-xp-event.dto';
 import { Permission } from '@/modules/rbac/permission.decorator';
 import { PermissionKey } from '@prisma/client';
 import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
+import { ok } from '@/common/http/envelope';
 
 @Controller('gamification')
 @OrgOperation(OrgOperationType.EXECUTION)
@@ -23,5 +24,10 @@ export class GamificationController {
     @Req() req: RequestWithUser,
   ) {
     return this.gamification.getSummary(membershipId, req.user);
+  }
+
+  @Get('me/badges')
+  async myBadges(@Req() req: RequestWithUser) {
+    return ok(await this.gamification.getMyBadges(req.user));
   }
 }

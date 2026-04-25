@@ -11,9 +11,11 @@ import { seed as seedTests } from './tests.seed';
 import { seed as seedAssignments } from './assignments.seed';
 import { seed as seedLevels } from './levels.seed';
 import { seed as seedPlatformAdmin } from './platform-admin.seed';
+import { seed as seedBadges } from './badges.seed';
 
 export async function runSeedPipeline(prisma: PrismaClient) {
   await seedLevels(prisma);
+  await seedBadges(prisma);
   await seedRbac(prisma);
   await seedOrgs(prisma);
   await seedAcademicYears(prisma);
