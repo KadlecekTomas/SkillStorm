@@ -9,7 +9,7 @@ import "react-toastify/dist/ReactToastify.css";
 import { MswLoader } from "@/components/dev/msw-loader";
 
 export const metadata: Metadata = {
-  title: "SkillStorm · EduTo Platform",
+  title: "SkillStorm Platform",
   description:
     "Modular learning experience platform for teachers and students built with Next.js 14.",
 };

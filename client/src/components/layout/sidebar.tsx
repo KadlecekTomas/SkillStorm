@@ -74,7 +74,7 @@ export const Sidebar = (): React.JSX.Element => {
               </div>
               <div>
                 <p className="text-sm font-semibold leading-tight">SkillStorm</p>
-                <p className="text-xs text-slate-400">EduTo Suite</p>
+                <p className="text-xs text-slate-400">SkillStorm Suite</p>
               </div>
             </Link>
           )}

@@ -594,7 +594,7 @@ export default function SettingsPage(): React.JSX.Element {
       {submitted && (
         <SuccessAlert
           title="Settings updated"
-          description="All changes synced with EduTo backend."
+          description="All changes synced with SkillStorm backend."
         />
       )}
 

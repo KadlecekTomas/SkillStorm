@@ -41,7 +41,7 @@ export default function LoginPage(): JSX.Element {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold text-slate-900">
-          Přihlášení do EduTo
+          Přihlášení do SkillStorm
         </h1>
         <p className="text-sm text-slate-500">
           Přihlaste se pomocí svého účtu.

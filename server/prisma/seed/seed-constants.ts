@@ -2,19 +2,19 @@ import { OrganizationType, SchoolGrade } from '@prisma/client';
 
 export const ORG_IDS = {
   chodovicka: '11111111-2222-4000-8000-000000000001',
-  edutoDemo: '11111111-2222-4000-8000-000000000002',
+  skillStormDemo: '11111111-2222-4000-8000-000000000002',
   pythonCommunity: '11111111-2222-4000-8000-000000000003',
 } as const;
 
 export const ORG_NAMES: Record<keyof typeof ORG_IDS, string> = {
   chodovicka: 'FZŠ Chodovická',
-  edutoDemo: 'EduTo Demo Class',
+  skillStormDemo: 'SkillStorm Demo Class',
   pythonCommunity: 'Komunitní kurz Python',
 };
 
 export const ORG_TYPES: Record<keyof typeof ORG_IDS, OrganizationType> = {
   chodovicka: OrganizationType.SCHOOL,
-  edutoDemo: OrganizationType.PRIVATE,
+  skillStormDemo: OrganizationType.PRIVATE,
   pythonCommunity: OrganizationType.COMMUNITY,
 };
 

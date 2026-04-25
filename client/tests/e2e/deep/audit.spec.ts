@@ -1,7 +1,7 @@
 /**
  * COMPREHENSIVE APPLICATION AUDIT
  *
- * Full automated QA audit of the SkillStorm EduTo platform.
+ * Full automated QA audit of the SkillStorm platform.
  *
  *   Part 1  — Basic Application Health
  *   Part 2  — Performance Audit

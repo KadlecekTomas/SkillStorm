@@ -18,12 +18,12 @@ export default function AuthLayout({ children }: { children: ReactNode }): React
           className="flex flex-col gap-8 bg-white px-8 py-10 shadow-2xl lg:px-12"
         >
           <Link href="/" className="text-xl font-semibold text-slate-900">
-            EduTo
+            SkillStorm
           </Link>
 
           <div className="my-auto">
             <h2 className="text-3xl font-semibold text-slate-900">
-              Přístup do systému EduTo
+              Přístup do systému SkillStorm
             </h2>
 
             <p className="mt-3 text-slate-500">

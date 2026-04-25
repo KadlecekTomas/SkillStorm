@@ -72,6 +72,7 @@ services:
       - .env
     environment:
       NODE_ENV: ${NODE_ENV:-production}
+      ENABLE_SWAGGER: ${ENABLE_SWAGGER:-1}
       PORT: 4200
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-skillstorm}
       # No default: container must fail if JWT_SECRET not set (production safety).

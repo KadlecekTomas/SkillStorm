@@ -30,6 +30,26 @@ const STUDENT_EMAIL = "student-a@zs.demo.local";
 const PASSWORD      = "Password123!";
 const TEST_TITLE    = `DiagTest-${Date.now()}`;
 
+type ClassSubjectItem = {
+  id: string;
+  subject: {
+    id: string;
+    name?: string | null;
+  };
+};
+
+type TopicLevelItem = {
+  id: string;
+  name?: string | null;
+  catalogTopic?: {
+    id?: string | null;
+    name?: string | null;
+  } | null;
+  subjectLevel?: {
+    grade?: string | null;
+  } | null;
+};
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 /**
@@ -64,6 +84,13 @@ function datetimeLocal(offsetMinutes: number): string {
   const d = new Date(Date.now() + offsetMinutes * 60_000);
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function chooseTopicForGrade(topics: TopicLevelItem[], grade: string): TopicLevelItem | null {
+  const exact = topics.find((topic) => topic.catalogTopic?.id && topic.subjectLevel?.grade === grade);
+  if (exact) return exact;
+  const fallback = topics.find((topic) => topic.catalogTopic?.id);
+  return fallback ?? null;
 }
 
 async function loginAs(page: Page, email: string): Promise<void> {
@@ -144,22 +171,41 @@ test("seeded-core-flow: teacher → publish → assign → student → score →
   // 2b: Back to teacher session
   await loginAs(page, TEACHER_EMAIL);
 
-  // 2c: Discover subject
-  const subjectsResp = await apiGet(page, "/subjects?limit=10");
-  expect(subjectsResp.status, "GET /subjects must return 200").toBe(200);
-  const subjectsList = (() => {
-    const u = unwrap(subjectsResp.json);
-    return Array.isArray(u) ? u as Array<{ id: string; name?: string }> : [];
+  // 2c: Discover a subject enabled for the student's class.
+  const classSubjectsResp = await apiGet(page, `/class-sections/${classSectionId}/org-subjects`);
+  expect(classSubjectsResp.status, "GET /class-sections/:id/org-subjects must return 200").toBe(200);
+  const classSubjects = (() => {
+    const u = unwrap(classSubjectsResp.json);
+    return Array.isArray(u) ? u as ClassSubjectItem[] : [];
   })();
-  expect(subjectsList.length, "at least one subject must exist").toBeGreaterThan(0);
-  const subjectId = subjectsList[0]!.id;
-  console.log(`[create] subject: ${subjectId} (${subjectsList[0]!.name ?? "?"})`);
+  expect(classSubjects.length, "student class must expose at least one enabled subject").toBeGreaterThan(0);
+  const selectedSubject = classSubjects[0]!;
+  const subjectId = selectedSubject.subject.id;
+  console.log(`[create] subject: ${subjectId} (${selectedSubject.subject.name ?? "?"})`);
 
-  // 2d: Create test — include student's grade in allowedGrades
+  // 2d: Discover a topic so the test is publishable under current business rules.
+  const subjectTopicsResp = await apiGet(page, `/topics/by-subject/${subjectId}`);
+  expect(subjectTopicsResp.status, "GET /topics/by-subject/:subjectId must return 200").toBe(200);
+  const subjectTopics = (() => {
+    const u = unwrap(subjectTopicsResp.json);
+    return Array.isArray(u) ? u as TopicLevelItem[] : [];
+  })();
+  const selectedTopic = chooseTopicForGrade(subjectTopics, studentGrade);
+  expect(
+    selectedTopic,
+    `subject ${subjectId} must expose at least one topic with catalogTopic for class grade ${studentGrade}`,
+  ).toBeTruthy();
+  expect(selectedTopic?.catalogTopic?.id, "selected topic must expose catalogTopicId").toBeTruthy();
+  console.log(
+    `[create] topic: ${selectedTopic!.catalogTopic!.id} (${selectedTopic!.catalogTopic!.name ?? selectedTopic!.name ?? "?"})`,
+  );
+
+  // 2e: Create test — include student's grade and topic assignment metadata.
   const createResp = await apiPost(page, "/tests", {
     title: TEST_TITLE,
     subjectId,
     allowedGrades: [studentGrade],
+    catalogTopicId: selectedTopic!.catalogTopic!.id,
   });
   expect(createResp.status, `POST /tests must succeed (got ${createResp.status}: ${JSON.stringify(createResp.json).slice(0, 200)})`).toBeLessThan(300);
   testId = unwrap<{ id?: string }>(createResp.json)?.id ?? "";

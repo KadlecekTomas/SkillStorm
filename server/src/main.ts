@@ -239,6 +239,15 @@ function initSentryIfConfigured(): void {
   }
 }
 
+function isSwaggerEnabled(): boolean {
+  const explicit = process.env.ENABLE_SWAGGER?.trim().toLowerCase();
+  if (explicit) {
+    return explicit === '1' || explicit === 'true' || explicit === 'yes';
+  }
+
+  return process.env.NODE_ENV !== 'production';
+}
+
 /**
  * Produkční/dev bootstrap (spouští HTTP server).
  * V test módu se server nespouští – v e2e si zavolej `createApp()` + `app.init()`.
@@ -253,7 +262,7 @@ async function bootstrap() {
   }
 
   if (process.env.NODE_ENV !== 'test') {
-    if (process.env.NODE_ENV !== 'production') {
+    if (isSwaggerEnabled()) {
       setupSwagger(app);
     }
     await app.listen(process.env.PORT ?? 4200, '0.0.0.0');

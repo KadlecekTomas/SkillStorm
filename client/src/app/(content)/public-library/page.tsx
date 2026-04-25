@@ -7,7 +7,7 @@ export default function PublicLibraryPage(): React.JSX.Element {
     <div className="min-h-screen bg-secondary px-6 py-12">
       <div className="mx-auto max-w-5xl space-y-6">
         <div className="text-center">
-          <p className="text-sm uppercase tracking-wide text-primary">EduTo Library</p>
+          <p className="text-sm uppercase tracking-wide text-primary">SkillStorm Library</p>
           <h1 className="mt-2 text-3xl font-semibold text-slate-900">
             Curated teaching resources
           </h1>
