@@ -12,6 +12,30 @@ const BADGE_CODES = {
   ACTIVE_LEARNER: 'ACTIVE_LEARNER',
 } as const;
 
+const DEFAULT_BADGE_DEFINITIONS = [
+  {
+    code: BADGE_CODES.FIRST_TEST_COMPLETED,
+    name: 'První dokončený test',
+    description: 'Získáno za první odevzdaný test v organizaci.',
+    iconKey: 'badge-first-test',
+    xpReward: null,
+  },
+  {
+    code: BADGE_CODES.PERFECT_SCORE,
+    name: 'Perfektní výsledek',
+    description: 'Získáno za skóre 100 % v testu.',
+    iconKey: 'badge-perfect-score',
+    xpReward: null,
+  },
+  {
+    code: BADGE_CODES.ACTIVE_LEARNER,
+    name: 'Aktivní student',
+    description: 'Získáno za tři dokončené testy v organizaci.',
+    iconKey: 'badge-active-learner',
+    xpReward: null,
+  },
+] as const;
+
 export type MembershipBadgeView = {
   code: string;
   name: string;
@@ -56,6 +80,8 @@ export class AchievementsService {
     membershipId: string,
     submissionId: string,
   ): Promise<string[]> {
+    await this.ensureDefaultBadgeDefinitions();
+
     const submission = await this.prisma.submission.findUnique({
       where: { id: submissionId },
       select: {
@@ -70,7 +96,48 @@ export class AchievementsService {
     if (submission.studentId !== membershipId) return [];
     if (!submission.submittedAt) return [];
 
-    const [badgeDefinitions, completedCount, existingAwards] = await Promise.all([
+    return this.syncSubmissionBadges(membershipId, {
+      source: 'submission.finish',
+      submissionId,
+    });
+  }
+
+  async getMembershipBadges(membershipId: string): Promise<MembershipBadgeView[]> {
+    await this.ensureDefaultBadgeDefinitions();
+    await this.syncSubmissionBadges(membershipId, {
+      source: 'badge.read',
+    });
+
+    const items = await this.prisma.membershipBadge.findMany({
+      where: { membershipId },
+      orderBy: { awardedAt: 'desc' },
+      select: {
+        awardedAt: true,
+        badgeDefinition: {
+          select: {
+            code: true,
+            name: true,
+            description: true,
+            iconKey: true,
+          },
+        },
+      },
+    });
+
+    return items.map((item) => ({
+      code: item.badgeDefinition.code,
+      name: item.badgeDefinition.name,
+      description: item.badgeDefinition.description ?? null,
+      iconKey: item.badgeDefinition.iconKey ?? null,
+      awardedAt: item.awardedAt,
+    }));
+  }
+
+  private async syncSubmissionBadges(
+    membershipId: string,
+    metadata: { source: string; submissionId?: string },
+  ): Promise<string[]> {
+    const [badgeDefinitions, completedCount, perfectSubmission, existingAwards] = await Promise.all([
       this.prisma.badgeDefinition.findMany({
         where: {
           code: {
@@ -89,6 +156,15 @@ export class AchievementsService {
           submittedAt: { not: null },
           deletedAt: null,
         },
+      }),
+      this.prisma.submission.findFirst({
+        where: {
+          studentId: membershipId,
+          submittedAt: { not: null },
+          deletedAt: null,
+          score: { gte: 0.9999 },
+        },
+        select: { id: true },
       }),
       this.prisma.membershipBadge.findMany({
         where: { membershipId },
@@ -109,14 +185,13 @@ export class AchievementsService {
 
     const toAwardCodes: string[] = [];
     if (
-      completedCount === 1 &&
+      completedCount >= 1 &&
       !alreadyAwarded.has(BADGE_CODES.FIRST_TEST_COMPLETED)
     ) {
       toAwardCodes.push(BADGE_CODES.FIRST_TEST_COMPLETED);
     }
     if (
-      submission.score != null &&
-      submission.score >= 0.9999 &&
+      perfectSubmission &&
       !alreadyAwarded.has(BADGE_CODES.PERFECT_SCORE)
     ) {
       toAwardCodes.push(BADGE_CODES.PERFECT_SCORE);
@@ -142,8 +217,8 @@ export class AchievementsService {
           badgeDefinitionId: definition.id,
           awardedAt: now,
           metadata: {
-            source: 'submission.finish',
-            submissionId,
+            source: metadata.source,
+            ...(metadata.submissionId ? { submissionId: metadata.submissionId } : {}),
           } as Prisma.InputJsonValue,
         })),
         skipDuplicates: true,
@@ -163,7 +238,7 @@ export class AchievementsService {
             description: 'Badge reward',
             metadata: {
               source: 'badges',
-              submissionId,
+              ...(metadata.submissionId ? { submissionId: metadata.submissionId } : {}),
               badgeCodes: definitionsToAward.map((definition) => definition.code),
             } as Prisma.InputJsonValue,
           },
@@ -180,30 +255,17 @@ export class AchievementsService {
     return definitionsToAward.map((definition) => definition.code);
   }
 
-  async getMembershipBadges(membershipId: string): Promise<MembershipBadgeView[]> {
-    const items = await this.prisma.membershipBadge.findMany({
-      where: { membershipId },
-      orderBy: { awardedAt: 'desc' },
-      select: {
-        awardedAt: true,
-        badgeDefinition: {
-          select: {
-            code: true,
-            name: true,
-            description: true,
-            iconKey: true,
-          },
-        },
-      },
+  private async ensureDefaultBadgeDefinitions() {
+    await this.prisma.badgeDefinition.createMany({
+      data: DEFAULT_BADGE_DEFINITIONS.map((definition) => ({
+        code: definition.code,
+        name: definition.name,
+        description: definition.description,
+        iconKey: definition.iconKey,
+        xpReward: definition.xpReward,
+      })),
+      skipDuplicates: true,
     });
-
-    return items.map((item) => ({
-      code: item.badgeDefinition.code,
-      name: item.badgeDefinition.name,
-      description: item.badgeDefinition.description ?? null,
-      iconKey: item.badgeDefinition.iconKey ?? null,
-      awardedAt: item.awardedAt,
-    }));
   }
 
   private meetsCondition(condition: AchievementCondition, xp: number) {

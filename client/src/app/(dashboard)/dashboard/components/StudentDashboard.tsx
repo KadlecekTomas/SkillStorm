@@ -23,6 +23,12 @@ import { OverviewCard } from "@/components/cards/overview-card";
 import { Alert } from "@/components/ui/alert";
 import { formatDate } from "@/lib/format-date";
 
+const scoreToPercent = (score: number | null | undefined): string => {
+  if (typeof score !== "number" || Number.isNaN(score)) return "—";
+  const percent = score <= 1 ? score * 100 : score;
+  return `${Math.round(percent)}%`;
+};
+
 export function StudentDashboard(): React.JSX.Element {
   const router = useRouter();
   const [data, setData] = useState<StudentDashboardResponse | null>(null);
@@ -106,7 +112,7 @@ export function StudentDashboard(): React.JSX.Element {
           <OverviewCard
             title="Průměrné skóre"
             value={
-              data?.avgScore != null ? `${Math.round(data.avgScore)}%` : "—"
+              data?.avgScore != null ? scoreToPercent(data.avgScore) : "—"
             }
             delta="Z vyhodnocených testů"
             icon={<BookOpenCheck className="h-5 w-5" />}
@@ -214,7 +220,7 @@ export function StudentDashboard(): React.JSX.Element {
                   </div>
                   {sub.score !== null ? (
                     <p className="text-sm font-semibold text-slate-900">
-                      {Math.round(sub.score)}%
+                      {scoreToPercent(sub.score)}
                     </p>
                   ) : (
                     <Badge variant="neutral">Čeká na vyhodnocení</Badge>
