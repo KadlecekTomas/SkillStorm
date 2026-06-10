@@ -42,22 +42,17 @@ jobs:
           npm ci
           npm run build
 
-      - name: 🧪 FE policy tests
+      - name: 🧪 FE component policy tests
         working-directory: ./client
         run: |
           npx playwright install --with-deps
-          npm run test:fe-policy
+          npm run test:fe-components
 
       # === BACKEND ===
-      - name: 🧩 Ensure Nest CLI available
-        working-directory: ./server
-        run: npm install --save-dev @nestjs/cli
-
       - name: 🧱 Build backend & seed DB
         working-directory: ./server
         run: |
           npm ci
-          npm install -g @nestjs/cli
           npm run prisma:generate
           npx prisma migrate deploy
           npm run typecheck

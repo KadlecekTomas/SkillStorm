@@ -40,15 +40,6 @@ jobs:
       - name: 🧪 Run unit/component tests
         run: npm run test:unit
 
-      - name: 🎭 Install Playwright browsers
-        run: npx playwright install --with-deps chromium
-
-      - name: 🎬 Run E2E tests
-        run: npm run test:e2e
-        env:
-          CI: true
-          BASE_URL: http://127.0.0.1:3000
-
       - name: 🏗️ Build Next.js application
         run: npm run build
         env:

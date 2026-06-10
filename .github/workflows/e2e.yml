@@ -1,0 +1,92 @@
+name: Fullstack E2E
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  NODE_VERSION: "20"
+  DATABASE_URL: postgresql://skillstorm_ci:skillstorm_ci_password@localhost:5432/skillstorm_ci
+  REDIS_URL: redis://localhost:6379
+  JWT_ACCESS_SECRET: ciSyntheticAccessSecret1234567890abcdef
+  JWT_REFRESH_SECRET: ciSyntheticRefreshSecret1234567890abcdef
+  JWT_SECRET: ciSyntheticAccessSecret1234567890abcdef
+  COOKIE_SECRET: ciSyntheticCookieSecret1234567890abcdef
+  METRICS_INGEST_KEY: ciSyntheticMetricsKey1234567890abcdef
+  CORS_ORIGINS: http://127.0.0.1:3001,http://localhost:3001
+  PUBLIC_APP_URL: http://127.0.0.1:3001
+  API_URL: http://127.0.0.1:4200
+  API_PROXY_TARGET: http://127.0.0.1:4200
+  DISABLE_CSRF: "1"
+  DISABLE_THROTTLE: "1"
+  E2E_TEST_TOKEN: skillstorm-e2e-token
+  CI: "true"
+
+jobs:
+  playwright:
+    name: Playwright Fullstack E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: skillstorm_ci
+          POSTGRES_PASSWORD: skillstorm_ci_password
+          POSTGRES_DB: skillstorm_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U skillstorm_ci -d skillstorm_ci"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            server/package-lock.json
+            client/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm ci
+        working-directory: server
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: client
+
+      - name: Prepare backend database
+        run: |
+          npm run prisma:generate
+          npx prisma migrate deploy
+          npm run seed:full
+          DEMO_SEED=1 npm run prisma:seed
+        working-directory: server
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+        working-directory: client
+
+      - name: Run Playwright E2E
+        run: npm run test:e2e
+        working-directory: client

@@ -145,6 +145,8 @@ Datum auditu: 2026-06-10
 * Production gate: `.github/workflows/production-gate.yml` běží na push a pull request do `main` a `develop`.
 * Backend gate: `npm ci`, `npm run prisma:generate`, `npm run typecheck`, `npm run build` v `server`; CI dodává syntetické `DATABASE_URL`, protože čistý runner nemá vygenerovaný Prisma client a `prebuild` spouští Prisma generate znovu.
 * Frontend gate: `npm ci`, `npm run typecheck`, `npm run build` v `client`; production build používá syntetické `API_PROXY_TARGET=http://backend:4200`, aby ověřil Docker-like proxy target bez produkčních secrets.
+* Frontend-only CI: `.github/workflows/frontend-ci.yml` nespouští fullstack Playwright e2e; ty vyžadují backend dependencies, DB a běžící backend.
+* Fullstack E2E: `.github/workflows/e2e.yml` instaluje server i client dependencies, startuje Postgres/Redis services, připraví Prisma DB a spouští `npm run test:e2e` přes lokální package scripts; Playwright startuje backend přes `npm --prefix ../server run start:e2e`, ne přes globální Nest CLI.
 * Frontend MSW policy: mock loader se v produkci nespouští, pokud není explicitně zapnutý přes `NEXT_PUBLIC_ENABLE_MSW=true`; protože loader zůstává dohledatelný build bundlerem, `msw` musí být explicitní devDependency dostupná v build stage.
 * Prisma gate: `npx prisma validate` a `npx prisma generate` v `server`; CI dodává syntetické `DATABASE_URL` bez reálných secrets.
 * Docker gate: `docker compose -f docker-compose.prod.yml config` běží se syntetickými `PROD_*` hodnotami v workflow env.
