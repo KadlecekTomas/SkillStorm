@@ -143,13 +143,16 @@ Datum auditu: 2026-06-10
 ## CI audit
 
 * Production gate: `.github/workflows/production-gate.yml` běží na push a pull request do `main` a `develop`.
-* Backend gate: `npm ci`, `npm run typecheck`, `npm run build` v `server`.
+* Backend gate: `npm ci`, `npm run prisma:generate`, `npm run typecheck`, `npm run build` v `server`; CI dodává syntetické `DATABASE_URL`, protože čistý runner nemá vygenerovaný Prisma client a `prebuild` spouští Prisma generate znovu.
 * Frontend gate: `npm ci`, `npm run typecheck`, `npm run build` v `client`; production build používá syntetické `API_PROXY_TARGET=http://backend:4200`, aby ověřil Docker-like proxy target bez produkčních secrets.
-* Prisma gate: `npx prisma validate` a `npx prisma generate` v `server`.
+* Frontend MSW policy: mock loader se v produkci nespouští, pokud není explicitně zapnutý přes `NEXT_PUBLIC_ENABLE_MSW=true`; protože loader zůstává dohledatelný build bundlerem, `msw` musí být explicitní devDependency dostupná v build stage.
+* Prisma gate: `npx prisma validate` a `npx prisma generate` v `server`; CI dodává syntetické `DATABASE_URL` bez reálných secrets.
 * Docker gate: `docker compose -f docker-compose.prod.yml config` běží se syntetickými `PROD_*` hodnotami v workflow env.
 * Env guards: `scripts/check-prod-env.sh` a `scripts/check-no-committed-env.sh` běží v CI.
 * Secrets: CI nepoužívá reálné produkční secrety; používá dlouhé syntetické hodnoty pouze pro render/validaci konfigurace.
+* Clean install parity: server typecheck závisí na explicitních `@types/express`, `@types/passport-jwt`, `@types/cookie-parser` a `@types/uuid` devDependencies.
 * Lint: lint není blocking production gate; historické lint kroky v `ci.yml` a `frontend-ci.yml` jsou non-blocking do plánovaného cleanupu.
+* Dependency follow-up: `npm audit` zranitelnosti jsou security backlog mimo tento CI parity fix; Prisma `package.json#prisma` warning bude řešen samostatně přes `prisma.config.ts`.
 * Migrace při deployi: `RUN_MIGRATIONS` existuje, ale runbook musí popsat rollback, lock a zero-downtime postup.
 * Backupy/monitoring: v repu není produkční backup strategie. Sentry je volitelné přes `SENTRY_DSN`, health a metrics moduly existují.
 
@@ -161,7 +164,7 @@ Datum auditu: 2026-06-10
 | Frontend build-time env | `API_PROXY_TARGET`, `BETA_MODE`, `ENABLE_RBAC_TELEMETRY_CLIENT` | `API_PROXY_TARGET` se vyhodnocuje v `next.config.ts` při `rewrites()` během `next build` i runtime startu. |
 | Frontend public env | `NEXT_PUBLIC_BETA_MODE`, `NEXT_PUBLIC_ENABLE_RBAC_TELEMETRY_CLIENT`, volitelně `NEXT_PUBLIC_AUTH_DEBUG`, `NEXT_PUBLIC_ENABLE_MSW`, `NEXT_PUBLIC_API_BASE_URL` | První dvě hodnoty se odvozují v `next.config.ts`; public hodnoty nejsou secrets. |
 | Docker input env `PROD_*` | `PROD_DATABASE_URL`, `PROD_JWT_ACCESS_SECRET`, `PROD_JWT_REFRESH_SECRET`, `PROD_COOKIE_SECRET`, `PROD_METRICS_INGEST_KEY`, `PROD_PUBLIC_APP_URL`, `PROD_API_URL`, `PROD_API_PROXY_TARGET`, `PROD_CORS_ORIGINS`, `PROD_ALLOW_CROSS_SITE_COOKIES`, `PROD_ALLOW_PUBLIC_ORG_CREATION`, `PROD_RUN_MIGRATIONS`, `PROD_RUN_SEED`, `PROD_FRONTEND_PORT`, `PROD_ENABLE_RBAC_TELEMETRY_CLIENT`, `PROD_BETA_MODE`, `PROD_SUPERADMIN_EMAIL`, `PROD_SUPERADMIN_PASSWORD` | `PROD_API_PROXY_TARGET=http://backend:4200` je non-secret Docker network config. |
-| CI synthetic env | Stejné `PROD_*` vstupy jako production compose plus frontend build `API_PROXY_TARGET=http://backend:4200` | Hodnoty jsou syntetické, nereálné a slouží pouze k production gate render/build validaci. |
+| CI synthetic env | Stejné `PROD_*` vstupy jako production compose plus backend/Prisma `DATABASE_URL=postgresql://skillstorm_ci:skillstorm_ci_password@localhost:5432/skillstorm_ci` a frontend build `API_PROXY_TARGET=http://backend:4200` | Hodnoty jsou syntetické, nereálné a slouží pouze k production gate render/build validaci. |
 
 ## Test audit
 

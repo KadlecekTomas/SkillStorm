@@ -8,6 +8,7 @@ on:
 
 env:
   NODE_VERSION: "20"
+  DATABASE_URL: postgresql://skillstorm_ci:skillstorm_ci_password@localhost:5432/skillstorm_ci
   PROD_POSTGRES_USER: skillstorm_prod_user
   PROD_POSTGRES_PASSWORD: ciSyntheticPostgresPassword1234567890
   PROD_POSTGRES_DB: skillstorm_prod
@@ -67,6 +68,10 @@ jobs:
 
       - name: Install backend dependencies
         run: npm ci
+        working-directory: server
+
+      - name: Backend Prisma generate
+        run: npm run prisma:generate
         working-directory: server
 
       - name: Backend typecheck

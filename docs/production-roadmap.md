@@ -34,6 +34,7 @@ Stav 2026-06-10: zahájeno. Přidána backend test matrix v `docs/tenant-rbac-te
 * PostgreSQL backup a restore smoke test.
 * Migration runbook a rollback postup.
 * Release checklist pro secrets, env, Docker image tags, migrations, seed policy a smoke test.
+* Follow-up mimo aktuální CI parity fix: vyřešit `npm audit` dependency backlog a přesunout Prisma konfiguraci z deprecated `package.json#prisma` do `prisma.config.ts`.
 
 ## 5. P1 datové invarianty
 
