@@ -6,9 +6,12 @@ Aktuální verdikt: READY FOR PRE-PROD
 
 ## 1. Tenant isolation / RBAC testy
 
+Stav 2026-06-10: zahájeno. Přidána backend test matrix v `docs/tenant-rbac-test-matrix.md` a rozšířená Jest e2e sada `tenant-scope-fortress` pro cross-tenant testy, assignment/submission izolaci, student/admin deny scénáře a org-scoped RBAC deny.
+
 * Endpoint-by-endpoint IDOR testy pro organizace, třídy, studenty, testy, assignmenty, submissions, audit, import/export.
 * Role matrix testy pro platform role i organization role.
 * Negativní testy pro cross-tenant přístup.
+* Zbývající P0 mezery: `PATCH /students/:id`, enrollment mutation cross-tenant testy a submission mutation cross-tenant testy.
 
 ## 2. Lint cleanup po kategoriích
 

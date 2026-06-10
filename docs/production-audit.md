@@ -44,6 +44,7 @@ Datum auditu: 2026-06-10
 | `docker compose -f docker-compose.prod.yml config` | PASS | Ověřeno se syntetickými `PROD_*` hodnotami; Postgres/Redis nemají publikované porty, backend není publikovaný, frontend publikuje pouze `PROD_FRONTEND_PORT`. |
 | `scripts/check-prod-env.sh` | PASS | Ověřeno se syntetickými `PROD_*` hodnotami; guard kontroluje zakázané fallback secrety, CSRF/Swagger, slabé markery a DB/Redis porty. |
 | `scripts/check-no-committed-env.sh` | PASS | Ověřuje přes `git ls-files`, že nejsou trackované reálné `.env` soubory. |
+| `npm --prefix server run test:e2e -- --runTestsByPath test/e2e/tenant-scope-fortress.e2e-spec.ts` | PASS | 15/15 tenant isolation/RBAC negativních e2e testů prošlo; sada odhalila a pokrývá opravu priority org-scoped RBAC policy proti globálnímu fallbacku. |
 
 ## P0 hardening update 2026-06-10
 
@@ -157,6 +158,7 @@ Datum auditu: 2026-06-10
 * Unit testy: existují rozsáhlé Jest/Vitest testy na backend služby a frontend komponenty/policy.
 * E2E: Playwright testy existují pro auth, RBAC, multitenancy, seeded core flow, onboarding, logout a hlubší workflowy.
 * Ověřeno v auditu: reprezentativní token/scoring unit testy a frontend login/post-auth policy prošly.
+* Ověřeno v tenant/RBAC iteraci 2026-06-10: backend `tenant-scope-fortress` e2e sada prochází 15/15 a pokrývá cross-org test read/update, body `organizationId` spoofing, assignment/submission izolaci, cizí class/student přístup, org-scoped RBAC deny a student deny pro teacher/admin endpointy.
 * Neověřeno v auditu: plný e2e běh, protože vyžaduje běžící stack/seed a je časově dražší.
 
 Minimální testovací sada před production-ready:
