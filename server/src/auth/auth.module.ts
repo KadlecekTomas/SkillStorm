@@ -12,6 +12,7 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { GamificationModule } from '@/gamification/gamification.module';
 import { AuditModule } from '@/audit/audit.module';
 import { RbacModule } from '@/modules/rbac/rbac.module';
+import { getJwtAccessSecret } from './jwt-secrets';
 
 @Module({
   imports: [
@@ -25,10 +26,7 @@ import { RbacModule } from '@/modules/rbac/rbac.module';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: async (configService: ConfigService) => {
-        const secret = configService.get<string>('JWT_SECRET');
-        if (!secret) {
-          throw new Error('JWT_SECRET is not configured');
-        }
+        const secret = getJwtAccessSecret(configService);
         return {
           secret,
           signOptions: { expiresIn: '1h' },

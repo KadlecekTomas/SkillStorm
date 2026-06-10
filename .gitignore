@@ -1,6 +1,12 @@
 node_modules/
 dist/
 .env
+.env.local
+.env.production
+.env.test
+.env.development
+.env.staging
+.env.*.local
 .DS_Store
 
 # Prevent stale compiled artifacts in src/ from shadowing .ts (causes "X is not a function")
@@ -10,12 +16,11 @@ server/src/shared/cache/*.js.map
 client/.env
 server/.env
 audit-report.json
+*.log
+logs/
 client/tests/test-results/
 client/test-results/
 test-results/
 client/tests/playwright-report/
 client/tests/snapshots/
 .playwright-mcp/
-docs/
-client/docs/
-server/docs/

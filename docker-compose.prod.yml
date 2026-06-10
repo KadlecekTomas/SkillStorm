@@ -1,0 +1,124 @@
+name: skillstorm-prod
+
+networks:
+  public:
+    driver: bridge
+  internal:
+    driver: bridge
+    internal: true
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${PROD_POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${PROD_POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${PROD_POSTGRES_DB:?POSTGRES_DB is required}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - internal
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - internal
+
+  backend:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+      target: runner
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 4200
+      DATABASE_URL: ${PROD_DATABASE_URL:?DATABASE_URL is required}
+      JWT_ACCESS_SECRET: ${PROD_JWT_ACCESS_SECRET:?JWT_ACCESS_SECRET is required}
+      JWT_REFRESH_SECRET: ${PROD_JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
+      COOKIE_SECRET: ${PROD_COOKIE_SECRET:?COOKIE_SECRET is required}
+      REDIS_URL: redis://redis:6379
+      RUN_MIGRATIONS: ${PROD_RUN_MIGRATIONS:?RUN_MIGRATIONS must be set to 0 or 1}
+      RUN_SEED: ${PROD_RUN_SEED:?RUN_SEED must be set to 0 or 1}
+      DEMO_SEED: "0"
+      DEMO_MODE: "0"
+      METRICS_INGEST_KEY: ${PROD_METRICS_INGEST_KEY:?METRICS_INGEST_KEY is required}
+      PUBLIC_APP_URL: ${PROD_PUBLIC_APP_URL:?PUBLIC_APP_URL is required}
+      API_URL: ${PROD_API_URL:?API_URL is required}
+      CORS_ORIGINS: ${PROD_CORS_ORIGINS:?CORS_ORIGINS is required}
+      ALLOW_CROSS_SITE_COOKIES: ${PROD_ALLOW_CROSS_SITE_COOKIES:?ALLOW_CROSS_SITE_COOKIES must be set to 0 or 1}
+      DISABLE_CSRF: "0"
+      ENABLE_SWAGGER: "0"
+      ALLOW_PUBLIC_ORG_CREATION: ${PROD_ALLOW_PUBLIC_ORG_CREATION:?ALLOW_PUBLIC_ORG_CREATION must be set to true or false}
+      SUPERADMIN_EMAIL: ${PROD_SUPERADMIN_EMAIL:-}
+      SUPERADMIN_PASSWORD: ${PROD_SUPERADMIN_PASSWORD:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:4200/health').then((res) => process.exit(res.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - internal
+
+  frontend:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+      target: runner
+      args:
+        API_PROXY_TARGET: http://backend:4200
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      API_PROXY_TARGET: http://backend:4200
+      ENABLE_RBAC_TELEMETRY_CLIENT: ${PROD_ENABLE_RBAC_TELEMETRY_CLIENT:-0}
+      DEMO_MODE: "0"
+      BETA_MODE: ${PROD_BETA_MODE:-}
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000').then((res) => process.exit(res.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    ports:
+      - "${PROD_FRONTEND_PORT:?FRONTEND_PORT is required}:3000"
+    networks:
+      - public
+      - internal
+
+volumes:
+  pgdata:

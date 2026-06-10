@@ -50,6 +50,7 @@ import {
   invalidateResourcesFailSafe,
   type CachedResource,
 } from '@/shared/cache/org-cache.utils';
+import { getJwtAccessSecret } from './jwt-secrets';
 import { getOrgBootstrap, getOrgReadiness, type OrgBootstrap, type OrgReadiness } from '@/shared/org-readiness.utils';
 import {
   deriveOrgReadiness,
@@ -211,10 +212,7 @@ export class AuthService {
 
   private async generateTokens(user: User, membership: Membership | null) {
     const claims = this.buildClaims(user, membership);
-    const accessSecret = this.config.get<string>('JWT_SECRET');
-    if (!accessSecret) {
-      throw new Error('JWT_SECRET is not configured');
-    }
+    const accessSecret = getJwtAccessSecret(this.config);
 
     const accessToken = this.jwtService.sign(
       { ...claims },
