@@ -1,0 +1,133 @@
+name: Production Gate
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  NODE_VERSION: "20"
+  PROD_POSTGRES_USER: skillstorm_prod_user
+  PROD_POSTGRES_PASSWORD: ciSyntheticPostgresPassword1234567890
+  PROD_POSTGRES_DB: skillstorm_prod
+  PROD_DATABASE_URL: postgresql://skillstorm_prod_user:ciSyntheticPostgresPassword1234567890@postgres:5432/skillstorm_prod
+  PROD_JWT_ACCESS_SECRET: ciSyntheticAccessSecret1234567890abcdef
+  PROD_JWT_REFRESH_SECRET: ciSyntheticRefreshSecret1234567890abcdef
+  PROD_COOKIE_SECRET: ciSyntheticCookieSecret1234567890abcdef
+  PROD_METRICS_INGEST_KEY: ciSyntheticMetricsKey1234567890abcdef
+  PROD_RUN_MIGRATIONS: "1"
+  PROD_RUN_SEED: "0"
+  PROD_PUBLIC_APP_URL: https://app.example.test
+  PROD_API_URL: https://app.example.test
+  PROD_CORS_ORIGINS: https://app.example.test
+  PROD_ALLOW_CROSS_SITE_COOKIES: "0"
+  PROD_ALLOW_PUBLIC_ORG_CREATION: "false"
+  PROD_FRONTEND_PORT: "3000"
+  PROD_ENABLE_RBAC_TELEMETRY_CLIENT: "0"
+  PROD_BETA_MODE: ""
+  PROD_SUPERADMIN_EMAIL: ""
+  PROD_SUPERADMIN_PASSWORD: ""
+
+jobs:
+  env-and-docker:
+    name: Env and Docker Production Config
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check no real env files are committed
+        run: bash scripts/check-no-committed-env.sh
+
+      - name: Render production Docker config
+        run: docker compose -f docker-compose.prod.yml config
+
+      - name: Run production env guard
+        run: bash scripts/check-prod-env.sh
+
+  backend:
+    name: Backend Typecheck and Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm ci
+        working-directory: server
+
+      - name: Backend typecheck
+        run: npm run typecheck
+        working-directory: server
+
+      - name: Backend build
+        run: npm run build
+        working-directory: server
+
+  frontend:
+    name: Frontend Typecheck and Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: client
+
+      - name: Frontend typecheck
+        run: npm run typecheck
+        working-directory: client
+
+      - name: Frontend build
+        run: npm run build
+        working-directory: client
+
+  prisma:
+    name: Prisma Validate and Generate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm ci
+        working-directory: server
+
+      - name: Prisma validate
+        run: npx prisma validate
+        working-directory: server
+
+      - name: Prisma generate
+        run: npx prisma generate
+        working-directory: server

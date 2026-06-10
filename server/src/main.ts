@@ -1,4 +1,8 @@
-import { validateEnvironment, buildCorsOrigin } from './bootstrap.utils';
+import {
+  validateCsrfConfiguration,
+  validateEnvironment,
+  buildCorsOrigin,
+} from './bootstrap.utils';
 import { NestFactory } from '@nestjs/core';
 import type {
   ArgumentsHost,
@@ -128,6 +132,7 @@ class AllExceptionsFilter implements ExceptionFilter {
  * Společná factory – používej ji v prod (main) i v e2e testech.
  */
 export async function createApp(): Promise<INestApplication> {
+  validateCsrfConfiguration();
   const isTest = process.env.NODE_ENV === 'test';
   const enableTestLogging = process.env.DEBUG_POLICY === '1';
   const options: NestApplicationOptions = {};

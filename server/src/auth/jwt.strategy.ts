@@ -12,6 +12,7 @@ import { PrismaService } from '@/prisma/prisma.service';
 import type { JwtPayload } from './types/jwt-payload';
 import { ACCESS_TOKEN_COOKIE } from './token-cookies';
 import { SystemRole, UserStatus } from '@prisma/client';
+import { getJwtAccessSecret } from './jwt-secrets';
 
 const bearerExtractor = ExtractJwt.fromAuthHeaderAsBearerToken();
 const cookieExtractor = (req: Request): string | null =>
@@ -30,10 +31,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       cookieExtractor,
       bearerExtractor,
     ]);
-    const secret = configService.get<string>('JWT_SECRET');
-    if (!secret) {
-      throw new Error('JWT_SECRET is required');
-    }
+    const secret = getJwtAccessSecret(configService);
     super({
       jwtFromRequest: tokenExtractor,
       secretOrKey: secret,

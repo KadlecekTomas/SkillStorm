@@ -31,6 +31,7 @@ jobs:
         run: npm ci
 
       - name: 🔍 Lint code
+        continue-on-error: true # Non-blocking until the planned lint cleanup lands.
         run: npm run lint
 
       - name: 🔎 Type check

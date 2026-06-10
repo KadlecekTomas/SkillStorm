@@ -157,7 +157,7 @@ function AssignmentSubmissionPage() {
         body: { assignmentId },
       });
       setSubmission(created);
-      setSuccess("Submission byla vytvořena. Můžeš vyplnit odpovědi.");
+      setSuccess("Pokus byl vytvořen. Můžeš vyplnit odpovědi.");
     } catch (err) {
       if (err instanceof HttpError) {
         if (err.status === 403) {
@@ -169,7 +169,7 @@ function AssignmentSubmissionPage() {
           return;
         }
       }
-      setError("Nepodařilo se založit submission.");
+      setError("Nepodařilo se založit pokus.");
     } finally {
       setSubmitting(false);
     }
@@ -223,9 +223,9 @@ function AssignmentSubmissionPage() {
       );
       setSubmission(finished);
       if (finished.status === "REJECTED") {
-        setSuccess("Submission byla zamítnuta (nelze vyhodnotit).");
+        setSuccess("Pokus nebylo možné vyhodnotit.");
       } else {
-        setSuccess("Submission byla odevzdána.");
+        setSuccess("Pokus byl odevzdán a vyhodnocen.");
       }
     } catch (err) {
       if (err instanceof HttpError) {
@@ -308,7 +308,7 @@ function AssignmentSubmissionPage() {
             </div>
             {scoreLabel && (
               <div className="text-right">
-                <p className="text-sm text-slate-500">Score</p>
+                <p className="text-sm text-slate-500">Skóre</p>
                 <p className="font-semibold">{scoreLabel}</p>
               </div>
             )}
@@ -403,8 +403,8 @@ function AssignmentSubmissionPage() {
 
       {submission && isReadOnly && (
         <InfoAlert
-          title="Submission je uzavřená"
-          description="Tento pokus je read-only."
+          title="Pokus je uzavřený"
+          description="Výsledek je pouze pro čtení."
         />
       )}
     </div>

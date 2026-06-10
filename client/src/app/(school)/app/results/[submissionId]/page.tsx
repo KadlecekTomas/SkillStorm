@@ -29,9 +29,14 @@ type SubmissionResult = {
   }>;
 };
 
+type TestDetail = {
+  title: string;
+};
+
 function SubmissionResultPage() {
   const { submissionId } = useParams<{ submissionId: string }>();
   const [submission, setSubmission] = useState<SubmissionResult | null>(null);
+  const [testTitle, setTestTitle] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -41,9 +46,13 @@ function SubmissionResultPage() {
     setError(null);
 
     fetchWithAuth<SubmissionResult>("GET", `/submissions/${submissionId}`)
-      .then((data) => {
+      .then(async (data) => {
         if (cancelled) return;
         setSubmission(data ?? null);
+        if (data?.testId) {
+          const testData = await fetchWithAuth<TestDetail>("GET", `/tests/${data.testId}`).catch(() => null);
+          if (!cancelled) setTestTitle(testData?.title ?? null);
+        }
       })
       .catch((e: unknown) => {
         if (cancelled) return;
@@ -92,6 +101,7 @@ function SubmissionResultPage() {
           ← Zpět na zadání
         </Link>
         <h1 className="mt-2 text-2xl font-semibold">Výsledek pokusu</h1>
+        {testTitle && <p className="mt-1 text-lg font-medium text-slate-800">{testTitle}</p>}
       </div>
 
       <Card className="space-y-4 p-4">
@@ -101,7 +111,7 @@ function SubmissionResultPage() {
             <p className="font-semibold">{submission.status}</p>
           </div>
           <div className="text-right">
-            <p className="text-sm text-slate-500">Score</p>
+            <p className="text-sm text-slate-500">Skóre</p>
             <p className="font-semibold">{scoreLabel}</p>
           </div>
         </div>
