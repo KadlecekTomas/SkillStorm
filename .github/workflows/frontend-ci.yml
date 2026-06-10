@@ -53,3 +53,4 @@ jobs:
         run: npm run build
         env:
           NODE_ENV: production
+          API_PROXY_TARGET: http://localhost:4200

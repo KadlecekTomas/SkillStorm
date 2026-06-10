@@ -36,6 +36,8 @@ jobs:
       # === FRONTEND ===
       - name: 🧱 Build frontend
         working-directory: ./client
+        env:
+          API_PROXY_TARGET: http://localhost:4200
         run: |
           npm ci
           npm run build

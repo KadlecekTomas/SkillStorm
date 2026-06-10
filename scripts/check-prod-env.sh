@@ -30,6 +30,7 @@ CONFIG_OUTPUT="$(docker compose -f "$COMPOSE_FILE" config 2>&1)" || {
 printf '%s\n' "$CONFIG_OUTPUT" | grep -q 'DISABLE_CSRF: "1"' && fail "DISABLE_CSRF=1 is not allowed"
 printf '%s\n' "$CONFIG_OUTPUT" | grep -q 'ENABLE_SWAGGER: "1"' && fail "ENABLE_SWAGGER=1 is not allowed by default"
 printf '%s\n' "$CONFIG_OUTPUT" | grep -qiE 'supersecret|changeme|change_me|dev-secret' && fail "rendered config contains weak/default secret markers"
+printf '%s\n' "$CONFIG_OUTPUT" | grep -qE 'API_PROXY_TARGET: .+' || fail "frontend API_PROXY_TARGET must be set"
 
 if printf '%s\n' "$CONFIG_OUTPUT" | awk '
   /^  postgres:/ { in_service=1; next }

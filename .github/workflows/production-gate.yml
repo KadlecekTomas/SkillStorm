@@ -20,6 +20,7 @@ env:
   PROD_RUN_SEED: "0"
   PROD_PUBLIC_APP_URL: https://app.example.test
   PROD_API_URL: https://app.example.test
+  PROD_API_PROXY_TARGET: http://backend:4200
   PROD_CORS_ORIGINS: https://app.example.test
   PROD_ALLOW_CROSS_SITE_COOKIES: "0"
   PROD_ALLOW_PUBLIC_ORG_CREATION: "false"
@@ -103,6 +104,8 @@ jobs:
       - name: Frontend build
         run: npm run build
         working-directory: client
+        env:
+          API_PROXY_TARGET: http://backend:4200
 
   prisma:
     name: Prisma Validate and Generate
