@@ -50,7 +50,7 @@ const SUB_COLUMNS = [
   "Actions",
 ];
 
-export default function PlatformSubscriptionsPage() {
+export default function PlatformSubscriptionsPage(): React.JSX.Element {
   return (
     <div className="space-y-6">
       {/* Plan tier cards */}

@@ -80,7 +80,7 @@ function truncate(s: string | null | undefined, max = 28): string {
 // Page
 // ---------------------------------------------------------------------------
 
-export default function OrgAuditPage() {
+export default function OrgAuditPage(): React.JSX.Element {
   const { user } = useAuth();
   const orgRole = user?.organizationRole;
   const canAccess = orgRole === "DIRECTOR" || orgRole === "OWNER";

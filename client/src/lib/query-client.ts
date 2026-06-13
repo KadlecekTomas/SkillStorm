@@ -19,6 +19,13 @@ type QueryState<T> = {
   isLoading: boolean;
 };
 
+export interface UseQueryResult<T> {
+  data: T | undefined;
+  error: unknown;
+  isLoading: boolean;
+  refetch: () => Promise<T | undefined>;
+}
+
 const queryEntries = new Map<string, QueryEntry<unknown>>();
 
 function serializeKey(queryKey: QueryKey): string {
@@ -48,7 +55,7 @@ function notify(queryKey: QueryKey) {
   entry.listeners.forEach((listener) => listener());
 }
 
-function isFresh(queryKey: QueryKey, staleTime: number) {
+function isFresh(queryKey: QueryKey, staleTime: number): boolean {
   const entry = ensureEntry(queryKey);
   return entry.updatedAt > 0 && Date.now() - entry.updatedAt < staleTime;
 }
@@ -95,7 +102,7 @@ export const queryClient = {
   invalidateQueries(
     prefix: QueryKey,
     options?: { exclude?: QueryKey[]; notify?: boolean },
-  ) {
+  ): void {
     const excluded = new Set(
       (options?.exclude ?? []).map((queryKey) => serializeKey(queryKey)),
     );
@@ -114,7 +121,7 @@ export const queryClient = {
   setQueryData<T>(
     queryKey: QueryKey,
     updater: T | ((current: T | undefined) => T | undefined),
-  ) {
+  ): void {
     const entry = ensureEntry<T>(queryKey);
     const nextValue =
       typeof updater === "function"
@@ -131,7 +138,7 @@ export const queryClient = {
     notify(queryKey);
   },
 
-  subscribe(queryKey: QueryKey, listener: () => void) {
+  subscribe(queryKey: QueryKey, listener: () => void): () => void {
     const entry = ensureEntry(queryKey);
     entry.listeners.add(listener);
     return () => {
@@ -145,7 +152,7 @@ export const queryClient = {
 
   isFresh,
 
-  clear() {
+  clear(): void {
     queryEntries.clear();
   },
 };
@@ -160,7 +167,7 @@ export function useQuery<T>({
   queryFn: () => Promise<T>;
   enabled?: boolean;
   staleTime?: number;
-}) {
+}): UseQueryResult<T> {
   const keyString = useMemo(() => serializeKey(queryKey), [queryKey]);
   const key = useMemo(() => JSON.parse(keyString) as QueryKey, [keyString]);
   const queryFnRef = useRef(queryFn);

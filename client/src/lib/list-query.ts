@@ -62,7 +62,7 @@ export async function refreshListAfterMutation(args: {
   resource: string;
   refetch?: (() => Promise<unknown>) | null;
   invalidatePrefixes?: QueryKey[];
-}) {
+}): Promise<void> {
   queryClient.invalidateQueries([args.resource]);
   for (const prefix of args.invalidatePrefixes ?? []) {
     queryClient.invalidateQueries(prefix);

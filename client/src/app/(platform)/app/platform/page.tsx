@@ -204,7 +204,7 @@ function HealthRow({
 // Page
 // ---------------------------------------------------------------------------
 
-export default function PlatformOverviewPage() {
+export default function PlatformOverviewPage(): React.JSX.Element {
   const router = useRouter();
   const [overview, setOverview] = useState<PlatformAnalyticsOverview | null>(null);
   const [loading, setLoading] = useState(true);

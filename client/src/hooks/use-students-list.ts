@@ -2,11 +2,12 @@
 
 import { useMemo } from "react";
 import { fetchWithAuth } from "@/lib/http/client";
-import { useQuery } from "@/lib/query-client";
+import { useQuery, type UseQueryResult } from "@/lib/query-client";
 import {
   buildListQueryKey,
   buildListRequestParams,
   normalizeListFilters,
+  type ListFilters,
 } from "@/lib/list-query";
 
 export type StudentListItem = {
@@ -39,7 +40,19 @@ type UseStudentsListParams = {
 
 const EMPTY_STUDENTS: StudentListItem[] = [];
 
-export function useStudentsList({ enabled, query }: UseStudentsListParams) {
+export type UseStudentsListResult = {
+  students: StudentListItem[];
+  meta: StudentsListResponse["meta"] | null;
+  loading: boolean;
+  error: unknown;
+  refetch: UseQueryResult<StudentsListResponse>["refetch"];
+  filters: { [K in keyof ListFilters]: string | number | boolean | null };
+};
+
+export function useStudentsList({
+  enabled,
+  query,
+}: UseStudentsListParams): UseStudentsListResult {
   const normalizedFilters = useMemo(
     () =>
       normalizeListFilters({

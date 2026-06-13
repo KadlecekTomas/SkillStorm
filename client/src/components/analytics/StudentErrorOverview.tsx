@@ -13,7 +13,7 @@ const trendLabelToText = (trend: TrendLabel): string => {
   return "beze změny";
 };
 
-export function StudentErrorOverview({ items }: Props) {
+export function StudentErrorOverview({ items }: Props): React.JSX.Element {
   return (
     <Card className="space-y-3 rounded-3xl border border-slate-100 bg-white p-4 shadow-soft">
       <div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -24,7 +24,6 @@ type TestDetail = {
 
 function TestDetailPage(): React.JSX.Element {
   const params = useParams<{ testId: string }>();
-  const router = useRouter();
   const testId = params?.testId ?? null;
   const [test, setTest] = useState<TestDetail | null>(null);
   const [loading, setLoading] = useState(true);

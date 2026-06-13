@@ -19,7 +19,7 @@ function LibraryPage(): React.JSX.Element {
   const [search, setSearch] = useState("");
   const [items, setItems] = useState<ContentItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const { org, hasOrganization, context } = useAuth();
+  const { org, context } = useAuth();
 
   useEffect(() => {
     let active = true;

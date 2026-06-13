@@ -2,16 +2,27 @@
 
 import { useMemo } from "react";
 import { fetchWithAuth } from "@/lib/http/client";
-import { useQuery } from "@/lib/query-client";
+import { useQuery, type UseQueryResult } from "@/lib/query-client";
 import {
   buildListQueryKey,
   buildListRequestParams,
   normalizeListFilters,
+  type ListFilters,
 } from "@/lib/list-query";
 import { normalizeAllowedGrades } from "@/lib/grades";
 import type { TestSummary } from "@/types";
 
 export type TestListItem = TestSummary & { creator?: { user?: { name?: string | null } } };
+
+type TestsListQueryData = { items?: TestListItem[] } | TestListItem[];
+
+export type UseTestsListResult = {
+  tests: TestListItem[];
+  loading: boolean;
+  error: unknown;
+  refetch: UseQueryResult<TestsListQueryData>["refetch"];
+  filters: { [K in keyof ListFilters]: string | number | boolean | null };
+};
 
 type UseTestsListParams = {
   enabled?: boolean;
@@ -25,7 +36,7 @@ type UseTestsListParams = {
 
 const EMPTY_TESTS: TestListItem[] = [];
 
-export function useTestsList(params: UseTestsListParams) {
+export function useTestsList(params: UseTestsListParams): UseTestsListResult {
   const normalizedFilters = useMemo(
     () =>
       normalizeListFilters({

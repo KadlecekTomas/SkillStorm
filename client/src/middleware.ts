@@ -30,7 +30,7 @@ function redirectDashboardToApp(pathname: string, request: NextRequest): NextRes
  * - Unauthenticated on /join* → redirect to /login?redirect=fullUrl (join has priority; after login user continues join flow).
  * - Role-based access to /app/platform* is enforced client-side (isPlatformAdmin).
  */
-export function middleware(request: NextRequest) {
+export function middleware(request: NextRequest): NextResponse {
   const url = request.nextUrl;
   const { pathname } = url;
 
