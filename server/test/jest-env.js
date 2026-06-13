@@ -4,10 +4,14 @@ const path = require('path');
 const fs = require('fs');
 const dotenv = require('dotenv');
 
-// VŽDY načti .env.test (ne .env)
+// Load .env.test if present; otherwise fall back to the tracked
+// .env.test.example so a fresh clone can run the suites without manual setup.
 const dotenvPath = path.resolve(__dirname, '..', '.env.test');
+const dotenvExamplePath = path.resolve(__dirname, '..', '.env.test.example');
 if (fs.existsSync(dotenvPath)) {
   dotenv.config({ path: dotenvPath });
+} else if (fs.existsSync(dotenvExamplePath)) {
+  dotenv.config({ path: dotenvExamplePath });
 }
 
 // Pokud chybí schema=, vytvoř izolované schema pro každý běh testu

@@ -2,6 +2,7 @@ import type { TestingModule } from '@nestjs/testing';
 import { Test } from '@nestjs/testing';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { PrismaService } from '@/prisma/prisma.service';
+import { RiskService } from '@/risk/risk.service';
 import { StatsController } from './stats.controller';
 import { StatsService } from './stats.service';
 
@@ -15,6 +16,7 @@ describe('StatsController', () => {
         StatsService,
         { provide: PrismaService, useValue: {} },
         { provide: CACHE_MANAGER, useValue: {} },
+        { provide: RiskService, useValue: {} },
       ],
     }).compile();
 

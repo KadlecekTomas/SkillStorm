@@ -12,6 +12,10 @@ import { AcademicYearExpiredGuard } from '@/academic-years/academic-year-expired
 import { RequireCurrentAcademicYearGuard } from '@/academic-years/require-current-academic-year.guard';
 import { ApiStandardResponses } from '@/common/http/api-standard-responses.decorator';
 import { ok } from '@/common/http/envelope';
+import {
+  OrgOperation,
+  OrgOperationType,
+} from '@/common/decorators/org-operation.decorator';
 import { OrgContextService } from '@/common/org-context/org-context.service';
 import { Permission } from '@/modules/rbac/permission.decorator';
 import { RequestWithUser } from '@/types/request-with-user';
@@ -24,6 +28,10 @@ import { StudentImportPreviewDto } from './dto/student-import-preview.dto';
 @ApiBearerAuth()
 @Controller('imports/students')
 @UseGuards(RequireCurrentAcademicYearGuard, AcademicYearExpiredGuard)
+// Bulk student import mutates org rosters/enrollments → EXECUTION (blocked for
+// NOT_READY orgs). This makes explicit the previously-implicit default the
+// readiness gate already applied; behaviour is unchanged.
+@OrgOperation(OrgOperationType.EXECUTION)
 export class ImportsController {
   constructor(
     private readonly importsService: ImportsService,
@@ -33,7 +41,10 @@ export class ImportsController {
   @Post('preview')
   @Permission(PermissionKey.MANAGE_STUDENTS)
   @ApiOperation({ summary: 'Preview student CSV import' })
-  async preview(@Body() dto: StudentImportPreviewDto, @Req() req: RequestWithUser) {
+  async preview(
+    @Body() dto: StudentImportPreviewDto,
+    @Req() req: RequestWithUser,
+  ) {
     const ctx = await this.orgContext.get(req);
     if (!ctx.activeAcademicYearId) {
       throw new BadRequestException('Missing active academic year.');
@@ -56,7 +67,10 @@ export class ImportsController {
   @Post('commit')
   @Permission(PermissionKey.MANAGE_STUDENTS)
   @ApiOperation({ summary: 'Commit edited student import rows' })
-  async commit(@Body() dto: StudentImportCommitDto, @Req() req: RequestWithUser) {
+  async commit(
+    @Body() dto: StudentImportCommitDto,
+    @Req() req: RequestWithUser,
+  ) {
     const ctx = await this.orgContext.get(req);
     if (!ctx.activeAcademicYearId) {
       throw new BadRequestException('Missing active academic year.');
