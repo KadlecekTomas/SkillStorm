@@ -51,12 +51,14 @@ import {
 } from '@/shared/org-readiness-v2';
 import { createOrgReadinessError } from '@/shared/errors/org-readiness.error';
 import { OrgOperationType } from '@/common/decorators/org-operation.decorator';
-import type { TeacherTestViewDTO, TestEditMode } from './dto/teacher-test-view.dto';
+import type {
+  TeacherTestViewDTO,
+  TestEditMode,
+} from './dto/teacher-test-view.dto';
 import type { StudentTestViewDTO } from './dto/student-test-view.dto';
 import { assertTenantWhere, withOrg } from '@/common/prisma/tenant-scope';
 import type { OrgContext } from '@/common/org-context/org-context.types';
 import { safePercent, ratioToPercent } from '@/common/math/safe-percent';
-
 
 function searchExpr(search?: string): Prisma.TestWhereInput | undefined {
   const s = search?.trim();
@@ -116,9 +118,7 @@ export class TestsService {
       _count: { _all: true },
     });
 
-    const submittedMap = new Map(
-      submittedGroups.map((g) => [g.testId, g]),
-    );
+    const submittedMap = new Map(submittedGroups.map((g) => [g.testId, g]));
     const allCountMap = new Map(
       allGroups.map((g) => [g.testId, g._count._all]),
     );
@@ -456,13 +456,18 @@ export class TestsService {
   ): Promise<string> {
     if (academicYearId) {
       const year = await db.academicYear.findFirst({
-        where: { id: academicYearId, orgId: ctx.organizationId, deletedAt: null },
+        where: {
+          id: academicYearId,
+          orgId: ctx.organizationId,
+          deletedAt: null,
+        },
         select: { id: true },
       });
       if (!year) {
         throw new BadRequestException({
           code: 'INVALID_ACADEMIC_YEAR',
-          message: 'Školní rok neexistuje, nepatří do organizace, nebo byl smazán.',
+          message:
+            'Školní rok neexistuje, nepatří do organizace, nebo byl smazán.',
         });
       }
       return year.id;
@@ -473,17 +478,23 @@ export class TestsService {
     if (!ctx.activeAcademicYearId) {
       throw new BadRequestException({
         code: 'NO_ACTIVE_ACADEMIC_YEAR',
-        message: 'Není aktivní školní rok. Požádejte ředitele o nastavení aktívního roku.',
+        message:
+          'Není aktivní školní rok. Požádejte ředitele o nastavení aktívního roku.',
       });
     }
     const fallbackYear = await db.academicYear.findFirst({
-      where: { id: ctx.activeAcademicYearId, orgId: ctx.organizationId, deletedAt: null },
+      where: {
+        id: ctx.activeAcademicYearId,
+        orgId: ctx.organizationId,
+        deletedAt: null,
+      },
       select: { id: true },
     });
     if (!fallbackYear) {
       throw new BadRequestException({
         code: 'NO_ACTIVE_ACADEMIC_YEAR',
-        message: 'Aktivní školní rok byl smazán nebo je neplatný. Požádejte ředitele o aktualizaci.',
+        message:
+          'Aktivní školní rok byl smazán nebo je neplatný. Požádejte ředitele o aktualizaci.',
       });
     }
     return fallbackYear.id;
@@ -566,7 +577,10 @@ export class TestsService {
     ]);
 
     return Array.from(
-      new Set([...homeroom.map((x) => x.id), ...taught.map((x) => x.classSectionId)]),
+      new Set([
+        ...homeroom.map((x) => x.id),
+        ...taught.map((x) => x.classSectionId),
+      ]),
     );
   }
 
@@ -702,7 +716,10 @@ export class TestsService {
       }),
       this.prisma.testAssignment.count({ where: { testId } }),
     ]);
-    const report = computeAssignability(test?.questions ?? [], test?.allowedGrades ?? []);
+    const report = computeAssignability(
+      test?.questions ?? [],
+      test?.allowedGrades ?? [],
+    );
     if (topicCount === 0) {
       report.issues.push({ reason: 'NO_TOPIC_ASSIGNMENT' });
       report.reasons.noTopicAssignments = 1;
@@ -748,7 +765,11 @@ export class TestsService {
     // Validate subject and year atomically — no test.create before both pass.
     const created = await this.prisma.$transaction(async (tx) => {
       await this.validateSubject(dto.subjectId, orgId, tx);
-      const yearId = await this.resolveAcademicYear(ctx, dto.academicYearId, tx);
+      const yearId = await this.resolveAcademicYear(
+        ctx,
+        dto.academicYearId,
+        tx,
+      );
 
       return tx.test.create({
         data: {
@@ -801,14 +822,15 @@ export class TestsService {
       changedFields: dto as unknown as Record<string, unknown>,
     });
 
-    await bumpOrgVersion(
-      this.cache,
-      cacheScopeForUser(user.systemRole, orgId),
-    );
+    await bumpOrgVersion(this.cache, cacheScopeForUser(user.systemRole, orgId));
     return created;
   }
 
-  async findAll(user: JwtPayload, q: QueryTestsDto, ctx: OrgContext): Promise<unknown> {
+  async findAll(
+    user: JwtPayload,
+    q: QueryTestsDto,
+    ctx: OrgContext,
+  ): Promise<unknown> {
     const page = q.page ?? 1;
     const limit = Math.min(q.limit ?? 20, 100);
     const skip = (page - 1) * limit;
@@ -850,7 +872,6 @@ export class TestsService {
       if (!effectiveOrgId || !user.membershipId) {
         throw new ForbiddenException('Access denied');
       }
-      const now = new Date();
       const student = await this.prisma.student.findFirst({
         where: {
           membershipId: user.membershipId,
@@ -1014,7 +1035,13 @@ export class TestsService {
     // Use findUnique (PK lookup) + explicit deletedAt guard instead of findFirst.
     const base = await this.prisma.test.findUnique({
       where: { id },
-      select: { id: true, organizationId: true, status: true, deletedAt: true, academicYearId: true },
+      select: {
+        id: true,
+        organizationId: true,
+        status: true,
+        deletedAt: true,
+        academicYearId: true,
+      },
     });
     if (!base || base.deletedAt !== null) {
       throw new NotFoundException('Test nenalezen');
@@ -1060,7 +1087,12 @@ export class TestsService {
       if (base.status !== PublishStatus.PUBLISHED) {
         throw new NotFoundException('Test nenalezen');
       }
-      await this.ensureStudentCanAccessTest(user, base.id, base.organizationId, base.academicYearId ?? null);
+      await this.ensureStudentCanAccessTest(
+        user,
+        base.id,
+        base.organizationId,
+        base.academicYearId ?? null,
+      );
       const studentView = await this.prisma.test.findUnique({
         where: { id },
         select: this.buildTestProjection(OrganizationRole.STUDENT, 'detail'),
@@ -1110,10 +1142,7 @@ export class TestsService {
     const editMode = await this.canEditTest(id, user);
     if (
       editMode !== 'FULL' &&
-      (
-        dto.subjectId !== undefined ||
-        dto.allowedGrades !== undefined
-      )
+      (dto.subjectId !== undefined || dto.allowedGrades !== undefined)
     ) {
       throw new ConflictException({
         code: 'TEST_STRUCTURE_LOCKED',
@@ -1157,7 +1186,10 @@ export class TestsService {
           reasons: ['subject_not_enabled'],
         });
       }
-      if (testMeta?.academicYear?.deletedAt !== null && testMeta?.academicYear?.deletedAt !== undefined) {
+      if (
+        testMeta?.academicYear?.deletedAt !== null &&
+        testMeta?.academicYear?.deletedAt !== undefined
+      ) {
         throw new BadRequestException({
           code: 'TEST_NOT_ASSIGNABLE',
           message: 'Školní rok testu byl smazán. Aktualizujte přiřazení roku.',
@@ -1227,7 +1259,8 @@ export class TestsService {
       if (publishResult.count === 0) {
         throw new ConflictException({
           code: 'ALREADY_PUBLISHED',
-          message: 'Test je již publikován nebo byl mezitím upraven jiným požadavkem.',
+          message:
+            'Test je již publikován nebo byl mezitím upraven jiným požadavkem.',
         });
       }
       updated = await this.prisma.test.findUnique({
@@ -1355,10 +1388,10 @@ export class TestsService {
     const report = await this.computeTestAssignability(test.id);
     this.logger.debug(
       `[assignTest] testId=${testId} status=${test.status} ` +
-      `isAssignable=${report.isAssignable} ` +
-      `topicAssignments=${report.reasons.noTopicAssignments === 0 ? 'ok' : 'missing'} ` +
-      `selectedTopicLevelId=${dto.topicLevelId ?? 'none'} ` +
-      `issues=[${report.issues.map((i) => i.reason).join(',')}]`,
+        `isAssignable=${report.isAssignable} ` +
+        `topicAssignments=${report.reasons.noTopicAssignments === 0 ? 'ok' : 'missing'} ` +
+        `selectedTopicLevelId=${dto.topicLevelId ?? 'none'} ` +
+        `issues=[${report.issues.map((i) => i.reason).join(',')}]`,
     );
     this.throwIfNotAssignable(report);
 
@@ -1580,9 +1613,15 @@ export class TestsService {
 
     return {
       items: submissions.map((s) => {
-        const correctCount = s.responses.filter((r) => r.isCorrect === true).length;
-        const incorrectCount = s.responses.filter((r) => r.isCorrect === false).length;
-        const pendingCount = s.responses.filter((r) => r.isCorrect == null).length;
+        const correctCount = s.responses.filter(
+          (r) => r.isCorrect === true,
+        ).length;
+        const incorrectCount = s.responses.filter(
+          (r) => r.isCorrect === false,
+        ).length;
+        const pendingCount = s.responses.filter(
+          (r) => r.isCorrect == null,
+        ).length;
         const totalEvaluated = correctCount + incorrectCount;
         return {
           id: s.id,
@@ -1644,7 +1683,10 @@ export class TestsService {
       }
     }
 
-    const membership = await this.resolveOrgMembership(user, test.organizationId);
+    const membership = await this.resolveOrgMembership(
+      user,
+      test.organizationId,
+    );
     const role = membership?.role ?? user.organizationRole ?? null;
     if (role === OrganizationRole.STUDENT) {
       throw new ForbiddenException('Přístup pouze pro učitele a ředitele.');
@@ -1701,13 +1743,15 @@ export class TestsService {
       where: {
         testId,
         studentId,
-        organizationId: orgId,  // explicit org scope — not trusting test.organizationId alone
+        organizationId: orgId, // explicit org scope — not trusting test.organizationId alone
         submittedAt: { not: null },
         deletedAt: null,
       },
       orderBy: { submittedAt: 'desc' },
       include: {
-        student: { select: { organizationId: true, user: { select: { name: true } } } },
+        student: {
+          select: { organizationId: true, user: { select: { name: true } } },
+        },
         responses: {
           select: {
             id: true,
@@ -1753,7 +1797,8 @@ export class TestsService {
       answers: submission.responses.map((r) => ({
         questionId: r.questionId,
         // Snapshot fields — immutable, taken at submit time.
-        questionTextSnapshot: r.questionTextSnapshot ?? r.question?.text ?? null,
+        questionTextSnapshot:
+          r.questionTextSnapshot ?? r.question?.text ?? null,
         givenText: r.givenText,
         isCorrect: r.isCorrect,
         correctAnswerSnapshot: r.correctAnswerSnapshot,

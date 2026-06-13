@@ -29,6 +29,20 @@ import { randomUUID } from 'crypto';
 type RequestWithId = { requestId?: string; headers: any; [k: string]: any };
 
 /**
+ * Optional Sentry client, loaded once at bootstrap when SENTRY_DSN is set
+ * and @sentry/node is installed. Kept module-level so the exception filter
+ * can capture synchronously without a per-request dynamic import.
+ *
+ * Typed against a minimal local interface (not `@sentry/node`) because the
+ * package is an OPTIONAL runtime dependency that may be absent at build time.
+ */
+interface SentryLike {
+  init(options: { dsn: string }): void;
+  captureException(exception: unknown): void;
+}
+let sentryClient: SentryLike | null = null;
+
+/**
  * Jednotný exception filter:
  * - HttpException vrací, jak je
  * - ZodError → 400
@@ -45,7 +59,11 @@ class AllExceptionsFilter implements ExceptionFilter {
 
     if (process.env.DEBUG_POLICY === '1') {
       // eslint-disable-next-line no-console
-      console.error('[AllExceptionsFilter]', requestId ? { requestId } : {}, exception);
+      console.error(
+        '[AllExceptionsFilter]',
+        requestId ? { requestId } : {},
+        exception,
+      );
       if (exception?.stack) {
         // eslint-disable-next-line no-console
         console.error(exception.stack);
@@ -103,27 +121,26 @@ class AllExceptionsFilter implements ExceptionFilter {
     // Log 5xx with requestId for correlation
     if (requestId) {
       // eslint-disable-next-line no-console
-      console.error(JSON.stringify({
-        event: 'server_error',
-        requestId,
-        error: String(exception?.message ?? exception),
-      }));
+      console.error(
+        JSON.stringify({
+          event: 'server_error',
+          requestId,
+          error: String(exception?.message ?? exception),
+        }),
+      );
     }
-    // Optional Sentry (only if SENTRY_DSN set and @sentry/node available)
-    if (process.env.SENTRY_DSN) {
-      try {
-        const Sentry = require('@sentry/node');
-        Sentry.captureException(exception);
-      } catch {
-        // Sentry not installed or init failed
-      }
+    // Optional Sentry: uses the client loaded once at bootstrap (no per-request require).
+    if (sentryClient) {
+      sentryClient.captureException(exception);
     }
     // In production do not leak exception message to client
     const isProduction = process.env.NODE_ENV === 'production';
     return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
       success: false,
       error: 'Internal Server Error',
-      ...(isProduction ? {} : { meta: String(exception?.message ?? exception) }),
+      ...(isProduction
+        ? {}
+        : { meta: String(exception?.message ?? exception) }),
     });
   }
 }
@@ -179,9 +196,16 @@ export async function createApp(): Promise<INestApplication> {
       const isStateChanging = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(
         method,
       );
-      const isAuthBootstrap = ['/auth/login', '/auth/register', '/auth/refresh', '/auth/use-org'].some(
-        (path) => req.path?.startsWith(path),
-      );
+      // /auth/sso/google is a session-bootstrap endpoint like login: the
+      // browser has no CSRF cookie yet. Forged cross-site calls cannot mint
+      // a victim session because a valid Google ID token is required.
+      const isAuthBootstrap = [
+        '/auth/login',
+        '/auth/register',
+        '/auth/refresh',
+        '/auth/use-org',
+        '/auth/sso/google',
+      ].some((path) => req.path?.startsWith(path));
       if (!isStateChanging || isAuthBootstrap) {
         return next();
       }
@@ -223,7 +247,10 @@ async function runProductionEnvCheck(app: INestApplication): Promise<void> {
     select: { id: true },
   });
   if (!existing) {
-    if (!process.env.SUPERADMIN_EMAIL?.trim() || !process.env.SUPERADMIN_PASSWORD) {
+    if (
+      !process.env.SUPERADMIN_EMAIL?.trim() ||
+      !process.env.SUPERADMIN_PASSWORD
+    ) {
       throw new Error(
         'No SUPERADMIN exists. Set SUPERADMIN_EMAIL and SUPERADMIN_PASSWORD for initial bootstrap.',
       );
@@ -234,13 +261,17 @@ async function runProductionEnvCheck(app: INestApplication): Promise<void> {
 /**
  * Optional Sentry init when SENTRY_DSN is set. No-op if @sentry/node not installed.
  */
-function initSentryIfConfigured(): void {
+async function initSentryIfConfigured(): Promise<void> {
   if (!process.env.SENTRY_DSN) return;
   try {
-    const Sentry = require('@sentry/node');
-    Sentry.init({ dsn: process.env.SENTRY_DSN });
+    // Non-literal specifier: keeps TS from resolving an optional dependency
+    // that need not be installed at build time.
+    const moduleName = '@sentry/node';
+    sentryClient = (await import(moduleName)) as unknown as SentryLike;
+    sentryClient.init({ dsn: process.env.SENTRY_DSN });
   } catch {
     // @sentry/node not installed
+    sentryClient = null;
   }
 }
 
@@ -259,7 +290,7 @@ function isSwaggerEnabled(): boolean {
  */
 async function bootstrap() {
   validateEnvironment();
-  initSentryIfConfigured();
+  await initSentryIfConfigured();
   const app = await createApp();
 
   if (process.env.NODE_ENV === 'production') {

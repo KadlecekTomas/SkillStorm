@@ -11,7 +11,9 @@ function hasText(value: unknown): value is string {
 
 function normalizeList(values: unknown): string[] | null {
   if (!Array.isArray(values)) return null;
-  return values.map((v) => (typeof v === 'string' ? v.trim() : '')).filter(Boolean);
+  return values
+    .map((v) => (typeof v === 'string' ? v.trim() : ''))
+    .filter(Boolean);
 }
 
 @ValidatorConstraint({ name: 'QuestionAnswersValidator', async: false })
@@ -25,11 +27,15 @@ export class QuestionAnswersValidator implements ValidatorConstraintInterface {
 
     const hasAnswer = hasText(obj.correctAnswer ?? undefined);
     const normalizedAnswers = normalizeList(obj.correctAnswers ?? undefined);
-    const hasAnswers = Array.isArray(normalizedAnswers) && normalizedAnswers.length > 0;
+    const hasAnswers =
+      Array.isArray(normalizedAnswers) && normalizedAnswers.length > 0;
 
     if (hasAnswer && hasAnswers) return false;
 
-    if (obj.type === QuestionType.TRUE_FALSE || obj.type === QuestionType.FILL_IN_THE_BLANK) {
+    if (
+      obj.type === QuestionType.TRUE_FALSE ||
+      obj.type === QuestionType.FILL_IN_THE_BLANK
+    ) {
       if (obj.correctAnswers && obj.correctAnswers.length > 0) return false;
       if (obj.correctAnswer !== undefined && !hasAnswer) return false;
     }
@@ -47,7 +53,7 @@ export class QuestionAnswersValidator implements ValidatorConstraintInterface {
     return true;
   }
 
-  defaultMessage(args: ValidationArguments): string {
+  defaultMessage(_args: ValidationArguments): string {
     return 'Invalid correctAnswer/correctAnswers combination for question type';
   }
 }

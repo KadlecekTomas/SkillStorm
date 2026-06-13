@@ -7,7 +7,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import { SystemRole } from '@prisma/client';
 import type { RequestWithUser } from '@/types/request-with-user';
-import { REQUIRE_SYSTEM_ROLE_KEY } from '../decorators/require-system-role.decorator';
+import { REQUIRE_SYSTEM_ROLE_KEY } from '@/common/decorators/require-system-role.decorator';
 
 /**
  * Metadata-driven guard for system-role enforcement.

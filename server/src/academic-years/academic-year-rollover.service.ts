@@ -1,6 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { Prisma } from '@prisma/client';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { PrismaService } from '@/prisma/prisma.service';
 import { AcademicYearCacheRef } from '@/common/year-cache/academic-year-cache.ref';
@@ -72,7 +71,13 @@ export class AcademicYearRolloverService {
         deletedAt: null,
         endsAt: { lte: cutoff },
       },
-      select: { id: true, orgId: true, label: true, startsAt: true, endsAt: true },
+      select: {
+        id: true,
+        orgId: true,
+        label: true,
+        startsAt: true,
+        endsAt: true,
+      },
     });
 
     if (approaching.length === 0) return;
@@ -110,7 +115,13 @@ export class AcademicYearRolloverService {
         endsAt: { lt: now },
         deletedAt: null,
       },
-      select: { id: true, orgId: true, label: true, startsAt: true, endsAt: true },
+      select: {
+        id: true,
+        orgId: true,
+        label: true,
+        startsAt: true,
+        endsAt: true,
+      },
     });
 
     if (expiredCurrentYears.length === 0) return;
@@ -213,8 +224,11 @@ export class AcademicYearRolloverService {
   private async activateOrCreateNext(expired: CurrentYear): Promise<void> {
     const { orgId } = expired;
     const nextStartYear = expired.startsAt.getUTCFullYear() + 1;
-    const { startDate: nextStartsAt, endDate: nextEndsAt, label: nextLabel } =
-      deriveCzechSchoolYearFromStartYear(nextStartYear);
+    const {
+      startDate: nextStartsAt,
+      endDate: nextEndsAt,
+      label: nextLabel,
+    } = deriveCzechSchoolYearFromStartYear(nextStartYear);
 
     type Outcome = {
       newYearId: string;
@@ -255,7 +269,11 @@ export class AcademicYearRolloverService {
           where: { id: existing.id },
           data: { isCurrent: true },
         });
-        return { newYearId: existing.id, newYearLabel: existing.label, wasPreExisting: true };
+        return {
+          newYearId: existing.id,
+          newYearLabel: existing.label,
+          wasPreExisting: true,
+        };
       }
 
       // Neither director nor prep created a next year — create and activate.
@@ -270,7 +288,11 @@ export class AcademicYearRolloverService {
         select: { id: true },
       });
 
-      return { newYearId: created.id, newYearLabel: nextLabel, wasPreExisting: false };
+      return {
+        newYearId: created.id,
+        newYearLabel: nextLabel,
+        wasPreExisting: false,
+      };
     });
 
     if (!outcome) return;

@@ -10,7 +10,7 @@ import type { RequestWithUser } from '@/types/request-with-user';
 import {
   PLATFORM_ACCESS_LEVEL_KEY,
   PlatformAccessLevel,
-} from '../decorators/platform-access.decorator';
+} from '@/common/decorators/platform-access.decorator';
 
 /** All system roles allowed to read platform data. */
 const READ_ROLES: readonly SystemRole[] = [
@@ -39,10 +39,9 @@ export class PlatformAccessGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
-    const level = this.reflector.getAllAndOverride<PlatformAccessLevel | undefined>(
-      PLATFORM_ACCESS_LEVEL_KEY,
-      [context.getHandler(), context.getClass()],
-    );
+    const level = this.reflector.getAllAndOverride<
+      PlatformAccessLevel | undefined
+    >(PLATFORM_ACCESS_LEVEL_KEY, [context.getHandler(), context.getClass()]);
 
     // No access level annotation → not a platform-restricted endpoint; skip.
     if (!level) return true;

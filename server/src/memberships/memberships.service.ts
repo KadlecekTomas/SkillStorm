@@ -1,6 +1,5 @@
 import {
   BadRequestException,
-  ConflictException,
   ForbiddenException,
   GoneException,
   Inject,
@@ -13,7 +12,6 @@ import type { UpdateMembershipDto } from './dto/update-membership.dto';
 import type { QueryMembershipsDto } from './dto/query-memberships.dto';
 import type { Prisma } from '@prisma/client';
 import { SystemRole, OrganizationRole, AuditEntityType } from '@prisma/client';
-import { hasAtLeastRole } from '@/shared/access.utils';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import {
@@ -33,8 +31,10 @@ export class MembershipsService {
   ) {}
 
   // -------- CREATE --------
-  async create(dto: CreateMembershipDto, user: any) {
-    throw new GoneException('Legacy membership create disabled. Use invitation token.');
+  async create(_dto: CreateMembershipDto, _user: any) {
+    throw new GoneException(
+      'Legacy membership create disabled. Use invitation token.',
+    );
   }
 
   // -------- LIST (search + pagination + cache) --------

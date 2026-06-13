@@ -1,6 +1,5 @@
 import {
   BadRequestException,
-  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -135,7 +134,10 @@ export class InvitesService {
     const prefix = trimmed ? trimmed.slice(0, 6) : 'empty';
     const key = this.failKey(ip, prefix);
 
-    this.logger.warn('Invalid invite attempt', { token: prefix, ip: ip ?? null });
+    this.logger.warn('Invalid invite attempt', {
+      token: prefix,
+      ip: ip ?? null,
+    });
 
     // DB audit trail for every failed attempt
     try {
@@ -164,11 +166,14 @@ export class InvitesService {
     entry.count += 1;
 
     if (entry.count >= BLOCK_THRESHOLD) {
-      this.logger.warn('Invite attempt blocked (brute-force threshold reached)', {
-        ip: ip ?? null,
-        tokenPrefix: prefix,
-        count: entry.count,
-      });
+      this.logger.warn(
+        'Invite attempt blocked (brute-force threshold reached)',
+        {
+          ip: ip ?? null,
+          tokenPrefix: prefix,
+          count: entry.count,
+        },
+      );
       throw new ForbiddenException(InvitesService.INVALID_INVITATION_MESSAGE);
     }
   }
@@ -180,7 +185,12 @@ export class InvitesService {
   async createInvite(
     dto: CreateInviteDto,
     user: JwtPayload,
-  ): Promise<{ id: string; inviteToken: string; code: string; expiresAt: Date }> {
+  ): Promise<{
+    id: string;
+    inviteToken: string;
+    code: string;
+    expiresAt: Date;
+  }> {
     const orgId = user.organizationId ?? null;
     if (!orgId) throw new ForbiddenException('Missing organization context');
 
@@ -198,14 +208,20 @@ export class InvitesService {
         throw new NotFoundException('Class section not found');
       }
       if (cs.yearId !== dto.yearId) {
-        throw new BadRequestException('yearId does not match classSection.yearId');
+        throw new BadRequestException(
+          'yearId does not match classSection.yearId',
+        );
       }
       if (dto.role && dto.role !== OrganizationRole.STUDENT) {
-        throw new BadRequestException('STUDENT_CLASS invite must use STUDENT role.');
+        throw new BadRequestException(
+          'STUDENT_CLASS invite must use STUDENT role.',
+        );
       }
     } else {
       if (dto.classSectionId || dto.yearId) {
-        throw new BadRequestException('ORG_ONLY invite must not have classSectionId/yearId');
+        throw new BadRequestException(
+          'ORG_ONLY invite must not have classSectionId/yearId',
+        );
       }
       if (!dto.role) {
         throw new BadRequestException('ORG_ONLY invite must include role.');
@@ -215,7 +231,9 @@ export class InvitesService {
         dto.role !== OrganizationRole.DIRECTOR &&
         dto.role !== OrganizationRole.STUDENT
       ) {
-        throw new BadRequestException('ORG_ONLY invite role must be TEACHER, DIRECTOR, or STUDENT.');
+        throw new BadRequestException(
+          'ORG_ONLY invite role must be TEACHER, DIRECTOR, or STUDENT.',
+        );
       }
     }
 
@@ -273,7 +291,8 @@ export class InvitesService {
   // -------------------------------------------------------------------------
 
   /** Single message for any invalid token state — prevents leaking invite existence. */
-  private static readonly INVALID_INVITATION_MESSAGE = 'Invalid or expired invitation';
+  private static readonly INVALID_INVITATION_MESSAGE =
+    'Invalid or expired invitation';
 
   private validateInvitation(
     invite: {
@@ -283,7 +302,8 @@ export class InvitesService {
       maxUses: number;
     } | null,
   ): void {
-    if (!invite) throw new BadRequestException(InvitesService.INVALID_INVITATION_MESSAGE);
+    if (!invite)
+      throw new BadRequestException(InvitesService.INVALID_INVITATION_MESSAGE);
 
     const now = new Date();
     if (invite.revokedAt != null) {
@@ -297,7 +317,9 @@ export class InvitesService {
     }
   }
 
-  private async validateOrganizationState(organizationId: string): Promise<void> {
+  private async validateOrganizationState(
+    organizationId: string,
+  ): Promise<void> {
     const org = await this.prisma.organization.findUnique({
       where: { id: organizationId },
       select: {
@@ -315,7 +337,9 @@ export class InvitesService {
     if (org.subscriptions.length > 0) {
       const hasActive = org.subscriptions.some((s) => s.status === 'ACTIVE');
       if (!hasActive) {
-        throw new BadRequestException(InvitesService.INVALID_INVITATION_MESSAGE);
+        throw new BadRequestException(
+          InvitesService.INVALID_INVITATION_MESSAGE,
+        );
       }
     }
   }
@@ -324,7 +348,10 @@ export class InvitesService {
   // Preview
   // -------------------------------------------------------------------------
 
-  async preview(tokenOrCode: string, ip?: string): Promise<InvitePreviewResponse> {
+  async preview(
+    tokenOrCode: string,
+    ip?: string,
+  ): Promise<InvitePreviewResponse> {
     const trimmed = (tokenOrCode ?? '').trim();
     if (!trimmed) {
       await this.recordFailedAttempt(trimmed, ip);
@@ -335,7 +362,9 @@ export class InvitesService {
       where: { OR: [{ token: trimmed }, { code: trimmed }] },
       include: {
         organization: { select: { id: true, name: true } },
-        classSection: { select: { id: true, label: true, grade: true, section: true } },
+        classSection: {
+          select: { id: true, label: true, grade: true, section: true },
+        },
         academicYear: { select: { id: true, label: true } },
       },
     });
@@ -360,7 +389,8 @@ export class InvitesService {
       organizationName: invite.organization.name,
     };
     if (invite.role != null) res.role = invite.role;
-    if (invite.classSectionId != null) res.classSectionId = invite.classSectionId;
+    if (invite.classSectionId != null)
+      res.classSectionId = invite.classSectionId;
     if (invite.yearId != null) res.yearId = invite.yearId;
     if (invite.classSection) {
       res.classLabel =
@@ -426,11 +456,15 @@ export class InvitesService {
     if (invite.type === InvitationType.STUDENT_CLASS) {
       if (!classSectionId || !yearId) {
         await this.recordFailedAttempt(token, ip, userId);
-        throw new BadRequestException(InvitesService.INVALID_INVITATION_MESSAGE);
+        throw new BadRequestException(
+          InvitesService.INVALID_INVITATION_MESSAGE,
+        );
       }
       if (invite.role !== OrganizationRole.STUDENT) {
         await this.recordFailedAttempt(token, ip, userId);
-        throw new BadRequestException(InvitesService.INVALID_INVITATION_MESSAGE);
+        throw new BadRequestException(
+          InvitesService.INVALID_INVITATION_MESSAGE,
+        );
       }
     } else {
       if (
@@ -439,7 +473,9 @@ export class InvitesService {
         invite.role !== OrganizationRole.STUDENT
       ) {
         await this.recordFailedAttempt(token, ip, userId);
-        throw new BadRequestException(InvitesService.INVALID_INVITATION_MESSAGE);
+        throw new BadRequestException(
+          InvitesService.INVALID_INVITATION_MESSAGE,
+        );
       }
     }
 
@@ -514,7 +550,9 @@ export class InvitesService {
       userId,
       result.membership.id,
     );
-    const ctx = await this.authService.getMeContext(userId, { organizationId: orgId });
+    const ctx = await this.authService.getMeContext(userId, {
+      organizationId: orgId,
+    });
 
     return {
       tokens,
