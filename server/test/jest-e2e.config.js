@@ -17,4 +17,8 @@ module.exports = {
   // Single worker to avoid "Too many database connections" in E2E (shared DB pool).
   maxWorkers: 1,
   testTimeout: 120000,
+  // The Nest app keeps long-lived handles open (cron @Cron jobs, SSE event
+  // bus, cache-manager timers). Without forceExit, Jest blocks indefinitely
+  // after the tests finish waiting for those handles to close.
+  forceExit: true,
 };
