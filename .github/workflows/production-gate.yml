@@ -8,6 +8,7 @@ on:
 
 env:
   NODE_VERSION: "20"
+  DATABASE_URL: postgresql://skillstorm_ci:skillstorm_ci_password@localhost:5432/skillstorm_ci
   PROD_POSTGRES_USER: skillstorm_prod_user
   PROD_POSTGRES_PASSWORD: ciSyntheticPostgresPassword1234567890
   PROD_POSTGRES_DB: skillstorm_prod
@@ -20,6 +21,7 @@ env:
   PROD_RUN_SEED: "0"
   PROD_PUBLIC_APP_URL: https://app.example.test
   PROD_API_URL: https://app.example.test
+  PROD_API_PROXY_TARGET: http://backend:4200
   PROD_CORS_ORIGINS: https://app.example.test
   PROD_ALLOW_CROSS_SITE_COOKIES: "0"
   PROD_ALLOW_PUBLIC_ORG_CREATION: "false"
@@ -68,6 +70,10 @@ jobs:
         run: npm ci
         working-directory: server
 
+      - name: Backend Prisma generate
+        run: npm run prisma:generate
+        working-directory: server
+
       - name: Backend typecheck
         run: npm run typecheck
         working-directory: server
@@ -103,6 +109,8 @@ jobs:
       - name: Frontend build
         run: npm run build
         working-directory: client
+        env:
+          API_PROXY_TARGET: http://backend:4200
 
   prisma:
     name: Prisma Validate and Generate

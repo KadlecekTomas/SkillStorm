@@ -6,7 +6,6 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-import { MswLoader } from "@/components/dev/msw-loader";
 
 export const metadata: Metadata = {
   title: "SkillStorm Platform",
@@ -14,17 +13,32 @@ export const metadata: Metadata = {
     "Modular learning experience platform for teachers and students built with Next.js 14.",
 };
 
-export default function RootLayout({
+const shouldLoadMsw =
+  process.env.NODE_ENV !== "production" ||
+  process.env.NEXT_PUBLIC_ENABLE_MSW === "true";
+
+async function getMswLoader(): Promise<React.ComponentType | null> {
+  if (!shouldLoadMsw) {
+    return null;
+  }
+
+  const { MswLoader } = await import("@/components/dev/msw-loader");
+  return MswLoader;
+}
+
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
-}>): React.JSX.Element {
+}>): Promise<React.JSX.Element> {
+  const MswLoader = await getMswLoader();
+
   return (
     <html lang="en">
       <body className="bg-secondary text-slate-900">
         <AppErrorBoundary>
           <TooltipProvider>
-            <MswLoader />
+            {MswLoader ? <MswLoader /> : null}
             <Suspense fallback={<LoadingSpinner fullScreen />}>
               {children}
             </Suspense>

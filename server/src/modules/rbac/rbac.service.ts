@@ -93,18 +93,23 @@ export class RbacService implements OnModuleDestroy {
       return true;
     }
 
-    const rolePermission = await this.prisma.rolePermission.findFirst({
-      where: {
-        role: membership.role,
-        permission: { key: permissionKey },
-        OR: [
-          { organizationId: membership.organizationId },
-          { organizationId: null },
-        ],
-      },
-      orderBy: { organizationId: 'desc' }, // prefer org-specific over global
-      select: { allowed: true },
-    });
+    const rolePermission =
+      (await this.prisma.rolePermission.findFirst({
+        where: {
+          role: membership.role,
+          permission: { key: permissionKey },
+          organizationId: membership.organizationId,
+        },
+        select: { allowed: true },
+      })) ??
+      (await this.prisma.rolePermission.findFirst({
+        where: {
+          role: membership.role,
+          permission: { key: permissionKey },
+          organizationId: null,
+        },
+        select: { allowed: true },
+      }));
 
     const allowed = rolePermission
       ? rolePermission.allowed
