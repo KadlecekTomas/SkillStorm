@@ -2,7 +2,10 @@ import type { CanActivate, ExecutionContext } from '@nestjs/common';
 import { Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { PrismaService } from '@/prisma/prisma.service';
-import { deriveOrgReadiness, OrgReadinessState } from '@/shared/org-readiness-v2';
+import {
+  deriveOrgReadiness,
+  OrgReadinessState,
+} from '@/shared/org-readiness-v2';
 import { createOrgReadinessError } from '@/shared/errors/org-readiness.error';
 import {
   ORG_OPERATION_KEY,

@@ -8,7 +8,7 @@ import {
   PermissionKey,
   PrismaClient,
 } from '@prisma/client';
-import { AppModule } from '../src/app.module';
+import { AppModule } from '../../src/app.module';
 import { PrismaService } from '@/prisma/prisma.service';
 import { RegisterMode } from '@/auth/dto/register.dto';
 import {
@@ -323,24 +323,53 @@ describe('Auth & Role Policy (integration)', () => {
 
   describe('Permissions and system role isolation', () => {
     it('ensures role permission matrix matches policy', async () => {
+      // Source of truth: src/modules/rbac/rbac.defaults.ts (seeded by
+      // rbac-default-sync on boot). Kept in sync with that file; the audited
+      // additions (assignments / test-overview / invite / submissions perms)
+      // are intentional and do not escalate STUDENT/TEACHER.
       const expected: Partial<Record<OrganizationRole, PermissionKey[]>> = {
         DIRECTOR: [
-          PermissionKey.MANAGE_TEACHERS,
-          PermissionKey.MANAGE_STUDENTS,
-          PermissionKey.VIEW_RESULTS,
           PermissionKey.CREATE_TEST,
           PermissionKey.EDIT_TEST,
-          PermissionKey.DELETE_TEST,
+          PermissionKey.VIEW_RESULTS,
           PermissionKey.VIEW_ANALYTICS,
+          PermissionKey.INVITE_STUDENTS,
+          PermissionKey.VIEW_TEST_OVERVIEW,
+          PermissionKey.MANAGE_TESTS,
+          PermissionKey.ASSIGN_TESTS,
+          PermissionKey.VIEW_SUBMISSIONS,
+          PermissionKey.VIEW_CLASS_ASSIGNMENTS,
+          PermissionKey.VIEW_OWN_ASSIGNMENTS,
+          PermissionKey.DELETE_TEST,
+          PermissionKey.MANAGE_STUDENTS,
+          PermissionKey.MANAGE_TEACHERS,
+          PermissionKey.INVITE_TEACHERS,
+          PermissionKey.MANAGE_ASSIGNMENTS,
+          PermissionKey.VIEW_ORG_ASSIGNMENTS,
         ],
         TEACHER: [
           PermissionKey.CREATE_TEST,
           PermissionKey.EDIT_TEST,
           PermissionKey.VIEW_RESULTS,
-          PermissionKey.MANAGE_STUDENTS,
+          PermissionKey.VIEW_ANALYTICS,
+          PermissionKey.INVITE_STUDENTS,
+          PermissionKey.VIEW_TEST_OVERVIEW,
+          PermissionKey.MANAGE_TESTS,
+          PermissionKey.ASSIGN_TESTS,
+          PermissionKey.VIEW_SUBMISSIONS,
+          PermissionKey.VIEW_CLASS_ASSIGNMENTS,
+          PermissionKey.VIEW_OWN_ASSIGNMENTS,
         ],
-        STUDENT: [PermissionKey.VIEW_RESULTS],
-        PARENT: [PermissionKey.VIEW_RESULTS],
+        STUDENT: [
+          PermissionKey.VIEW_RESULTS,
+          PermissionKey.VIEW_TEST_OVERVIEW,
+          PermissionKey.VIEW_SUBMISSIONS,
+          PermissionKey.VIEW_OWN_ASSIGNMENTS,
+        ],
+        PARENT: [
+          PermissionKey.VIEW_RESULTS,
+          PermissionKey.VIEW_SUBMISSIONS,
+        ],
       };
 
       const permissions = await prisma.permission.findMany({

@@ -198,7 +198,10 @@ describe('Organizations (e2e)', () => {
           email,
           password,
           username: tag.slice(0, 20),
-          mode: RegisterMode.INDIVIDUAL,
+          // Personal registration: CREATE_ORG registers the user only (org
+          // fields are optional) and the org is created separately via
+          // POST /organizations below. RegisterMode.INDIVIDUAL was removed.
+          mode: RegisterMode.CREATE_ORG,
         })
         .expect(201);
 
@@ -256,7 +259,10 @@ describe('Organizations (e2e)', () => {
           email,
           password,
           username: tag.slice(0, 20),
-          mode: RegisterMode.INDIVIDUAL,
+          // Personal registration: CREATE_ORG registers the user only (org
+          // fields are optional) and the org is created separately via
+          // POST /organizations below. RegisterMode.INDIVIDUAL was removed.
+          mode: RegisterMode.CREATE_ORG,
         })
         .expect(201);
 
@@ -315,7 +321,10 @@ describe('Organizations (e2e)', () => {
           email,
           password,
           username: tag.slice(0, 20),
-          mode: RegisterMode.INDIVIDUAL,
+          // Personal registration: CREATE_ORG registers the user only (org
+          // fields are optional) and the org is created separately via
+          // POST /organizations below. RegisterMode.INDIVIDUAL was removed.
+          mode: RegisterMode.CREATE_ORG,
         })
         .expect(201);
 
@@ -374,7 +383,10 @@ describe('Organizations (e2e)', () => {
           email,
           password,
           username: tag.slice(0, 20),
-          mode: RegisterMode.INDIVIDUAL,
+          // Personal registration: CREATE_ORG registers the user only (org
+          // fields are optional) and the org is created separately via
+          // POST /organizations below. RegisterMode.INDIVIDUAL was removed.
+          mode: RegisterMode.CREATE_ORG,
         })
         .expect(201);
 

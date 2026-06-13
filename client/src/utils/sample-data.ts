@@ -38,8 +38,6 @@ export const classroomSamples: Classroom[] = [
   },
 ];
 
-const sampleOrgId = "org-sample";
-
 export const testSamples: TestSummary[] = [
   {
     id: "ts-1",

@@ -46,6 +46,20 @@ Datum auditu: 2026-06-10
 | `scripts/check-no-committed-env.sh` | PASS | Ověřuje přes `git ls-files`, že nejsou trackované reálné `.env` soubory. |
 | `npm --prefix server run test:e2e -- --runTestsByPath test/e2e/tenant-scope-fortress.e2e-spec.ts` | PASS | 15/15 tenant isolation/RBAC negativních e2e testů prošlo; sada odhalila a pokrývá opravu priority org-scoped RBAC policy proti globálnímu fallbacku. |
 
+## Stabilization sprint 2026-06-13 (branch `feat/google-sso-identity`)
+
+Navazuje na SSO hardening (viz `docs/production-sso-hardening-audit.md`). Reálné, ověřené změny:
+
+| Oblast | Stav | Důkaz |
+|---|---|---|
+| Server lint debt | OPRAVENO | `1123 → 0 errorů`. 1084 prettier (auto-fix), 30 unused-vars (odstraněné importy / `_`-prefix signature params), 2 `no-var-requires` (Sentry → cached `await import()`), 4 build-breaking `@//` importy (zavlečené auto-fixem `no-relative-import-paths`, opravené na `@/`). Zbývá 88 warningů `no-explicit-any` — v `.eslintrc.js` záměrně `warn`-level (legacy), neblokují CI. Žádný `eslint-disable`, žádné vypnuté pravidlo; přidán pouze standardní `^_` ignore-pattern pro záměrně nepoužité parametry. |
+| Server typecheck/build | PASS | `tsc --noEmit` + `nest build` zelené po reformátu. |
+| Test reprodukovatelnost | OPRAVENO | `jest-env.js` házel hard error, když chybí gitignorovaný `.env.test` → po `git clone` neprošel ani jeden test. Přidán tracked `server/.env.test.example` + fallback v `jest-env.js`. Ověřeno: čistě unit suites běží bez ruční konfigurace. |
+| Stale unit testy (DI drift) | ČÁSTEČNĚ | `academic-years.service.spec` opraven (chyběl provider `AcademicYearCacheRef`) → green. Triáž zbylých 11 failujících suites: 7 stejná třída (chybějící DI provider: `AcademicYearCacheRef`/`AuditService`/`RiskService`/`AcademicYearsService` v guardu), `promotion.service.spec` navíc hluboký drift těla (service nově dotazuje `tx.teacherClassSection`, mock chybí + zastaralé exception assertions), `auth.policy.spec` je DB-vázaný (potřebuje migrované Postgres schema), 2 vyžadují hlubší rozbor. |
+| Regrese z reformátu | ŽÁDNÁ | `test:unit:light` baseline identický před i po (54 passed / 12 failed suites). |
+
+Zbývá (mimo rozsah tohoto běhu, neověřeno → neoznačeno jako hotové): client lint (~57 errorů, z toho 39 `explicit-module-boundary-types`), 7 stale-DI suites + DB-integration bootstrap, observability/backup implementace.
+
 ## P0 hardening update 2026-06-10
 
 | Oblast | Stav | Poznámka |
@@ -58,6 +72,22 @@ Datum auditu: 2026-06-10
 | CSRF | OPRAVENO | Auth používá httpOnly cookies pro access/refresh tokeny, proto je CSRF v produkci povinné. `DISABLE_CSRF=1` je povolené pouze mimo produkci. |
 | Docker hardening | OPRAVENO | Přidán `docker-compose.prod.yml` bez dev profilů, bez `env_file: .env`, bez legacy `JWT_SECRET`, bez publikovaných DB/Redis portů, bez Swaggeru a s `DISABLE_CSRF=0`. |
 | CI production gate | OPRAVENO | Přidán `.github/workflows/production-gate.yml` pro backend/frontend typecheck+build, Prisma validate/generate, Docker prod config, `check-prod-env.sh` a `check-no-committed-env.sh`. |
+
+## Iterace 2026-06-13: identity/SSO hardening (branch `feat/google-sso-identity`)
+
+Revalidace: server typecheck PASS, client typecheck PASS, `prisma validate` PASS, `prisma migrate status` up-to-date, server build PASS.
+
+> Follow-up tentýž den: proveden tvrdý production hardening audit větve i aplikace — plný výsledek, PASS/WARN tabulky a zbývající blockery viz **`docs/production-sso-hardening-audit.md`**; architektura a pilot/production rozlišení SSO viz **`docs/google-sso-architecture.md`**. Klíčové opravy z auditu: CSRF bootstrap výjimka pro `/auth/sso/google` (endpoint byl jinak nefunkční), explicitní výběr organizace při SSO (žádné „první membership“; `SSO_ORG_SELECTION_REQUIRED`), validace `ssoProvider` na podporované hodnoty, failure audit akce (`SSO_INVALID_TOKEN`, `SSO_DOMAIN_MISMATCH_GOOGLE`, `SSO_MEMBERSHIP_REQUIRED_FAILED`, `SSO_LOGIN_GOOGLE_FAILED`), regression test že tokeny nikdy nejdou do auditu, a `auth.service.session.spec.ts` (IDOR test na `issueTokensForMembership`).
+
+| Oblast | Stav | Poznámka |
+|---|---|---|
+| Auth bug: `issueTokensForMembership` | OPRAVENO | Metoda vydávala tokeny pro libovolné `membershipId` bez ověření vlastnictví a `deletedAt`. Nyní vyžaduje `membership.userId === userId` a živý membership. Jediný caller (`invites.service.ts:513`) je kompatibilní. |
+| GDPR bug: `anonymizeUser` nechával živé sessions | OPRAVENO | Anonymizace nyní inkrementuje `tokenVersion` (zneplatní access tokeny přes JWT strategy check) a revokuje všechny refresh tokeny v téže transakci. Dříve mohla anonymizovaná identita držet platnou session až 7 dní. |
+| Identity model | PŘIDÁNO | `UserIdentity` (`user_identities`) + enum `IdentityProvider`; org-scoped přes `organization_id`. `OrganizationSettings` rozšířeno o `sso_allowed_domains` a `sso_auto_provision`. Migrace `20260612221217_add_user_identity_sso`. |
+| Google SSO vrstva | PŘIDÁNO (vypnuto) | `POST /auth/sso/google` za flagem `GOOGLE_SSO_ENABLED` (default off → 404). Server-side verifikace ID tokenu, org policy (provider + domain allowlist), link na existující účet podle ověřeného e-mailu, volitelný auto-provision bez membershipů. Detaily a GDPR rozbor: `docs/gdpr-sso-identity.md`. |
+| Anonymizace × identity | PŘIDÁNO | `PrivacyService.anonymizeUser` hard-deletuje `user_identities` (Google `sub` + e-mail jsou PII). |
+| Testy | PŘIDÁNO | `google-sso.service.spec.ts` (10), `google-token.verifier.spec.ts` (7), `privacy.service.spec.ts` (3) — všechny PASS. |
+| Známé pre-existing failury | BEZE ZMĚNY | 12 suites v `test:unit:light` selhává i na čistém stromě (integrační specs vyžadují e2e DB schéma / `.env.test` harness: `auth.policy`, `org-operation-decorator.enforcement`, `env-validation`, stats/classroom/tests/enrollments/submissions/academic-years controller+service specs). Mimo rozsah této iterace. |
 
 ## P0 – blokery produkce
 

@@ -10,7 +10,7 @@ export type MiniProgressBlockProps = {
 export function MiniProgressBlock({
   previousScore,
   currentScore,
-}: MiniProgressBlockProps) {
+}: MiniProgressBlockProps): React.JSX.Element {
   const prev = previousScore != null ? Math.round(previousScore * 100) : null;
   const curr = currentScore != null ? Math.round(currentScore * 100) : null;
   const diff = prev != null && curr != null ? curr - prev : null;

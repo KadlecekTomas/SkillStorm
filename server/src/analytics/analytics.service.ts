@@ -172,7 +172,9 @@ export class AnalyticsService {
     ) {
       const sid = studentId ?? null;
       if (!sid || typeof sid !== 'string') {
-        throw new BadRequestException('studentId is required for teacher/director/owner');
+        throw new BadRequestException(
+          'studentId is required for teacher/director/owner',
+        );
       }
       targetStudentId = sid;
       const membership = await this.prisma.membership.findFirst({
@@ -184,7 +186,9 @@ export class AnalyticsService {
         },
       });
       if (!membership) {
-        throw new ForbiddenException('Student not found or not in your organization');
+        throw new ForbiddenException(
+          'Student not found or not in your organization',
+        );
       }
     } else {
       throw new ForbiddenException('Insufficient permissions');
@@ -311,10 +315,14 @@ export class AnalyticsService {
     const orgId = user.organizationId ?? null;
     const membershipId = user.membershipId ?? null;
     if (!orgId || !membershipId) {
-      throw new ForbiddenException('Missing organization or membership context');
+      throw new ForbiddenException(
+        'Missing organization or membership context',
+      );
     }
     if (user.organizationRole !== OrganizationRole.STUDENT) {
-      throw new ForbiddenException('Only students can access student analytics');
+      throw new ForbiddenException(
+        'Only students can access student analytics',
+      );
     }
 
     const now = new Date();
@@ -362,13 +370,11 @@ export class AnalyticsService {
       if (r.isCorrect === true) continue;
       const createdAt = r.submission.createdAt;
       const key = r.question.id;
-      const bucket =
-        buckets.get(key) ??
-        {
-          label: r.question.text,
-          currentCount: 0,
-          previousCount: 0,
-        };
+      const bucket = buckets.get(key) ?? {
+        label: r.question.text,
+        currentCount: 0,
+        previousCount: 0,
+      };
       if (createdAt >= currentSince) {
         bucket.currentCount += 1;
       } else {
@@ -417,10 +423,14 @@ export class AnalyticsService {
     const orgId = user.organizationId ?? null;
     const membershipId = user.membershipId ?? null;
     if (!orgId || !membershipId) {
-      throw new ForbiddenException('Missing organization or membership context');
+      throw new ForbiddenException(
+        'Missing organization or membership context',
+      );
     }
     if (user.organizationRole !== OrganizationRole.STUDENT) {
-      throw new ForbiddenException('Only students can access student analytics');
+      throw new ForbiddenException(
+        'Only students can access student analytics',
+      );
     }
 
     const now = new Date();
@@ -483,18 +493,14 @@ export class AnalyticsService {
       const topicId = assignment.topicLevelId ?? topicLevel?.id;
       if (!topicId) continue;
       const name =
-        topicLevel?.name ??
-        topicLevel?.catalogTopic?.name ??
-        'Neznámé téma';
-      const bucket =
-        topicBuckets.get(topicId) ??
-        {
-          name,
-          currentCorrect: 0,
-          currentTotal: 0,
-          previousCorrect: 0,
-          previousTotal: 0,
-        };
+        topicLevel?.name ?? topicLevel?.catalogTopic?.name ?? 'Neznámé téma';
+      const bucket = topicBuckets.get(topicId) ?? {
+        name,
+        currentCorrect: 0,
+        currentTotal: 0,
+        previousCorrect: 0,
+        previousTotal: 0,
+      };
       const createdAt = r.submission.createdAt;
       const isCorrect = r.isCorrect === true;
       if (createdAt >= currentSince) {
@@ -615,14 +621,12 @@ export class AnalyticsService {
       if (r.isCorrect === true) continue;
       const createdAt = r.submission.createdAt;
       const questionId = r.question.id;
-      const bucket =
-        errorBuckets.get(questionId) ??
-        {
-          label: r.question.text,
-          studentIds: new Set<string>(),
-          currentCount: 0,
-          previousCount: 0,
-        };
+      const bucket = errorBuckets.get(questionId) ?? {
+        label: r.question.text,
+        studentIds: new Set<string>(),
+        currentCount: 0,
+        previousCount: 0,
+      };
       bucket.studentIds.add(r.submission.studentId);
       if (createdAt >= currentSince) {
         bucket.currentCount += 1;
@@ -763,19 +767,15 @@ export class AnalyticsService {
       const topicId = assignment.topicLevelId ?? topicLevel?.id;
       if (!topicId) continue;
       const name =
-        topicLevel?.name ??
-        topicLevel?.catalogTopic?.name ??
-        'Neznámé téma';
-      const bucket =
-        topicBuckets.get(topicId) ??
-        {
-          name,
-          studentIds: new Set<string>(),
-          currentCorrect: 0,
-          currentTotal: 0,
-          previousCorrect: 0,
-          previousTotal: 0,
-        };
+        topicLevel?.name ?? topicLevel?.catalogTopic?.name ?? 'Neznámé téma';
+      const bucket = topicBuckets.get(topicId) ?? {
+        name,
+        studentIds: new Set<string>(),
+        currentCorrect: 0,
+        currentTotal: 0,
+        previousCorrect: 0,
+        previousTotal: 0,
+      };
       bucket.studentIds.add(r.submission.studentId);
       const createdAt = r.submission.createdAt;
       const isCorrect = r.isCorrect === true;

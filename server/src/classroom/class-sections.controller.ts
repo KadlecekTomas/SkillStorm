@@ -32,7 +32,10 @@ import { ApiStandardResponses } from '@/common/http/api-standard-responses.decor
 import { RequireCurrentAcademicYearGuard } from '@/academic-years/require-current-academic-year.guard';
 import { AcademicYearExpiredGuard } from '@/academic-years/academic-year-expired.guard';
 import { AllowPendingOrg } from '@/common/decorators/allow-pending-org.decorator';
-import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
+import {
+  OrgOperation,
+  OrgOperationType,
+} from '@/common/decorators/org-operation.decorator';
 import { OrgContextService } from '@/common/org-context/org-context.service';
 import { NoHttpCache } from '@/common/cache/no-http-cache.decorator';
 
@@ -52,7 +55,10 @@ export class ClassSectionsController {
   @Post()
   @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'Create class section' })
-  async create(@Body() dto: CreateClassSectionDto, @Req() req: RequestWithUser) {
+  async create(
+    @Body() dto: CreateClassSectionDto,
+    @Req() req: RequestWithUser,
+  ) {
     const ctx = await this.orgContext.get(req);
     if (!ctx.activeAcademicYearId) {
       throw new BadRequestException('Missing active academic year.');
@@ -61,7 +67,9 @@ export class ClassSectionsController {
       (dto.yearId && dto.yearId !== ctx.activeAcademicYearId) ||
       (dto.academicYearId && dto.academicYearId !== ctx.activeAcademicYearId)
     ) {
-      throw new BadRequestException('yearId/academicYearId body is not allowed');
+      throw new BadRequestException(
+        'yearId/academicYearId body is not allowed',
+      );
     }
     return ok(
       this.service.create(
@@ -80,15 +88,21 @@ export class ClassSectionsController {
   @ApiOperation({ summary: 'List class sections' })
   @NoHttpCache()
   @CacheTTL(0) // vypnout HTTP response cache – používáme verzovanou cache v service
-  async findAll(@Req() req: RequestWithUser, @Query() q: QueryClassSectionsDto) {
+  async findAll(
+    @Req() req: RequestWithUser,
+    @Query() q: QueryClassSectionsDto,
+  ) {
     const ctx = await this.orgContext.get(req);
     if (!ctx.activeAcademicYearId) {
       throw new BadRequestException('Missing active academic year.');
     }
     if (q.yearId && q.academicYearId && q.yearId !== q.academicYearId) {
-      throw new BadRequestException('academicYearId a yearId se musí shodovat.');
+      throw new BadRequestException(
+        'academicYearId a yearId se musí shodovat.',
+      );
     }
-    const requestedYearId = q.yearId ?? q.academicYearId ?? ctx.activeAcademicYearId;
+    const requestedYearId =
+      q.yearId ?? q.academicYearId ?? ctx.activeAcademicYearId;
     return ok(
       this.service.findAll(
         {
@@ -126,9 +140,7 @@ export class ClassSectionsController {
   @Post(':id/org-subjects')
   @ApiOperation({ summary: 'Attach subjects to class section' })
   @Permission(PermissionKey.MANAGE_TEACHERS)
-  @InvalidateScopes(({ req }) =>
-    [req?.user?.organizationId].filter(Boolean),
-  )
+  @InvalidateScopes(({ req }) => [req?.user?.organizationId].filter(Boolean))
   attachOrgSubjects(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() dto: AttachOrgSubjectsDto,
@@ -171,7 +183,9 @@ export class ClassSectionsController {
 
   @Post(':id/teachers')
   @Permission(PermissionKey.MANAGE_TEACHERS)
-  @ApiOperation({ summary: 'Assign teacher to class section (explicit teaching role)' })
+  @ApiOperation({
+    summary: 'Assign teacher to class section (explicit teaching role)',
+  })
   async assignTeacher(
     @Param('id', new ParseUUIDPipe()) classSectionId: string,
     @Body() dto: AssignTeacherDto,
@@ -179,13 +193,19 @@ export class ClassSectionsController {
   ) {
     const ctx = await this.orgContext.get(req);
     return ok(
-      this.service.assignTeacherToClass(classSectionId, dto.teacherId, ctx.organizationId),
+      this.service.assignTeacherToClass(
+        classSectionId,
+        dto.teacherId,
+        ctx.organizationId,
+      ),
     );
   }
 
   @Delete(':id/teachers/:teacherId')
   @Permission(PermissionKey.MANAGE_TEACHERS)
-  @ApiOperation({ summary: 'Remove teacher from class section (soft-delete assignment)' })
+  @ApiOperation({
+    summary: 'Remove teacher from class section (soft-delete assignment)',
+  })
   async removeTeacher(
     @Param('id', new ParseUUIDPipe()) classSectionId: string,
     @Param('teacherId', new ParseUUIDPipe()) teacherId: string,
@@ -193,7 +213,11 @@ export class ClassSectionsController {
   ) {
     const ctx = await this.orgContext.get(req);
     return ok(
-      this.service.removeTeacherFromClass(classSectionId, teacherId, ctx.organizationId),
+      this.service.removeTeacherFromClass(
+        classSectionId,
+        teacherId,
+        ctx.organizationId,
+      ),
     );
   }
 }

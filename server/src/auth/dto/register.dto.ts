@@ -10,7 +10,10 @@ import {
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { SystemRole } from '@prisma/client';
 import { Transform } from 'class-transformer';
-import { StrongPassword, PASSWORD_POLICY_MESSAGE } from '@/common/validators/password.validator';
+import {
+  StrongPassword,
+  PASSWORD_POLICY_MESSAGE,
+} from '@/common/validators/password.validator';
 
 export enum RegisterMode {
   CREATE_ORG = 'CREATE_ORG',
@@ -78,13 +81,16 @@ export class RegisterDto {
     example: 'invite-token-from-link',
   })
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
-  @ValidateIf((o) => o.mode === RegisterMode.JOIN_ORG && o.inviteToken !== undefined)
+  @ValidateIf(
+    (o) => o.mode === RegisterMode.JOIN_ORG && o.inviteToken !== undefined,
+  )
   @IsString()
   @IsNotEmpty()
   inviteToken?: string;
 
   @ApiPropertyOptional({
-    description: 'Legacy invite code (backward compatibility). Internally mapped to inviteToken.',
+    description:
+      'Legacy invite code (backward compatibility). Internally mapped to inviteToken.',
     example: 'invite-token-from-link',
   })
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
@@ -94,7 +100,9 @@ export class RegisterDto {
   code?: string;
 
   /** Ignored at register. Required in onboarding step (POST /organizations). Kept optional so clients can send it without 400. */
-  @ApiPropertyOptional({ description: 'Ignored. Use POST /organizations in onboarding step.' })
+  @ApiPropertyOptional({
+    description: 'Ignored. Use POST /organizations in onboarding step.',
+  })
   @IsOptional()
   @IsString()
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))

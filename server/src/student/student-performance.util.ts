@@ -76,10 +76,7 @@ export function computeStudentPerformance(
     (sum, a) => sum + (a.earnedPoints ?? 0),
     0,
   );
-  const totalMaxPoints = bestAttempts.reduce(
-    (sum, a) => sum + a.maxPoints,
-    0,
-  );
+  const totalMaxPoints = bestAttempts.reduce((sum, a) => sum + a.maxPoints, 0);
   // averageScore in 0–100 range, rounded to 2 decimal places
   const averageScore =
     totalMaxPoints > 0

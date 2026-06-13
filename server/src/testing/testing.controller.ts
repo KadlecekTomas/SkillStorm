@@ -301,7 +301,8 @@ export class TestingController {
     @Body() body: { topicLevelId?: string },
   ): Promise<{ attached: true }> {
     this.assertAuthorized(token);
-    if (!body?.topicLevelId) throw new BadRequestException('topicLevelId is required');
+    if (!body?.topicLevelId)
+      throw new BadRequestException('topicLevelId is required');
     await this.prisma.testAssignment.create({
       data: {
         testId,
@@ -392,21 +393,33 @@ export class TestingController {
   }
 
   private assertAuthorized(token: string | undefined): void {
-    const expected = process.env.E2E_TEST_TOKEN ?? process.env.METRICS_INGEST_KEY;
+    const expected =
+      process.env.E2E_TEST_TOKEN ?? process.env.METRICS_INGEST_KEY;
     if (!expected || token !== expected) {
       throw new ForbiddenException('E2E testing endpoint is disabled');
     }
   }
 
-  private assertFixture(fixture: Partial<GoldenFlowFixtureInput> | undefined): asserts fixture is GoldenFlowFixtureInput {
-    if (!fixture?.orgName || !fixture.ownerEmail || !fixture.teacherEmail || !fixture.studentEmail) {
+  private assertFixture(
+    fixture: Partial<GoldenFlowFixtureInput> | undefined,
+  ): asserts fixture is GoldenFlowFixtureInput {
+    if (
+      !fixture?.orgName ||
+      !fixture.ownerEmail ||
+      !fixture.teacherEmail ||
+      !fixture.studentEmail
+    ) {
       throw new BadRequestException('fixture payload is incomplete');
     }
   }
 
   private async cleanupFixture(fixture: GoldenFlowFixtureInput): Promise<void> {
     const users = await this.prisma.user.findMany({
-      where: { email: { in: [fixture.ownerEmail, fixture.teacherEmail, fixture.studentEmail] } },
+      where: {
+        email: {
+          in: [fixture.ownerEmail, fixture.teacherEmail, fixture.studentEmail],
+        },
+      },
       select: { id: true },
     });
     const userIds = users.map((user) => user.id);
@@ -415,7 +428,13 @@ export class TestingController {
       where: {
         OR: [
           { name: fixture.orgName },
-          { ownerUserId: { in: userIds.length ? userIds : ['00000000-0000-0000-0000-000000000000'] } },
+          {
+            ownerUserId: {
+              in: userIds.length
+                ? userIds
+                : ['00000000-0000-0000-0000-000000000000'],
+            },
+          },
         ],
       },
       select: { id: true },
@@ -423,31 +442,75 @@ export class TestingController {
     const orgIds = orgs.map((org) => org.id);
 
     if (orgIds.length) {
-      await this.prisma.submission.deleteMany({ where: { organizationId: { in: orgIds } } });
-      await this.prisma.assignmentStudent.deleteMany({ where: { assignment: { organizationId: { in: orgIds } } } });
-      await this.prisma.assignment.deleteMany({ where: { organizationId: { in: orgIds } } });
-      await this.prisma.testAssignment.deleteMany({ where: { test: { organizationId: { in: orgIds } } } });
-      await this.prisma.answer.deleteMany({ where: { question: { test: { organizationId: { in: orgIds } } } } });
-      await this.prisma.option.deleteMany({ where: { question: { test: { organizationId: { in: orgIds } } } } });
-      await this.prisma.question.deleteMany({ where: { test: { organizationId: { in: orgIds } } } });
-      await this.prisma.test.deleteMany({ where: { organizationId: { in: orgIds } } });
-      await this.prisma.teacherSubject.deleteMany({ where: { teacher: { organizationId: { in: orgIds } } } });
-      await this.prisma.teacherClassSection.deleteMany({ where: { academicYear: { orgId: { in: orgIds } } } });
-      await this.prisma.enrollment.deleteMany({ where: { orgId: { in: orgIds } } });
-      await this.prisma.student.deleteMany({ where: { orgId: { in: orgIds } } });
-      await this.prisma.teacher.deleteMany({ where: { organizationId: { in: orgIds } } });
-      await this.prisma.classSectionOrgSubject.deleteMany({ where: { classSection: { orgId: { in: orgIds } } } });
-      await this.prisma.classSection.deleteMany({ where: { orgId: { in: orgIds } } });
-      await this.prisma.orgSubject.deleteMany({ where: { organizationId: { in: orgIds } } });
-      await this.prisma.membership.deleteMany({ where: { organizationId: { in: orgIds } } });
-      await this.prisma.academicYear.deleteMany({ where: { orgId: { in: orgIds } } });
-      await this.prisma.organization.deleteMany({ where: { id: { in: orgIds } } });
+      await this.prisma.submission.deleteMany({
+        where: { organizationId: { in: orgIds } },
+      });
+      await this.prisma.assignmentStudent.deleteMany({
+        where: { assignment: { organizationId: { in: orgIds } } },
+      });
+      await this.prisma.assignment.deleteMany({
+        where: { organizationId: { in: orgIds } },
+      });
+      await this.prisma.testAssignment.deleteMany({
+        where: { test: { organizationId: { in: orgIds } } },
+      });
+      await this.prisma.answer.deleteMany({
+        where: { question: { test: { organizationId: { in: orgIds } } } },
+      });
+      await this.prisma.option.deleteMany({
+        where: { question: { test: { organizationId: { in: orgIds } } } },
+      });
+      await this.prisma.question.deleteMany({
+        where: { test: { organizationId: { in: orgIds } } },
+      });
+      await this.prisma.test.deleteMany({
+        where: { organizationId: { in: orgIds } },
+      });
+      await this.prisma.teacherSubject.deleteMany({
+        where: { teacher: { organizationId: { in: orgIds } } },
+      });
+      await this.prisma.teacherClassSection.deleteMany({
+        where: { academicYear: { orgId: { in: orgIds } } },
+      });
+      await this.prisma.enrollment.deleteMany({
+        where: { orgId: { in: orgIds } },
+      });
+      await this.prisma.student.deleteMany({
+        where: { orgId: { in: orgIds } },
+      });
+      await this.prisma.teacher.deleteMany({
+        where: { organizationId: { in: orgIds } },
+      });
+      await this.prisma.classSectionOrgSubject.deleteMany({
+        where: { classSection: { orgId: { in: orgIds } } },
+      });
+      await this.prisma.classSection.deleteMany({
+        where: { orgId: { in: orgIds } },
+      });
+      await this.prisma.orgSubject.deleteMany({
+        where: { organizationId: { in: orgIds } },
+      });
+      await this.prisma.membership.deleteMany({
+        where: { organizationId: { in: orgIds } },
+      });
+      await this.prisma.academicYear.deleteMany({
+        where: { orgId: { in: orgIds } },
+      });
+      await this.prisma.organization.deleteMany({
+        where: { id: { in: orgIds } },
+      });
     }
 
     if (userIds.length) {
-      await this.prisma.refreshToken.deleteMany({ where: { userId: { in: userIds } } });
-      await this.prisma.revokedToken.deleteMany({ where: { userId: { in: userIds } } });
-      await this.prisma.passwordResetToken.deleteMany({ where: { userId: { in: userIds } } });
+      await this.prisma.refreshToken.deleteMany({
+        where: { userId: { in: userIds } },
+      });
+      await this.prisma.revokedToken.deleteMany({
+        where: { userId: { in: userIds } },
+      });
+      await this.prisma.passwordResetToken.deleteMany({
+        where: { userId: { in: userIds } },
+      });
       await this.prisma.user.deleteMany({ where: { id: { in: userIds } } });
     }
 
@@ -457,11 +520,21 @@ export class TestingController {
     });
 
     if (catalogSubject) {
-      await this.prisma.topicLevel.deleteMany({ where: { catalogTopic: { subjectId: catalogSubject.id } } });
-      await this.prisma.subjectLevel.deleteMany({ where: { subject: { catalogSubjectId: catalogSubject.id } } });
-      await this.prisma.subject.deleteMany({ where: { catalogSubjectId: catalogSubject.id } });
-      await this.prisma.catalogTopic.deleteMany({ where: { subjectId: catalogSubject.id } });
-      await this.prisma.catalogSubject.delete({ where: { id: catalogSubject.id } });
+      await this.prisma.topicLevel.deleteMany({
+        where: { catalogTopic: { subjectId: catalogSubject.id } },
+      });
+      await this.prisma.subjectLevel.deleteMany({
+        where: { subject: { catalogSubjectId: catalogSubject.id } },
+      });
+      await this.prisma.subject.deleteMany({
+        where: { catalogSubjectId: catalogSubject.id },
+      });
+      await this.prisma.catalogTopic.deleteMany({
+        where: { subjectId: catalogSubject.id },
+      });
+      await this.prisma.catalogSubject.delete({
+        where: { id: catalogSubject.id },
+      });
     }
   }
 }

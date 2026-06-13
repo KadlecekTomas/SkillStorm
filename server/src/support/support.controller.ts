@@ -14,7 +14,11 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CacheTTL } from '@nestjs/cache-manager';
-import { OrganizationRole, SupportTicketStatus, SystemRole } from '@prisma/client';
+import {
+  OrganizationRole,
+  SupportTicketStatus,
+  SystemRole,
+} from '@prisma/client';
 import { Permission } from '@/modules/rbac/permission.decorator';
 import { ok } from '@/common/http/envelope';
 import { ApiStandardResponses } from '@/common/http/api-standard-responses.decorator';
@@ -45,15 +49,25 @@ export class SupportController {
   ) {}
 
   @Post('support/tickets')
-  @Permission(OrganizationRole.OWNER, OrganizationRole.DIRECTOR, OrganizationRole.TEACHER)
+  @Permission(
+    OrganizationRole.OWNER,
+    OrganizationRole.DIRECTOR,
+    OrganizationRole.TEACHER,
+  )
   @ApiOperation({ summary: 'Create lightweight support ticket' })
   createTicket(@Body() dto: CreateTicketDto, @Req() req: RequestWithUser) {
     return ok(this.supportService.createTicket(dto, req.user, req));
   }
 
   @Get('support/my-tickets')
-  @Permission(OrganizationRole.OWNER, OrganizationRole.DIRECTOR, OrganizationRole.TEACHER)
-  @ApiOperation({ summary: 'List current user support tickets in active organization' })
+  @Permission(
+    OrganizationRole.OWNER,
+    OrganizationRole.DIRECTOR,
+    OrganizationRole.TEACHER,
+  )
+  @ApiOperation({
+    summary: 'List current user support tickets in active organization',
+  })
   @NoHttpCache()
   @CacheTTL(0)
   @Header('Cache-Control', 'no-store, no-cache, must-revalidate, private')
@@ -64,7 +78,10 @@ export class SupportController {
   @Get('platform/support/tickets')
   @UseGuards(PlatformAccessGuard)
   @RequirePlatformAccess(PlatformAccessLevel.READ)
-  @ApiOperation({ summary: 'List support tickets for platform triage (READ — SUPERADMIN | DEVOPS | SUPPORT)' })
+  @ApiOperation({
+    summary:
+      'List support tickets for platform triage (READ — SUPERADMIN | DEVOPS | SUPPORT)',
+  })
   @NoHttpCache()
   @CacheTTL(0)
   @Header('Cache-Control', 'no-store, no-cache, must-revalidate, private')
@@ -86,7 +103,9 @@ export class SupportController {
   @Get('platform/support/tickets/:id')
   @UseGuards(PlatformAccessGuard)
   @RequirePlatformAccess(PlatformAccessLevel.READ)
-  @ApiOperation({ summary: 'Get support ticket detail (READ — SUPERADMIN | DEVOPS | SUPPORT)' })
+  @ApiOperation({
+    summary: 'Get support ticket detail (READ — SUPERADMIN | DEVOPS | SUPPORT)',
+  })
   async getTicket(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Req() req: RequestWithUser,
@@ -98,13 +117,21 @@ export class SupportController {
   @Patch('platform/support/tickets/:id')
   @UseGuards(SystemRoleGuard)
   @RequireSystemRole(SystemRole.SUPERADMIN, SystemRole.SUPPORT)
-  @ApiOperation({ summary: 'Update support ticket triage state (MUTATION — SUPERADMIN | SUPPORT)' })
+  @ApiOperation({
+    summary:
+      'Update support ticket triage state (MUTATION — SUPERADMIN | SUPPORT)',
+  })
   async updateTicket(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() dto: UpdateTicketDto,
     @Req() req: RequestWithUser,
   ) {
-    const ticket = await this.supportService.updateTicket(id, dto, req.user, req);
+    const ticket = await this.supportService.updateTicket(
+      id,
+      dto,
+      req.user,
+      req,
+    );
     return ok(this.dataScope.scopeTicket(req.user, ticket));
   }
 }

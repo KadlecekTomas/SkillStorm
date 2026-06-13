@@ -1,11 +1,4 @@
-import {
-  Controller,
-  Get,
-  Query,
-  Req,
-  UseInterceptors,
-  ForbiddenException,
-} from '@nestjs/common';
+import { Controller, Get, Query, Req, UseInterceptors } from '@nestjs/common';
 import { RequestWithUser } from '@/types/request-with-user';
 import {
   ApiBearerAuth,
@@ -22,7 +15,10 @@ import {
   StatsOverviewQueryDto,
 } from './dto/stats-overview-query.dto';
 import { NoHttpCacheInterceptor } from '@/common/interceptors/no-http-cache.interceptor';
-import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
+import {
+  OrgOperation,
+  OrgOperationType,
+} from '@/common/decorators/org-operation.decorator';
 
 export const DEFAULT_STATS_OVERVIEW_SCOPE = 'evaluated' as const;
 

@@ -23,7 +23,7 @@ export function hasAtLeastRole(
   const role =
     typeof roleOrMembership === 'string'
       ? roleOrMembership
-      : roleOrMembership?.role ?? null;
+      : (roleOrMembership?.role ?? null);
   if (!role) return false;
   return ROLE_ORDER[role] >= ROLE_ORDER[required];
 }

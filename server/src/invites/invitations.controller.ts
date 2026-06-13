@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Post,
+  Query,
+  Req,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { Response } from 'express';
@@ -13,7 +22,10 @@ import {
   setCsrfCookie,
   generateCsrfToken,
 } from '@/auth/token-cookies';
-import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
+import {
+  OrgOperation,
+  OrgOperationType,
+} from '@/common/decorators/org-operation.decorator';
 import { ApiProperty } from '@nestjs/swagger';
 import { IsString } from 'class-validator';
 
@@ -47,7 +59,9 @@ export class InvitationsController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @Throttle({ default: { limit: 10, ttl: 60 } })
-  @ApiOperation({ summary: 'Accept invitation by token (idempotent if already member)' })
+  @ApiOperation({
+    summary: 'Accept invitation by token (idempotent if already member)',
+  })
   async accept(
     @Body() dto: AcceptInvitationDto,
     @Req() req: RequestWithUser,
@@ -56,7 +70,11 @@ export class InvitationsController {
     const body: { token: string } = {
       token: dto.token?.trim() ?? '',
     };
-    const result = await this.service.acceptInvite(req.user.userId, body, req.ip);
+    const result = await this.service.acceptInvite(
+      req.user.userId,
+      body,
+      req.ip,
+    );
     setAuthCookies(res, result.tokens);
     setCsrfCookie(res, generateCsrfToken());
     return ok({

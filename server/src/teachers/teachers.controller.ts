@@ -28,7 +28,10 @@ import { AssignSubjectsDto } from './dto/assign-subjects.dto';
 
 import { Permission } from '@/modules/rbac/permission.decorator';
 import { PermissionKey } from '@prisma/client';
-import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
+import {
+  OrgOperation,
+  OrgOperationType,
+} from '@/common/decorators/org-operation.decorator';
 import { NoHttpCache } from '@/common/cache/no-http-cache.decorator';
 
 @ApiTags('Teachers')

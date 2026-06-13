@@ -91,9 +91,7 @@ export class StudentAccessGuard implements CanActivate {
         organizationId: user.organizationId ?? null,
         metadata: { reason: 'student_role_not_allowed' },
       });
-      throw new ForbiddenException(
-        'Žáci nemají přístup k detailu žáka.',
-      );
+      throw new ForbiddenException('Žáci nemají přístup k detailu žáka.');
     }
 
     if (user.systemRole === SystemRole.SUPERADMIN) {

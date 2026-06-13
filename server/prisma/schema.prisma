@@ -39,6 +39,7 @@ model User {
   revokedTokens      RevokedToken[]
   passwordResetTokens PasswordResetToken[]
   userPermissions     UserPermission[]
+  identities          UserIdentity[]
   lastActiveMembership Membership?     @relation("LastActiveMembership", fields: [lastActiveMembershipId], references: [id], onDelete: SetNull)
   ownedOrganizations   Organization[]   @relation("OrganizationOwner")
 
@@ -83,6 +84,7 @@ model Organization {
   promotionLogs     PromotionLog[]
   submissions       Submission[]
   supportTickets    SupportTicket[]
+  userIdentities    UserIdentity[]
 
   @@index([name])
   @@index([city])
@@ -104,9 +106,47 @@ model OrganizationSettings {
   initialPassword        String       @default("ChangeMe!{yy}")
   forceResetOnFirstLogin Boolean      @default(true)
   ssoProvider            String?
+  ssoAllowedDomains      String[]     @default([]) @map("sso_allowed_domains")
+  ssoAutoProvision       Boolean      @default(false) @map("sso_auto_provision")
   organization           Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
   @@map("organization_settings")
+}
+
+/// External identity (SSO) linked to a local user account.
+///
+/// IDENTITY IS GLOBAL, ACCESS IS MEMBERSHIP: one user has at most one
+/// identity per provider ((userId, provider) unique) and that identity
+/// authenticates the user into ANY organization where they hold a live
+/// Membership. `organizationId` here is PROVENANCE ONLY — it records which
+/// organization's SSO policy admitted/provisioned the identity (for audit
+/// and GDPR scoping). It never restricts which organizations the user can
+/// log into. The (provider, providerSubject) pair is globally unique
+/// because provider subjects (e.g. Google `sub`) are global.
+model UserIdentity {
+  id              String           @id @default(uuid()) @map("user_identity_id")
+  userId          String           @map("user_id")
+  organizationId  String?          @map("organization_id")
+  provider        IdentityProvider
+  providerSubject String           @map("provider_subject") @db.VarChar(255)
+  email           String?          @db.VarChar(320)
+  emailVerified   Boolean          @default(false) @map("email_verified")
+  displayName     String?          @map("display_name") @db.VarChar(150)
+  lastUsedAt      DateTime?        @map("last_used_at")
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization    Organization?    @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
+  @@unique([provider, providerSubject])
+  @@unique([userId, provider])
+  @@index([organizationId, provider])
+  @@index([email])
+  @@map("user_identities")
+}
+
+enum IdentityProvider {
+  GOOGLE
 }
 
 model IdempotencyKey {

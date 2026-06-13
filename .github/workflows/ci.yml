@@ -36,14 +36,18 @@ jobs:
       # === FRONTEND ===
       - name: 🧱 Build frontend
         working-directory: ./client
+        # NODE_ENV=production strips devDeps from `npm ci`; --include=dev keeps
+        # build tooling. next.config requires API_PROXY_TARGET in production.
         env:
           API_PROXY_TARGET: http://localhost:4200
         run: |
-          npm ci
+          npm ci --include=dev
           npm run build
 
       - name: 🧪 FE component policy tests
         working-directory: ./client
+        env:
+          NODE_ENV: test
         run: |
           npx playwright install --with-deps
           npm run test:fe-components
@@ -51,8 +55,11 @@ jobs:
       # === BACKEND ===
       - name: 🧱 Build backend & seed DB
         working-directory: ./server
+        # --include=dev: NODE_ENV=production would otherwise omit devDeps
+        # (@types/*, tsconfig-paths) and break typecheck + seed path aliases.
         run: |
-          npm ci
+          npm ci --include=dev
+          npm install -g @nestjs/cli
           npm run prisma:generate
           npx prisma migrate deploy
           npm run typecheck
@@ -162,8 +169,10 @@ jobs:
 
       - name: 🧩 Backend setup & seed (with E2E onboarding user)
         working-directory: ./server
+        # --include=dev: NODE_ENV=production strips devDeps (@nestjs/cli,
+        # tsconfig-paths) needed by build + seed path aliases.
         run: |
-          npm ci
+          npm ci --include=dev
           npm run prisma:generate
           npx prisma migrate deploy
           npm run build
@@ -172,7 +181,7 @@ jobs:
       - name: 📦 Frontend deps & Playwright
         working-directory: ./client
         run: |
-          npm ci
+          npm ci --include=dev
           npx playwright install --with-deps chromium
 
       - name: 🎬 Onboarding E2E (backend + frontend, routing + context.mode)

@@ -17,7 +17,8 @@ export class LoginDto {
   password!: string;
 
   @ApiPropertyOptional({
-    description: 'Organization to log in as (JWT will be scoped to this org). User must be a member.',
+    description:
+      'Organization to log in as (JWT will be scoped to this org). User must be a member.',
   })
   @IsOptional()
   @IsUUID()

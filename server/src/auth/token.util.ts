@@ -9,7 +9,10 @@ export function timingSafeEqualHex(leftHex: string, rightHex: string): boolean {
   return crypto.timingSafeEqual(Buffer.from(leftHex), Buffer.from(rightHex));
 }
 
-export function matchesTokenHash(rawToken: string, storedHash: string): boolean {
+export function matchesTokenHash(
+  rawToken: string,
+  storedHash: string,
+): boolean {
   const hashed = hashToken(rawToken);
   return timingSafeEqualHex(hashed, storedHash);
 }

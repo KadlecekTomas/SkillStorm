@@ -25,7 +25,17 @@ export type TeacherAccessItem = {
 
 const EMPTY_TEACHER_ACCESS_ITEMS: TeacherAccessItem[] = [];
 
-export const useTeacherAccess = (teacherId: string | null, enabled = true) => {
+export type UseTeacherAccessResult = {
+  items: TeacherAccessItem[];
+  loading: boolean;
+  error: string | null;
+  refetch: () => Promise<boolean>;
+};
+
+export const useTeacherAccess = (
+  teacherId: string | null,
+  enabled = true,
+): UseTeacherAccessResult => {
   const query = useQuery<TeacherAccessItem[]>({
     queryKey: ["teacher-access", teacherId],
     enabled: enabled && !!teacherId,

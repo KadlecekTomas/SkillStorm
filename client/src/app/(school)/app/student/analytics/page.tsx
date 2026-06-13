@@ -20,7 +20,7 @@ function StudentAnalyticsPage() {
   const { selectedYearId, bootstrapState } = useAcademicYears();
   const [errors, setErrors] = useState<StudentErrorAnalyticsItem[]>([]);
   const [topics, setTopics] = useState<StudentTopicAnalyticsItem[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [, setLoading] = useState(false);
 
   useEffect(() => {
     if (bootstrapState !== "READY" || !selectedYearId) return;

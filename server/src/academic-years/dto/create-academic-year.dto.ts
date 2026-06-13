@@ -5,7 +5,8 @@ import { IsInt, IsOptional, Max, Min } from 'class-validator';
 export class CreateAcademicYearDto {
   @ApiProperty({
     example: 2025,
-    description: 'Start year of school year (2025 = 2025/2026, starts 1.9., ends 31.8.)',
+    description:
+      'Start year of school year (2025 = 2025/2026, starts 1.9., ends 31.8.)',
   })
   @Type(() => Number)
   @IsInt()

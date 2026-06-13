@@ -63,7 +63,9 @@ export class SubjectsService {
           teacher: {
             include: {
               membership: {
-                include: { user: { select: { id: true, name: true, email: true } } },
+                include: {
+                  user: { select: { id: true, name: true, email: true } },
+                },
               },
             },
           },
@@ -82,7 +84,9 @@ export class SubjectsService {
           teacher: {
             include: {
               membership: {
-                include: { user: { select: { id: true, name: true, email: true } } },
+                include: {
+                  user: { select: { id: true, name: true, email: true } },
+                },
               },
             },
           },
@@ -92,7 +96,10 @@ export class SubjectsService {
     });
   }
 
-  private async resolveSubjectOrgId(subjectId: string, user: JwtPayload): Promise<string | null> {
+  private async resolveSubjectOrgId(
+    subjectId: string,
+    user: JwtPayload,
+  ): Promise<string | null> {
     if (user.organizationId) {
       const scoped = await this.prisma.orgSubject.findFirst({
         where: { subjectId, organizationId: user.organizationId },
@@ -108,7 +115,11 @@ export class SubjectsService {
     return fallback?.organizationId ?? null;
   }
 
-  private assertSubjectScope(user: JwtPayload, orgId: string | null, context = 'předmět') {
+  private assertSubjectScope(
+    user: JwtPayload,
+    orgId: string | null,
+    context = 'předmět',
+  ) {
     if (user.systemRole === SystemRole.SUPERADMIN) return;
     if (!orgId) {
       throw new ForbiddenException(
@@ -154,7 +165,9 @@ export class SubjectsService {
       page,
       limit,
       search: q.search ?? '',
-      ...(q.includeLevels !== undefined ? { includeLevels: q.includeLevels } : {}),
+      ...(q.includeLevels !== undefined
+        ? { includeLevels: q.includeLevels }
+        : {}),
       ...(q.includeInactive ? { includeInactive: true } : {}),
       ...(q.grade ? { grade: q.grade } : {}),
       order: [{ name: 'asc' }, { id: 'asc' }],
@@ -217,7 +230,12 @@ export class SubjectsService {
     });
   }
 
-  async toggleSubjectLevel(subjectId: string, grade: string, isEnabled: boolean, user: JwtPayload) {
+  async toggleSubjectLevel(
+    subjectId: string,
+    grade: string,
+    isEnabled: boolean,
+    user: JwtPayload,
+  ) {
     const subj = await this.prisma.subject.findUnique({
       where: { id: subjectId },
       select: { id: true, deletedAt: true },
@@ -227,9 +245,15 @@ export class SubjectsService {
     }
     const orgId = await this.resolveSubjectOrgId(subjectId, user);
     if (!orgId && user.systemRole !== SystemRole.SUPERADMIN) {
-      throw new ForbiddenException('Přístup k tomuto předmětu je omezen na vlastní organizaci.');
+      throw new ForbiddenException(
+        'Přístup k tomuto předmětu je omezen na vlastní organizaci.',
+      );
     }
-    assertTeacherOrDirectorInOrgOrSuperadmin(user, orgId ?? user.organizationId ?? '', 'předmět');
+    assertTeacherOrDirectorInOrgOrSuperadmin(
+      user,
+      orgId ?? user.organizationId ?? '',
+      'předmět',
+    );
 
     const updated = await this.prisma.subjectLevel.upsert({
       where: {

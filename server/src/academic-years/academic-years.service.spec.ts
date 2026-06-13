@@ -3,6 +3,7 @@ import { Test } from '@nestjs/testing';
 import { ConflictException } from '@nestjs/common';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { PrismaService } from '@/prisma/prisma.service';
+import { AcademicYearCacheRef } from '@/common/year-cache/academic-year-cache.ref';
 import {
   AcademicYearsService,
   MULTIPLE_CURRENT_YEARS_FOR_ORG,
@@ -30,6 +31,8 @@ describe('AcademicYearsService', () => {
       providers: [
         AcademicYearsService,
         { provide: PrismaService, useValue: prismaMock },
+        // Dependency-free in-memory cache; real instance is safe in tests.
+        AcademicYearCacheRef,
       ],
     }).compile();
 

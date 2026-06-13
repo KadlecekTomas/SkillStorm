@@ -54,11 +54,12 @@ jobs:
         working-directory: server
 
       - name: 🌱 Seed the database
-        run: npx ts-node prisma/seed/e2e-seed.ts
+        # Use the npm script so the @/ path alias resolves (tsconfig-paths/register).
+        run: npm run prisma:seed
         working-directory: server
 
       - name: 🔍 Validate seed data
-        run: npx ts-node prisma/seed/validate-seed.ts
+        run: npm run seed:validate
         working-directory: server
 
       - name: ✅ Done

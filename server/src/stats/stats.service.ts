@@ -28,7 +28,9 @@ import type { StatsOverviewResponse } from './dto/overview.dto';
 import { RiskService } from '@/risk/risk.service';
 
 const DASHBOARD_SUBMISSION_LIMIT = 2_000;
-export function invalidateDirectorDashboardCache(_organizationId: string): void {}
+export function invalidateDirectorDashboardCache(
+  _organizationId: string,
+): void {}
 
 @Injectable()
 export class StatsService {
@@ -151,7 +153,8 @@ export class StatsService {
 
     const compute = async (): Promise<StatsOverviewResponse> => {
       if (
-        (role === OrganizationRole.STUDENT || role === OrganizationRole.TEACHER) &&
+        (role === OrganizationRole.STUDENT ||
+          role === OrganizationRole.TEACHER) &&
         membership
       ) {
         const teacher = await this.prisma.teacher.findFirst({
@@ -160,13 +163,19 @@ export class StatsService {
         });
         const submissionScope: Prisma.SubmissionWhereInput =
           role === OrganizationRole.STUDENT
-            ? { studentId: membership.id, deletedAt: null, test: { deletedAt: null } }
+            ? {
+                studentId: membership.id,
+                deletedAt: null,
+                test: { deletedAt: null },
+              }
             : {
                 assignment: {
                   organizationId: membership.organizationId,
                   OR: [
                     { createdById: membership.id },
-                    ...(teacher ? [{ classSection: { teacherId: teacher.id } }] : []),
+                    ...(teacher
+                      ? [{ classSection: { teacherId: teacher.id } }]
+                      : []),
                   ],
                 },
                 deletedAt: null,
@@ -455,11 +464,19 @@ export class StatsService {
       await Promise.all([
         // Tests created this month
         this.prisma.test.count({
-          where: { organizationId, deletedAt: null, createdAt: { gte: startOfMonth } },
+          where: {
+            organizationId,
+            deletedAt: null,
+            createdAt: { gte: startOfMonth },
+          },
         }),
         // Submissions this week (all students, any status)
         this.prisma.submission.count({
-          where: { organizationId, deletedAt: null, createdAt: { gte: startOfWeek } },
+          where: {
+            organizationId,
+            deletedAt: null,
+            createdAt: { gte: startOfWeek },
+          },
         }),
         // Class sections for current year (no deletedAt on ClassSection)
         this.prisma.classSection.findMany({
@@ -491,7 +508,9 @@ export class StatsService {
           where: { organizationId, deletedAt: null },
           select: {
             membershipId: true,
-            membership: { select: { id: true, user: { select: { name: true } } } },
+            membership: {
+              select: { id: true, user: { select: { name: true } } },
+            },
           },
         }),
       ]);
@@ -554,7 +573,11 @@ export class StatsService {
       }
       // Accumulate per-student weighted scores for at-risk list
       if (s.studentId && s.earnedPoints != null) {
-        const sPrev = studentScoreMap.get(s.studentId) ?? { points: 0, maxPoints: 0, lastAt: null };
+        const sPrev = studentScoreMap.get(s.studentId) ?? {
+          points: 0,
+          maxPoints: 0,
+          lastAt: null,
+        };
         sPrev.points += s.earnedPoints ?? 0;
         sPrev.maxPoints += maxScore;
         if (s.submittedAt && (!sPrev.lastAt || s.submittedAt > sPrev.lastAt))
@@ -595,7 +618,11 @@ export class StatsService {
     const [teacherTestCounts, teacherWeekSubs] = await Promise.all([
       this.prisma.test.groupBy({
         by: ['creatorId'],
-        where: { organizationId, deletedAt: null, creatorId: { in: teacherIds } },
+        where: {
+          organizationId,
+          deletedAt: null,
+          creatorId: { in: teacherIds },
+        },
         _count: { id: true },
       }),
       teacherIds.length
@@ -606,12 +633,22 @@ export class StatsService {
               createdAt: { gte: startOfWeek },
               test: { creatorId: { in: teacherIds }, deletedAt: null },
             },
-            select: { test: { select: { creatorId: true } }, submittedAt: true },
+            select: {
+              test: { select: { creatorId: true } },
+              submittedAt: true,
+            },
           })
-        : Promise.resolve([] as { test: { creatorId: string } | null; submittedAt: Date | null }[]),
+        : Promise.resolve(
+            [] as {
+              test: { creatorId: string } | null;
+              submittedAt: Date | null;
+            }[],
+          ),
     ]);
 
-    const testCountByTeacher = new Map(teacherTestCounts.map((t) => [t.creatorId, t._count.id]));
+    const testCountByTeacher = new Map(
+      teacherTestCounts.map((t) => [t.creatorId, t._count.id]),
+    );
     const lastSubByTeacher = new Map<string, Date>();
     const weekSubCountByTeacher = new Map<string, number>();
     for (const s of teacherWeekSubs) {
@@ -620,7 +657,8 @@ export class StatsService {
       weekSubCountByTeacher.set(tid, (weekSubCountByTeacher.get(tid) ?? 0) + 1);
       if (s.submittedAt) {
         const prev = lastSubByTeacher.get(tid);
-        if (!prev || s.submittedAt > prev) lastSubByTeacher.set(tid, s.submittedAt);
+        if (!prev || s.submittedAt > prev)
+          lastSubByTeacher.set(tid, s.submittedAt);
       }
     }
     const teachersResult = teacherMemberships
@@ -629,7 +667,8 @@ export class StatsService {
         name: m.membership?.user?.name ?? '—',
         testsCreated: testCountByTeacher.get(m.membershipId) ?? 0,
         submissionsThisWeek: weekSubCountByTeacher.get(m.membershipId) ?? 0,
-        lastActivityAt: lastSubByTeacher.get(m.membershipId)?.toISOString() ?? null,
+        lastActivityAt:
+          lastSubByTeacher.get(m.membershipId)?.toISOString() ?? null,
         activeThisWeek: weekSubCountByTeacher.has(m.membershipId),
       }))
       .sort((a, b) => b.submissionsThisWeek - a.submissionsThisWeek);
@@ -655,7 +694,9 @@ export class StatsService {
             where: { id: { in: riskMembershipIds } },
             select: { id: true, user: { select: { name: true } } },
           })
-        : Promise.resolve([] as { id: string; user: { name: string | null } | null }[]),
+        : Promise.resolve(
+            [] as { id: string; user: { name: string | null } | null }[],
+          ),
       riskMembershipIds.length
         ? this.prisma.student.findMany({
             where: { membershipId: { in: riskMembershipIds }, deletedAt: null },
@@ -666,19 +707,39 @@ export class StatsService {
                   status: EnrollmentStatus.ACTIVE,
                   ...(currentYear ? { yearId: currentYear.id } : {}),
                 },
-                select: { classSection: { select: { label: true, grade: true, section: true } } },
+                select: {
+                  classSection: {
+                    select: { label: true, grade: true, section: true },
+                  },
+                },
                 take: 1,
               },
             },
           })
-        : Promise.resolve([] as { membershipId: string; enrollments: { classSection: { label: string | null; grade: string; section: string } | null }[] }[]),
+        : Promise.resolve(
+            [] as {
+              membershipId: string;
+              enrollments: {
+                classSection: {
+                  label: string | null;
+                  grade: string;
+                  section: string;
+                } | null;
+              }[];
+            }[],
+          ),
     ]);
 
-    const nameMap = new Map(riskMemberships.map((m) => [m.id, m.user?.name ?? '—']));
+    const nameMap = new Map(
+      riskMemberships.map((m) => [m.id, m.user?.name ?? '—']),
+    );
     const classLabelMap = new Map(
       riskStudents.map((s) => {
         const cs = s.enrollments[0]?.classSection;
-        return [s.membershipId, cs?.label ?? `${cs?.grade ?? ''}.${cs?.section ?? ''}`];
+        return [
+          s.membershipId,
+          cs?.label ?? `${cs?.grade ?? ''}.${cs?.section ?? ''}`,
+        ];
       }),
     );
 
@@ -693,7 +754,9 @@ export class StatsService {
           }) !== 'LOW'
         );
       })
-      .sort((a, b) => (a[1].points / a[1].maxPoints) - (b[1].points / b[1].maxPoints))
+      .sort(
+        (a, b) => a[1].points / a[1].maxPoints - b[1].points / b[1].maxPoints,
+      )
       .slice(0, 10)
       .map(([studentId, v]) => ({
         studentId,
@@ -703,8 +766,12 @@ export class StatsService {
         lastActivityAt: v.lastAt?.toISOString() ?? null,
       }));
 
-    const activeTeachersThisWeek = teachersResult.filter((t) => t.activeThisWeek).length;
-    const activeClassesThisWeek = classesResult.filter((c) => c.submissionsThisWeek > 0).length;
+    const activeTeachersThisWeek = teachersResult.filter(
+      (t) => t.activeThisWeek,
+    ).length;
+    const activeClassesThisWeek = classesResult.filter(
+      (c) => c.submissionsThisWeek > 0,
+    ).length;
 
     return {
       testsThisMonth,
@@ -724,7 +791,9 @@ export class StatsService {
       membership?.role === OrganizationRole.DIRECTOR ||
       (membership?.role as string) === 'OWNER';
     if (!isDirectorLevel && user.systemRole !== SystemRole.SUPERADMIN) {
-      throw new ForbiddenException('Director dashboard requires DIRECTOR or OWNER role.');
+      throw new ForbiddenException(
+        'Director dashboard requires DIRECTOR or OWNER role.',
+      );
     }
     if (!organizationId) {
       throw new ForbiddenException('Organization context required.');
@@ -735,10 +804,7 @@ export class StatsService {
   }
 
   // ===== TEACHER DASHBOARD ===================================================
-  async getTeacherDashboard(
-    organizationId: string | null,
-    user: JwtPayload,
-  ) {
+  async getTeacherDashboard(organizationId: string | null, user: JwtPayload) {
     await this.ensureOrgContext(user, organizationId);
     const membership = await this.resolveMembership(user, organizationId);
     if (!membership || membership.role !== OrganizationRole.TEACHER) {
@@ -799,9 +865,7 @@ export class StatsService {
             deletedAt: null,
             earnedPoints: { not: null },
             test: { creatorId: membership.id, deletedAt: null },
-            ...(currentYear
-              ? { assignment: { yearId: currentYear.id } }
-              : {}),
+            ...(currentYear ? { assignment: { yearId: currentYear.id } } : {}),
           },
           select: {
             earnedPoints: true,

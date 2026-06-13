@@ -31,7 +31,10 @@ import { RequireCurrentAcademicYearGuard } from '@/academic-years/require-curren
 import { AcademicYearExpiredGuard } from '@/academic-years/academic-year-expired.guard';
 import { StudentAccessGuard } from './guards/student-access.guard';
 import { Throttle } from '@nestjs/throttler';
-import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
+import {
+  OrgOperation,
+  OrgOperationType,
+} from '@/common/decorators/org-operation.decorator';
 import { StudentDiagnosticService } from '@/analytics/student-diagnostic.service';
 import { NoHttpCache } from '@/common/cache/no-http-cache.decorator';
 
@@ -49,7 +52,11 @@ export class StudentsController {
   // ---------- EXPORT ----------
   // src/modules/students/student.controller.ts
   @Get('export')
-  @Permission(SystemRole.SUPERADMIN, OrganizationRole.OWNER, OrganizationRole.DIRECTOR)
+  @Permission(
+    SystemRole.SUPERADMIN,
+    OrganizationRole.OWNER,
+    OrganizationRole.DIRECTOR,
+  )
   async export(
     @Req() req: RequestWithUser,
     @Query() q: ExportStudentsDto,
@@ -87,7 +94,11 @@ export class StudentsController {
   // ---------- LIST ----------
   // Pozn.: Učitel v cizí org → 403 (RbacGuard ho sem nepustí)
   @Get()
-  @Permission(SystemRole.SUPERADMIN, OrganizationRole.OWNER, OrganizationRole.DIRECTOR)
+  @Permission(
+    SystemRole.SUPERADMIN,
+    OrganizationRole.OWNER,
+    OrganizationRole.DIRECTOR,
+  )
   @ApiOperation({ summary: 'List students (pagination + filters)' })
   @NoHttpCache()
   @CacheTTL(0)
@@ -150,7 +161,11 @@ export class StudentsController {
 
   // ---------- DELETE (soft) ----------
   @Delete(':id')
-  @Permission(SystemRole.SUPERADMIN, OrganizationRole.OWNER, OrganizationRole.DIRECTOR)
+  @Permission(
+    SystemRole.SUPERADMIN,
+    OrganizationRole.OWNER,
+    OrganizationRole.DIRECTOR,
+  )
   @ApiOperation({ summary: 'Soft delete student by ID' })
   remove(
     @Param('id', new ParseUUIDPipe()) id: string,

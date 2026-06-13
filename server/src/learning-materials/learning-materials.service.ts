@@ -124,7 +124,10 @@ export class LearningMaterialsService {
     const allowed =
       user.systemRole === SystemRole.SUPERADMIN ||
       (sameOrg &&
-        hasAtLeastRole(user.organizationRole ?? null, OrganizationRole.TEACHER));
+        hasAtLeastRole(
+          user.organizationRole ?? null,
+          OrganizationRole.TEACHER,
+        ));
 
     if (!allowed) {
       throw new ForbiddenException(
@@ -180,7 +183,9 @@ export class LearningMaterialsService {
           select: { id: true },
         });
         if (!enabled) {
-          throw new BadRequestException('Subject není pro danou organizaci povolen.');
+          throw new BadRequestException(
+            'Subject není pro danou organizaci povolen.',
+          );
         }
       }
       if (!subject)
@@ -478,7 +483,10 @@ export class LearningMaterialsService {
     const allowed =
       user.systemRole === SystemRole.SUPERADMIN ||
       (sameOrg &&
-        hasAtLeastRole(user.organizationRole ?? null, OrganizationRole.DIRECTOR));
+        hasAtLeastRole(
+          user.organizationRole ?? null,
+          OrganizationRole.DIRECTOR,
+        ));
     if (!allowed)
       throw new ForbiddenException(
         'Pouze ředitel/owner nebo superadmin může smazat materiál.',
@@ -528,7 +536,10 @@ export class LearningMaterialsService {
     const allowed =
       user.systemRole === SystemRole.SUPERADMIN ||
       (sameOrg &&
-        hasAtLeastRole(user.organizationRole ?? null, OrganizationRole.TEACHER));
+        hasAtLeastRole(
+          user.organizationRole ?? null,
+          OrganizationRole.TEACHER,
+        ));
 
     if (!allowed)
       throw new ForbiddenException('Nemáte oprávnění nahrát soubor.');

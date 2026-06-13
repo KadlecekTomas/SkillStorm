@@ -79,7 +79,7 @@ function StatusBadge({ status }: { status: string }) {
 
 const LIMIT = 20;
 
-export default function PlatformUsersPage() {
+export default function PlatformUsersPage(): React.JSX.Element {
   const [searchRaw, setSearchRaw] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);

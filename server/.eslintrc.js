@@ -32,6 +32,19 @@ module.exports = {
     '@typescript-eslint/explicit-module-boundary-types': 'off',
     '@typescript-eslint/no-explicit-any': 'warn',
     '@typescript-eslint/consistent-type-imports': 'off',
+    // Honour the standard underscore convention for intentionally-unused
+    // bindings (signature-required params, destructured discards). This is
+    // the documented escape hatch of the rule, not a disabling of it:
+    // anything NOT prefixed with `_` is still a hard error.
+    '@typescript-eslint/no-unused-vars': [
+      'error',
+      {
+        argsIgnorePattern: '^_',
+        varsIgnorePattern: '^_',
+        caughtErrorsIgnorePattern: '^_',
+        ignoreRestSiblings: true,
+      },
+    ],
     'no-relative-import-paths/no-relative-import-paths': [
       'error',
       {

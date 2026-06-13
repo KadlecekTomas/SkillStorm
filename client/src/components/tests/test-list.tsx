@@ -23,7 +23,7 @@ export function TestList({
   items,
   onOpenTest,
   onViewResult,
-}: TestListProps) {
+}: TestListProps): React.JSX.Element {
   if (items.length === 0) {
     return (
       <p className="text-sm text-slate-500">Žádná zadání k zobrazení.</p>

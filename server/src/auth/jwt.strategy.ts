@@ -1,8 +1,4 @@
-import {
-  Inject,
-  Injectable,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
@@ -85,14 +81,19 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     if (user.passwordChangedAt) {
       const issuedAtMs = iat * 1000;
       if (issuedAtMs < user.passwordChangedAt.getTime()) {
-        throw new UnauthorizedException('Token invalidated due to password change.');
+        throw new UnauthorizedException(
+          'Token invalidated due to password change.',
+        );
       }
     }
     // tokenVersion mismatch also invalidates (e.g. after reset or admin reset)
-    const payloadTokenVersion = (payload as { tokenVersion?: number }).tokenVersion;
+    const payloadTokenVersion = (payload as { tokenVersion?: number })
+      .tokenVersion;
     const userTokenVersion = user.tokenVersion ?? 0;
     if (payloadTokenVersion !== userTokenVersion) {
-      throw new UnauthorizedException('Token invalidated due to password change.');
+      throw new UnauthorizedException(
+        'Token invalidated due to password change.',
+      );
     }
 
     let organizationRole: string | null = null;
@@ -109,7 +110,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         select: { id: true, organizationId: true, role: true },
       });
       if (!membership) {
-        throw new UnauthorizedException('Invalid token: membership not found or revoked');
+        throw new UnauthorizedException(
+          'Invalid token: membership not found or revoked',
+        );
       }
       organizationId = membership.organizationId;
       organizationRole = membership.role;
@@ -125,7 +128,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     // Effective value must be (user.isPlatformAdmin ?? false) || user.systemRole === SUPERADMIN.
     // PlatformAdminGuard must NOT be changed: it only checks req.user.isPlatformAdmin; this payload supplies it.
     const isPlatformAdmin =
-      (user.isPlatformAdmin ?? false) || user.systemRole === SystemRole.SUPERADMIN;
+      (user.isPlatformAdmin ?? false) ||
+      user.systemRole === SystemRole.SUPERADMIN;
 
     return {
       userId: user.id,

@@ -131,7 +131,10 @@ export class TeachersService {
       !(
         user.systemRole === SystemRole.SUPERADMIN ||
         (sameOrg &&
-          hasAtLeastRole(user.organizationRole ?? null, OrganizationRole.DIRECTOR))
+          hasAtLeastRole(
+            user.organizationRole ?? null,
+            OrganizationRole.DIRECTOR,
+          ))
       )
     ) {
       throw new ForbiddenException(
@@ -238,31 +241,37 @@ export class TeachersService {
       filters: { organizationId: effectiveOrgId },
     });
 
-    return cacheGetOrSet(this.cache, cacheKey, TeachersService.TEACHERS_CACHE_TTL_MS, async () => {
-      const [total, items] = await this.prisma.$transaction([
-        this.prisma.teacher.count({ where }),
-        this.prisma.teacher.findMany({
-          where,
-          include,
-          orderBy: [{ membership: { user: { name: 'asc' } } }, { id: 'asc' }],
-          skip,
-          take: limit,
-        }),
-      ]);
+    return cacheGetOrSet(
+      this.cache,
+      cacheKey,
+      TeachersService.TEACHERS_CACHE_TTL_MS,
+      async () => {
+        const [total, items] = await this.prisma.$transaction([
+          this.prisma.teacher.count({ where }),
+          this.prisma.teacher.findMany({
+            where,
+            include,
+            orderBy: [{ membership: { user: { name: 'asc' } } }, { id: 'asc' }],
+            skip,
+            take: limit,
+          }),
+        ]);
 
-      return {
-        items,
-        meta: {
-          page,
-          limit,
-          total,
-          pages: Math.max(1, Math.ceil(total / limit)),
-        },
-      };
-    }, {
-      scopeId,
-      resource: 'teachers',
-    });
+        return {
+          items,
+          meta: {
+            page,
+            limit,
+            total,
+            pages: Math.max(1, Math.ceil(total / limit)),
+          },
+        };
+      },
+      {
+        scopeId,
+        resource: 'teachers',
+      },
+    );
   }
 
   // ---------- DETAIL ----------
@@ -314,7 +323,10 @@ export class TeachersService {
       !(
         user.systemRole === SystemRole.SUPERADMIN ||
         (sameOrg &&
-          hasAtLeastRole(user.organizationRole ?? null, OrganizationRole.DIRECTOR))
+          hasAtLeastRole(
+            user.organizationRole ?? null,
+            OrganizationRole.DIRECTOR,
+          ))
       )
     ) {
       throw new ForbiddenException(
@@ -365,7 +377,10 @@ export class TeachersService {
       !(
         user.systemRole === SystemRole.SUPERADMIN ||
         (sameOrg &&
-          hasAtLeastRole(user.organizationRole ?? null, OrganizationRole.DIRECTOR))
+          hasAtLeastRole(
+            user.organizationRole ?? null,
+            OrganizationRole.DIRECTOR,
+          ))
       )
     ) {
       throw new ForbiddenException(
@@ -419,7 +434,10 @@ export class TeachersService {
     const isAllowed =
       user.systemRole === SystemRole.SUPERADMIN ||
       (sameOrg &&
-        hasAtLeastRole(user.organizationRole ?? null, OrganizationRole.DIRECTOR));
+        hasAtLeastRole(
+          user.organizationRole ?? null,
+          OrganizationRole.DIRECTOR,
+        ));
 
     if (!isAllowed) {
       throw new ForbiddenException(
@@ -519,7 +537,10 @@ export class TeachersService {
       !(
         user.systemRole === SystemRole.SUPERADMIN ||
         (sameOrg &&
-          hasAtLeastRole(user.organizationRole ?? null, OrganizationRole.DIRECTOR))
+          hasAtLeastRole(
+            user.organizationRole ?? null,
+            OrganizationRole.DIRECTOR,
+          ))
       )
     ) {
       throw new ForbiddenException(

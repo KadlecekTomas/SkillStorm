@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { DataTable, type Column } from "@/components/ui/table";
 import type { TestSummary } from "@/types";
@@ -14,7 +14,6 @@ import { useAcademicYears } from "@/hooks/use-academic-years";
 import Link from "next/link";
 import { PermissionKey } from "@/types";
 import { AssignToClassModal } from "@/components/tests/AssignToClassModal";
-import { useTestAssignments } from "@/hooks/use-test-assignments";
 import { useSubjects, subjectLabel } from "@/hooks/use-subjects";
 import type { Subject } from "@/types";
 import { formatPercent, formatInt } from "@/utils/format";
@@ -211,7 +210,6 @@ function TestsPage(): React.JSX.Element {
   const router = useRouter();
   const { org, context, user } = useAuth();
   const { selectedYearId } = useAcademicYears();
-  const { byTestId: assignmentByTestId } = useTestAssignments(selectedYearId);
   const { subjects: orgSubjects } = useSubjects();
 
   const isDirector = user?.organizationRole === "DIRECTOR" || user?.organizationRole === "OWNER";

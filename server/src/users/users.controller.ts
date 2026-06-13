@@ -32,7 +32,10 @@ import { NoHttpCache } from '@/common/cache/no-http-cache.decorator';
 import { Permission } from '@/modules/rbac/permission.decorator';
 import { ok } from '@/common/http/envelope';
 import { ApiStandardResponses } from '@/common/http/api-standard-responses.decorator';
-import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
+import {
+  OrgOperation,
+  OrgOperationType,
+} from '@/common/decorators/org-operation.decorator';
 
 @ApiTags('users')
 @ApiStandardResponses()
@@ -44,7 +47,11 @@ export class UsersController {
 
   // -------- LIST (SUPERADMIN: všichni; DIRECTOR: jen jeho org) --------
   @Get()
-  @Permission(SystemRole.SUPERADMIN, OrganizationRole.OWNER, OrganizationRole.DIRECTOR)
+  @Permission(
+    SystemRole.SUPERADMIN,
+    OrganizationRole.OWNER,
+    OrganizationRole.DIRECTOR,
+  )
   @ApiOperation({
     summary: 'List users (search, filters, pagination, sorting)',
   })
@@ -117,7 +124,11 @@ export class UsersController {
 
   // -------- DELETE/ANONYMIZE (SUPERADMIN nebo DIRECTOR v téže org; nikdy ne mazat superadmina) --------
   @Delete(':id')
-  @Permission(SystemRole.SUPERADMIN, OrganizationRole.OWNER, OrganizationRole.DIRECTOR)
+  @Permission(
+    SystemRole.SUPERADMIN,
+    OrganizationRole.OWNER,
+    OrganizationRole.DIRECTOR,
+  )
   @ApiOperation({
     summary:
       'Delete/anonymize user (SUPERADMIN or DIRECTOR of same org, not superadmin target)',
@@ -138,7 +149,11 @@ export class UsersController {
   }
 
   @Post(':id/reset-password')
-  @Permission(SystemRole.SUPERADMIN, OrganizationRole.OWNER, OrganizationRole.DIRECTOR)
+  @Permission(
+    SystemRole.SUPERADMIN,
+    OrganizationRole.OWNER,
+    OrganizationRole.DIRECTOR,
+  )
   @ApiOperation({ summary: 'Create password reset token for user (admin)' })
   async resetPassword(
     @Param('id', new ParseUUIDPipe()) id: string,

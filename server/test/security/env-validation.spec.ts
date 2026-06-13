@@ -7,6 +7,28 @@ import { validateEnvironment, buildCorsOrigin } from '../../src/bootstrap.utils'
 describe('validateEnvironment', () => {
   const ORIGINAL_ENV = process.env;
 
+  // Strong, non-placeholder secrets: >= 32 chars and free of the weak markers
+  // (secret/dev/test/default/changeme/password) rejected in production.
+  const STRONG_ACCESS = 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2';
+  const STRONG_REFRESH = 'f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5';
+  const STRONG_METRICS = '9081726354afbecd9081726354afbecd90817263';
+
+  /** Set every required production var to a valid value; tests then delete one. */
+  function setAllProductionVars() {
+    process.env.NODE_ENV = 'production';
+    process.env.JWT_ACCESS_SECRET = STRONG_ACCESS;
+    process.env.JWT_REFRESH_SECRET = STRONG_REFRESH;
+    process.env.CORS_ORIGINS = 'https://app.example.com';
+    process.env.DATABASE_URL = 'postgresql://user:pass@db:5432/skillstorm';
+    process.env.METRICS_INGEST_KEY = STRONG_METRICS;
+    process.env.PUBLIC_APP_URL = 'https://app.example.com';
+    process.env.API_URL = 'https://api.example.com';
+    delete process.env.ALLOW_CROSS_SITE_COOKIES;
+    // jest-env sets DISABLE_CSRF=1 for the test process; production validation
+    // forbids it, so clear it for these production-config assertions.
+    delete process.env.DISABLE_CSRF;
+  }
+
   beforeEach(() => {
     process.env = { ...ORIGINAL_ENV };
   });
@@ -17,7 +39,8 @@ describe('validateEnvironment', () => {
 
   it('does not throw in development even when required vars are missing', () => {
     process.env.NODE_ENV = 'development';
-    delete process.env.JWT_SECRET;
+    delete process.env.JWT_ACCESS_SECRET;
+    delete process.env.JWT_REFRESH_SECRET;
     delete process.env.CORS_ORIGINS;
     delete process.env.DATABASE_URL;
     delete process.env.METRICS_INGEST_KEY;
@@ -28,7 +51,8 @@ describe('validateEnvironment', () => {
 
   it('does not throw in test mode even when required vars are missing', () => {
     process.env.NODE_ENV = 'test';
-    delete process.env.JWT_SECRET;
+    delete process.env.JWT_ACCESS_SECRET;
+    delete process.env.JWT_REFRESH_SECRET;
     delete process.env.CORS_ORIGINS;
     delete process.env.DATABASE_URL;
     delete process.env.METRICS_INGEST_KEY;
@@ -37,98 +61,71 @@ describe('validateEnvironment', () => {
     expect(() => validateEnvironment()).not.toThrow();
   });
 
-  it('throws when JWT_SECRET is missing in production', () => {
-    process.env.NODE_ENV = 'production';
-    process.env.CORS_ORIGINS = 'https://app.example.com';
-    process.env.DATABASE_URL = 'postgresql://user:pass@db:5432/skillstorm';
-    process.env.METRICS_INGEST_KEY = 'metrics-key';
-    process.env.PUBLIC_APP_URL = 'https://app.example.com';
-    process.env.API_URL = 'https://api.example.com';
-    delete process.env.JWT_SECRET;
+  it('throws when JWT_ACCESS_SECRET is missing in production', () => {
+    setAllProductionVars();
+    delete process.env.JWT_ACCESS_SECRET;
 
-    expect(() => validateEnvironment()).toThrow(/JWT_SECRET/);
+    expect(() => validateEnvironment()).toThrow(/JWT_ACCESS_SECRET/);
+  });
+
+  it('rejects an insecure placeholder JWT secret in production', () => {
+    setAllProductionVars();
+    process.env.JWT_ACCESS_SECRET = 'change_me_super_secret_placeholder_value';
+
+    expect(() => validateEnvironment()).toThrow(/insecure placeholder/);
+  });
+
+  it('rejects a too-short JWT secret in production', () => {
+    setAllProductionVars();
+    process.env.JWT_ACCESS_SECRET = 'short';
+
+    expect(() => validateEnvironment()).toThrow(/at least 32 characters/);
   });
 
   it('throws when CORS_ORIGINS is missing in production', () => {
-    process.env.NODE_ENV = 'production';
-    process.env.JWT_SECRET = 'super-secret-key';
-    process.env.DATABASE_URL = 'postgresql://user:pass@db:5432/skillstorm';
-    process.env.METRICS_INGEST_KEY = 'metrics-key';
-    process.env.PUBLIC_APP_URL = 'https://app.example.com';
-    process.env.API_URL = 'https://api.example.com';
+    setAllProductionVars();
     delete process.env.CORS_ORIGINS;
 
     expect(() => validateEnvironment()).toThrow(/CORS_ORIGINS/);
   });
 
   it('throws when DATABASE_URL is missing in production', () => {
-    process.env.NODE_ENV = 'production';
-    process.env.JWT_SECRET = 'super-secret-key';
-    process.env.CORS_ORIGINS = 'https://app.example.com';
-    process.env.METRICS_INGEST_KEY = 'metrics-key';
-    process.env.PUBLIC_APP_URL = 'https://app.example.com';
-    process.env.API_URL = 'https://api.example.com';
+    setAllProductionVars();
     delete process.env.DATABASE_URL;
 
     expect(() => validateEnvironment()).toThrow(/DATABASE_URL/);
   });
 
   it('throws when METRICS_INGEST_KEY is missing in production', () => {
-    process.env.NODE_ENV = 'production';
-    process.env.JWT_SECRET = 'super-secret-key';
-    process.env.CORS_ORIGINS = 'https://app.example.com';
-    process.env.DATABASE_URL = 'postgresql://user:pass@db:5432/skillstorm';
-    process.env.PUBLIC_APP_URL = 'https://app.example.com';
-    process.env.API_URL = 'https://api.example.com';
+    setAllProductionVars();
     delete process.env.METRICS_INGEST_KEY;
 
     expect(() => validateEnvironment()).toThrow(/METRICS_INGEST_KEY/);
   });
 
   it('throws when PUBLIC_APP_URL is missing in production', () => {
-    process.env.NODE_ENV = 'production';
-    process.env.JWT_SECRET = 'super-secret-key';
-    process.env.CORS_ORIGINS = 'https://app.example.com';
-    process.env.DATABASE_URL = 'postgresql://user:pass@db:5432/skillstorm';
-    process.env.METRICS_INGEST_KEY = 'metrics-key';
-    process.env.API_URL = 'https://api.example.com';
+    setAllProductionVars();
     delete process.env.PUBLIC_APP_URL;
 
     expect(() => validateEnvironment()).toThrow(/PUBLIC_APP_URL/);
   });
 
   it('rejects wildcard CORS origins in production', () => {
-    process.env.NODE_ENV = 'production';
-    process.env.JWT_SECRET = 'super-secret-key';
+    setAllProductionVars();
     process.env.CORS_ORIGINS = 'https://*.example.com';
-    process.env.DATABASE_URL = 'postgresql://user:pass@db:5432/skillstorm';
-    process.env.METRICS_INGEST_KEY = 'metrics-key';
-    process.env.PUBLIC_APP_URL = 'https://app.example.com';
-    process.env.API_URL = 'https://api.example.com';
 
     expect(() => validateEnvironment()).toThrow(/Wildcards are not allowed/);
   });
 
   it('rejects cross-site cookie topology without explicit override', () => {
-    process.env.NODE_ENV = 'production';
-    process.env.JWT_SECRET = 'super-secret-key';
-    process.env.CORS_ORIGINS = 'https://app.example.com';
-    process.env.DATABASE_URL = 'postgresql://user:pass@db:5432/skillstorm';
-    process.env.METRICS_INGEST_KEY = 'metrics-key';
-    process.env.PUBLIC_APP_URL = 'https://app.example.com';
+    setAllProductionVars();
     process.env.API_URL = 'https://api.other-site.net';
-    delete process.env.ALLOW_CROSS_SITE_COOKIES;
 
     expect(() => validateEnvironment()).toThrow(/Cross-site cookie deployment detected/);
   });
 
   it('allows cross-site cookie topology only with explicit override', () => {
-    process.env.NODE_ENV = 'production';
-    process.env.JWT_SECRET = 'super-secret-key';
-    process.env.CORS_ORIGINS = 'https://app.example.com';
-    process.env.DATABASE_URL = 'postgresql://user:pass@db:5432/skillstorm';
-    process.env.METRICS_INGEST_KEY = 'metrics-key';
-    process.env.PUBLIC_APP_URL = 'https://app.example.com';
+    setAllProductionVars();
     process.env.API_URL = 'https://api.other-site.net';
     process.env.ALLOW_CROSS_SITE_COOKIES = '1';
 
@@ -137,7 +134,8 @@ describe('validateEnvironment', () => {
 
   it('lists all missing variables in a single error in production', () => {
     process.env.NODE_ENV = 'production';
-    delete process.env.JWT_SECRET;
+    delete process.env.JWT_ACCESS_SECRET;
+    delete process.env.JWT_REFRESH_SECRET;
     delete process.env.CORS_ORIGINS;
     delete process.env.DATABASE_URL;
     delete process.env.METRICS_INGEST_KEY;
@@ -145,18 +143,12 @@ describe('validateEnvironment', () => {
     delete process.env.API_URL;
 
     expect(() => validateEnvironment()).toThrow(
-      /JWT_SECRET.*CORS_ORIGINS.*DATABASE_URL.*METRICS_INGEST_KEY.*PUBLIC_APP_URL.*API_URL/,
+      /JWT_ACCESS_SECRET.*JWT_REFRESH_SECRET.*CORS_ORIGINS.*DATABASE_URL.*METRICS_INGEST_KEY.*PUBLIC_APP_URL.*API_URL/,
     );
   });
 
   it('does not throw when all required vars are set in production', () => {
-    process.env.NODE_ENV = 'production';
-    process.env.JWT_SECRET = 'super-secret-key';
-    process.env.CORS_ORIGINS = 'https://app.example.com';
-    process.env.DATABASE_URL = 'postgresql://user:pass@db:5432/skillstorm';
-    process.env.METRICS_INGEST_KEY = 'metrics-key';
-    process.env.PUBLIC_APP_URL = 'https://app.example.com';
-    process.env.API_URL = 'https://api.example.com';
+    setAllProductionVars();
 
     expect(() => validateEnvironment()).not.toThrow();
   });

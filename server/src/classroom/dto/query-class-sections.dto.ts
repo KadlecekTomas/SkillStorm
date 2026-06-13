@@ -54,7 +54,10 @@ export class QueryClassSectionsDto {
   @IsString()
   search?: string;
 
-  @ApiPropertyOptional({ description: 'Filter by teacher', example: 'teacher-uuid' })
+  @ApiPropertyOptional({
+    description: 'Filter by teacher',
+    example: 'teacher-uuid',
+  })
   @IsOptional()
   @Transform(optionalTrimmed)
   @IsUUID()
@@ -72,7 +75,8 @@ export class QueryClassSectionsDto {
 
   @ApiPropertyOptional({
     description: 'Opaque cursor token (base64url)',
-    example: 'eyJncmFkZSI6IkdSQURFXzEiLCJzZWN0aW9uIjoiQSIsImlkIjoidXVpZC0uLi4ifQ',
+    example:
+      'eyJncmFkZSI6IkdSQURFXzEiLCJzZWN0aW9uIjoiQSIsImlkIjoidXVpZC0uLi4ifQ',
   })
   @IsOptional()
   @Transform(optionalTrimmed)

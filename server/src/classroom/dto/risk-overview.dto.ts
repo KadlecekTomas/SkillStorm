@@ -1,7 +1,11 @@
 /**
  * GDPR-minimal risk overview response. No email, username, membership, audit.
  */
-import type { RiskLevel, RiskTrend, RiskFlag } from '../risk-overview.util';
+import type {
+  RiskLevel,
+  RiskTrend,
+  RiskFlag,
+} from '@/classroom/risk-overview.util';
 
 export type ClassroomRiskOverviewStudentDto = {
   studentId: string;

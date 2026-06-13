@@ -16,7 +16,10 @@ import { PermissionKey } from '@prisma/client';
 import { Permission } from '@/modules/rbac/permission.decorator';
 import { RequestWithUser } from '@/types/request-with-user';
 import { ok } from '@/common/http/envelope';
-import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
+import {
+  OrgOperation,
+  OrgOperationType,
+} from '@/common/decorators/org-operation.decorator';
 import { TeacherAccessService } from './teacher-access.service';
 import { QueryTeacherAccessDto } from './dto/query-teacher-access.dto';
 import { CreateTeacherAccessDto } from './dto/create-teacher-access.dto';

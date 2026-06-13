@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { ErrorAlert } from "@/components/ui/alert";
 import { getDashboardTeacher, type TeacherDashboardResponse } from "@/lib/api/dashboard";
 import { useAuth } from "@/hooks/use-auth";

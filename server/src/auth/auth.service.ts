@@ -51,7 +51,12 @@ import {
   type CachedResource,
 } from '@/shared/cache/org-cache.utils';
 import { getJwtAccessSecret } from './jwt-secrets';
-import { getOrgBootstrap, getOrgReadiness, type OrgBootstrap, type OrgReadiness } from '@/shared/org-readiness.utils';
+import {
+  getOrgBootstrap,
+  getOrgReadiness,
+  type OrgBootstrap,
+  type OrgReadiness,
+} from '@/shared/org-readiness.utils';
 import {
   deriveOrgReadiness,
   type DerivedOrgReadiness,
@@ -106,7 +111,7 @@ export class AuthService {
     private readonly auditService: AuditService,
     private readonly rbac: RbacService,
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
-  ) { }
+  ) {}
 
   private readonly logger = new Logger(AuthService.name);
 
@@ -140,7 +145,9 @@ export class AuthService {
 
   private resolveJoinRole(role?: OrganizationRole): OrganizationRole {
     if (!role) {
-      throw new BadRequestException('Role is required for joining an organization');
+      throw new BadRequestException(
+        'Role is required for joining an organization',
+      );
     }
     const allowed = new Set<OrganizationRole>([
       OrganizationRole.STUDENT,
@@ -152,7 +159,6 @@ export class AuthService {
     }
     return role;
   }
-
 
   private async resolveJoinOrganization(joinCode?: string) {
     if (!joinCode) {
@@ -173,7 +179,10 @@ export class AuthService {
     return org;
   }
 
-  private buildClaims(user: User & { tokenVersion?: number }, membership: Membership | null): JwtClaims {
+  private buildClaims(
+    user: User & { tokenVersion?: number },
+    membership: Membership | null,
+  ): JwtClaims {
     return {
       sub: user.id,
       email: user.email ?? null,
@@ -261,7 +270,8 @@ export class AuthService {
       throw new UnauthorizedException('Token invalid');
     }
 
-    let membership: { id: string; role: any; organizationId: string } | null = null;
+    let membership: { id: string; role: any; organizationId: string } | null =
+      null;
     if (user.lastActiveMembershipId) {
       const m = await this.prisma.membership.findFirst({
         where: {
@@ -312,7 +322,9 @@ export class AuthService {
     const membership = await this.prisma.membership.findUnique({
       where: { id: membershipId },
     });
-    if (!membership) throw new UnauthorizedException('Membership not found');
+    if (!membership || membership.deletedAt || membership.userId !== userId) {
+      throw new UnauthorizedException('Membership not found');
+    }
     return this.generateTokens(user, membership);
   }
 
@@ -336,10 +348,14 @@ export class AuthService {
         throw new ConflictException('A record with this value already exists');
       }
       if (e.code === 'P2003') {
-        throw new BadRequestException('Invalid reference (foreign key constraint)');
+        throw new BadRequestException(
+          'Invalid reference (foreign key constraint)',
+        );
       }
       this.logger.warn(`Prisma error ${e.code} in register`, e.meta);
-      throw new BadRequestException('Registration failed due to data constraint');
+      throw new BadRequestException(
+        'Registration failed due to data constraint',
+      );
     }
     if (e instanceof BadRequestException || e instanceof ConflictException) {
       throw e;
@@ -472,7 +488,9 @@ export class AuthService {
         invite.role !== OrganizationRole.DIRECTOR &&
         invite.role !== OrganizationRole.STUDENT
       ) {
-        throw new BadRequestException('Invite role is not allowed for ORG_ONLY.');
+        throw new BadRequestException(
+          'Invite role is not allowed for ORG_ONLY.',
+        );
       }
     }
 
@@ -514,7 +532,9 @@ export class AuthService {
       }
 
       if (invite.role !== OrganizationRole.STUDENT) {
-        throw new BadRequestException('Student class invite must have STUDENT role.');
+        throw new BadRequestException(
+          'Student class invite must have STUDENT role.',
+        );
       }
 
       const classSection = await tx.classSection.findUnique({
@@ -522,10 +542,14 @@ export class AuthService {
         select: { id: true, orgId: true, yearId: true },
       });
       if (!classSection || classSection.orgId !== invite.organizationId) {
-        throw new BadRequestException('Class section not found or does not belong to organization');
+        throw new BadRequestException(
+          'Class section not found or does not belong to organization',
+        );
       }
       if (classSection.yearId !== invite.yearId) {
-        throw new BadRequestException('yearId does not match classSection.yearId');
+        throw new BadRequestException(
+          'yearId does not match classSection.yearId',
+        );
       }
 
       const academicYear = await tx.academicYear.findUnique({
@@ -560,7 +584,9 @@ export class AuthService {
       });
       if (existingEnrollment) {
         if (existingEnrollment.classSectionId !== invite.classSectionId) {
-          throw new ConflictException('Student is already enrolled in another class for this year');
+          throw new ConflictException(
+            'Student is already enrolled in another class for this year',
+          );
         }
       } else {
         await tx.enrollment.create({
@@ -604,7 +630,9 @@ export class AuthService {
       throw new BadRequestException('Password is required');
     }
     if (!name || name.length < 2) {
-      throw new BadRequestException('Name is required and must be at least 2 characters');
+      throw new BadRequestException(
+        'Name is required and must be at least 2 characters',
+      );
     }
 
     if (mode === RegisterMode.CREATE_ORG) {
@@ -752,7 +780,10 @@ export class AuthService {
             throw new NotFoundException('User not found after registration');
           }
 
-          const tokens = await this.generateTokens(persistedUser, result.membership);
+          const tokens = await this.generateTokens(
+            persistedUser,
+            result.membership,
+          );
 
           await this.auditService.log({
             action: 'REGISTER',
@@ -802,6 +833,111 @@ export class AuthService {
     throw new BadRequestException('Unsupported registration mode');
   }
 
+  /**
+   * JWT organizationId: chosen from this membership. Selection order:
+   * (1) optional organizationId if user is member of that org; (2) lastActiveMembershipId if set and valid;
+   * (3) else first membership by createdAt asc (deterministic but may not be READY).
+   */
+  private async resolveSessionMembership(
+    user: User,
+    organizationId: string | null,
+  ): Promise<Membership | null> {
+    let membership: Membership | null = null;
+    if (organizationId) {
+      membership = await this.prisma.membership.findFirst({
+        where: {
+          userId: user.id,
+          organizationId,
+          deletedAt: null,
+        },
+      });
+      if (!membership) {
+        throw new UnauthorizedException(
+          'Uživatel není členem zvolené organizace.',
+        );
+      }
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: { lastActiveMembershipId: membership.id },
+      });
+    }
+    if (!membership && user.lastActiveMembershipId) {
+      membership = await this.prisma.membership.findFirst({
+        where: {
+          id: user.lastActiveMembershipId,
+          userId: user.id,
+          deletedAt: null,
+        },
+      });
+    }
+    if (!membership) {
+      membership = await this.prisma.membership.findFirst({
+        where: { userId: user.id, deletedAt: null },
+        orderBy: { createdAt: 'asc' },
+      });
+      if (membership?.id) {
+        await this.prisma.user.update({
+          where: { id: user.id },
+          data: { lastActiveMembershipId: membership.id },
+        });
+      }
+    }
+    return membership;
+  }
+
+  /**
+   * Issue a session for a user whose identity was already verified by an
+   * external provider (SSO). Performs the same status checks, membership
+   * selection and audit logging as password login, but never touches
+   * passwords.
+   */
+  async issueSessionForVerifiedUser(
+    userId: string,
+    opts: { organizationId?: string | null; auditAction?: string } = {},
+  ) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new UnauthorizedException('Operace se nezdařila.');
+    }
+    if (user.status !== UserStatus.ACTIVE || user.deletedAt) {
+      throw new UnauthorizedException('Account disabled');
+    }
+
+    const updatedUser = await this.prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() },
+    });
+
+    const membership = await this.resolveSessionMembership(
+      updatedUser,
+      opts.organizationId ?? null,
+    );
+
+    const tokens = await this.generateTokens(updatedUser, membership);
+
+    await this.auditService.log({
+      action: opts.auditAction ?? 'LOGIN',
+      entityType: AuditEntityType.USER,
+      userId: updatedUser.id,
+      organizationId: membership?.organizationId ?? null,
+      entityId: updatedUser.id,
+    });
+
+    return {
+      tokens,
+      user: {
+        id: updatedUser.id,
+        email: updatedUser.email,
+        username: updatedUser.username,
+        name: updatedUser.name,
+        systemRole: updatedUser.systemRole,
+        organizationRole: membership?.role ?? null,
+        organizationId: membership?.organizationId ?? null,
+        lastLoginAt: updatedUser.lastLoginAt,
+      },
+    };
+  }
+
   async login(dto: LoginDto) {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
@@ -831,49 +967,10 @@ export class AuthService {
       data: { lastLoginAt: new Date() },
     });
 
-    // JWT organizationId: chosen from this membership. Selection order:
-    // (1) optional dto.organizationId if user is member of that org; (2) lastActiveMembershipId if set and valid;
-    // (3) else first membership by createdAt asc (deterministic but may not be READY).
-    let membership: Membership | null = null;
-    if (dto.organizationId) {
-      membership = await this.prisma.membership.findFirst({
-        where: {
-          userId: updatedUser.id,
-          organizationId: dto.organizationId,
-          deletedAt: null,
-        },
-      });
-      if (!membership) {
-        throw new UnauthorizedException(
-          'Uživatel není členem zvolené organizace.',
-        );
-      }
-      await this.prisma.user.update({
-        where: { id: updatedUser.id },
-        data: { lastActiveMembershipId: membership.id },
-      });
-    }
-    if (!membership && updatedUser.lastActiveMembershipId) {
-      membership = await this.prisma.membership.findFirst({
-        where: {
-          id: updatedUser.lastActiveMembershipId,
-          userId: updatedUser.id,
-          deletedAt: null,
-        },
-      });
-    }
-    if (!membership) {
-      membership = await this.prisma.membership.findFirst({
-        where: { userId: updatedUser.id, deletedAt: null },
-        orderBy: { createdAt: 'asc' },
-      });
-      if (membership?.id) {
-        await this.prisma.user.update({
-          where: { id: updatedUser.id },
-          data: { lastActiveMembershipId: membership.id },
-        });
-      }
-    }
+    const membership = await this.resolveSessionMembership(
+      updatedUser,
+      dto.organizationId ?? null,
+    );
 
     const tokens = await this.generateTokens(updatedUser, membership);
 
@@ -1015,7 +1112,7 @@ export class AuthService {
   }
 
   async getUserProfile(userId: string) {
-    let user = await this.prisma.user.findUnique({
+    const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
         id: true,
@@ -1050,7 +1147,8 @@ export class AuthService {
 
     // CONTRACT: same effective platform admin as JWT payload (see jwt.strategy.ts). Guard unchanged.
     const isPlatformAdmin =
-      (user.isPlatformAdmin ?? false) || user.systemRole === SystemRole.SUPERADMIN;
+      (user.isPlatformAdmin ?? false) ||
+      user.systemRole === SystemRole.SUPERADMIN;
 
     return {
       id: user.id,
@@ -1139,7 +1237,12 @@ export class AuthService {
           userId,
           deletedAt: null,
         },
-        select: { id: true, role: true, organizationId: true, organization: { select: { name: true, type: true, status: true } } },
+        select: {
+          id: true,
+          role: true,
+          organizationId: true,
+          organization: { select: { name: true, type: true, status: true } },
+        },
       });
       if (m) {
         activeMembership = m;
@@ -1152,12 +1255,17 @@ export class AuthService {
     }
 
     if (!activeMembership && claims?.organizationId) {
-      activeMembership = memberships.find((m) => m.organizationId === claims.organizationId) ?? null;
+      activeMembership =
+        memberships.find((m) => m.organizationId === claims.organizationId) ??
+        null;
     }
 
     if (!activeMembership && memberships.length) {
       activeMembership = memberships[0] ?? null;
-      if (activeMembership && userRow.lastActiveMembershipId !== activeMembership.id) {
+      if (
+        activeMembership &&
+        userRow.lastActiveMembershipId !== activeMembership.id
+      ) {
         await this.prisma.user.update({
           where: { id: userId },
           data: { lastActiveMembershipId: activeMembership.id },
@@ -1213,7 +1321,8 @@ export class AuthService {
       systemRole: userRow.systemRole,
       // CONTRACT: effective platform admin (SUPERADMIN or DB flag). Must match jwt.strategy and getMe.
       isPlatformAdmin:
-        (userRow.isPlatformAdmin ?? false) || userRow.systemRole === SystemRole.SUPERADMIN,
+        (userRow.isPlatformAdmin ?? false) ||
+        userRow.systemRole === SystemRole.SUPERADMIN,
       createdAt: userRow.createdAt,
       lastLoginAt: userRow.lastLoginAt,
       memberships,
@@ -1270,10 +1379,9 @@ export class AuthService {
     };
   }
 
-  async joinOrganization(userId: string, dto: JoinOrganizationDto) {
+  async joinOrganization(_userId: string, _dto: JoinOrganizationDto) {
     throw new GoneException('Legacy join disabled. Use invitation token.');
   }
-
 
   async useOrganization(userId: string, orgId: string) {
     const membership = await this.prisma.membership.findFirst({
@@ -1282,7 +1390,9 @@ export class AuthService {
         id: true,
         role: true,
         organizationId: true,
-        organization: { select: { id: true, name: true, type: true, status: true } },
+        organization: {
+          select: { id: true, name: true, type: true, status: true },
+        },
       },
     });
 
@@ -1339,7 +1449,9 @@ export class AuthService {
         id: true,
         role: true,
         organizationId: true,
-        organization: { select: { id: true, name: true, type: true, status: true } },
+        organization: {
+          select: { id: true, name: true, type: true, status: true },
+        },
       },
     });
 
@@ -1486,7 +1598,11 @@ export class AuthService {
     await this.prisma.$transaction([
       this.prisma.user.update({
         where: { id: row.userId },
-        data: { passwordHash, passwordChangedAt: now, tokenVersion: nextVersion },
+        data: {
+          passwordHash,
+          passwordChangedAt: now,
+          tokenVersion: nextVersion,
+        },
       }),
       this.prisma.passwordResetToken.update({
         where: { id: row.id },

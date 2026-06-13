@@ -26,7 +26,7 @@ export function TestListRow({
   assignmentId,
   onOpen,
   onViewResult,
-}: TestListRowProps) {
+}: TestListRowProps): React.JSX.Element {
   const scoreLabel =
     lastScore != null && lastMaxScore != null && lastMaxScore > 0
       ? `${lastScore} / ${lastMaxScore} (${Math.round(lastPercentage ?? (lastScore / lastMaxScore) * 100)} %)`

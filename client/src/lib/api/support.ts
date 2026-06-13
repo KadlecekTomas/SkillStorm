@@ -28,13 +28,17 @@ export type UpdateSupportTicketInput = {
   resolutionNote?: string | null;
 };
 
-export const createSupportTicket = (input: CreateSupportTicketInput) =>
+export const createSupportTicket = (
+  input: CreateSupportTicketInput,
+): Promise<SupportTicket> =>
   httpClient.post<SupportTicket, CreateSupportTicketInput>("/support/tickets", input);
 
-export const getMySupportTickets = () =>
+export const getMySupportTickets = (): Promise<SupportTicket[]> =>
   httpClient.get<SupportTicket[]>("/support/my-tickets", { cache: "no-store" });
 
-export const getSupportInboxTickets = (filters: SupportInboxFilters = {}) =>
+export const getSupportInboxTickets = (
+  filters: SupportInboxFilters = {},
+): Promise<AdminSupportTicket[]> =>
   httpClient.get<AdminSupportTicket[]>("/platform/support/tickets", {
     cache: "no-store",
     query: {
@@ -44,7 +48,7 @@ export const getSupportInboxTickets = (filters: SupportInboxFilters = {}) =>
     },
   });
 
-export const getSupportTicketDetail = (id: string) =>
+export const getSupportTicketDetail = (id: string): Promise<AdminSupportTicket> =>
   httpClient.get<AdminSupportTicket>(`/platform/support/tickets/${id}`, {
     cache: "no-store",
   });
@@ -52,7 +56,7 @@ export const getSupportTicketDetail = (id: string) =>
 export const updateSupportTicket = (
   id: string,
   input: UpdateSupportTicketInput,
-) =>
+): Promise<AdminSupportTicket> =>
   httpClient.patch<AdminSupportTicket, UpdateSupportTicketInput>(
     `/platform/support/tickets/${id}`,
     input,

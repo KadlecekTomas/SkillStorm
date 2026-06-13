@@ -1,4 +1,10 @@
-import { Body, Controller, Post, Req, ForbiddenException } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Post,
+  Req,
+  ForbiddenException,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ok } from '@/common/http/envelope';
 import { Permission } from '@/modules/rbac/permission.decorator';

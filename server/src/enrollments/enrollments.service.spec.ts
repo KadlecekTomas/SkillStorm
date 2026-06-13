@@ -1,8 +1,10 @@
 import type { TestingModule } from '@nestjs/testing';
 import { Test } from '@nestjs/testing';
 import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { EnrollmentsService } from './enrollments.service';
 import { PrismaService } from '@/prisma/prisma.service';
+import { AuditService } from '@/audit/audit.service';
 import { OrganizationRole, SystemRole } from '@prisma/client';
 
 describe('EnrollmentsService', () => {
@@ -12,6 +14,7 @@ describe('EnrollmentsService', () => {
     classSection: { findUnique: jest.Mock };
     membership: { findUnique: jest.Mock };
     enrollment: { findFirst: jest.Mock; findUnique: jest.Mock; create: jest.Mock };
+    academicYear: { findFirst: jest.Mock };
   };
 
   beforeEach(async () => {
@@ -20,12 +23,21 @@ describe('EnrollmentsService', () => {
       classSection: { findUnique: jest.fn() },
       membership: { findUnique: jest.fn() },
       enrollment: { findFirst: jest.fn(), findUnique: jest.fn(), create: jest.fn() },
+      academicYear: { findFirst: jest.fn() },
     };
+    // assertValidAcademicYear(): default to a valid, non-deleted year so tests
+    // exercise the downstream branches (isCurrent / duplicate) they target.
+    prisma.academicYear.findFirst.mockResolvedValue({ id: 'year-1', orgId: 'org-1' });
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         EnrollmentsService,
         { provide: PrismaService, useValue: prisma },
+        { provide: AuditService, useValue: { log: jest.fn() } },
+        {
+          provide: CACHE_MANAGER,
+          useValue: { get: jest.fn(), set: jest.fn(), del: jest.fn() },
+        },
       ],
     }).compile();
 

@@ -21,7 +21,7 @@ export function TestDetailSummary({
   percentage,
   submittedAt,
   attemptNo,
-}: TestDetailSummaryProps) {
+}: TestDetailSummaryProps): React.JSX.Element {
   const scoreLabel =
     score != null && maxScore != null && maxScore > 0
       ? `${score} / ${maxScore} (${Math.round(percentage ?? (score / maxScore) * 100)} %)`

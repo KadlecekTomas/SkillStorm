@@ -15,7 +15,9 @@ export class RbacDefaultSyncService implements OnModuleInit {
 
   private async syncDefaults(): Promise<void> {
     const permissionRows = await this.ensurePermissions();
-    const permissionIdByKey = new Map(permissionRows.map((row) => [row.key, row.id]));
+    const permissionIdByKey = new Map(
+      permissionRows.map((row) => [row.key, row.id]),
+    );
 
     let createdRolePermissions = 0;
 

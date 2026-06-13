@@ -12,7 +12,10 @@ export class CreateTeacherAccessDto {
   @IsUUID()
   classSectionId!: string;
 
-  @ApiProperty({ enum: TeacherClassAccessLevel, example: TeacherClassAccessLevel.EDIT })
+  @ApiProperty({
+    enum: TeacherClassAccessLevel,
+    example: TeacherClassAccessLevel.EDIT,
+  })
   @IsEnum(TeacherClassAccessLevel)
   accessLevel!: TeacherClassAccessLevel;
 

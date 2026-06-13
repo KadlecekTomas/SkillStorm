@@ -25,7 +25,10 @@ import { ApiStandardResponses } from '@/common/http/api-standard-responses.decor
 import { MyAssignmentDto } from './my-assignments.dto';
 import { RequireCurrentAcademicYearGuard } from '@/academic-years/require-current-academic-year.guard';
 import { AcademicYearExpiredGuard } from '@/academic-years/academic-year-expired.guard';
-import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
+import {
+  OrgOperation,
+  OrgOperationType,
+} from '@/common/decorators/org-operation.decorator';
 import { OrgContextService } from '@/common/org-context/org-context.service';
 import { NoHttpCache } from '@/common/cache/no-http-cache.decorator';
 
@@ -45,10 +48,7 @@ export class AssignmentsController {
   @Post()
   @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'Create assignment' })
-  async create(
-    @Body() dto: CreateAssignmentDto,
-    @Req() req: RequestWithUser,
-  ) {
+  async create(@Body() dto: CreateAssignmentDto, @Req() req: RequestWithUser) {
     const ctx = await this.orgContext.get(req);
     if (!ctx.activeAcademicYearId) {
       throw new ForbiddenException('Missing active academic year.');
@@ -74,7 +74,8 @@ export class AssignmentsController {
       },
       ctx,
     );
-    const requestId = (req as RequestWithUser & { requestId?: string }).requestId;
+    const requestId = (req as RequestWithUser & { requestId?: string })
+      .requestId;
     if (requestId) {
       this.logger.log(
         JSON.stringify({
@@ -95,7 +96,9 @@ export class AssignmentsController {
     PermissionKey.VIEW_ORG_ASSIGNMENTS,
   )
   @NoHttpCache()
-  @ApiOperation({ summary: 'List assignments for current user (permission-scoped)' })
+  @ApiOperation({
+    summary: 'List assignments for current user (permission-scoped)',
+  })
   async myAssignments(
     @Req() req: RequestWithUser,
   ): Promise<{ success: boolean; data?: MyAssignmentDto[]; error?: string }> {
@@ -107,7 +110,10 @@ export class AssignmentsController {
   @Get('overview')
   @Permission(PermissionKey.VIEW_OWN_ASSIGNMENTS)
   @NoHttpCache()
-  @ApiOperation({ summary: 'Student assignment overview bucketed by status (active/upcoming/closedUnsubmitted/completed)' })
+  @ApiOperation({
+    summary:
+      'Student assignment overview bucketed by status (active/upcoming/closedUnsubmitted/completed)',
+  })
   async overview(@Req() req: RequestWithUser) {
     const ctx = await this.orgContext.get(req);
     const data = await this.assignmentsService.getStudentOverview(
@@ -126,12 +132,12 @@ export class AssignmentsController {
   )
   @NoHttpCache()
   @ApiOperation({ summary: 'Get assignment detail (permission-scoped)' })
-  async findOne(
-    @Param('id') id: string,
-    @Req() req: RequestWithUser,
-  ) {
+  async findOne(@Param('id') id: string, @Req() req: RequestWithUser) {
     const ctx = await this.orgContext.get(req);
-    const assignment = await this.assignmentsService.findOneOrThrowScoped(id, ctx);
+    const assignment = await this.assignmentsService.findOneOrThrowScoped(
+      id,
+      ctx,
+    );
     const allowed = await this.assignmentsService.canAccessAssignment(
       assignment,
       req.user.userId,
@@ -160,10 +166,7 @@ export class AssignmentsController {
   @Delete(':id')
   @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'Delete assignment' })
-  async remove(
-    @Param('id') id: string,
-    @Req() req: RequestWithUser,
-  ) {
+  async remove(@Param('id') id: string, @Req() req: RequestWithUser) {
     const ctx = await this.orgContext.get(req);
     await this.assignmentsService.findOneOrThrowScoped(id, ctx);
     return ok(this.assignmentsService.remove(id, ctx));

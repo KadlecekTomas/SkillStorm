@@ -22,7 +22,9 @@ export function safePercent(
  * Convert a 0..1 ratio to a 0..100 percentage, rounded to 1 decimal place.
  * Returns `null` when ratio is null, undefined, or non-finite.
  */
-export function ratioToPercent(ratio: number | null | undefined): number | null {
+export function ratioToPercent(
+  ratio: number | null | undefined,
+): number | null {
   if (ratio == null) return null;
   if (!Number.isFinite(ratio)) return null;
   return Math.round(ratio * 1000) / 10;

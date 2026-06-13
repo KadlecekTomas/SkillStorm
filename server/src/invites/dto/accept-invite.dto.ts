@@ -9,13 +9,17 @@ export class AcceptInviteDto {
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   inviteToken?: string;
 
-  @ApiPropertyOptional({ description: 'Invite code (from link or manual entry)' })
+  @ApiPropertyOptional({
+    description: 'Invite code (from link or manual entry)',
+  })
   @IsOptional()
   @IsString()
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   code?: string;
 
-  @ApiPropertyOptional({ description: 'Invite token (preferred; same as code from invite link)' })
+  @ApiPropertyOptional({
+    description: 'Invite token (preferred; same as code from invite link)',
+  })
   @IsOptional()
   @IsString()
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))

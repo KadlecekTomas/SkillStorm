@@ -24,7 +24,7 @@ const DASHBOARD_PLATFORM_PATH = "/app/platform";
 export function OrganizationGate({ children }: { children: ReactNode }): ReactNode {
   const router = useRouter();
   const pathname = usePathname();
-  const { context, org, hasOrganization, isLoading, isLoggingOut } = useAuth();
+  const { context, org, isLoading, isLoggingOut } = useAuth();
 
   const isJoinOnboarding =
     pathname === DASHBOARD_ONBOARDING_PATH || pathname?.startsWith(`${DASHBOARD_ONBOARDING_PATH}/`);

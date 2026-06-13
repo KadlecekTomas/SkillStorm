@@ -22,12 +22,14 @@ import {
   UpdateSubmissionDto,
 } from './dto';
 import { SubmissionsService } from './submissions.service';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { ok } from '@/common/http/envelope';
-import { ForbiddenException } from '@nestjs/common';
 import { ApiStandardResponses } from '@/common/http/api-standard-responses.decorator';
 import { RequireCurrentAcademicYearGuard } from '@/academic-years/require-current-academic-year.guard';
-import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
+import {
+  OrgOperation,
+  OrgOperationType,
+} from '@/common/decorators/org-operation.decorator';
 import { OrgContextService } from '@/common/org-context/org-context.service';
 
 @ApiTags('submissions')
@@ -85,11 +87,22 @@ export class SubmissionsController {
     const rawLimit = parseInt(String(limitStr ?? '50'), 10) || 50;
     const limit = Math.min(100, Math.max(1, rawLimit));
     const ctx = await this.orgContext.get(req);
-    return ok(this.submissionsService.findAll({ assignmentId, studentId }, req.user, ctx, { page, limit }));
+    return ok(
+      this.submissionsService.findAll(
+        { assignmentId, studentId },
+        req.user,
+        ctx,
+        { page, limit },
+      ),
+    );
   }
 
   @Get(':id')
-  @Permission(OrganizationRole.STUDENT, PermissionKey.VIEW_RESULTS, PermissionKey.MANAGE_STUDENTS)
+  @Permission(
+    OrganizationRole.STUDENT,
+    PermissionKey.VIEW_RESULTS,
+    PermissionKey.MANAGE_STUDENTS,
+  )
   async findOne(@Param('id') id: string, @Req() req: RequestWithUser) {
     const ctx = await this.orgContext.get(req);
     return ok(this.submissionsService.findOne(id, req.user, ctx));

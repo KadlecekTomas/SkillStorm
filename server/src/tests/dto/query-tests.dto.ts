@@ -68,7 +68,10 @@ export class QueryTestsDto {
   @IsUUID()
   academicYearId?: string;
 
-  @ApiPropertyOptional({ description: 'Filter by pedagogical grade', enum: SchoolGrade })
+  @ApiPropertyOptional({
+    description: 'Filter by pedagogical grade',
+    enum: SchoolGrade,
+  })
   @IsOptional()
   @Transform(optionalTrimmedGrade)
   @IsEnum(SchoolGrade)

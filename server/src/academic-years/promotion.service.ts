@@ -7,13 +7,20 @@ import {
 import { Logger } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
 import type { JwtPayload } from '@/auth/types/jwt-payload';
-import { SchoolGrade, EnrollmentStatus, OrganizationRole } from '@prisma/client';
+import {
+  SchoolGrade,
+  EnrollmentStatus,
+  OrganizationRole,
+} from '@prisma/client';
 import { Prisma } from '@prisma/client';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 import { Inject } from '@nestjs/common';
-import { bumpOrgVersion, cacheScopeForUser } from '@/shared/cache/org-cache.utils';
+import {
+  bumpOrgVersion,
+  cacheScopeForUser,
+} from '@/shared/cache/org-cache.utils';
 import { assertSameOrganization } from '@/shared/access.utils';
 import { hasAtLeastRole } from '@/shared/access.utils';
 import { AcademicYearCacheRef } from '@/common/year-cache/academic-year-cache.ref';
@@ -110,7 +117,13 @@ export class PromotionService {
     const [fromYear, toYear] = await Promise.all([
       this.prisma.academicYear.findFirst({
         where: { id: fromYearId, orgId: organizationId, deletedAt: null },
-        select: { id: true, orgId: true, startsAt: true, endsAt: true, label: true },
+        select: {
+          id: true,
+          orgId: true,
+          startsAt: true,
+          endsAt: true,
+          label: true,
+        },
       }),
       this.prisma.academicYear.findFirst({
         where: { id: toYearId, orgId: organizationId, deletedAt: null },
@@ -177,13 +190,17 @@ export class PromotionService {
         const sectionsData: Prisma.ClassSectionCreateManyInput[] = [];
         const oldSectionToKey = new Map<string, string>();
         let skippedClassesCount = 0;
-        const unsupportedSections: Array<{ grade: string; section: string }> = [];
+        const unsupportedSections: Array<{ grade: string; section: string }> =
+          [];
 
         for (const section of sections) {
           const progression = classifyGrade(section.grade as SchoolGrade);
 
           if (progression.status === 'unsupported') {
-            unsupportedSections.push({ grade: section.grade, section: section.section });
+            unsupportedSections.push({
+              grade: section.grade,
+              section: section.section,
+            });
             continue;
           }
           if (progression.status === 'graduated') {
@@ -201,7 +218,10 @@ export class PromotionService {
             label: `${gradeNum}.${section.section}`,
             teacherId: section.teacherId,
           });
-          oldSectionToKey.set(section.id, sectionKey(nextGrade, section.section));
+          oldSectionToKey.set(
+            section.id,
+            sectionKey(nextGrade, section.section),
+          );
         }
 
         // Reject explicitly — silent skip is not allowed for unsupported grades.
@@ -278,7 +298,8 @@ export class PromotionService {
           select: { teacherId: true, classSectionId: true },
         });
 
-        const teacherAssignmentRows: Prisma.TeacherClassSectionCreateManyInput[] = [];
+        const teacherAssignmentRows: Prisma.TeacherClassSectionCreateManyInput[] =
+          [];
         for (const ta of oldTeacherAssignments) {
           const key = oldSectionToKey.get(ta.classSectionId);
           const newSectionId = key ? newSectionByKey.get(key) : undefined;

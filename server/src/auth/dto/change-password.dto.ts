@@ -1,6 +1,9 @@
 import { IsString } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-import { StrongPassword, PASSWORD_POLICY_MESSAGE } from '@/common/validators/password.validator';
+import {
+  StrongPassword,
+  PASSWORD_POLICY_MESSAGE,
+} from '@/common/validators/password.validator';
 
 export class ChangePasswordDto {
   @ApiProperty({ description: 'Současné heslo' })

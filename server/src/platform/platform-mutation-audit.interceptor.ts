@@ -33,7 +33,8 @@ export class PlatformMutationAuditInterceptor implements NestInterceptor {
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     const req = context.switchToHttp().getRequest<RequestWithUser>();
     const handlerName = context.getHandler().name.toUpperCase();
-    const entityId: string | null = (req.params as Record<string, string>)?.id ?? null;
+    const entityId: string | null =
+      (req.params as Record<string, string>)?.id ?? null;
 
     return next.handle().pipe(
       tap(() => {
@@ -56,7 +57,10 @@ export class PlatformMutationAuditInterceptor implements NestInterceptor {
           })
           .catch((err: unknown) => {
             // Audit failure must never surface to the client
-            console.error('[PlatformMutationAudit] Failed to write audit log:', err);
+            console.error(
+              '[PlatformMutationAudit] Failed to write audit log:',
+              err,
+            );
           });
       }),
     );
@@ -67,11 +71,21 @@ function toJsonSafe(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value ?? null)) as Prisma.InputJsonValue;
 }
 
-const SENSITIVE_KEYS = new Set(['password', 'token', 'secret', 'authorization', 'cookie']);
+const SENSITIVE_KEYS = new Set([
+  'password',
+  'token',
+  'secret',
+  'authorization',
+  'cookie',
+]);
 
-function sanitizeBody(body: Record<string, unknown> | null | undefined): Record<string, unknown> {
+function sanitizeBody(
+  body: Record<string, unknown> | null | undefined,
+): Record<string, unknown> {
   if (!body || typeof body !== 'object') return {};
   return Object.fromEntries(
-    Object.entries(body).filter(([key]) => !SENSITIVE_KEYS.has(key.toLowerCase())),
+    Object.entries(body).filter(
+      ([key]) => !SENSITIVE_KEYS.has(key.toLowerCase()),
+    ),
   );
 }

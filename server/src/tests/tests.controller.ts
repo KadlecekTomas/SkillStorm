@@ -90,10 +90,14 @@ export class TestsController {
         throw new ForbiddenException('Invalid org scope for test list');
       }
       return ok(
-        this.service.findAll(req.user, {
-          ...q,
-          organizationId: ctx.organizationId,
-        }, ctx),
+        this.service.findAll(
+          req.user,
+          {
+            ...q,
+            organizationId: ctx.organizationId,
+          },
+          ctx,
+        ),
       );
     }
     return ok(this.service.findAll(req.user, q, ctx));
@@ -169,7 +173,9 @@ export class TestsController {
   @Get(':id/results/:studentId')
   @OrgOperation(OrgOperationType.EXECUTION)
   @Permission(PermissionKey.VIEW_RESULTS)
-  @ApiOperation({ summary: 'Get per-student answer breakdown (teachers/directors only)' })
+  @ApiOperation({
+    summary: 'Get per-student answer breakdown (teachers/directors only)',
+  })
   async getStudentResult(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Param('studentId', new ParseUUIDPipe()) studentId: string,
@@ -213,9 +219,7 @@ export class TestsController {
     @Body() dto: UpdateQuestionDto,
     @Req() req: RequestWithUser,
   ) {
-    return ok(
-      this.service.updateQuestion(testId, questionId, dto, req.user),
-    );
+    return ok(this.service.updateQuestion(testId, questionId, dto, req.user));
   }
 
   @Delete(':id/questions/:questionId([0-9a-fA-F-]{36})')
@@ -253,13 +257,7 @@ export class TestsController {
     @Req() req: RequestWithUser,
   ) {
     return ok(
-      this.service.updateOption(
-        testId,
-        questionId,
-        optionId,
-        dto,
-        req.user,
-      ),
+      this.service.updateOption(testId, questionId, optionId, dto, req.user),
     );
   }
 
@@ -302,13 +300,7 @@ export class TestsController {
     @Req() req: RequestWithUser,
   ) {
     return ok(
-      this.service.updateAnswer(
-        testId,
-        questionId,
-        answerId,
-        dto,
-        req.user,
-      ),
+      this.service.updateAnswer(testId, questionId, answerId, dto, req.user),
     );
   }
 

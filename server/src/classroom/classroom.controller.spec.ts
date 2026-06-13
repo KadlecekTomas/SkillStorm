@@ -2,6 +2,9 @@ import { Test } from '@nestjs/testing';
 import { SchoolGrade, SystemRole } from '@prisma/client';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { PrismaService } from '@/prisma/prisma.service';
+import { AcademicYearsService } from '@/academic-years/academic-years.service';
+import { AcademicYearCacheRef } from '@/common/year-cache/academic-year-cache.ref';
+import { OrgContextService } from '@/common/org-context/org-context.service';
 import type { RequestWithUser } from '@/types/request-with-user';
 import { ClassSectionsController } from './class-sections.controller';
 import { ClassSectionsService } from './class-sections.service';
@@ -21,13 +24,27 @@ describe('ClassSectionsController', () => {
     setHomeroom: jest.fn(),
   };
 
+  // Controller resolves the active academic year through OrgContextService and
+  // injects it into the service call; tests need a functional get().
+  const mockOrgContext = { get: jest.fn() };
+
   beforeEach(async () => {
+    // Re-applied each test because afterEach(resetAllMocks) clears implementations.
+    mockOrgContext.get.mockResolvedValue({
+      organizationId: 'org-1',
+      activeAcademicYearId: 'year-1',
+    });
+
     const module = await Test.createTestingModule({
       controllers: [ClassSectionsController],
       providers: [
         { provide: ClassSectionsService, useValue: mockService },
         { provide: PrismaService, useValue: {} },
         { provide: CACHE_MANAGER, useValue: {} },
+        // Required by RequireCurrentAcademicYearGuard / AcademicYearExpiredGuard.
+        { provide: AcademicYearsService, useValue: {} },
+        AcademicYearCacheRef,
+        { provide: OrgContextService, useValue: mockOrgContext },
       ],
     }).compile();
 
@@ -57,8 +74,13 @@ describe('ClassSectionsController', () => {
     } as RequestWithUser;
 
     const res = await controller.create(dto, req);
-    expect(service.create).toHaveBeenCalledWith(dto, req.user);
-    expect(res).toEqual({ success: true, data: created });
+    // Controller injects the active academic year resolved from OrgContext.
+    expect(service.create).toHaveBeenCalledWith(
+      { ...dto, yearId: 'year-1', academicYearId: 'year-1' },
+      req.user,
+    );
+    if (!res.success) throw new Error('expected a success envelope');
+    expect(await res.data).toEqual(created);
   });
 
   it('findAll() vrací list', async () => {
@@ -74,7 +96,12 @@ describe('ClassSectionsController', () => {
 
     mockService.findAll.mockResolvedValue([{ id: 'cls-1' }]);
     const res = await controller.findAll(req, query);
-    expect(service.findAll).toHaveBeenCalledWith(query, req.user);
-    expect(res).toEqual({ success: true, data: [{ id: 'cls-1' }] });
+    // Empty query → controller falls back to the active academic year.
+    expect(service.findAll).toHaveBeenCalledWith(
+      { ...query, yearId: 'year-1', academicYearId: 'year-1' },
+      req.user,
+    );
+    if (!res.success) throw new Error('expected a success envelope');
+    expect(await res.data).toEqual([{ id: 'cls-1' }]);
   });
 });

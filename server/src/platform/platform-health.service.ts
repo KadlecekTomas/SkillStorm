@@ -174,7 +174,11 @@ function clamp01(x: number): number {
 }
 
 /** Extracts non-PII error metadata for structured logging. */
-function safeError(err: unknown): { name: string; message: string; stackTop: string } {
+function safeError(err: unknown): {
+  name: string;
+  message: string;
+  stackTop: string;
+} {
   if (err instanceof Error) {
     return {
       name: err.name,
@@ -211,7 +215,9 @@ function buildRawFromWindow(
 
   // Smoothed Laplace completion: denominator >= 10, so div-by-zero is impossible,
   // but safeDivide + clamp01 guard against any future NaN path.
-  const completionSmoothed = clamp01(safeDivide(approvedSubs + 5, totalSubs + 10));
+  const completionSmoothed = clamp01(
+    safeDivide(approvedSubs + 5, totalSubs + 10),
+  );
   const inviteConversion = clamp01(safeDivide(inv.used, inv.max));
 
   return {
@@ -236,11 +242,41 @@ function buildBreakdown(raw: OrgHealthRaw): HealthMetric[] {
     cap: number;
     weight: number;
   }> = [
-    { key: 'teacherActivity', label: 'Teacher activity (creators)', raw: raw.activeCreators30d, cap: caps.teacher, weight: 0.3 },
-    { key: 'studentActivity', label: 'Student activity (submitters)', raw: raw.activeSubmitters30d, cap: caps.student, weight: 0.25 },
-    { key: 'contentVelocity', label: 'Tests created (30 d)', raw: raw.testsCreated30d, cap: caps.tests, weight: 0.15 },
-    { key: 'completionQuality', label: 'Completion quality (smoothed)', raw: Math.round(raw.completionSmoothed30d * 100) / 100, cap: 1, weight: 0.2 },
-    { key: 'onboarding', label: 'Invite conversion', raw: Math.round(raw.inviteConversion30d * 100) / 100, cap: 1, weight: 0.1 },
+    {
+      key: 'teacherActivity',
+      label: 'Teacher activity (creators)',
+      raw: raw.activeCreators30d,
+      cap: caps.teacher,
+      weight: 0.3,
+    },
+    {
+      key: 'studentActivity',
+      label: 'Student activity (submitters)',
+      raw: raw.activeSubmitters30d,
+      cap: caps.student,
+      weight: 0.25,
+    },
+    {
+      key: 'contentVelocity',
+      label: 'Tests created (30 d)',
+      raw: raw.testsCreated30d,
+      cap: caps.tests,
+      weight: 0.15,
+    },
+    {
+      key: 'completionQuality',
+      label: 'Completion quality (smoothed)',
+      raw: Math.round(raw.completionSmoothed30d * 100) / 100,
+      cap: 1,
+      weight: 0.2,
+    },
+    {
+      key: 'onboarding',
+      label: 'Invite conversion',
+      raw: Math.round(raw.inviteConversion30d * 100) / 100,
+      cap: 1,
+      weight: 0.1,
+    },
   ];
 
   return defs.map((m) => {
@@ -253,7 +289,9 @@ function buildBreakdown(raw: OrgHealthRaw): HealthMetric[] {
       cap: m.cap,
       normalized: Math.round(normalized * 100) / 100,
       weight: m.weight,
-      contribution: Number.isFinite(contribution) ? Math.round(contribution * 100) / 100 : 0,
+      contribution: Number.isFinite(contribution)
+        ? Math.round(contribution * 100) / 100
+        : 0,
     };
   });
 }
@@ -316,7 +354,8 @@ function buildRecommendations(
   if (raw.activeCreators30d === 0) codes.push('NO_TEACHER_ACTIVITY');
   if (raw.activeSubmitters30d === 0) codes.push('NO_STUDENT_ACTIVITY');
   if (raw.testsCreated30d === 0) codes.push('NO_NEW_CONTENT');
-  if (raw.inviteConversion30d < 0.2 && invitesCreated30d > 5) codes.push('LOW_INVITE_CONVERSION');
+  if (raw.inviteConversion30d < 0.2 && invitesCreated30d > 5)
+    codes.push('LOW_INVITE_CONVERSION');
   if (score < 40) codes.push('AT_RISK');
 
   return codes.map((code) => {
@@ -401,12 +440,14 @@ export class PlatformHealthService {
     }
 
     // Inline warn-and-fallback helpers (no PII in log — only metric name).
-    const countFallback = (metric: string) => (err: unknown): OrgCountRow[] => {
-      this.logger.warn(
-        `PLATFORM_HEALTH_QUERY_FAILED metric=${metric} ${safeError(err).message}`,
-      );
-      return [];
-    };
+    const countFallback =
+      (metric: string) =>
+      (err: unknown): OrgCountRow[] => {
+        this.logger.warn(
+          `PLATFORM_HEALTH_QUERY_FAILED metric=${metric} ${safeError(err).message}`,
+        );
+        return [];
+      };
     const inviteFallback = (err: unknown): OrgInviteRow[] => {
       this.logger.warn(
         `PLATFORM_HEALTH_QUERY_FAILED metric=invites ${safeError(err).message}`,
@@ -414,9 +455,16 @@ export class PlatformHealthService {
       return [];
     };
 
-    const [creatorRows, graderRows, submitterRows, testRows, totalSubRows, approvedSubRows, inviteRows] =
-      await Promise.all([
-        this.prisma.$queryRaw<OrgCountRow[]>`
+    const [
+      creatorRows,
+      graderRows,
+      submitterRows,
+      testRows,
+      totalSubRows,
+      approvedSubRows,
+      inviteRows,
+    ] = await Promise.all([
+      this.prisma.$queryRaw<OrgCountRow[]>`
           SELECT organization_id, COUNT(DISTINCT creator_id)::int AS count
           FROM tests
           WHERE organization_id = ANY(${orgIds}::text[])
@@ -425,7 +473,7 @@ export class PlatformHealthService {
           GROUP BY organization_id
         `.catch(countFallback('creators')),
 
-        this.prisma.$queryRaw<OrgCountRow[]>`
+      this.prisma.$queryRaw<OrgCountRow[]>`
           SELECT organization_id, COUNT(DISTINCT created_by_id)::int AS count
           FROM assignments
           WHERE organization_id = ANY(${orgIds}::text[])
@@ -433,7 +481,7 @@ export class PlatformHealthService {
           GROUP BY organization_id
         `.catch(countFallback('graders')),
 
-        this.prisma.$queryRaw<OrgCountRow[]>`
+      this.prisma.$queryRaw<OrgCountRow[]>`
           SELECT organization_id, COUNT(DISTINCT student_id)::int AS count
           FROM submissions
           WHERE organization_id = ANY(${orgIds}::text[])
@@ -442,7 +490,7 @@ export class PlatformHealthService {
           GROUP BY organization_id
         `.catch(countFallback('submitters')),
 
-        this.prisma.$queryRaw<OrgCountRow[]>`
+      this.prisma.$queryRaw<OrgCountRow[]>`
           SELECT organization_id, COUNT(*)::bigint AS count
           FROM tests
           WHERE organization_id = ANY(${orgIds}::text[])
@@ -451,7 +499,7 @@ export class PlatformHealthService {
           GROUP BY organization_id
         `.catch(countFallback('testsCreated')),
 
-        this.prisma.$queryRaw<OrgCountRow[]>`
+      this.prisma.$queryRaw<OrgCountRow[]>`
           SELECT organization_id, COUNT(*)::bigint AS count
           FROM submissions
           WHERE organization_id = ANY(${orgIds}::text[])
@@ -460,7 +508,7 @@ export class PlatformHealthService {
           GROUP BY organization_id
         `.catch(countFallback('totalSubs')),
 
-        this.prisma.$queryRaw<OrgCountRow[]>`
+      this.prisma.$queryRaw<OrgCountRow[]>`
           SELECT organization_id, COUNT(*)::bigint AS count
           FROM submissions
           WHERE organization_id = ANY(${orgIds}::text[])
@@ -470,7 +518,7 @@ export class PlatformHealthService {
           GROUP BY organization_id
         `.catch(countFallback('approvedSubs')),
 
-        this.prisma.$queryRaw<OrgInviteRow[]>`
+      this.prisma.$queryRaw<OrgInviteRow[]>`
           SELECT organization_id,
                  COALESCE(SUM(used_count), 0)::bigint AS used,
                  COALESCE(SUM(max_uses), 0)::bigint   AS max_uses,
@@ -480,7 +528,7 @@ export class PlatformHealthService {
             AND created_at >= ${from} AND created_at < ${to}
           GROUP BY organization_id
         `.catch(inviteFallback),
-      ]);
+    ]);
 
     // Pre-initialise maps to 0 for every requested orgId so lookups are always
     // defined even for orgs that have no activity in this window.
@@ -496,15 +544,24 @@ export class PlatformHealthService {
     const testsCreated = initCountMap();
     const totalSubs = initCountMap();
     const approvedSubs = initCountMap();
-    const invites = new Map<string, { used: number; max: number; count: number }>();
+    const invites = new Map<
+      string,
+      { used: number; max: number; count: number }
+    >();
     for (const id of orgIds) invites.set(id, { used: 0, max: 0, count: 0 });
 
-    for (const r of creatorRows) creators.set(r.organization_id, toNumber(r.count));
-    for (const r of graderRows) graders.set(r.organization_id, toNumber(r.count));
-    for (const r of submitterRows) submitters.set(r.organization_id, toNumber(r.count));
-    for (const r of testRows) testsCreated.set(r.organization_id, toNumber(r.count));
-    for (const r of totalSubRows) totalSubs.set(r.organization_id, toNumber(r.count));
-    for (const r of approvedSubRows) approvedSubs.set(r.organization_id, toNumber(r.count));
+    for (const r of creatorRows)
+      creators.set(r.organization_id, toNumber(r.count));
+    for (const r of graderRows)
+      graders.set(r.organization_id, toNumber(r.count));
+    for (const r of submitterRows)
+      submitters.set(r.organization_id, toNumber(r.count));
+    for (const r of testRows)
+      testsCreated.set(r.organization_id, toNumber(r.count));
+    for (const r of totalSubRows)
+      totalSubs.set(r.organization_id, toNumber(r.count));
+    for (const r of approvedSubRows)
+      approvedSubs.set(r.organization_id, toNumber(r.count));
     for (const r of inviteRows) {
       invites.set(r.organization_id, {
         used: toNumber(r.used),
@@ -513,7 +570,15 @@ export class PlatformHealthService {
       });
     }
 
-    return { creators, graders, submitters, testsCreated, totalSubs, approvedSubs, invites };
+    return {
+      creators,
+      graders,
+      submitters,
+      testsCreated,
+      totalSubs,
+      approvedSubs,
+      invites,
+    };
   }
 
   /**
@@ -536,29 +601,55 @@ export class PlatformHealthService {
     });
 
     try {
-      const [creatorRows, graderRows, submitterRows, testsCount, totalSubsCount, approvedSubsCount, inviteAgg] =
-        await Promise.all([
-          this.prisma.$queryRaw<OrgCountRow[]>`
+      const [
+        creatorRows,
+        graderRows,
+        submitterRows,
+        testsCount,
+        totalSubsCount,
+        approvedSubsCount,
+        inviteAgg,
+      ] = await Promise.all([
+        this.prisma.$queryRaw<OrgCountRow[]>`
             SELECT COUNT(DISTINCT creator_id)::int AS count FROM tests
             WHERE organization_id = ${orgId}::text AND created_at >= ${from} AND created_at < ${to} AND deleted_at IS NULL
           `,
-          this.prisma.$queryRaw<OrgCountRow[]>`
+        this.prisma.$queryRaw<OrgCountRow[]>`
             SELECT COUNT(DISTINCT created_by_id)::int AS count FROM assignments
             WHERE organization_id = ${orgId}::text AND created_at >= ${from} AND created_at < ${to}
           `,
-          this.prisma.$queryRaw<OrgCountRow[]>`
+        this.prisma.$queryRaw<OrgCountRow[]>`
             SELECT COUNT(DISTINCT student_id)::int AS count FROM submissions
             WHERE organization_id = ${orgId}::text AND created_at >= ${from} AND created_at < ${to} AND deleted_at IS NULL
           `,
-          this.prisma.test.count({ where: { organizationId: orgId, createdAt: { gte: from, lt: to }, deletedAt: null } }),
-          this.prisma.submission.count({ where: { organizationId: orgId, createdAt: { gte: from, lt: to }, deletedAt: null } }),
-          this.prisma.submission.count({ where: { organizationId: orgId, status: 'APPROVED', createdAt: { gte: from, lt: to }, deletedAt: null } }),
-          this.prisma.invite.aggregate({
-            where: { organizationId: orgId, createdAt: { gte: from, lt: to } },
-            _sum: { usedCount: true, maxUses: true },
-            _count: { id: true },
-          }),
-        ]);
+        this.prisma.test.count({
+          where: {
+            organizationId: orgId,
+            createdAt: { gte: from, lt: to },
+            deletedAt: null,
+          },
+        }),
+        this.prisma.submission.count({
+          where: {
+            organizationId: orgId,
+            createdAt: { gte: from, lt: to },
+            deletedAt: null,
+          },
+        }),
+        this.prisma.submission.count({
+          where: {
+            organizationId: orgId,
+            status: 'APPROVED',
+            createdAt: { gte: from, lt: to },
+            deletedAt: null,
+          },
+        }),
+        this.prisma.invite.aggregate({
+          where: { organizationId: orgId, createdAt: { gte: from, lt: to } },
+          _sum: { usedCount: true, maxUses: true },
+          _count: { id: true },
+        }),
+      ]);
 
       const inv = {
         used: toNumber(inviteAgg._sum.usedCount),
@@ -576,7 +667,9 @@ export class PlatformHealthService {
         invites: new Map([[orgId, inv]]),
       };
     } catch (err) {
-      this.logger.warn(`PLATFORM_HEALTH_SINGLE_QUERY_FAILED: ${safeError(err).message}`);
+      this.logger.warn(
+        `PLATFORM_HEALTH_SINGLE_QUERY_FAILED: ${safeError(err).message}`,
+      );
       return zero();
     }
   }
@@ -596,15 +689,17 @@ export class PlatformHealthService {
    *
    * Results are cached for CACHE_TTL_MS (5 min). Pass nocache=true to bypass.
    */
-  async computePlatformOverview(nocache = false): Promise<PlatformAnalyticsOverview> {
+  async computePlatformOverview(
+    nocache = false,
+  ): Promise<PlatformAnalyticsOverview> {
     const now = Date.now();
     if (!nocache && this.overviewCache && this.overviewCache.expiresAt > now) {
       return this.overviewCache.data;
     }
 
     const nowDate = new Date();
-    const cutoffA = subDays(nowDate, 30);  // windowA: last 30d
-    const cutoffB = subDays(nowDate, 60);  // windowB: prev 30d
+    const cutoffA = subDays(nowDate, 30); // windowA: last 30d
+    const cutoffB = subDays(nowDate, 60); // windowB: prev 30d
 
     // `totalOrganizations` is hoisted so the catch block can include it in the
     // fallback response even if only the org query succeeded before failure.
@@ -621,7 +716,13 @@ export class PlatformHealthService {
         this.prisma.membership.groupBy({
           by: ['organizationId', 'role'],
           where: {
-            role: { in: [OrganizationRole.TEACHER, OrganizationRole.DIRECTOR, OrganizationRole.STUDENT] },
+            role: {
+              in: [
+                OrganizationRole.TEACHER,
+                OrganizationRole.DIRECTOR,
+                OrganizationRole.STUDENT,
+              ],
+            },
             deletedAt: null,
           },
           _count: { id: true },
@@ -632,7 +733,10 @@ export class PlatformHealthService {
 
       if (activeOrgs.length === 0) {
         const result = this.emptyOverview(totalOrganizations);
-        this.overviewCache = { data: result, expiresAt: now + this.CACHE_TTL_MS };
+        this.overviewCache = {
+          data: result,
+          expiresAt: now + this.CACHE_TTL_MS,
+        };
         return result;
       }
 
@@ -648,9 +752,15 @@ export class PlatformHealthService {
       for (const r of membershipCountRows) {
         if (!orgIds.includes(r.organizationId)) continue;
         if (r.role === OrganizationRole.STUDENT) {
-          studentMap.set(r.organizationId, (studentMap.get(r.organizationId) ?? 0) + r._count.id);
+          studentMap.set(
+            r.organizationId,
+            (studentMap.get(r.organizationId) ?? 0) + r._count.id,
+          );
         } else {
-          teacherMap.set(r.organizationId, (teacherMap.get(r.organizationId) ?? 0) + r._count.id);
+          teacherMap.set(
+            r.organizationId,
+            (teacherMap.get(r.organizationId) ?? 0) + r._count.id,
+          );
         }
       }
 
@@ -707,13 +817,18 @@ export class PlatformHealthService {
 
       const averageHealthScore =
         orgSummaries.length > 0
-          ? Math.round(orgSummaries.reduce((s, o) => s + o.score, 0) / orgSummaries.length)
+          ? Math.round(
+              orgSummaries.reduce((s, o) => s + o.score, 0) /
+                orgSummaries.length,
+            )
           : 0;
 
       const result: PlatformAnalyticsOverview = {
         totalOrganizations,
         activeOrganizationsLast30Days,
-        averageHealthScore: Number.isFinite(averageHealthScore) ? averageHealthScore : 0,
+        averageHealthScore: Number.isFinite(averageHealthScore)
+          ? averageHealthScore
+          : 0,
         lowHealthOrganizations: [...orgSummaries]
           .filter((o) => o.score < 40)
           .reverse()
@@ -760,7 +875,13 @@ export class PlatformHealthService {
         where: {
           organizationId: orgId,
           deletedAt: null,
-          role: { in: [OrganizationRole.TEACHER, OrganizationRole.DIRECTOR, OrganizationRole.STUDENT] },
+          role: {
+            in: [
+              OrganizationRole.TEACHER,
+              OrganizationRole.DIRECTOR,
+              OrganizationRole.STUDENT,
+            ],
+          },
         },
         _count: { id: true },
       }),
@@ -792,7 +913,12 @@ export class PlatformHealthService {
       const scoreA = computeHealthScore(bdA);
 
       const invCount = wA.invites.get(orgId)?.count ?? 0;
-      const recommendations = buildRecommendations(rawA, scoreA, invCount, orgId);
+      const recommendations = buildRecommendations(
+        rawA,
+        scoreA,
+        invCount,
+        orgId,
+      );
       const trend = buildTrend(orgId, sizes, wA, wB, scoreA);
 
       return {
@@ -841,10 +967,22 @@ export class PlatformHealthService {
         score: 0,
         deltaScore: 0,
         trendLabel: 'FLAT',
-        signals: { totalTeachers, totalStudents, activeCreators30d: 0, activeGraders30d: 0, activeSubmitters30d: 0, testsCreated30d: 0 },
+        signals: {
+          totalTeachers,
+          totalStudents,
+          activeCreators30d: 0,
+          activeGraders30d: 0,
+          activeSubmitters30d: 0,
+          testsCreated30d: 0,
+        },
         raw: zeroRaw,
         breakdown: zeroBd,
-        trend: { scorePrev30d: 0, deltaScore: 0, trendLabel: 'FLAT', metrics: {} },
+        trend: {
+          scorePrev30d: 0,
+          deltaScore: 0,
+          trendLabel: 'FLAT',
+          metrics: {},
+        },
         recommendations: buildRecommendations(zeroRaw, 0, 0, orgId),
       };
     }

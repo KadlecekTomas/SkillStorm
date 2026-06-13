@@ -12,15 +12,14 @@ import { Prisma } from '@prisma/client';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
-import {
-  AuditEntityType,
-  SubmissionStatus,
-  XpEventType,
-} from '@prisma/client';
+import { AuditEntityType, SubmissionStatus, XpEventType } from '@prisma/client';
 import { computeScore } from './submission-scoring';
 import { PrismaService } from '@/prisma/prisma.service';
 import { assertSameOrganizationIds } from '@/shared/access.utils';
-import { deriveOrgReadiness, OrgReadinessState } from '@/shared/org-readiness-v2';
+import {
+  deriveOrgReadiness,
+  OrgReadinessState,
+} from '@/shared/org-readiness-v2';
 import { createOrgReadinessError } from '@/shared/errors/org-readiness.error';
 import { OrgOperationType } from '@/common/decorators/org-operation.decorator';
 import { GamificationService } from '@/gamification/gamification.service';
@@ -261,7 +260,10 @@ export class SubmissionsService {
     }
 
     // 1b) Org readiness >= R2 (invariant)
-    const readiness = await deriveOrgReadiness(this.prisma, assignment.organizationId);
+    const readiness = await deriveOrgReadiness(
+      this.prisma,
+      assignment.organizationId,
+    );
     if (!readiness.canExecute) {
       throw createOrgReadinessError({
         operationType: OrgOperationType.EXECUTION,
@@ -322,7 +324,10 @@ export class SubmissionsService {
     // 5) okno otevření + academic year boundary
     const now = new Date();
     if (assignment.academicYear) {
-      if (now < assignment.academicYear.startsAt || now > assignment.academicYear.endsAt) {
+      if (
+        now < assignment.academicYear.startsAt ||
+        now > assignment.academicYear.endsAt
+      ) {
         throw new BadRequestException({
           code: 'YEAR_WINDOW_CLOSED',
           message: 'Odevzdání není možné mimo rozsah školního roku.',
@@ -369,10 +374,7 @@ export class SubmissionsService {
       );
       return created;
     } catch (e) {
-      if (
-        e instanceof PrismaClientKnownRequestError &&
-        e.code === 'P2002'
-      ) {
+      if (e instanceof PrismaClientKnownRequestError && e.code === 'P2002') {
         const existing = await this.prisma.submission.findFirst({
           where: {
             organizationId: assignment.organizationId,
@@ -436,7 +438,9 @@ export class SubmissionsService {
         where: { id: submission.testId },
         select: { questions: { select: { id: true } } },
       });
-      const validQuestionIds = new Set((test?.questions ?? []).map((q) => q.id));
+      const validQuestionIds = new Set(
+        (test?.questions ?? []).map((q) => q.id),
+      );
 
       for (const r of list) {
         if (!validQuestionIds.has(r.questionId)) {
@@ -498,7 +502,9 @@ export class SubmissionsService {
             organizationId: true,
             closeAt: true,
             openAt: true,
-            academicYear: { select: { id: true, startsAt: true, endsAt: true } },
+            academicYear: {
+              select: { id: true, startsAt: true, endsAt: true },
+            },
           },
         },
         student: { select: { id: true, organizationId: true } },
@@ -560,7 +566,12 @@ export class SubmissionsService {
         where: { id },
         include: {
           assignment: {
-            select: { id: true, organizationId: true, closeAt: true, openAt: true },
+            select: {
+              id: true,
+              organizationId: true,
+              closeAt: true,
+              openAt: true,
+            },
           },
           responses: { select: { id: true, questionId: true } },
           test: {
@@ -581,7 +592,8 @@ export class SubmissionsService {
           },
         },
       });
-      if (!locked || !locked.assignment) throw new NotFoundException('Submission nenalezena');
+      if (!locked || !locked.assignment)
+        throw new NotFoundException('Submission nenalezena');
       if (locked.submittedAt) return locked;
 
       if (incoming.length > 0) {
@@ -592,7 +604,9 @@ export class SubmissionsService {
           if (!validQuestionIds.has(r.questionId)) {
             throw new BadRequestException('Nevalidní questionId');
           }
-          const existing = locked.responses.find((x) => x.questionId === r.questionId);
+          const existing = locked.responses.find(
+            (x) => x.questionId === r.questionId,
+          );
           if (existing) {
             await tx.response.update({
               where: { id: existing.id },
@@ -657,9 +671,9 @@ export class SubmissionsService {
           const q = questionMap.get(item.questionId);
           const correctAnswerSnapshot = q
             ? (q.correctAnswer ??
-               (Array.isArray(q.correctAnswers) && q.correctAnswers.length > 0
-                 ? JSON.stringify(q.correctAnswers)
-                 : null))
+              (Array.isArray(q.correctAnswers) && q.correctAnswers.length > 0
+                ? JSON.stringify(q.correctAnswers)
+                : null))
             : null;
           const maxPoints = q?.score ?? 1;
           await tx.response.update({
@@ -776,10 +790,13 @@ export class SubmissionsService {
     const limit = Math.min(100, Math.max(1, paging?.limit ?? 50));
     const skip = (page - 1) * limit;
 
-    const where: Prisma.SubmissionWhereInput = withOrg({
-      deletedAt: null,
-      ...(filter.assignmentId ? { assignmentId: filter.assignmentId } : {}),
-    }, ctx.organizationId);
+    const where: Prisma.SubmissionWhereInput = withOrg(
+      {
+        deletedAt: null,
+        ...(filter.assignmentId ? { assignmentId: filter.assignmentId } : {}),
+      },
+      ctx.organizationId,
+    );
     assertTenantWhere(where as Record<string, unknown>, ctx.organizationId);
 
     if (role === 'TEACHER') {
@@ -914,10 +931,7 @@ export class SubmissionsService {
       }
     }
 
-    if (
-      role === 'STUDENT' &&
-      submission.studentId !== membership.id
-    ) {
+    if (role === 'STUDENT' && submission.studentId !== membership.id) {
       throw new ForbiddenException('Access denied');
     }
 
@@ -926,7 +940,8 @@ export class SubmissionsService {
         where: { membershipId: membership.id, deletedAt: null },
         select: { id: true },
       });
-      const createdByTeacher = submission.assignment?.createdById === membership.id;
+      const createdByTeacher =
+        submission.assignment?.createdById === membership.id;
       let homeroomMatch = false;
       if (teacher && submission.assignment?.classSectionId) {
         const cls = await this.prisma.classSection.findFirst({

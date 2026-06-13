@@ -57,10 +57,12 @@ export class ApplicationReadinessGuard implements CanActivate {
       });
     }
 
-    const currentCount = await this.accessPolicy.countCurrentAcademicYears(orgId);
+    const currentCount =
+      await this.accessPolicy.countCurrentAcademicYears(orgId);
     if (currentCount === 0) {
       throw new ConflictException({
-        message: 'Current academic year is not configured for this organization.',
+        message:
+          'Current academic year is not configured for this organization.',
         meta: {
           code: READINESS_ERROR_CODES.NO_CURRENT_ACADEMIC_YEAR,
           deprecatedCode: READINESS_ERROR_CODES.NO_ACTIVE_ACADEMIC_YEAR,

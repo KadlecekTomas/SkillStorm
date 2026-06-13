@@ -50,12 +50,18 @@ export class PrismaService extends PrismaClient {
       }
 
       // Field allowlist: only PII fields may be set, and only to null.
-      const RETENTION_ALLOWED_FIELDS = new Set(['userId', 'ipAddress', 'userAgent']);
+      const RETENTION_ALLOWED_FIELDS = new Set([
+        'userId',
+        'ipAddress',
+        'userAgent',
+      ]);
       const data =
         (params.args as { data?: Record<string, unknown> })?.data ?? {};
       const dataKeys = Object.keys(data);
 
-      const forbidden = dataKeys.filter((k) => !RETENTION_ALLOWED_FIELDS.has(k));
+      const forbidden = dataKeys.filter(
+        (k) => !RETENTION_ALLOWED_FIELDS.has(k),
+      );
       if (forbidden.length > 0) {
         throw new Error(
           `AuditLog retention updateMany: forbidden field(s) [${forbidden.join(', ')}]. ` +

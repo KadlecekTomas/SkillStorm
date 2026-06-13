@@ -31,7 +31,8 @@ export class QuerySubjectsDto {
 
   @ApiPropertyOptional({
     example: false,
-    description: 'When true, includes inactive subjects. Default: false (active only).',
+    description:
+      'When true, includes inactive subjects. Default: false (active only).',
   })
   @IsOptional()
   @Transform(({ value }) => value === 'true' || value === true)
@@ -40,7 +41,8 @@ export class QuerySubjectsDto {
   @ApiPropertyOptional({
     enum: SchoolGrade,
     example: 'GRADE_5',
-    description: 'Filter to subjects with an enabled SubjectLevel for the given grade.',
+    description:
+      'Filter to subjects with an enabled SubjectLevel for the given grade.',
   })
   @IsOptional()
   @IsEnum(SchoolGrade)

@@ -18,7 +18,7 @@ export type TestTimelineProps = {
   items: TestTimelineItem[];
 };
 
-export function TestTimeline({ items }: TestTimelineProps) {
+export function TestTimeline({ items }: TestTimelineProps): React.JSX.Element {
   if (items.length === 0) {
     return (
       <Card className="rounded-2xl border border-slate-200 p-6">

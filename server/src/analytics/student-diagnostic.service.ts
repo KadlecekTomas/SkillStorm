@@ -5,7 +5,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { EnrollmentStatus, Prisma, SystemRole } from '@prisma/client';
+import { SystemRole } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
 import type { JwtPayload } from '@/auth/types/jwt-payload';
 import { buildCompletedStudentSubmissionWhere } from '@/student/student-analytics-query.util';
@@ -79,19 +79,17 @@ export function buildStudentDiagnosticFromRecords(
 
   for (const record of records) {
     const topicKey = `${record.subjectId}::${record.topicId}`;
-    const bucket =
-      topicBuckets.get(topicKey) ??
-      {
-        topicId: record.topicId,
-        topic: record.topicName,
-        subjectId: record.subjectId,
-        subject: record.subjectName,
-        totalAnswers: 0,
-        correctAnswers: 0,
-        wrongAnswers: 0,
-        sampleMistakes: [],
-        wrongQuestions: new Map<string, WrongQuestionBucket>(),
-      };
+    const bucket = topicBuckets.get(topicKey) ?? {
+      topicId: record.topicId,
+      topic: record.topicName,
+      subjectId: record.subjectId,
+      subject: record.subjectName,
+      totalAnswers: 0,
+      correctAnswers: 0,
+      wrongAnswers: 0,
+      sampleMistakes: [],
+      wrongQuestions: new Map<string, WrongQuestionBucket>(),
+    };
 
     bucket.totalAnswers += 1;
     if (record.isCorrect) {
@@ -105,13 +103,11 @@ export function buildStudentDiagnosticFromRecords(
         correctAnswer: record.correctAnswer,
         attemptedAt: record.attemptedAt,
       });
-      const wrongQuestion =
-        bucket.wrongQuestions.get(record.questionId) ??
-        {
-          questionId: record.questionId,
-          questionText: record.questionText,
-          wrongCount: 0,
-        };
+      const wrongQuestion = bucket.wrongQuestions.get(record.questionId) ?? {
+        questionId: record.questionId,
+        questionText: record.questionText,
+        wrongCount: 0,
+      };
       wrongQuestion.wrongCount += 1;
       bucket.wrongQuestions.set(record.questionId, wrongQuestion);
     }
@@ -145,17 +141,19 @@ export function buildStudentDiagnosticFromRecords(
         .slice(0, MAX_SAMPLE_MISTAKES),
       repeatedlyWrongQuestions: Array.from(bucket.wrongQuestions.values())
         .filter((question) => question.wrongCount > 1)
-        .sort((a, b) => b.wrongCount - a.wrongCount || a.questionText.localeCompare(b.questionText))
+        .sort(
+          (a, b) =>
+            b.wrongCount - a.wrongCount ||
+            a.questionText.localeCompare(b.questionText),
+        )
         .slice(0, MAX_REPEATED_QUESTIONS),
     };
 
-    const subjectBucket =
-      subjectBuckets.get(bucket.subjectId) ??
-      {
-        subjectId: bucket.subjectId,
-        subject: bucket.subject,
-        topics: [],
-      };
+    const subjectBucket = subjectBuckets.get(bucket.subjectId) ?? {
+      subjectId: bucket.subjectId,
+      subject: bucket.subject,
+      topics: [],
+    };
     subjectBucket.topics.push(topic);
     subjectBuckets.set(bucket.subjectId, subjectBucket);
   }
@@ -165,7 +163,8 @@ export function buildStudentDiagnosticFromRecords(
       ...subjectBucket,
       topics: [...subjectBucket.topics].sort((a, b) => {
         if (a.accuracy !== b.accuracy) return a.accuracy - b.accuracy;
-        if (a.totalAnswers !== b.totalAnswers) return b.totalAnswers - a.totalAnswers;
+        if (a.totalAnswers !== b.totalAnswers)
+          return b.totalAnswers - a.totalAnswers;
         return a.topic.localeCompare(b.topic);
       }),
     }))
@@ -186,7 +185,8 @@ export function buildStudentDiagnosticFromRecords(
     .filter((topic) => topic.totalAnswers > 0)
     .sort((a, b) => {
       if (a.accuracy !== b.accuracy) return a.accuracy - b.accuracy;
-      if (a.totalAnswers !== b.totalAnswers) return b.totalAnswers - a.totalAnswers;
+      if (a.totalAnswers !== b.totalAnswers)
+        return b.totalAnswers - a.totalAnswers;
       return a.topic.localeCompare(b.topic);
     })
     .slice(0, 5);
@@ -195,10 +195,14 @@ export function buildStudentDiagnosticFromRecords(
     studentId,
     summary: {
       subjectsCount: subjects.length,
-      topicsEvaluated: subjects.reduce((sum, subject) => sum + subject.topics.length, 0),
+      topicsEvaluated: subjects.reduce(
+        (sum, subject) => sum + subject.topics.length,
+        0,
+      ),
       weakTopicsCount: subjects.reduce(
         (sum, subject) =>
-          sum + subject.topics.filter((topic) => topic.status === 'WEAK').length,
+          sum +
+          subject.topics.filter((topic) => topic.status === 'WEAK').length,
         0,
       ),
     },
@@ -237,7 +241,9 @@ export class StudentDiagnosticService {
       user.organizationId != null &&
       student.orgId !== user.organizationId
     ) {
-      throw new ForbiddenException('Nemáš oprávnění zobrazit detail tohoto žáka.');
+      throw new ForbiddenException(
+        'Nemáš oprávnění zobrazit detail tohoto žáka.',
+      );
     }
 
     if (yearId) {

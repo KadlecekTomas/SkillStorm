@@ -14,14 +14,13 @@ export class AuthCleanupService {
     const cutoff = subHours(new Date(), 24);
     const result = await this.prisma.passwordResetToken.deleteMany({
       where: {
-        OR: [
-          { expiresAt: { lt: cutoff } },
-          { usedAt: { lt: cutoff } },
-        ],
+        OR: [{ expiresAt: { lt: cutoff } }, { usedAt: { lt: cutoff } }],
       },
     });
     if (result.count > 0) {
-      this.logger.log(`Cleaned up ${result.count} expired/used password reset token(s)`);
+      this.logger.log(
+        `Cleaned up ${result.count} expired/used password reset token(s)`,
+      );
     }
   }
 }

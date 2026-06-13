@@ -48,7 +48,12 @@ type BodySummary = {
 };
 
 function summarizeBody(body: unknown): BodySummary | null {
-  if (body === null || body === undefined || typeof body !== 'object' || Array.isArray(body)) {
+  if (
+    body === null ||
+    body === undefined ||
+    typeof body !== 'object' ||
+    Array.isArray(body)
+  ) {
     return null;
   }
   const obj = body as Record<string, unknown>;
@@ -56,7 +61,9 @@ function summarizeBody(body: unknown): BodySummary | null {
   return {
     bodyKeys: keys.slice(0, 30),
     bodySize: keys.length,
-    bodyHasNested: Object.values(obj).some((v) => typeof v === 'object' && v !== null),
+    bodyHasNested: Object.values(obj).some(
+      (v) => typeof v === 'object' && v !== null,
+    ),
   };
 }
 

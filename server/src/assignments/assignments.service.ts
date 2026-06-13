@@ -4,7 +4,6 @@ import {
   BadRequestException,
   NotFoundException,
   ConflictException,
-  ForbiddenException,
   Logger,
   Inject,
 } from '@nestjs/common';
@@ -15,23 +14,24 @@ import { PrismaService } from '@/prisma/prisma.service';
 import type { Assignment, Prisma } from '@prisma/client';
 import type { CreateAssignmentDto, UpdateAssignmentDto } from './dto';
 import type { JwtPayload } from '@/auth/types/jwt-payload';
-import type { MyAssignmentDto, EffectiveAssignmentStatus } from './my-assignments.dto';
+import type {
+  MyAssignmentDto,
+  EffectiveAssignmentStatus,
+} from './my-assignments.dto';
 import { RbacService } from '@/modules/rbac/rbac.service';
 import {
   computeAssignability,
   type AssignabilityReport,
 } from '@/shared/test-assignability.util';
-import { deriveOrgReadiness, OrgReadinessState } from '@/shared/org-readiness-v2';
+import {
+  deriveOrgReadiness,
+  OrgReadinessState,
+} from '@/shared/org-readiness-v2';
 import { createOrgReadinessError } from '@/shared/errors/org-readiness.error';
 import { OrgOperationType } from '@/common/decorators/org-operation.decorator';
 import type { OrgContext } from '@/common/org-context/org-context.types';
-import {
-  assertTenantWhere,
-  withOrg,
-} from '@/common/prisma/tenant-scope';
-import {
-  invalidateResourcesFailSafe,
-} from '@/shared/cache/org-cache.utils';
+import { assertTenantWhere, withOrg } from '@/common/prisma/tenant-scope';
+import { invalidateResourcesFailSafe } from '@/shared/cache/org-cache.utils';
 
 const ALLOWED_TARGET_TYPES = new Set(['CLASS', 'STUDENTS']);
 
@@ -83,10 +83,7 @@ export class AssignmentsService {
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
   ) {}
 
-  private async invalidateAssignmentReads(
-    scopeId: string,
-    mutation: string,
-  ) {
+  private async invalidateAssignmentReads(scopeId: string, mutation: string) {
     await invalidateResourcesFailSafe(this.cache, {
       scopeId,
       resources: ['assignments', 'dashboard'],
@@ -167,12 +164,16 @@ export class AssignmentsService {
         state: readiness.state,
         missing: readiness.missing,
         requiredMinState: OrgReadinessState.R2_STRUCTURE_READY,
-        messageOverride: 'Organization must have a current year and at least one class section to create assignments.',
+        messageOverride:
+          'Organization must have a current year and at least one class section to create assignments.',
       });
     }
 
     // 4) Test v rámci org
-    const testWhere = withOrg({ id: dto.testId, deletedAt: null }, ctx.organizationId);
+    const testWhere = withOrg(
+      { id: dto.testId, deletedAt: null },
+      ctx.organizationId,
+    );
     assertTenantWhere(testWhere, ctx.organizationId);
     const test = await this.prisma.test.findFirst({
       where: testWhere,
@@ -192,7 +193,10 @@ export class AssignmentsService {
       throw new BadRequestException('Test must be published before assignment');
     }
     // Guard: test's academic year must match the current active year.
-    if (test.academicYearId && test.academicYearId !== ctx.activeAcademicYearId) {
+    if (
+      test.academicYearId &&
+      test.academicYearId !== ctx.activeAcademicYearId
+    ) {
       throw new BadRequestException({
         code: 'YEAR_MISMATCH',
         message: 'Test byl vytvořen pro jiný školní rok než je aktuální.',
@@ -258,7 +262,10 @@ export class AssignmentsService {
         if (!topicLevel) {
           throw new NotFoundException('Téma nebylo nalezeno.');
         }
-        if (!test.subjectId || topicLevel.subjectLevel.subjectId !== test.subjectId) {
+        if (
+          !test.subjectId ||
+          topicLevel.subjectLevel.subjectId !== test.subjectId
+        ) {
           throw new BadRequestException({
             code: 'TOPIC_NOT_IN_TEST_SUBJECT',
             message: 'Vybrané téma nepatří do předmětu tohoto testu.',
@@ -282,7 +289,7 @@ export class AssignmentsService {
         });
         this.logger.log(
           `[create assignment] classSectionId=${dto.classSectionId} enrolledStudentCount=${enrolledCount} ` +
-          `orgId=${ctx.organizationId}`,
+            `orgId=${ctx.organizationId}`,
         );
         if (enrolledCount === 0) {
           throw new BadRequestException({
@@ -335,7 +342,12 @@ export class AssignmentsService {
     }
 
     // 9) Vytvoření assignmentu (studentIds nejsou sloupec assignmentu)
-    const { academicYearId: _ignoredYearId, studentIds, createdById: _ignoredCreatedBy, ...rest } = dto;
+    const {
+      academicYearId: _ignoredYearId,
+      studentIds,
+      createdById: _ignoredCreatedBy,
+      ...rest
+    } = dto;
     void _ignoredYearId;
     void _ignoredCreatedBy;
     const yearId = ctx.activeAcademicYearId;
@@ -351,7 +363,10 @@ export class AssignmentsService {
           },
         },
       });
-      await this.invalidateAssignmentReads(ctx.organizationId, 'assignments.create');
+      await this.invalidateAssignmentReads(
+        ctx.organizationId,
+        'assignments.create',
+      );
       return created;
     } else {
       const { studentIds: _unused } = dto;
@@ -364,7 +379,10 @@ export class AssignmentsService {
           yearId,
         },
       });
-      await this.invalidateAssignmentReads(ctx.organizationId, 'assignments.create');
+      await this.invalidateAssignmentReads(
+        ctx.organizationId,
+        'assignments.create',
+      );
       return created;
     }
   }
@@ -401,9 +419,21 @@ export class AssignmentsService {
       return { viewOrg: false, viewClass: false, viewOwn: false };
     }
     const [viewOrg, viewClass, viewOwn] = await Promise.all([
-      this.rbac.canUser(userId, organizationId, PermissionKey.VIEW_ORG_ASSIGNMENTS),
-      this.rbac.canUser(userId, organizationId, PermissionKey.VIEW_CLASS_ASSIGNMENTS),
-      this.rbac.canUser(userId, organizationId, PermissionKey.VIEW_OWN_ASSIGNMENTS),
+      this.rbac.canUser(
+        userId,
+        organizationId,
+        PermissionKey.VIEW_ORG_ASSIGNMENTS,
+      ),
+      this.rbac.canUser(
+        userId,
+        organizationId,
+        PermissionKey.VIEW_CLASS_ASSIGNMENTS,
+      ),
+      this.rbac.canUser(
+        userId,
+        organizationId,
+        PermissionKey.VIEW_OWN_ASSIGNMENTS,
+      ),
     ]);
     return { viewOrg, viewClass, viewOwn };
   }
@@ -462,12 +492,22 @@ export class AssignmentsService {
   }
 
   // ------- UPDATE ------------------------------------------------------------
-  async update(id: string, dto: UpdateAssignmentDto, ctx: OrgContext): Promise<Assignment> {
+  async update(
+    id: string,
+    dto: UpdateAssignmentDto,
+    ctx: OrgContext,
+  ): Promise<Assignment> {
     const current = await this.findOneOrThrowScoped(id, ctx);
 
     // Nepovoluj měnit identitu/kontext assignmentu,
     // držíme to jednoduché a bezpečné (není požadavek to dynamicky migrovat).
-    if (dto.organizationId || dto.academicYearId || dto.testId || dto.createdById || dto.studentIds) {
+    if (
+      dto.organizationId ||
+      dto.academicYearId ||
+      dto.testId ||
+      dto.createdById ||
+      dto.studentIds
+    ) {
       throw new BadRequestException(
         'Pole organizationId/academicYearId/testId/createdById/studentIds nelze měnit PATCHem',
       );
@@ -534,14 +574,20 @@ export class AssignmentsService {
       where: { id },
       data,
     });
-    await this.invalidateAssignmentReads(current.organizationId, 'assignments.update');
+    await this.invalidateAssignmentReads(
+      current.organizationId,
+      'assignments.update',
+    );
     return updated;
   }
 
   // ------- DELETE ------------------------------------------------------------
   async remove(id: string, ctx: OrgContext): Promise<Assignment> {
     // Assignment má historickou hodnotu, pokud existují submissions; v tom případě delete zakazujeme.
-    const submissionsWhere = withOrg({ assignmentId: id, deletedAt: null }, ctx.organizationId);
+    const submissionsWhere = withOrg(
+      { assignmentId: id, deletedAt: null },
+      ctx.organizationId,
+    );
     assertTenantWhere(submissionsWhere, ctx.organizationId);
     const submissions = await this.prisma.submission.count({
       where: submissionsWhere,
@@ -552,7 +598,10 @@ export class AssignmentsService {
     // Bez submissions je hard delete bezpečný (konfigurační záznam bez historie).
     const current = await this.findOneOrThrowScoped(id, ctx);
     const deleted = await this.prisma.assignment.delete({ where: { id } });
-    await this.invalidateAssignmentReads(current.organizationId, 'assignments.remove');
+    await this.invalidateAssignmentReads(
+      current.organizationId,
+      'assignments.remove',
+    );
     return deleted;
   }
 
@@ -597,19 +646,19 @@ export class AssignmentsService {
       if (classSectionIds.length === 0) {
         this.logger.warn(
           `[getStudentOverview] Student has no ACTIVE enrollment for current academic year. ` +
-          `membershipId=${membershipId} orgId=${organizationId} yearId=${activeYearId}. ` +
-          `CLASS-targeted assignments will not be visible.`,
+            `membershipId=${membershipId} orgId=${organizationId} yearId=${activeYearId}. ` +
+            `CLASS-targeted assignments will not be visible.`,
         );
       }
     } else if (!student) {
       this.logger.warn(
         `[getStudentOverview] No Student record found for membershipId=${membershipId} orgId=${organizationId}. ` +
-        `Returning empty overview.`,
+          `Returning empty overview.`,
       );
     } else if (!activeYearId) {
       this.logger.warn(
         `[getStudentOverview] No active academic year for orgId=${organizationId}. ` +
-        `CLASS-targeted assignments will not be visible.`,
+          `CLASS-targeted assignments will not be visible.`,
       );
     }
 
@@ -668,10 +717,7 @@ export class AssignmentsService {
         : [];
 
     // Group submissions by assignmentId
-    const subsByAssignment = new Map<
-      string,
-      typeof submissions
-    >();
+    const subsByAssignment = new Map<string, typeof submissions>();
     for (const s of submissions) {
       const arr = subsByAssignment.get(s.assignmentId) ?? [];
       arr.push(s);
@@ -718,7 +764,7 @@ export class AssignmentsService {
         // Defensive: maxAttempts=0 or state anomaly — treat as active so student is never silently hidden
         this.logger.warn(
           `[getStudentOverview] Assignment ${a.id} is OPEN and exhausted=true but has no submissions. ` +
-          `Possible data anomaly. membershipId=${membershipId}`,
+            `Possible data anomaly. membershipId=${membershipId}`,
         );
         active.push(item);
       } else if (isClosed && hasSubmission) {
@@ -782,17 +828,21 @@ export class AssignmentsService {
             studentId: student.id,
             orgId,
             status: EnrollmentStatus.ACTIVE,
-            ...(ctx.activeAcademicYearId ? { yearId: ctx.activeAcademicYearId } : {}),
+            ...(ctx.activeAcademicYearId
+              ? { yearId: ctx.activeAcademicYearId }
+              : {}),
           },
           select: { classSectionId: true },
         })
       : [];
 
-    const classSectionIds = enrollments.map((enrollment) => enrollment.classSectionId);
+    const classSectionIds = enrollments.map(
+      (enrollment) => enrollment.classSectionId,
+    );
 
     this.logger.log(
       `[listForStudent] membershipId=${membershipId} studentId=${student?.id ?? 'NONE'} ` +
-      `classSectionIds=${JSON.stringify(classSectionIds)} yearId=${ctx.activeAcademicYearId ?? 'NONE'}`,
+        `classSectionIds=${JSON.stringify(classSectionIds)} yearId=${ctx.activeAcademicYearId ?? 'NONE'}`,
     );
 
     // 3. Fetch assignments targeted either to the student's class(es) or directly to the student.
@@ -802,7 +852,9 @@ export class AssignmentsService {
             where: {
               organizationId: orgId,
               classSectionId: { in: classSectionIds },
-              ...(ctx.activeAcademicYearId ? { yearId: ctx.activeAcademicYearId } : {}),
+              ...(ctx.activeAcademicYearId
+                ? { yearId: ctx.activeAcademicYearId }
+                : {}),
               test: { status: PublishStatus.PUBLISHED, deletedAt: null },
             },
             include: {
@@ -819,7 +871,9 @@ export class AssignmentsService {
           organizationId: orgId,
           targetType: 'STUDENTS',
           students: { some: { studentId: membershipId } },
-          ...(ctx.activeAcademicYearId ? { yearId: ctx.activeAcademicYearId } : {}),
+          ...(ctx.activeAcademicYearId
+            ? { yearId: ctx.activeAcademicYearId }
+            : {}),
           test: { status: PublishStatus.PUBLISHED, deletedAt: null },
         },
         include: {
@@ -854,12 +908,20 @@ export class AssignmentsService {
         submissionId: latestSubmission?.id ?? null,
         submittedAt: latestSubmission?.submittedAt?.toISOString() ?? null,
         submissionStatus: latestSubmission?.status ?? null,
-        effectiveStatus: this.computeEffectiveStatus(a, latestSubmission, attemptsUsed, now),
+        effectiveStatus: this.computeEffectiveStatus(
+          a,
+          latestSubmission,
+          attemptsUsed,
+          now,
+        ),
       };
     });
   }
 
-  async listForUser(user: JwtPayload, ctx: OrgContext): Promise<MyAssignmentDto[]> {
+  async listForUser(
+    user: JwtPayload,
+    ctx: OrgContext,
+  ): Promise<MyAssignmentDto[]> {
     const membership = await this.prisma.membership.findFirst({
       where: {
         userId: user.userId,
@@ -941,7 +1003,12 @@ export class AssignmentsService {
         submissionId: latestSubmission?.id ?? null,
         submittedAt: latestSubmission?.submittedAt?.toISOString() ?? null,
         submissionStatus: latestSubmission?.status ?? null,
-        effectiveStatus: this.computeEffectiveStatus(a, latestSubmission, attemptsUsed, now),
+        effectiveStatus: this.computeEffectiveStatus(
+          a,
+          latestSubmission,
+          attemptsUsed,
+          now,
+        ),
       };
     });
   }

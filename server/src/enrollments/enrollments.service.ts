@@ -95,7 +95,12 @@ export class EnrollmentsService {
 
     const classSection = await this.prisma.classSection.findUnique({
       where: { id: dto.classSectionId },
-      select: { id: true, orgId: true, yearId: true, academicYear: { select: { isCurrent: true } } },
+      select: {
+        id: true,
+        orgId: true,
+        yearId: true,
+        academicYear: { select: { isCurrent: true } },
+      },
     });
     if (!classSection) {
       throw new NotFoundException('Class section not found.');
@@ -112,10 +117,14 @@ export class EnrollmentsService {
       throw new ForbiddenException('Foreign organization.');
     }
     if (student.orgId !== classSection.orgId) {
-      throw new BadRequestException('Student and class section are in different organizations.');
+      throw new BadRequestException(
+        'Student and class section are in different organizations.',
+      );
     }
     if (!classSection.academicYear?.isCurrent) {
-      throw new ForbiddenException('Nelze zapisovat do uzavřeného školního roku.');
+      throw new ForbiddenException(
+        'Nelze zapisovat do uzavřeného školního roku.',
+      );
     }
 
     const membership = await this.prisma.membership.findUnique({
@@ -165,7 +174,11 @@ export class EnrollmentsService {
         entityId: student.id,
         userId: user.userId,
         organizationId: classSection.orgId,
-        metadata: { enrollmentId: enrollment.id, classSectionId: classSection.id, yearId: classSection.yearId },
+        metadata: {
+          enrollmentId: enrollment.id,
+          classSectionId: classSection.id,
+          yearId: classSection.yearId,
+        },
       });
       await this.invalidateEnrollmentReads(
         cacheScopeForUser(user.systemRole, classSection.orgId),
@@ -173,7 +186,10 @@ export class EnrollmentsService {
       );
       return enrollment;
     } catch (err) {
-      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === 'P2002'
+      ) {
         // @@unique([studentId, yearId]) — exactly one enrollment exists for this student+year.
         const existing = await this.prisma.enrollment.findFirst({
           where: { studentId: student.id, yearId: classSection.yearId },
@@ -183,7 +199,10 @@ export class EnrollmentsService {
           // Student previously left; re-enroll them (possibly in a different class).
           const reactivated = await this.prisma.enrollment.update({
             where: { id: existing.id },
-            data: { classSectionId: classSection.id, status: EnrollmentStatus.ACTIVE },
+            data: {
+              classSectionId: classSection.id,
+              status: EnrollmentStatus.ACTIVE,
+            },
           });
           void this.auditService.log({
             action: 'ENROLLMENT_REACTIVATED',
@@ -191,7 +210,11 @@ export class EnrollmentsService {
             entityId: student.id,
             userId: user.userId,
             organizationId: classSection.orgId,
-            metadata: { enrollmentId: existing.id, classSectionId: classSection.id, yearId: classSection.yearId },
+            metadata: {
+              enrollmentId: existing.id,
+              classSectionId: classSection.id,
+              yearId: classSection.yearId,
+            },
           });
           await this.invalidateEnrollmentReads(
             cacheScopeForUser(user.systemRole, classSection.orgId),
@@ -243,14 +266,20 @@ export class EnrollmentsService {
       throw new ForbiddenException('Foreign organization.');
     }
     if (!classSection.academicYear?.isCurrent) {
-      throw new ForbiddenException('Nelze zapisovat do uzavřeného školního roku.');
+      throw new ForbiddenException(
+        'Nelze zapisovat do uzavřeného školního roku.',
+      );
     }
 
     const results: {
       enrolled: number;
       createdUsers: number;
       errors: Array<{ index: number; name: string; message: string }>;
-      enrollments: Array<{ enrollmentId: string; studentId: string; name: string }>;
+      enrollments: Array<{
+        enrollmentId: string;
+        studentId: string;
+        name: string;
+      }>;
       results: Array<{
         index: number;
         name: string;
@@ -282,7 +311,9 @@ export class EnrollmentsService {
       try {
         const outcome = await this.prisma.$transaction(async (tx) => {
           if (!email) {
-            throw new BadRequestException('Email is required for invite-based enrollment.');
+            throw new BadRequestException(
+              'Email is required for invite-based enrollment.',
+            );
           }
 
           const userRecord = await tx.user.findUnique({
@@ -295,11 +326,13 @@ export class EnrollmentsService {
           }
 
           if (!userRecord) {
-            throw new ForbiddenException('Student must join via invite before enrollment.');
+            throw new ForbiddenException(
+              'Student must join via invite before enrollment.',
+            );
           }
           const createdUser = false;
 
-          let membership = await tx.membership.findUnique({
+          const membership = await tx.membership.findUnique({
             where: {
               userId_organizationId: {
                 userId: userRecord.id,
@@ -310,7 +343,9 @@ export class EnrollmentsService {
           });
 
           if (!membership) {
-            throw new ForbiddenException('Student must join via invite before enrollment.');
+            throw new ForbiddenException(
+              'Student must join via invite before enrollment.',
+            );
           }
 
           if (membership.role !== OrganizationRole.STUDENT) {
@@ -388,7 +423,10 @@ export class EnrollmentsService {
                 // Re-enroll returning student (possibly to a different class).
                 const reactivated = await tx.enrollment.update({
                   where: { id: existing.id },
-                  data: { classSectionId: classSection.id, status: EnrollmentStatus.ACTIVE },
+                  data: {
+                    classSectionId: classSection.id,
+                    status: EnrollmentStatus.ACTIVE,
+                  },
                   select: { id: true },
                 });
                 return {
@@ -471,14 +509,20 @@ export class EnrollmentsService {
           student: {
             include: {
               membership: {
-                include: { user: { select: { id: true, name: true, email: true } } },
+                include: {
+                  user: { select: { id: true, name: true, email: true } },
+                },
               },
             },
           },
         },
       });
     const scopeId = cacheScopeForUser(user.systemRole, classSection.orgId);
-    const version = await getResourceVersion(this.cache, scopeId, 'enrollments');
+    const version = await getResourceVersion(
+      this.cache,
+      scopeId,
+      'enrollments',
+    );
     const authzKey = buildAuthzScopeKey({
       userId: user.userId,
       systemRole: user.systemRole ?? null,
@@ -496,10 +540,16 @@ export class EnrollmentsService {
     });
 
     if (user.systemRole === SystemRole.SUPERADMIN) {
-      return cacheGetOrSet(this.cache, cacheKey, EnrollmentsService.ENROLLMENTS_CACHE_TTL_MS, queryEnrollments, {
-        scopeId,
-        resource: 'enrollments',
-      });
+      return cacheGetOrSet(
+        this.cache,
+        cacheKey,
+        EnrollmentsService.ENROLLMENTS_CACHE_TTL_MS,
+        queryEnrollments,
+        {
+          scopeId,
+          resource: 'enrollments',
+        },
+      );
     }
 
     if (!user.organizationId || user.organizationId !== classSection.orgId) {
@@ -517,17 +567,29 @@ export class EnrollmentsService {
       if (!teacher || classSection.teacherId !== teacher.id) {
         throw new ForbiddenException('Teacher has no access to this class.');
       }
-      return cacheGetOrSet(this.cache, cacheKey, EnrollmentsService.ENROLLMENTS_CACHE_TTL_MS, queryEnrollments, {
-        scopeId,
-        resource: 'enrollments',
-      });
+      return cacheGetOrSet(
+        this.cache,
+        cacheKey,
+        EnrollmentsService.ENROLLMENTS_CACHE_TTL_MS,
+        queryEnrollments,
+        {
+          scopeId,
+          resource: 'enrollments',
+        },
+      );
     }
 
     if (role && hasAtLeastRole(role, OrganizationRole.DIRECTOR)) {
-      return cacheGetOrSet(this.cache, cacheKey, EnrollmentsService.ENROLLMENTS_CACHE_TTL_MS, queryEnrollments, {
-        scopeId,
-        resource: 'enrollments',
-      });
+      return cacheGetOrSet(
+        this.cache,
+        cacheKey,
+        EnrollmentsService.ENROLLMENTS_CACHE_TTL_MS,
+        queryEnrollments,
+        {
+          scopeId,
+          resource: 'enrollments',
+        },
+      );
     }
 
     if (role === OrganizationRole.STUDENT) {
@@ -590,7 +652,9 @@ export class EnrollmentsService {
       throw new NotFoundException('Nová třída nenalezena.');
     }
     if (newClass.orgId !== enrollment.classSection.orgId) {
-      throw new BadRequestException('Nová třída musí být ve stejné organizaci.');
+      throw new BadRequestException(
+        'Nová třída musí být ve stejné organizaci.',
+      );
     }
     if (newClass.yearId !== enrollment.classSection.yearId) {
       throw new BadRequestException(
@@ -630,7 +694,11 @@ export class EnrollmentsService {
       where: { id },
       include: {
         classSection: {
-          select: { orgId: true, yearId: true, academicYear: { select: { isCurrent: true } } },
+          select: {
+            orgId: true,
+            yearId: true,
+            academicYear: { select: { isCurrent: true } },
+          },
         },
       },
     });

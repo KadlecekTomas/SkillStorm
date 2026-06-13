@@ -70,7 +70,9 @@ export class PlatformController {
   ) {}
 
   @Get('users')
-  @ApiOperation({ summary: 'Global users list (READ — SUPERADMIN | DEVOPS | SUPPORT)' })
+  @ApiOperation({
+    summary: 'Global users list (READ — SUPERADMIN | DEVOPS | SUPPORT)',
+  })
   @NoHttpCache()
   async listUsers(
     @Req() req: RequestWithUser,
@@ -79,7 +81,10 @@ export class PlatformController {
     @Query('limit') limit?: string,
   ) {
     const parsedPage = Math.max(1, parseInt(page ?? '1', 10) || 1);
-    const parsedLimit = Math.min(100, Math.max(1, parseInt(limit ?? '20', 10) || 20));
+    const parsedLimit = Math.min(
+      100,
+      Math.max(1, parseInt(limit ?? '20', 10) || 20),
+    );
 
     const opts: { page: number; limit: number; search?: string } = {
       page: parsedPage,
@@ -95,7 +100,9 @@ export class PlatformController {
   }
 
   @Get('organizations')
-  @ApiOperation({ summary: 'List organizations (READ — SUPERADMIN | DEVOPS | SUPPORT)' })
+  @ApiOperation({
+    summary: 'List organizations (READ — SUPERADMIN | DEVOPS | SUPPORT)',
+  })
   @NoHttpCache()
   async listOrganizations(
     @Req() req: RequestWithUser,
@@ -119,7 +126,9 @@ export class PlatformController {
   }
 
   @Get('organizations/:id')
-  @ApiOperation({ summary: 'Organization detail (READ — SUPERADMIN | DEVOPS | SUPPORT)' })
+  @ApiOperation({
+    summary: 'Organization detail (READ — SUPERADMIN | DEVOPS | SUPPORT)',
+  })
   async getOrganizationDetail(
     @Param('id') id: string,
     @Req() req: RequestWithUser,
@@ -131,7 +140,10 @@ export class PlatformController {
   @Post('organizations/:id/activate')
   @RequirePlatformAccess(PlatformAccessLevel.MUTATION)
   @UseInterceptors(PlatformMutationAuditInterceptor)
-  @ApiOperation({ summary: 'Approve organization PENDING → ACTIVE (MUTATION — SUPERADMIN only)' })
+  @ApiOperation({
+    summary:
+      'Approve organization PENDING → ACTIVE (MUTATION — SUPERADMIN only)',
+  })
   activate(@Param('id') id: string, @Req() req: RequestWithUser) {
     return ok(this.service.activate(id, req.user.userId));
   }
@@ -139,7 +151,9 @@ export class PlatformController {
   @Post('organizations/:id/suspend')
   @RequirePlatformAccess(PlatformAccessLevel.MUTATION)
   @UseInterceptors(PlatformMutationAuditInterceptor)
-  @ApiOperation({ summary: 'Suspend organization (MUTATION — SUPERADMIN only)' })
+  @ApiOperation({
+    summary: 'Suspend organization (MUTATION — SUPERADMIN only)',
+  })
   suspend(@Param('id') id: string) {
     return ok(this.service.suspend(id));
   }
@@ -147,7 +161,9 @@ export class PlatformController {
   @Post('organizations/:id/reactivate')
   @RequirePlatformAccess(PlatformAccessLevel.MUTATION)
   @UseInterceptors(PlatformMutationAuditInterceptor)
-  @ApiOperation({ summary: 'Reactivate organization (MUTATION — SUPERADMIN only)' })
+  @ApiOperation({
+    summary: 'Reactivate organization (MUTATION — SUPERADMIN only)',
+  })
   reactivate(@Param('id') id: string) {
     return ok(this.service.reactivate(id));
   }
@@ -156,7 +172,8 @@ export class PlatformController {
   @RequirePlatformAccess(PlatformAccessLevel.MUTATION)
   @UseInterceptors(PlatformMutationAuditInterceptor)
   @ApiOperation({
-    summary: 'Sync default subjects + subject levels to all organizations (MUTATION — SUPERADMIN only)',
+    summary:
+      'Sync default subjects + subject levels to all organizations (MUTATION — SUPERADMIN only)',
     description:
       'Idempotent. Upserts one Subject per CatalogSubject and one SubjectLevel per SchoolGrade for every non-deleted organization. Use after adding a new CatalogSubject to propagate it to existing schools.',
   })
@@ -175,7 +192,9 @@ export class PlatformController {
    * Omitting organizationId returns platform-wide logs (all orgs).
    */
   @Get('audit/logs')
-  @ApiOperation({ summary: 'Platform-wide audit logs (READ — SUPERADMIN | DEVOPS | SUPPORT)' })
+  @ApiOperation({
+    summary: 'Platform-wide audit logs (READ — SUPERADMIN | DEVOPS | SUPPORT)',
+  })
   async listAuditLogs(
     @Req() req: RequestWithUser,
     @Query('organizationId') organizationId?: string,
@@ -212,7 +231,10 @@ export class PlatformController {
    * ?nocache=1 — bypass the 5-minute in-memory cache (SUPERADMIN only for debugging).
    */
   @Get('analytics/overview')
-  @ApiOperation({ summary: 'Platform analytics overview (READ — SUPERADMIN | DEVOPS | SUPPORT)' })
+  @ApiOperation({
+    summary:
+      'Platform analytics overview (READ — SUPERADMIN | DEVOPS | SUPPORT)',
+  })
   async analyticsOverview(
     @Req() req: RequestWithUser,
     @Query('nocache') nocache?: string,
@@ -229,7 +251,10 @@ export class PlatformController {
    * Access: READ level (SUPERADMIN | DEVOPS | SUPPORT).
    */
   @Get('organizations/:id/health')
-  @ApiOperation({ summary: 'Organization health detail (READ — SUPERADMIN | DEVOPS | SUPPORT)' })
+  @ApiOperation({
+    summary:
+      'Organization health detail (READ — SUPERADMIN | DEVOPS | SUPPORT)',
+  })
   async orgHealth(@Param('id') id: string) {
     return ok(await this.healthService.computeOrgHealth(id));
   }

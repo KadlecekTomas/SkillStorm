@@ -31,13 +31,8 @@ export type CreateOrgReadinessErrorOptions = {
 export function createOrgReadinessError(
   options: CreateOrgReadinessErrorOptions,
 ): PreconditionFailedException {
-  const {
-    operationType,
-    state,
-    missing,
-    requiredMinState,
-    messageOverride,
-  } = options;
+  const { operationType, state, missing, requiredMinState, messageOverride } =
+    options;
 
   const payload: OrgReadinessErrorPayload = {
     statusCode: 412,

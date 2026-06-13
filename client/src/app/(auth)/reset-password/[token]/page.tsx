@@ -43,7 +43,7 @@ export default function ResetPasswordWithTokenPage(): React.JSX.Element {
       });
       showToastOnce("Heslo bylo nastaveno. Můžete se přihlásit.", { type: "success" });
       router.replace("/login");
-    } catch (err) {
+    } catch {
       setError("Obnovení hesla se nepovedlo. Zkuste to znovu nebo požádejte o nový odkaz.");
     } finally {
       setLoading(false);

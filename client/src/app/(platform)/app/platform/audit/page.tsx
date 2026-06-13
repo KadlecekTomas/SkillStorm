@@ -102,7 +102,7 @@ function ActionBadge({ action }: { action: string }) {
 // Page
 // ---------------------------------------------------------------------------
 
-export default function PlatformAuditPage() {
+export default function PlatformAuditPage(): React.JSX.Element {
   const { user } = useAuth();
   const isSuperAdmin = user?.systemRole === "SUPERADMIN";
 

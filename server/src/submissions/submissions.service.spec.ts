@@ -17,6 +17,7 @@ describe('SubmissionsService (integrity)', () => {
     };
     membership: { findFirst: jest.Mock };
     $transaction: jest.Mock;
+    $queryRaw: jest.Mock;
   };
 
   const orgA = 'org-a';
@@ -37,6 +38,7 @@ describe('SubmissionsService (integrity)', () => {
       },
       membership: { findFirst: jest.fn() },
       $transaction: jest.fn(),
+      $queryRaw: jest.fn(),
     };
     const module = await Test.createTestingModule({
       providers: [
@@ -52,6 +54,10 @@ describe('SubmissionsService (integrity)', () => {
   describe('updateResponses after submit', () => {
     it('throws 409 with errorCode SUBMISSION_LOCKED when submission already submitted', async () => {
       prisma.membership.findFirst.mockResolvedValue(membershipA);
+      // updateResponses runs inside $transaction(fn): execute the callback with the mock tx.
+      prisma.$transaction.mockImplementation((fn: (tx: typeof prisma) => unknown) =>
+        fn(prisma),
+      );
       prisma.submission.findUnique.mockResolvedValue({
         id: 'sub-1',
         organizationId: orgA,
@@ -101,7 +107,7 @@ describe('SubmissionsService (integrity)', () => {
 
       expect(prisma.submission.findUnique).toHaveBeenCalledWith({
         where: { id: 'sub-other-org', organizationId: orgA },
-        include: expect.any(Object),
+        select: expect.any(Object),
       });
     });
   });
@@ -165,6 +171,9 @@ describe('SubmissionsService (integrity)', () => {
         testId: 't1',
         status: 'APPROVED',
         score: 0.8,
+        earnedPoints: null,
+        maxPoints: null,
+        percentage: null,
         submittedAt: new Date('2025-01-01T00:00:00.000Z'),
         attemptNo: 1,
         isAnonymous: false,

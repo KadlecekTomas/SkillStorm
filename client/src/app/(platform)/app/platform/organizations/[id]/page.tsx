@@ -315,7 +315,7 @@ function RawRow({ label, value }: { label: string; value: string | number }) {
 // Page
 // ---------------------------------------------------------------------------
 
-export default function OrgHealthDetailPage() {
+export default function OrgHealthDetailPage(): React.JSX.Element {
   const params = useParams();
   const router = useRouter();
   const orgId = typeof params.id === "string" ? params.id : params.id?.[0];

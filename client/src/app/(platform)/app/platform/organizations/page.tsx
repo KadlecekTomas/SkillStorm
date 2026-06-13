@@ -30,7 +30,7 @@ function daysSince(dateStr: string): number {
   return Math.floor((now - created) / (24 * 60 * 60 * 1000));
 }
 
-export default function PlatformOrganizationsPage() {
+export default function PlatformOrganizationsPage(): React.JSX.Element {
   const { user } = useAuth();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
