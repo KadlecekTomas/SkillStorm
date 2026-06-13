@@ -46,6 +46,8 @@ jobs:
 
       - name: 🧪 FE policy tests
         working-directory: ./client
+        env:
+          NODE_ENV: test
         run: |
           npx playwright install --with-deps
           npm run test:fe-policy
