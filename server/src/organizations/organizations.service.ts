@@ -1,5 +1,12 @@
 // src/modules/organizations/organizations.service.ts
-import { Injectable, NotFoundException, ConflictException, Inject, Logger, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+  Inject,
+  Logger,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
 import type { CreateOrganizationDto } from './dto/create-organization.dto';
 import type { UpdateOrganizationDto } from './dto/update-organization.dto';
@@ -165,7 +172,9 @@ export class OrganizationsService {
     return count > 0;
   }
 
-  private normalizeIdempotencyKey(idempotencyKey?: string | null): string | null {
+  private normalizeIdempotencyKey(
+    idempotencyKey?: string | null,
+  ): string | null {
     const normalized = idempotencyKey?.trim() ?? '';
     return normalized.length > 0 ? normalized.slice(0, 255) : null;
   }
@@ -271,7 +280,8 @@ export class OrganizationsService {
     idempotencyKey?: string | null,
     testOptions?: CreateOrganizationTestOptions,
   ) {
-    const normalizedIdempotencyKey = this.normalizeIdempotencyKey(idempotencyKey);
+    const normalizedIdempotencyKey =
+      this.normalizeIdempotencyKey(idempotencyKey);
     const requestHash = this.buildCreateRequestHash(dto);
 
     if (creatorUserId && normalizedIdempotencyKey) {
@@ -387,7 +397,9 @@ export class OrganizationsService {
         await tx.auditLog.create({ data: auditData });
 
         if (testOptions?.failBeforeAcademicYear) {
-          throw new Error('Simulated bootstrap failure before academic year creation');
+          throw new Error(
+            'Simulated bootstrap failure before academic year creation',
+          );
         }
 
         const { startDate, endDate, label } = getDefaultCzechSchoolYear();
@@ -413,7 +425,9 @@ export class OrganizationsService {
               },
             },
             data: {
-              result: this.buildCreateOrganizationResult(created) as Prisma.InputJsonValue,
+              result: this.buildCreateOrganizationResult(
+                created,
+              ) as Prisma.InputJsonValue,
             },
           });
         }
@@ -444,7 +458,8 @@ export class OrganizationsService {
           ? error.meta?.target.map(String)
           : [];
         const isOwnerLimitConflict = target.some(
-          (item) => item.includes('owner_user_id') || item.includes('ownerUserId'),
+          (item) =>
+            item.includes('owner_user_id') || item.includes('ownerUserId'),
         );
         if (!isOwnerLimitConflict) {
           throw error;

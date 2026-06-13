@@ -8,7 +8,12 @@ import { MetricsModule } from '@/metrics/metrics.module';
 
 @Module({
   imports: [PrismaModule, MetricsModule],
-  providers: [RbacService, RbacGuard, RbacPolicyService, RbacDefaultSyncService],
+  providers: [
+    RbacService,
+    RbacGuard,
+    RbacPolicyService,
+    RbacDefaultSyncService,
+  ],
   exports: [RbacService, RbacGuard, RbacPolicyService],
 })
 export class RbacModule {}

@@ -16,7 +16,10 @@ import { RequestWithUser } from '@/types/request-with-user';
 import { ApiStandardResponses } from '@/common/http/api-standard-responses.decorator';
 import { ok } from '@/common/http/envelope';
 import { AllowPendingOrg } from '@/common/decorators/allow-pending-org.decorator';
-import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
+import {
+  OrgOperation,
+  OrgOperationType,
+} from '@/common/decorators/org-operation.decorator';
 import { AcademicYearsService } from './academic-years.service';
 import { PromotionService } from './promotion.service';
 import { CreateAcademicYearDto } from './dto/create-academic-year.dto';
@@ -56,15 +59,22 @@ export class AcademicYearsController {
   })
   /** @deprecated Use getCurrent() and GET /academic-years/current instead. */
   getActive(@Req() req: RequestWithUser) {
-    return ok(this.service.getCurrentForOrgOrFail(req.user.organizationId ?? null));
+    return ok(
+      this.service.getCurrentForOrgOrFail(req.user.organizationId ?? null),
+    );
   }
 
   @Get('current')
   @AllowPendingOrg()
   @CacheTTL(0)
-  @ApiOperation({ summary: 'Get current academic year (id + name only, single source of truth)' })
+  @ApiOperation({
+    summary:
+      'Get current academic year (id + name only, single source of truth)',
+  })
   async getCurrent(@Req() req: RequestWithUser) {
-    const year = await this.service.getCurrentForOrgOrFail(req.user.organizationId ?? null);
+    const year = await this.service.getCurrentForOrgOrFail(
+      req.user.organizationId ?? null,
+    );
     return ok({ id: year.id, name: year.name });
   }
 
@@ -127,7 +137,9 @@ export class AcademicYearsController {
   @AllowPendingOrg()
   @Permission(PermissionKey.VIEW_RESULTS, PermissionKey.MANAGE_STUDENTS)
   @CacheTTL(0)
-  @ApiOperation({ summary: 'Get immediate next academic year (for promotion UI)' })
+  @ApiOperation({
+    summary: 'Get immediate next academic year (for promotion UI)',
+  })
   getNextYear(
     @Param('fromYearId', new ParseUUIDPipe()) fromYearId: string,
     @Req() req: RequestWithUser,

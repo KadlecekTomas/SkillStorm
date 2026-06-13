@@ -12,7 +12,8 @@ import {
 import { SystemRole } from '@prisma/client';
 
 const PASSWORD_POLICY = {
-  message: 'Heslo musí mít alespoň 8 znaků, obsahovat alespoň jedno písmeno a jednu číslici.',
+  message:
+    'Heslo musí mít alespoň 8 znaků, obsahovat alespoň jedno písmeno a jednu číslici.',
 };
 
 export class UpdateUserDto {

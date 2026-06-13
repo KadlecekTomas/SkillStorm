@@ -134,7 +134,9 @@ export class ImportsService {
     const rows = this.validateRows(syntheticRows, context);
     const validRows = rows.filter((row) => row.status === 'VALID');
     if (!validRows.length) {
-      throw new BadRequestException('Nejsou k dispozici žádné validní řádky pro import.');
+      throw new BadRequestException(
+        'Nejsou k dispozici žádné validní řádky pro import.',
+      );
     }
 
     const batch = await this.prisma.importBatch.create({
@@ -159,7 +161,9 @@ export class ImportsService {
     let createdEnrollments = 0;
 
     for (const row of validRows) {
-      const targetClass = context.classMap.get(this.normalizeClassName(row.class));
+      const targetClass = context.classMap.get(
+        this.normalizeClassName(row.class),
+      );
       if (!targetClass) {
         errors.push({
           rowNumber: row.rowNumber,
@@ -176,13 +180,22 @@ export class ImportsService {
       try {
         await this.prisma.$transaction(async (tx) => {
           const passwordHash = await bcrypt.hash(
-            this.renderPattern(context.settings.initialPassword, row.firstName, row.lastName),
+            this.renderPattern(
+              context.settings.initialPassword,
+              row.firstName,
+              row.lastName,
+            ),
             10,
           );
           const email = row.email.trim().toLowerCase();
           const username = await this.ensureUniqueUsername(
             tx,
-            this.buildUsernameBase(context.settings.usernamePattern, row.firstName, row.lastName, email),
+            this.buildUsernameBase(
+              context.settings.usernamePattern,
+              row.firstName,
+              row.lastName,
+              email,
+            ),
           );
 
           const createdUser = await tx.user.create({
@@ -241,7 +254,10 @@ export class ImportsService {
       }
     }
 
-    const batchStatus = errors.length === validRows.length ? ImportStatus.FAILED : ImportStatus.DONE;
+    const batchStatus =
+      errors.length === validRows.length
+        ? ImportStatus.FAILED
+        : ImportStatus.DONE;
     await this.prisma.importBatch.update({
       where: { id: batch.id },
       data: {
@@ -307,16 +323,22 @@ export class ImportsService {
 
     const classOptions = classSections.map((item) => ({
       id: item.id,
-      label: item.label?.trim() || `${String(item.grade).replace('GRADE_', '')}.${item.section}`,
+      label:
+        item.label?.trim() ||
+        `${String(item.grade).replace('GRADE_', '')}.${item.section}`,
     }));
     const classMap = new Map<string, ClassOption>();
     classOptions.forEach((item) => {
-      this.buildClassAliases(item.label).forEach((alias) => classMap.set(alias, item));
+      this.buildClassAliases(item.label).forEach((alias) =>
+        classMap.set(alias, item),
+      );
     });
 
     let defaultClassLabel: string | null = null;
     if (input.defaultClassSectionId) {
-      const match = classOptions.find((item) => item.id === input.defaultClassSectionId);
+      const match = classOptions.find(
+        (item) => item.id === input.defaultClassSectionId,
+      );
       defaultClassLabel = match?.label ?? null;
     }
 
@@ -370,7 +392,10 @@ export class ImportsService {
     };
   }
 
-  private validateRows(rows: ParsedCsvRow[], context: ValidationContext): ValidatedRow[] {
+  private validateRows(
+    rows: ParsedCsvRow[],
+    context: ValidationContext,
+  ): ValidatedRow[] {
     const duplicateMap = new Map<string, number[]>();
 
     const normalizedRows = rows.map((row) => {
@@ -457,7 +482,8 @@ export class ImportsService {
       throw new BadRequestException('CSV soubor neobsahuje žádná data.');
     }
 
-    const header = rows[0]?.map((cell) => cell.replace(/^\ufeff/, '').toLowerCase()) ?? [];
+    const header =
+      rows[0]?.map((cell) => cell.replace(/^\ufeff/, '').toLowerCase()) ?? [];
     const hasHeader =
       header.includes('firstname') ||
       header.includes('first_name') ||
@@ -469,10 +495,28 @@ export class ImportsService {
     const dataRows = hasHeader ? rows.slice(1) : rows;
     return dataRows.map((row, index) => ({
       rowNumber: index + 1,
-      firstName: this.readColumn(row, header, hasHeader, ['firstname', 'first_name'], 0),
-      lastName: this.readColumn(row, header, hasHeader, ['lastname', 'last_name'], 1),
+      firstName: this.readColumn(
+        row,
+        header,
+        hasHeader,
+        ['firstname', 'first_name'],
+        0,
+      ),
+      lastName: this.readColumn(
+        row,
+        header,
+        hasHeader,
+        ['lastname', 'last_name'],
+        1,
+      ),
       email: this.readColumn(row, header, hasHeader, ['email', 'mail'], 2),
-      className: this.readColumn(row, header, hasHeader, ['class', 'classroom', 'trida'], 3),
+      className: this.readColumn(
+        row,
+        header,
+        hasHeader,
+        ['class', 'classroom', 'trida'],
+        3,
+      ),
     }));
   }
 
@@ -530,7 +574,7 @@ export class ImportsService {
     const index = aliases
       .map((alias) => header.indexOf(alias))
       .find((value) => value !== -1);
-    return index !== undefined && index >= 0 ? row[index] ?? '' : '';
+    return index !== undefined && index >= 0 ? (row[index] ?? '') : '';
   }
 
   private normalizeClassName(value: string): string {
@@ -563,17 +607,28 @@ export class ImportsService {
       .replace(/[^a-z0-9]/g, '');
   }
 
-  private buildUsernameBase(pattern: string, firstName: string, lastName: string, email: string) {
+  private buildUsernameBase(
+    pattern: string,
+    firstName: string,
+    lastName: string,
+    email: string,
+  ) {
     const rendered = this.renderPattern(pattern, firstName, lastName);
-    const fallback = email.split('@')[0] || `${lastName}${firstName.slice(0, 1)}`;
-    return this.normalizeIdentifier(rendered || fallback || 'student').slice(0, 32);
+    const fallback =
+      email.split('@')[0] || `${lastName}${firstName.slice(0, 1)}`;
+    return this.normalizeIdentifier(rendered || fallback || 'student').slice(
+      0,
+      32,
+    );
   }
 
   private async ensureUniqueUsername(
     tx: Prisma.TransactionClient,
     baseInput: string,
   ): Promise<string> {
-    const base = this.normalizeIdentifier(baseInput || 'student').slice(0, 24) || 'student';
+    const base =
+      this.normalizeIdentifier(baseInput || 'student').slice(0, 24) ||
+      'student';
     let candidate = base;
     let suffix = 1;
 
@@ -587,7 +642,11 @@ export class ImportsService {
     }
   }
 
-  private renderPattern(pattern: string, firstName: string, lastName: string): string {
+  private renderPattern(
+    pattern: string,
+    firstName: string,
+    lastName: string,
+  ): string {
     const year = new Date().getFullYear();
     const safeFirst = this.normalizeIdentifier(firstName);
     const safeLast = this.normalizeIdentifier(lastName);
@@ -620,7 +679,10 @@ export class ImportsService {
   }
 
   private mapCommitError(error: unknown): string {
-    if (error instanceof BadRequestException || error instanceof ForbiddenException) {
+    if (
+      error instanceof BadRequestException ||
+      error instanceof ForbiddenException
+    ) {
       const response = error.getResponse();
       if (
         response &&
@@ -634,9 +696,12 @@ export class ImportsService {
     }
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       if (error.code === 'P2002') {
-        const target = Array.isArray(error.meta?.target) ? error.meta.target.join(', ') : '';
+        const target = Array.isArray(error.meta?.target)
+          ? error.meta.target.join(', ')
+          : '';
         if (target.includes('email')) return 'Email už v systému existuje.';
-        if (target.includes('username')) return 'Nepodařilo se vytvořit unikátní username.';
+        if (target.includes('username'))
+          return 'Nepodařilo se vytvořit unikátní username.';
       }
     }
     if (error instanceof Error) return error.message;

@@ -34,7 +34,10 @@ import { Permission } from '@/modules/rbac/permission.decorator';
 import { ok } from '@/common/http/envelope';
 import { AllowAnyOrgStatus } from '@/common/decorators/allow-any-org-status.decorator';
 import { ApiStandardResponses } from '@/common/http/api-standard-responses.decorator';
-import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
+import {
+  OrgOperation,
+  OrgOperationType,
+} from '@/common/decorators/org-operation.decorator';
 
 @ApiTags('organizations')
 @ApiStandardResponses()
@@ -108,7 +111,11 @@ export class OrganizationsController {
 
   @Patch(':id')
   @UseGuards(SchoolAccessGuard)
-  @Permission(OrganizationRole.OWNER, OrganizationRole.DIRECTOR, SystemRole.SUPERADMIN)
+  @Permission(
+    OrganizationRole.OWNER,
+    OrganizationRole.DIRECTOR,
+    SystemRole.SUPERADMIN,
+  )
   @ApiOperation({ summary: 'Update organization (director or superadmin)' })
   @InvalidateScopes(() => ['ALL'])
   update(

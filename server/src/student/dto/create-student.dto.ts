@@ -10,11 +10,17 @@ export class CreateStudentDto {
   @IsUUID()
   orgId!: string;
 
-  @ApiProperty({ example: 'year-uuid', description: 'ID školního roku (AcademicYear)' })
+  @ApiProperty({
+    example: 'year-uuid',
+    description: 'ID školního roku (AcademicYear)',
+  })
   @IsUUID()
   academicYearId!: string;
 
-  @ApiProperty({ example: 'class-section-uuid', description: 'ID třídy (ClassSection)' })
+  @ApiProperty({
+    example: 'class-section-uuid',
+    description: 'ID třídy (ClassSection)',
+  })
   @IsUUID()
   classSectionId!: string;
 

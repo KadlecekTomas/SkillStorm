@@ -32,7 +32,11 @@ export class AcademicYearExpiredGuard implements CanActivate {
     const req = context.switchToHttp().getRequest<RequestWithUser>();
 
     // Only guard mutating requests — reads are always safe.
-    if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') {
+    if (
+      req.method === 'GET' ||
+      req.method === 'HEAD' ||
+      req.method === 'OPTIONS'
+    ) {
       return true;
     }
 

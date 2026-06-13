@@ -102,7 +102,9 @@ export class AchievementsService {
     });
   }
 
-  async getMembershipBadges(membershipId: string): Promise<MembershipBadgeView[]> {
+  async getMembershipBadges(
+    membershipId: string,
+  ): Promise<MembershipBadgeView[]> {
     await this.ensureDefaultBadgeDefinitions();
     await this.syncSubmissionBadges(membershipId, {
       source: 'badge.read',
@@ -137,7 +139,12 @@ export class AchievementsService {
     membershipId: string,
     metadata: { source: string; submissionId?: string },
   ): Promise<string[]> {
-    const [badgeDefinitions, completedCount, perfectSubmission, existingAwards] = await Promise.all([
+    const [
+      badgeDefinitions,
+      completedCount,
+      perfectSubmission,
+      existingAwards,
+    ] = await Promise.all([
       this.prisma.badgeDefinition.findMany({
         where: {
           code: {
@@ -190,10 +197,7 @@ export class AchievementsService {
     ) {
       toAwardCodes.push(BADGE_CODES.FIRST_TEST_COMPLETED);
     }
-    if (
-      perfectSubmission &&
-      !alreadyAwarded.has(BADGE_CODES.PERFECT_SCORE)
-    ) {
+    if (perfectSubmission && !alreadyAwarded.has(BADGE_CODES.PERFECT_SCORE)) {
       toAwardCodes.push(BADGE_CODES.PERFECT_SCORE);
     }
     if (
@@ -218,7 +222,9 @@ export class AchievementsService {
           awardedAt: now,
           metadata: {
             source: metadata.source,
-            ...(metadata.submissionId ? { submissionId: metadata.submissionId } : {}),
+            ...(metadata.submissionId
+              ? { submissionId: metadata.submissionId }
+              : {}),
           } as Prisma.InputJsonValue,
         })),
         skipDuplicates: true,
@@ -238,8 +244,12 @@ export class AchievementsService {
             description: 'Badge reward',
             metadata: {
               source: 'badges',
-              ...(metadata.submissionId ? { submissionId: metadata.submissionId } : {}),
-              badgeCodes: definitionsToAward.map((definition) => definition.code),
+              ...(metadata.submissionId
+                ? { submissionId: metadata.submissionId }
+                : {}),
+              badgeCodes: definitionsToAward.map(
+                (definition) => definition.code,
+              ),
             } as Prisma.InputJsonValue,
           },
         });

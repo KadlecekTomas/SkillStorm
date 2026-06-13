@@ -22,11 +22,16 @@ export type PlatformOrgFullView = PlatformOrgListDto;
  * Owner email is redacted; structural / operational fields are preserved.
  * Use this for any observability or support role that should not see PII.
  */
-export type PlatformOrgRestrictedView = Omit<PlatformOrgListDto, 'ownerEmail'> & {
+export type PlatformOrgRestrictedView = Omit<
+  PlatformOrgListDto,
+  'ownerEmail'
+> & {
   ownerEmail: null;
 };
 
-export type PlatformOrgScopedView = PlatformOrgFullView | PlatformOrgRestrictedView;
+export type PlatformOrgScopedView =
+  | PlatformOrgFullView
+  | PlatformOrgRestrictedView;
 
 /**
  * Full detail view — SUPERADMIN only.
@@ -36,7 +41,10 @@ export type PlatformOrgDetailFullView = PlatformOrgDetailDto;
 /**
  * Restricted detail view — DEVOPS | SUPPORT.
  */
-export type PlatformOrgDetailRestrictedView = Omit<PlatformOrgDetailDto, 'ownerEmail'> & {
+export type PlatformOrgDetailRestrictedView = Omit<
+  PlatformOrgDetailDto,
+  'ownerEmail'
+> & {
   ownerEmail: null;
 };
 

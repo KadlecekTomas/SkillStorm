@@ -25,7 +25,10 @@ import { TransferEnrollmentDto } from './dto/transfer-enrollment.dto';
 import { QueryEnrollmentsDto } from './dto/query-enrollments.dto';
 import { RequireCurrentAcademicYearGuard } from '@/academic-years/require-current-academic-year.guard';
 import { AcademicYearExpiredGuard } from '@/academic-years/academic-year-expired.guard';
-import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
+import {
+  OrgOperation,
+  OrgOperationType,
+} from '@/common/decorators/org-operation.decorator';
 import { OrgContextService } from '@/common/org-context/org-context.service';
 
 @ApiTags('Enrollments')
@@ -59,12 +62,16 @@ export class EnrollmentsController {
     ) {
       throw new BadRequestException('yearId / academicYearId is not allowed.');
     }
-    return ok(this.service.create({ ...dto, classSectionId, academicYearId }, req.user));
+    return ok(
+      this.service.create({ ...dto, classSectionId, academicYearId }, req.user),
+    );
   }
 
   @Post('bulk')
   @Permission(PermissionKey.MANAGE_STUDENTS)
-  @ApiOperation({ summary: 'Bulk enrollment (create students and enroll them)' })
+  @ApiOperation({
+    summary: 'Bulk enrollment (create students and enroll them)',
+  })
   async bulk(@Body() dto: BulkEnrollmentDto, @Req() req: RequestWithUser) {
     const ctx = await this.orgContext.get(req);
     if (!ctx.activeAcademicYearId) {
@@ -112,13 +119,18 @@ export class EnrollmentsController {
   @Delete(':id')
   @Permission(PermissionKey.MANAGE_STUDENTS)
   @ApiOperation({ summary: 'Soft delete enrollment (set status=LEFT)' })
-  remove(@Param('id', new ParseUUIDPipe()) id: string, @Req() req: RequestWithUser) {
+  remove(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() req: RequestWithUser,
+  ) {
     return ok(this.service.softDelete(id, req.user));
   }
 
   @Post(':id/transfer')
   @Permission(PermissionKey.MANAGE_STUDENTS)
-  @ApiOperation({ summary: 'Přestup studenta do jiné třídy (v rámci téhož roku)' })
+  @ApiOperation({
+    summary: 'Přestup studenta do jiné třídy (v rámci téhož roku)',
+  })
   transfer(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() dto: TransferEnrollmentDto,

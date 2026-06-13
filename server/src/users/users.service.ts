@@ -483,7 +483,11 @@ export class UsersService {
 
   async createPasswordResetToken(
     userId: string,
-    requester: { userId: string; systemRole: string | null; organizationId: string | null },
+    requester: {
+      userId: string;
+      systemRole: string | null;
+      organizationId: string | null;
+    },
     ctx?: { ipAddress?: string | null; userAgent?: string | null },
   ): Promise<{ token: string; expiresAt: Date }> {
     const isSuperadmin = requester.systemRole === 'SUPERADMIN';
@@ -504,7 +508,9 @@ export class UsersService {
         },
       });
       if (!sameOrg) {
-        throw new ForbiddenException('Můžeš resetovat heslo jen uživatelům ve své organizaci.');
+        throw new ForbiddenException(
+          'Můžeš resetovat heslo jen uživatelům ve své organizaci.',
+        );
       }
     }
     const user = await this.prisma.user.findUnique({

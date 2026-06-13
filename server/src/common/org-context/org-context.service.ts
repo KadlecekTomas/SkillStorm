@@ -34,7 +34,9 @@ export class OrgContextService {
 
     const membership = await this.resolveMembership(user, organizationId);
     const { yearId, endsAt } = await this.getActiveYearData(organizationId);
-    const isAcademicYearExpired = endsAt ? Date.now() > endsAt.getTime() : false;
+    const isAcademicYearExpired = endsAt
+      ? Date.now() > endsAt.getTime()
+      : false;
 
     return {
       organizationId,
@@ -68,7 +70,9 @@ export class OrgContextService {
       select: { id: true, role: true },
     });
     if (!fallback) {
-      throw new ForbiddenException('Active membership not found in organization.');
+      throw new ForbiddenException(
+        'Active membership not found in organization.',
+      );
     }
     return fallback;
   }
@@ -83,7 +87,8 @@ export class OrgContextService {
     }
 
     try {
-      const year = await this.academicYears.getCurrentForOrgOrFail(organizationId);
+      const year =
+        await this.academicYears.getCurrentForOrgOrFail(organizationId);
       this.yearCache.set(organizationId, {
         yearId: year.id,
         endsAt: year.endDate,
@@ -103,7 +108,9 @@ export class OrgContextService {
   }
 
   /** @deprecated Use getActiveYearData internally; kept for any external callers. */
-  async getActiveAcademicYearId(organizationId: string): Promise<string | null> {
+  async getActiveAcademicYearId(
+    organizationId: string,
+  ): Promise<string | null> {
     const { yearId } = await this.getActiveYearData(organizationId);
     return yearId;
   }

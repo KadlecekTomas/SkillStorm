@@ -30,7 +30,12 @@ export class RbacGuard implements CanActivate {
     const req = context.switchToHttp().getRequest();
     const user = req.user;
     if (!user) {
-      await this.recordDenied(req, null, permissions, 'Forbidden: user not resolved from token');
+      await this.recordDenied(
+        req,
+        null,
+        permissions,
+        'Forbidden: user not resolved from token',
+      );
       throw new ForbiddenException({
         statusCode: 403,
         message: 'Forbidden: user not resolved from token',

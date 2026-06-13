@@ -7,7 +7,10 @@ import { EventsService } from './events.service';
 import { JwtAuthGuard } from '@/auth/guards/jwt-auth.guard';
 import { RequestWithUser } from '@/types/request-with-user';
 import { Sse } from '@nestjs/common';
-import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
+import {
+  OrgOperation,
+  OrgOperationType,
+} from '@/common/decorators/org-operation.decorator';
 
 /**
  * Server-Sent Events controller.
@@ -28,7 +31,9 @@ export class EventsController {
   @Sse()
   @UseGuards(JwtAuthGuard)
   @Throttle({ default: { limit: 20, ttl: 60 } })
-  @ApiOperation({ summary: 'SSE stream: student-joined events for an organization' })
+  @ApiOperation({
+    summary: 'SSE stream: student-joined events for an organization',
+  })
   streamStudents(
     @Query('orgId') orgId: string,
     @Req() req: RequestWithUser,

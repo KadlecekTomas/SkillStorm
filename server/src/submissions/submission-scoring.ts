@@ -19,7 +19,9 @@ function normalizeBool(value: unknown): boolean | string {
     if (v === 'false') return false;
     return v;
   }
-  return String(value ?? '').trim().toLowerCase();
+  return String(value ?? '')
+    .trim()
+    .toLowerCase();
 }
 
 function normalizeText(s?: string | null): string | null {
@@ -156,11 +158,15 @@ export function computeScore(
     } else if (q.type === QuestionType.MULTIPLE_CHOICE) {
       if (mode === 'multi') {
         const corr = [...correctAnswers].map(normalizeAnswer).sort().join(',');
-        const giv = normalizeAnswerList(given).map(normalizeAnswer).sort().join(',');
+        const giv = normalizeAnswerList(given)
+          .map(normalizeAnswer)
+          .sort()
+          .join(',');
         correct = corr === giv;
       } else {
         const givenSingle = Array.isArray(given) ? given[0] : given;
-        correct = normalizeAnswer(givenSingle) === normalizeAnswer(correctAnswer);
+        correct =
+          normalizeAnswer(givenSingle) === normalizeAnswer(correctAnswer);
       }
       gained = correct ? qScore : 0;
     }
@@ -174,8 +180,7 @@ export function computeScore(
     });
   }
 
-  const normalizedScore =
-    maxScore > 0 ? roundScore(total / maxScore) : 0;
+  const normalizedScore = maxScore > 0 ? roundScore(total / maxScore) : 0;
 
   return {
     total,

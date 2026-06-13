@@ -17,7 +17,8 @@ export class CreateClassSectionDto {
 
   @ApiProperty({
     example: 'year-uuid',
-    description: 'Alias pro yearId – alespoň jeden z yearId/academicYearId MUSÍ být vyplněn',
+    description:
+      'Alias pro yearId – alespoň jeden z yearId/academicYearId MUSÍ být vyplněn',
   })
   @IsOptional()
   @IsUUID()

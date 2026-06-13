@@ -220,7 +220,9 @@ export class GamificationService {
         where: {
           ...(actor.membershipId ? { id: actor.membershipId } : {}),
           ...(actor.userId ? { userId: actor.userId } : {}),
-          ...(actor.organizationId ? { organizationId: actor.organizationId } : {}),
+          ...(actor.organizationId
+            ? { organizationId: actor.organizationId }
+            : {}),
         },
         select: defaultSelect,
       });

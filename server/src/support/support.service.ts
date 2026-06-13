@@ -72,18 +72,28 @@ export class SupportService {
 
   private assertPlatformReader(user: JwtPayload) {
     if (!user.systemRole || !PLATFORM_READ_ROLES.has(user.systemRole)) {
-      throw new ForbiddenException('Platform support inbox requires system role access.');
+      throw new ForbiddenException(
+        'Platform support inbox requires system role access.',
+      );
     }
   }
 
   private assertSupportOperator(user: JwtPayload): SupportOperatorRole {
-    if (!user.systemRole || !SUPPORT_MUTATION_ROLES.has(user.systemRole as SupportOperatorRole)) {
-      throw new ForbiddenException('Support triage actions require SUPPORT or SUPERADMIN.');
+    if (
+      !user.systemRole ||
+      !SUPPORT_MUTATION_ROLES.has(user.systemRole as SupportOperatorRole)
+    ) {
+      throw new ForbiddenException(
+        'Support triage actions require SUPPORT or SUPERADMIN.',
+      );
     }
     return user.systemRole as SupportOperatorRole;
   }
 
-  private resolvePage(dto: CreateTicketDto, req: RequestWithUser): string | null {
+  private resolvePage(
+    dto: CreateTicketDto,
+    req: RequestWithUser,
+  ): string | null {
     const headerPage =
       req.headers['x-skillstorm-page'] ??
       req.headers['x-page-route'] ??
@@ -112,27 +122,25 @@ export class SupportService {
     return metadata as Prisma.InputJsonValue;
   }
 
-  private mapTicket(
-    ticket: {
-      id: string;
-      organizationId: string;
-      category: string;
-      message: string;
-      page: string | null;
-      metadata: Prisma.JsonValue | null;
-      status: SupportTicketStatus;
-      priority: SupportTicketPriority;
-      internalNote: string | null;
-      resolutionNote: string | null;
-      resolvedAt: Date | null;
-      createdAt: Date;
-      updatedAt: Date;
-      organization: { id: string; name: string };
-      user: { id: string; name: string; email: string | null };
-      assignedTo: { id: string; name: string; email: string | null } | null;
-      resolvedBy: { id: string; name: string; email: string | null } | null;
-    },
-  ): SupportTicketInternalDto {
+  private mapTicket(ticket: {
+    id: string;
+    organizationId: string;
+    category: string;
+    message: string;
+    page: string | null;
+    metadata: Prisma.JsonValue | null;
+    status: SupportTicketStatus;
+    priority: SupportTicketPriority;
+    internalNote: string | null;
+    resolutionNote: string | null;
+    resolvedAt: Date | null;
+    createdAt: Date;
+    updatedAt: Date;
+    organization: { id: string; name: string };
+    user: { id: string; name: string; email: string | null };
+    assignedTo: { id: string; name: string; email: string | null } | null;
+    resolvedBy: { id: string; name: string; email: string | null } | null;
+  }): SupportTicketInternalDto {
     return {
       id: ticket.id,
       organizationId: ticket.organizationId,
@@ -140,7 +148,9 @@ export class SupportService {
       message: ticket.message,
       page: ticket.page,
       metadata:
-        ticket.metadata && typeof ticket.metadata === 'object' && !Array.isArray(ticket.metadata)
+        ticket.metadata &&
+        typeof ticket.metadata === 'object' &&
+        !Array.isArray(ticket.metadata)
           ? (ticket.metadata as SupportTicketInternalDto['metadata'])
           : null,
       status: ticket.status,
@@ -188,7 +198,9 @@ export class SupportService {
       assignee.isPlatformAdmin === true;
 
     if (!canOperate) {
-      throw new BadRequestException('Assigned user must be SUPPORT or SUPERADMIN.');
+      throw new BadRequestException(
+        'Assigned user must be SUPPORT or SUPERADMIN.',
+      );
     }
 
     return { id: assignee.id, name: assignee.name };
@@ -202,7 +214,8 @@ export class SupportService {
 
     const allowed =
       (current === SupportTicketStatus.OPEN &&
-        (next === SupportTicketStatus.IN_REVIEW || next === SupportTicketStatus.RESOLVED)) ||
+        (next === SupportTicketStatus.IN_REVIEW ||
+          next === SupportTicketStatus.RESOLVED)) ||
       (current === SupportTicketStatus.IN_REVIEW &&
         next === SupportTicketStatus.RESOLVED);
 
@@ -213,7 +226,11 @@ export class SupportService {
     }
   }
 
-  async createTicket(dto: CreateTicketDto, user: JwtPayload, req: RequestWithUser) {
+  async createTicket(
+    dto: CreateTicketDto,
+    user: JwtPayload,
+    req: RequestWithUser,
+  ) {
     await this.assertOrgMembership(user);
 
     const page = this.resolvePage(dto, req);
@@ -294,7 +311,9 @@ export class SupportService {
     const tickets = await this.prisma.supportTicket.findMany({
       where: {
         ...(filters.status ? { status: filters.status } : {}),
-        ...(filters.organizationId ? { organizationId: filters.organizationId } : {}),
+        ...(filters.organizationId
+          ? { organizationId: filters.organizationId }
+          : {}),
         ...(filters.category ? { category: filters.category } : {}),
       },
       orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
@@ -413,7 +432,9 @@ export class SupportService {
       nextStatus === SupportTicketStatus.RESOLVED &&
       !(dto.resolutionNote?.trim() || current.resolutionNote?.trim())
     ) {
-      throw new BadRequestException('Resolving a support ticket requires a resolution note.');
+      throw new BadRequestException(
+        'Resolving a support ticket requires a resolution note.',
+      );
     }
 
     const assignee =
@@ -423,16 +444,23 @@ export class SupportService {
 
     const updateData: Prisma.SupportTicketUncheckedUpdateInput = {
       ...(dto.priority ? { priority: dto.priority } : {}),
-      ...(dto.internalNote !== undefined ? { internalNote: dto.internalNote } : {}),
-      ...(dto.resolutionNote !== undefined ? { resolutionNote: dto.resolutionNote } : {}),
-      ...(dto.assignedToId !== undefined ? { assignedToId: assignee?.id ?? null } : {}),
+      ...(dto.internalNote !== undefined
+        ? { internalNote: dto.internalNote }
+        : {}),
+      ...(dto.resolutionNote !== undefined
+        ? { resolutionNote: dto.resolutionNote }
+        : {}),
+      ...(dto.assignedToId !== undefined
+        ? { assignedToId: assignee?.id ?? null }
+        : {}),
     };
 
     let action = 'UPDATED';
 
     if (nextStatus !== current.status) {
       updateData.status = nextStatus;
-      action = nextStatus === SupportTicketStatus.RESOLVED ? 'RESOLVED' : 'IN_REVIEW';
+      action =
+        nextStatus === SupportTicketStatus.RESOLVED ? 'RESOLVED' : 'IN_REVIEW';
     }
 
     if (nextStatus === SupportTicketStatus.RESOLVED) {

@@ -61,7 +61,8 @@ export class QueryStudentsDto {
   availableForClassSectionId?: string;
 
   @ApiPropertyOptional({
-    description: 'Žáci dostupní pro zápis: yearId pro availableForClassSectionId',
+    description:
+      'Žáci dostupní pro zápis: yearId pro availableForClassSectionId',
     example: 'academic-year-uuid',
   })
   @IsOptional()

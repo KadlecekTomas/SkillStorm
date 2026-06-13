@@ -36,7 +36,11 @@ export class CatalogSyncService {
     ]);
 
     if (!catalogSubjects.length || !orgs.length) {
-      return { orgsProcessed: 0, catalogSubjectsFound: catalogSubjects.length, levelUpserts: 0 };
+      return {
+        orgsProcessed: 0,
+        catalogSubjectsFound: catalogSubjects.length,
+        levelUpserts: 0,
+      };
     }
 
     let levelUpserts = 0;
@@ -74,7 +78,12 @@ export class CatalogSyncService {
             await tx.subjectLevel.upsert({
               where: { subjectId_grade: { subjectId: subject.id, grade } },
               update: {},
-              create: { subjectId: subject.id, grade, order: null, label: null },
+              create: {
+                subjectId: subject.id,
+                grade,
+                order: null,
+                label: null,
+              },
             });
             levelUpserts++;
           }

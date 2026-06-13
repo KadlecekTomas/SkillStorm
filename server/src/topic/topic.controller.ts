@@ -29,7 +29,10 @@ import { QueryTopicsDto } from './dto/query-topics.dto';
 import { AssignMaterialsDto } from './dto/assign-materials.dto';
 import { AssignTestsDto } from './dto/assign-tests.dto';
 import { InvalidateScopes } from '@/common/cache/invalidate.decorator';
-import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
+import {
+  OrgOperation,
+  OrgOperationType,
+} from '@/common/decorators/org-operation.decorator';
 
 @ApiTags('Topics')
 @ApiBearerAuth()

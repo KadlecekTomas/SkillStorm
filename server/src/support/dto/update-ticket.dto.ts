@@ -13,7 +13,8 @@ import { SupportTicketPriority, SupportTicketStatus } from '@prisma/client';
 export class UpdateTicketDto {
   @ApiPropertyOptional({
     nullable: true,
-    description: 'Assign ticket to a platform operator. Use null to clear assignment.',
+    description:
+      'Assign ticket to a platform operator. Use null to clear assignment.',
   })
   @IsOptional()
   @Transform(({ value }) => (value === null || value === '' ? null : value))
@@ -32,14 +33,18 @@ export class UpdateTicketDto {
 
   @ApiPropertyOptional({ nullable: true })
   @IsOptional()
-  @Transform(({ value }) => (value === null || value === '' ? null : value?.trim?.()))
+  @Transform(({ value }) =>
+    value === null || value === '' ? null : value?.trim?.(),
+  )
   @IsString()
   @MaxLength(2000)
   internalNote?: string | null;
 
   @ApiPropertyOptional({ nullable: true })
   @IsOptional()
-  @Transform(({ value }) => (value === null || value === '' ? null : value?.trim?.()))
+  @Transform(({ value }) =>
+    value === null || value === '' ? null : value?.trim?.(),
+  )
   @IsString()
   @Length(3, 2000)
   resolutionNote?: string | null;

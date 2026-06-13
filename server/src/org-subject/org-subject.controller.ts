@@ -19,7 +19,10 @@ import { ok } from '@/common/http/envelope';
 import { ApiStandardResponses } from '@/common/http/api-standard-responses.decorator';
 import { InvalidateScopes } from '@/common/cache/invalidate.decorator';
 import { NoHttpCache } from '@/common/cache/no-http-cache.decorator';
-import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
+import {
+  OrgOperation,
+  OrgOperationType,
+} from '@/common/decorators/org-operation.decorator';
 import { OrgSubjectService } from './org-subject.service';
 import { CreateOrgSubjectDto } from './dto/create-org-subject.dto';
 import { UpdateOrgSubjectDto } from './dto/update-org-subject.dto';
@@ -42,10 +45,15 @@ export class OrgSubjectController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'List org subjects (filtered by JWT org, optional ?grade=)' })
+  @ApiOperation({
+    summary: 'List org subjects (filtered by JWT org, optional ?grade=)',
+  })
   @NoHttpCache()
   @CacheTTL(0)
-  @Header('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+  @Header(
+    'Cache-Control',
+    'no-store, no-cache, must-revalidate, proxy-revalidate',
+  )
   findAll(@Req() req: RequestWithUser, @Query() q: QueryOrgSubjectsDto) {
     return ok(this.service.findAll(req.user, q));
   }
@@ -54,7 +62,10 @@ export class OrgSubjectController {
   @ApiOperation({ summary: 'Get org subject by id' })
   @NoHttpCache()
   @CacheTTL(0)
-  @Header('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+  @Header(
+    'Cache-Control',
+    'no-store, no-cache, must-revalidate, proxy-revalidate',
+  )
   findOne(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Req() req: RequestWithUser,

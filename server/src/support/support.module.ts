@@ -10,6 +10,11 @@ import { SupportService } from './support.service';
 @Module({
   imports: [PrismaModule, AuditModule],
   controllers: [SupportController],
-  providers: [SupportService, SupportDataScopeService, SystemRoleGuard, PlatformAccessGuard],
+  providers: [
+    SupportService,
+    SupportDataScopeService,
+    SystemRoleGuard,
+    PlatformAccessGuard,
+  ],
 })
 export class SupportModule {}

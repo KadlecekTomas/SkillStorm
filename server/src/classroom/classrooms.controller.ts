@@ -23,7 +23,10 @@ import { ClassSectionsService } from './class-sections.service';
 import { CreateClassSectionDto } from './dto/create-classroom.dto';
 import { QueryClassSectionsDto } from './dto/query-class-sections.dto';
 import { AllowPendingOrg } from '@/common/decorators/allow-pending-org.decorator';
-import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
+import {
+  OrgOperation,
+  OrgOperationType,
+} from '@/common/decorators/org-operation.decorator';
 import { OrgContextService } from '@/common/org-context/org-context.service';
 import { AcademicYearExpiredGuard } from '@/academic-years/academic-year-expired.guard';
 import { NoHttpCache } from '@/common/cache/no-http-cache.decorator';
@@ -51,9 +54,12 @@ export class ClassroomsController {
       throw new BadRequestException('Missing active academic year');
     }
     if (q.yearId && q.academicYearId && q.yearId !== q.academicYearId) {
-      throw new BadRequestException('academicYearId a yearId se musí shodovat.');
+      throw new BadRequestException(
+        'academicYearId a yearId se musí shodovat.',
+      );
     }
-    const requestedYearId = q.yearId ?? q.academicYearId ?? ctx.activeAcademicYearId;
+    const requestedYearId =
+      q.yearId ?? q.academicYearId ?? ctx.activeAcademicYearId;
     return ok(
       this.service.findAll(
         {
@@ -69,7 +75,10 @@ export class ClassroomsController {
   @Get('my-structure')
   @Permission(PermissionKey.MANAGE_STUDENTS, PermissionKey.VIEW_RESULTS)
   @CacheTTL(0)
-  @ApiOperation({ summary: 'Get structured classroom view for current user (homeroom / teaching / other)' })
+  @ApiOperation({
+    summary:
+      'Get structured classroom view for current user (homeroom / teaching / other)',
+  })
   async myStructure(@Req() req: RequestWithUser) {
     const ctx = await this.orgContext.get(req);
     if (!ctx.activeAcademicYearId) {
@@ -113,7 +122,14 @@ export class ClassroomsController {
     if (academicYearId && academicYearId !== ctx.activeAcademicYearId) {
       throw new BadRequestException('academicYearId query is not allowed');
     }
-    return ok(this.service.getSubjectPerformance(id, req.user, ctx.activeAcademicYearId, limit));
+    return ok(
+      this.service.getSubjectPerformance(
+        id,
+        req.user,
+        ctx.activeAcademicYearId,
+        limit,
+      ),
+    );
   }
 
   @Get(':id')
@@ -132,7 +148,10 @@ export class ClassroomsController {
   @UseGuards(AcademicYearExpiredGuard)
   @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'Create classroom for academic year' })
-  async create(@Body() dto: CreateClassSectionDto, @Req() req: RequestWithUser) {
+  async create(
+    @Body() dto: CreateClassSectionDto,
+    @Req() req: RequestWithUser,
+  ) {
     const ctx = await this.orgContext.get(req);
     if (!ctx.activeAcademicYearId) {
       throw new BadRequestException('Missing active academic year');
@@ -141,7 +160,9 @@ export class ClassroomsController {
       (dto.yearId && dto.yearId !== ctx.activeAcademicYearId) ||
       (dto.academicYearId && dto.academicYearId !== ctx.activeAcademicYearId)
     ) {
-      throw new BadRequestException('yearId/academicYearId body is not allowed');
+      throw new BadRequestException(
+        'yearId/academicYearId body is not allowed',
+      );
     }
     return ok(
       this.service.create(

@@ -18,13 +18,17 @@ export class MetricsService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async recordForbiddenAccess(payload: RecordRbacMetricDto | ForbiddenAccessMetric) {
+  async recordForbiddenAccess(
+    payload: RecordRbacMetricDto | ForbiddenAccessMetric,
+  ) {
     try {
       await this.prisma.auditLog.create({
         data: {
           userId: payload.userId ?? null,
           organizationId:
-            'organizationId' in payload ? payload.organizationId ?? null : null,
+            'organizationId' in payload
+              ? (payload.organizationId ?? null)
+              : null,
           entityType: AuditEntityType.PERMISSION,
           action: 'FORBIDDEN_ACCESS',
           metadata: {

@@ -34,7 +34,10 @@ import { Permission } from '@/modules/rbac/permission.decorator';
 import { PermissionKey } from '@prisma/client';
 
 import { InvalidateScopes } from '@/common/cache/invalidate.decorator';
-import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
+import {
+  OrgOperation,
+  OrgOperationType,
+} from '@/common/decorators/org-operation.decorator';
 
 @ApiTags('LearningMaterials')
 @ApiBearerAuth()

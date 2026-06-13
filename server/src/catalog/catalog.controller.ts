@@ -30,7 +30,10 @@ import { MaterializeSubjectDto } from './dto/materialize-subject.dto';
 import { MaterializeTopicDto } from './dto/materialize-topic.dto';
 import { MaterializeTopicsBulkDto } from './dto/materialize-topics-bulk.dto';
 import { CatalogService } from './catalog.service';
-import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
+import {
+  OrgOperation,
+  OrgOperationType,
+} from '@/common/decorators/org-operation.decorator';
 
 @ApiTags('Catalog')
 @ApiBearerAuth()

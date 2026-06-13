@@ -26,7 +26,10 @@ export class CreateInviteDto {
   @IsOptional()
   expiresInDays?: number;
 
-  @ApiPropertyOptional({ description: 'Max number of accepts (default 1)', default: 1 })
+  @ApiPropertyOptional({
+    description: 'Max number of accepts (default 1)',
+    default: 1,
+  })
   @IsOptional()
   @IsInt()
   @Min(1)

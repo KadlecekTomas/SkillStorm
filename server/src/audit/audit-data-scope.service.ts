@@ -11,7 +11,10 @@ import type { AuditLogDto } from './audit.service';
 export type AuditLogFullView = AuditLogDto;
 
 /** Restricted audit entry — DEVOPS | SUPPORT | DIRECTOR | OWNER. */
-export type AuditLogRestrictedView = Omit<AuditLogDto, 'ipAddress' | 'userAgent'> & {
+export type AuditLogRestrictedView = Omit<
+  AuditLogDto,
+  'ipAddress' | 'userAgent'
+> & {
   ipAddress: null;
   userAgent: null;
 };
@@ -36,10 +39,7 @@ export type AuditLogScopedView = AuditLogFullView | AuditLogRestrictedView;
  */
 @Injectable()
 export class AuditDataScopeService {
-  scopeAudit(
-    user: JwtPayload,
-    log: AuditLogDto,
-  ): AuditLogScopedView | null {
+  scopeAudit(user: JwtPayload, log: AuditLogDto): AuditLogScopedView | null {
     const isSuperAdmin = user.systemRole === SystemRole.SUPERADMIN;
     const isPlatformRole =
       user.systemRole === SystemRole.DEVOPS ||
@@ -56,11 +56,15 @@ export class AuditDataScopeService {
     }
 
     // Org roles: restricted view, own org only
-    const orgRole = user.organizationRole as OrganizationRole | null | undefined;
+    const orgRole = user.organizationRole as
+      | OrganizationRole
+      | null
+      | undefined;
     const callerOrgId = user.organizationId ?? null;
 
     if (
-      (orgRole === OrganizationRole.DIRECTOR || orgRole === OrganizationRole.OWNER) &&
+      (orgRole === OrganizationRole.DIRECTOR ||
+        orgRole === OrganizationRole.OWNER) &&
       log.organizationId === callerOrgId
     ) {
       return this.restrict(log);
@@ -69,10 +73,7 @@ export class AuditDataScopeService {
     return null;
   }
 
-  scopeAuditList(
-    user: JwtPayload,
-    logs: AuditLogDto[],
-  ): AuditLogScopedView[] {
+  scopeAuditList(user: JwtPayload, logs: AuditLogDto[]): AuditLogScopedView[] {
     return logs
       .map((log) => this.scopeAudit(user, log))
       .filter((log): log is AuditLogScopedView => log !== null);

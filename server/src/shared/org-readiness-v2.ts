@@ -31,7 +31,8 @@ export type DerivedOrgReadiness = {
 };
 
 const MISSING_CURRENT_ACADEMIC_YEAR = 'missing_current_academic_year';
-const MISSING_CLASS_SECTION_IN_CURRENT_YEAR = 'missing_class_section_in_current_year';
+const MISSING_CLASS_SECTION_IN_CURRENT_YEAR =
+  'missing_class_section_in_current_year';
 const MISSING_ASSIGNMENT_IN_CURRENT_YEAR = 'missing_assignment_in_current_year';
 
 /**
@@ -46,7 +47,10 @@ export async function deriveOrgReadiness(
   const empty: DerivedOrgReadiness = {
     state: OrgReadinessState.R0_EMPTY,
     canExecute: false,
-    missing: [MISSING_CURRENT_ACADEMIC_YEAR, MISSING_CLASS_SECTION_IN_CURRENT_YEAR],
+    missing: [
+      MISSING_CURRENT_ACADEMIC_YEAR,
+      MISSING_CLASS_SECTION_IN_CURRENT_YEAR,
+    ],
     evidence: {
       hasCurrentYear: false,
       hasClassSectionInCurrentYear: false,
@@ -65,7 +69,10 @@ export async function deriveOrgReadiness(
   if (!currentYear) {
     return {
       ...empty,
-      missing: [MISSING_CURRENT_ACADEMIC_YEAR, MISSING_CLASS_SECTION_IN_CURRENT_YEAR],
+      missing: [
+        MISSING_CURRENT_ACADEMIC_YEAR,
+        MISSING_CLASS_SECTION_IN_CURRENT_YEAR,
+      ],
     };
   }
 
@@ -96,7 +103,9 @@ export async function deriveOrgReadiness(
     state = OrgReadinessState.R3_EXECUTION_READY;
   }
 
-  const canExecute = state === OrgReadinessState.R2_STRUCTURE_READY || state === OrgReadinessState.R3_EXECUTION_READY;
+  const canExecute =
+    state === OrgReadinessState.R2_STRUCTURE_READY ||
+    state === OrgReadinessState.R3_EXECUTION_READY;
 
   return {
     state,

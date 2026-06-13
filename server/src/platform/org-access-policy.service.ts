@@ -31,9 +31,11 @@ export class OrgAccessPolicy {
     reflector: Reflector,
     context: ExecutionContext,
   ): Promise<OrgAccessDecision> {
-    const req = context.switchToHttp().getRequest<RequestWithUser & {
-      [ORG_ACCESS_CACHE_KEY]?: CachedOrgAccessDecision;
-    }>();
+    const req = context.switchToHttp().getRequest<
+      RequestWithUser & {
+        [ORG_ACCESS_CACHE_KEY]?: CachedOrgAccessDecision;
+      }
+    >();
 
     if (req?.[ORG_ACCESS_CACHE_KEY]) {
       const cached = req[ORG_ACCESS_CACHE_KEY];
@@ -106,10 +108,7 @@ export class OrgAccessPolicy {
     if (!req) return 'UNKNOWN_ROUTE';
     const method = req.method ?? 'UNKNOWN';
     const path =
-      req.route?.path ??
-      req.originalUrl ??
-      req.url ??
-      'UNKNOWN_PATH';
+      req.route?.path ?? req.originalUrl ?? req.url ?? 'UNKNOWN_PATH';
     return `${method} ${path}`;
   }
 

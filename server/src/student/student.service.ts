@@ -268,7 +268,12 @@ export class StudentsService {
 
     const classSection = await this.prisma.classSection.findUnique({
       where: { id: dto.classSectionId },
-      select: { id: true, orgId: true, yearId: true, academicYear: { select: { isCurrent: true } } },
+      select: {
+        id: true,
+        orgId: true,
+        yearId: true,
+        academicYear: { select: { isCurrent: true } },
+      },
     });
     if (!classSection) {
       throw new NotFoundException('Třída nebyla nalezena.');
@@ -280,14 +285,21 @@ export class StudentsService {
     if (membership.organizationId !== orgId) {
       throw new ForbiddenException('Membership nepatří do zadané organizace.');
     }
-    if (user.systemRole !== SystemRole.SUPERADMIN && user.organizationId !== orgId) {
-      throw new ForbiddenException('Nelze vytvářet studenta v jiné organizaci.');
+    if (
+      user.systemRole !== SystemRole.SUPERADMIN &&
+      user.organizationId !== orgId
+    ) {
+      throw new ForbiddenException(
+        'Nelze vytvářet studenta v jiné organizaci.',
+      );
     }
     if (classSection.yearId !== dto.academicYearId) {
       throw new BadRequestException('Školní rok neodpovídá třídě.');
     }
     if (!classSection.academicYear?.isCurrent) {
-      throw new ForbiddenException('Nelze zapisovat do uzavřeného školního roku.');
+      throw new ForbiddenException(
+        'Nelze zapisovat do uzavřeného školního roku.',
+      );
     }
 
     const created = await this.prisma.$transaction(async (tx) => {
@@ -388,25 +400,34 @@ export class StudentsService {
       },
     });
 
-    return cacheGetOrSet(this.cache, cacheKey, StudentsService.STUDENTS_CACHE_TTL_MS, async () => {
-      const [total, data] = await this.prisma.$transaction([
-        this.prisma.student.count({ where }),
-        this.prisma.student.findMany({
-          where,
-          include: {
-            membership: {
-              include: { user: { select: { id: true, name: true, email: true } } },
-            },
-            enrollments: {
-              include: {
-                academicYear: true,
-                classSection: {
-                  include: {
-                    teacher: {
-                      include: {
-                        membership: {
-                          include: {
-                            user: { select: { id: true, name: true, email: true } },
+    return cacheGetOrSet(
+      this.cache,
+      cacheKey,
+      StudentsService.STUDENTS_CACHE_TTL_MS,
+      async () => {
+        const [total, data] = await this.prisma.$transaction([
+          this.prisma.student.count({ where }),
+          this.prisma.student.findMany({
+            where,
+            include: {
+              membership: {
+                include: {
+                  user: { select: { id: true, name: true, email: true } },
+                },
+              },
+              enrollments: {
+                include: {
+                  academicYear: true,
+                  classSection: {
+                    include: {
+                      teacher: {
+                        include: {
+                          membership: {
+                            include: {
+                              user: {
+                                select: { id: true, name: true, email: true },
+                              },
+                            },
                           },
                         },
                       },
@@ -415,30 +436,31 @@ export class StudentsService {
                 },
               },
             },
-          },
-          orderBy: [
-            { membership: { user: { name: 'asc' } } },
-            { studentNumber: 'asc' },
-            { membershipId: 'asc' },
-          ],
-          skip,
-          take: limit,
-        }),
-      ]);
+            orderBy: [
+              { membership: { user: { name: 'asc' } } },
+              { studentNumber: 'asc' },
+              { membershipId: 'asc' },
+            ],
+            skip,
+            take: limit,
+          }),
+        ]);
 
-      return {
-        data,
-        meta: {
-          page,
-          limit,
-          total,
-          pages: Math.max(1, Math.ceil(total / limit)),
-        },
-      };
-    }, {
-      scopeId,
-      resource: 'students',
-    });
+        return {
+          data,
+          meta: {
+            page,
+            limit,
+            total,
+            pages: Math.max(1, Math.ceil(total / limit)),
+          },
+        };
+      },
+      {
+        scopeId,
+        resource: 'students',
+      },
+    );
   }
 
   // ---------- DETAIL ----------
@@ -524,8 +546,10 @@ export class StudentsService {
     if (
       user.systemRole !== SystemRole.SUPERADMIN &&
       !(
-        hasAtLeastRole(user.organizationRole ?? null, OrganizationRole.DIRECTOR) &&
-        user.organizationId === student.orgId
+        hasAtLeastRole(
+          user.organizationRole ?? null,
+          OrganizationRole.DIRECTOR,
+        ) && user.organizationId === student.orgId
       )
     ) {
       throw new ForbiddenException(
@@ -557,7 +581,11 @@ export class StudentsService {
    * GDPR-minimal student detail. Called after StudentAccessGuard.
    * Returns only: id, displayName, classroomLabel, performanceSummary, progressByTopic, recentTests.
    */
-  async getDetail(id: string, user: JwtPayload, yearId?: string): Promise<StudentDetailResponse> {
+  async getDetail(
+    id: string,
+    user: JwtPayload,
+    yearId?: string,
+  ): Promise<StudentDetailResponse> {
     const student = await this.prisma.student.findUnique({
       where: { id },
       select: {
@@ -578,7 +606,9 @@ export class StudentsService {
           select: {
             yearId: true,
             academicYear: { select: { isCurrent: true, label: true } },
-            classSection: { select: { label: true, grade: true, section: true } },
+            classSection: {
+              select: { label: true, grade: true, section: true },
+            },
           },
           orderBy: { academicYear: { isCurrent: 'desc' } },
           take: 20,
@@ -593,7 +623,9 @@ export class StudentsService {
       user.organizationId != null &&
       student.orgId !== user.organizationId
     ) {
-      throw new ForbiddenException('Nemáš oprávnění zobrazit detail tohoto žáka.');
+      throw new ForbiddenException(
+        'Nemáš oprávnění zobrazit detail tohoto žáka.',
+      );
     }
 
     // Guard: yearId must belong to this student's org — prevents cross-org year enumeration.
@@ -610,15 +642,19 @@ export class StudentsService {
       }
     }
 
-    const displayName =
-      student.membership?.user?.name?.trim() || 'Žák';
+    const displayName = student.membership?.user?.name?.trim() || 'Žák';
     // When yearId is provided, find that year's enrollment; otherwise prefer current year
     const currentEnrollment = yearId
-      ? student.enrollments?.find((e) => e.yearId === yearId) ?? student.enrollments?.[0]
-      : student.enrollments?.find((e) => e.academicYear?.isCurrent) ?? student.enrollments?.[0];
+      ? (student.enrollments?.find((e) => e.yearId === yearId) ??
+        student.enrollments?.[0])
+      : (student.enrollments?.find((e) => e.academicYear?.isCurrent) ??
+        student.enrollments?.[0]);
     const classroomLabel =
       currentEnrollment?.classSection?.label ||
-      [currentEnrollment?.classSection?.grade, currentEnrollment?.classSection?.section]
+      [
+        currentEnrollment?.classSection?.grade,
+        currentEnrollment?.classSection?.section,
+      ]
         .filter(Boolean)
         .join(' ') ||
       '—';
@@ -669,7 +705,8 @@ export class StudentsService {
           earnedPoints: s.earnedPoints ?? null,
           maxPoints:
             s.maxPoints ??
-            (test?.questions?.reduce((sum, q) => sum + (q.score ?? 1), 0) ?? 0),
+            test?.questions?.reduce((sum, q) => sum + (q.score ?? 1), 0) ??
+            0,
           submittedAt: s.submittedAt,
           topicLevelId: tl?.id ?? null,
           topicName: tl?.catalogTopic?.name ?? null,

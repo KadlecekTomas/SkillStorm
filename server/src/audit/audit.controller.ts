@@ -59,7 +59,10 @@ export class AuditController {
         message: 'No active organization membership.',
       });
     }
-    if (orgRole !== OrganizationRole.DIRECTOR && orgRole !== OrganizationRole.OWNER) {
+    if (
+      orgRole !== OrganizationRole.DIRECTOR &&
+      orgRole !== OrganizationRole.OWNER
+    ) {
       throw new ForbiddenException({
         code: 'FORBIDDEN_ORG_ADMIN_ONLY',
         message: 'Audit log access requires DIRECTOR or OWNER role.',

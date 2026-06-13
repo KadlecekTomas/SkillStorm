@@ -17,7 +17,10 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
 import type { JwtPayload } from '@/auth/types/jwt-payload';
-import { cacheScopeForUser, invalidateResourcesFailSafe } from '@/shared/cache/org-cache.utils';
+import {
+  cacheScopeForUser,
+  invalidateResourcesFailSafe,
+} from '@/shared/cache/org-cache.utils';
 import type { CreateTeacherAccessDto } from './dto/create-teacher-access.dto';
 import type { UpdateTeacherAccessDto } from './dto/update-teacher-access.dto';
 import type { QueryTeacherAccessDto } from './dto/query-teacher-access.dto';
@@ -85,7 +88,11 @@ export class TeacherAccessService {
     return this.prisma.auditLog.create({ data });
   }
 
-  private async invalidateAccessReads(systemRole: SystemRole | null | undefined, orgId: string, mutation: string) {
+  private async invalidateAccessReads(
+    systemRole: SystemRole | null | undefined,
+    orgId: string,
+    mutation: string,
+  ) {
     await invalidateResourcesFailSafe(this.cache, {
       scopeId: cacheScopeForUser(systemRole, orgId),
       resources: ['teachers', 'classrooms', 'dashboard'],
@@ -102,7 +109,9 @@ export class TeacherAccessService {
   private async assertManagerAccess(user: JwtPayload, orgId: string) {
     if (user.systemRole === SystemRole.SUPERADMIN) return;
     if (!user.organizationId || user.organizationId !== orgId) {
-      throw new ForbiddenException('Cross-organization teacher access is forbidden.');
+      throw new ForbiddenException(
+        'Cross-organization teacher access is forbidden.',
+      );
     }
     const managerMembership = await this.prisma.membership.findFirst({
       where: {
@@ -114,11 +123,16 @@ export class TeacherAccessService {
       select: { id: true },
     });
     if (!managerMembership) {
-      throw new ForbiddenException('Pouze owner nebo ředitel může spravovat přístupy učitelů.');
+      throw new ForbiddenException(
+        'Pouze owner nebo ředitel může spravovat přístupy učitelů.',
+      );
     }
   }
 
-  private async resolveTeacherAndClass(teacherId: string, classSectionId: string) {
+  private async resolveTeacherAndClass(
+    teacherId: string,
+    classSectionId: string,
+  ) {
     const [teacher, classSection] = await Promise.all([
       this.prisma.teacher.findUnique({
         where: { id: teacherId },
@@ -148,10 +162,14 @@ export class TeacherAccessService {
       throw new NotFoundException('Třída nebyla nalezena.');
     }
     if (teacher.organizationId !== classSection.orgId) {
-      throw new ForbiddenException('Učitel a třída musí patřit do stejné organizace.');
+      throw new ForbiddenException(
+        'Učitel a třída musí patřit do stejné organizace.',
+      );
     }
     if (teacher.membership?.role !== OrganizationRole.TEACHER) {
-      throw new BadRequestException('Přístup lze přidělit pouze členovi s rolí TEACHER.');
+      throw new BadRequestException(
+        'Přístup lze přidělit pouze členovi s rolí TEACHER.',
+      );
     }
     return { teacher, classSection };
   }
@@ -285,7 +303,10 @@ export class TeacherAccessService {
 
   async create(dto: CreateTeacherAccessDto, user: JwtPayload) {
     this.assertValidWindow(dto.validFrom, dto.validTo);
-    const { teacher, classSection } = await this.resolveTeacherAndClass(dto.teacherId, dto.classSectionId);
+    const { teacher, classSection } = await this.resolveTeacherAndClass(
+      dto.teacherId,
+      dto.classSectionId,
+    );
     await this.assertManagerAccess(user, classSection.orgId);
 
     const created = await this.prisma.$transaction(async (tx) => {
@@ -310,7 +331,9 @@ export class TeacherAccessService {
       });
 
       if (existing && !existing.deletedAt) {
-        throw new ConflictException('Přístup učitele k této třídě již existuje.');
+        throw new ConflictException(
+          'Přístup učitele k této třídě již existuje.',
+        );
       }
 
       const record = existing
@@ -372,7 +395,11 @@ export class TeacherAccessService {
       },
     });
 
-    await this.invalidateAccessReads(user.systemRole, classSection.orgId, 'teacher-access.create');
+    await this.invalidateAccessReads(
+      user.systemRole,
+      classSection.orgId,
+      'teacher-access.create',
+    );
     return created;
   }
 
@@ -384,7 +411,9 @@ export class TeacherAccessService {
         classSection: {
           select: { id: true, orgId: true, yearId: true, teacherId: true },
         },
-        teacher: { select: { id: true, organizationId: true, deletedAt: true } },
+        teacher: {
+          select: { id: true, organizationId: true, deletedAt: true },
+        },
       },
     });
     if (!current || current.deletedAt) {
@@ -393,8 +422,10 @@ export class TeacherAccessService {
     await this.assertManagerAccess(user, current.classSection.orgId);
 
     const nextAccessLevel = dto.accessLevel ?? current.accessLevel;
-    const nextValidFrom = dto.validFrom === undefined ? current.validFrom : dto.validFrom ?? null;
-    const nextValidTo = dto.validTo === undefined ? current.validTo : dto.validTo ?? null;
+    const nextValidFrom =
+      dto.validFrom === undefined ? current.validFrom : (dto.validFrom ?? null);
+    const nextValidTo =
+      dto.validTo === undefined ? current.validTo : (dto.validTo ?? null);
     this.assertValidWindow(nextValidFrom, nextValidTo);
 
     const updated = await this.prisma.$transaction(async (tx) => {
@@ -457,7 +488,11 @@ export class TeacherAccessService {
       },
     });
 
-    await this.invalidateAccessReads(user.systemRole, current.classSection.orgId, 'teacher-access.update');
+    await this.invalidateAccessReads(
+      user.systemRole,
+      current.classSection.orgId,
+      'teacher-access.update',
+    );
     return updated;
   }
 
@@ -504,7 +539,11 @@ export class TeacherAccessService {
       },
     });
 
-    await this.invalidateAccessReads(user.systemRole, current.classSection.orgId, 'teacher-access.remove');
+    await this.invalidateAccessReads(
+      user.systemRole,
+      current.classSection.orgId,
+      'teacher-access.remove',
+    );
     return { success: true };
   }
 

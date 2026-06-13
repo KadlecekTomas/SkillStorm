@@ -97,7 +97,9 @@ export async function bumpResourceVersions(
   scopeId: string,
   resources: CachedResource[],
 ) {
-  await Promise.all(resources.map((resource) => bumpResourceVersion(cache, scopeId, resource)));
+  await Promise.all(
+    resources.map((resource) => bumpResourceVersion(cache, scopeId, resource)),
+  );
 }
 
 function logInvalidationError(
@@ -128,14 +130,14 @@ export async function fallbackInvalidate(
 
   const operations = await Promise.allSettled([
     ...opts.resources.map((resource) =>
-      cache.set(
-        resourceBypassKey(opts.scopeId, resource),
-        '1',
-        { ttl: BYPASS_TTL_SECONDS } as never,
-      ),
+      cache.set(resourceBypassKey(opts.scopeId, resource), '1', {
+        ttl: BYPASS_TTL_SECONDS,
+      } as never),
     ),
     cache.del(orgVersionKey(opts.scopeId)),
-    ...opts.resources.map((resource) => cache.del(resourceVersionKey(opts.scopeId, resource))),
+    ...opts.resources.map((resource) =>
+      cache.del(resourceVersionKey(opts.scopeId, resource)),
+    ),
   ]);
 
   const failedOperations = operations
@@ -147,7 +149,8 @@ export async function fallbackInvalidate(
     .map(({ result, index }) => ({
       key: (() => {
         if (index < opts.resources.length) {
-          const resource = opts.resources[index] ?? opts.resources[opts.resources.length - 1]!;
+          const resource =
+            opts.resources[index] ?? opts.resources[opts.resources.length - 1]!;
           return resourceBypassKey(opts.scopeId, resource);
         }
         if (index === opts.resources.length) {
@@ -159,17 +162,24 @@ export async function fallbackInvalidate(
         return resourceVersionKey(opts.scopeId, resource);
       })(),
       error:
-        result.reason instanceof Error ? result.reason.message : String(result.reason),
+        result.reason instanceof Error
+          ? result.reason.message
+          : String(result.reason),
     }));
 
-  logInvalidationError(opts.logger, 'Cache invalidation failed -> activating bypass', {
-    mutation: opts.mutation,
-    scopeId: opts.scopeId,
-    resources: opts.resources,
-    bypassTtlSeconds: BYPASS_TTL_SECONDS,
-    error: opts.error instanceof Error ? opts.error.message : String(opts.error),
-    failedOperations,
-  });
+  logInvalidationError(
+    opts.logger,
+    'Cache invalidation failed -> activating bypass',
+    {
+      mutation: opts.mutation,
+      scopeId: opts.scopeId,
+      resources: opts.resources,
+      bypassTtlSeconds: BYPASS_TTL_SECONDS,
+      error:
+        opts.error instanceof Error ? opts.error.message : String(opts.error),
+      failedOperations,
+    },
+  );
 }
 
 export async function invalidateResourcesFailSafe(
@@ -184,7 +194,9 @@ export async function invalidateResourcesFailSafe(
   try {
     await bumpResourceVersions(cache, opts.scopeId, opts.resources);
     await Promise.all(
-      opts.resources.map((resource) => cache.del(resourceBypassKey(opts.scopeId, resource))),
+      opts.resources.map((resource) =>
+        cache.del(resourceBypassKey(opts.scopeId, resource)),
+      ),
     );
   } catch (error) {
     await fallbackInvalidate(cache, {
@@ -259,10 +271,7 @@ export function buildAuthzScopeKey(opts: {
   organizationRole?: OrganizationRole | null;
 }) {
   const role = opts.organizationRole ?? opts.systemRole ?? 'none';
-  return [
-    `u:${opts.userId}`,
-    `r:${role}`,
-  ].join('|');
+  return [`u:${opts.userId}`, `r:${role}`].join('|');
 }
 
 /**
@@ -281,17 +290,22 @@ export async function cacheGetOrSet<T>(
 ): Promise<T> {
   if (opts?.scopeId && opts.resource) {
     try {
-      const bypass = await cache.get(resourceBypassKey(opts.scopeId, opts.resource));
+      const bypass = await cache.get(
+        resourceBypassKey(opts.scopeId, opts.resource),
+      );
       if (bypass) {
         return fetcher();
       }
     } catch (error) {
-      console.error('Cache bypass flag read failed; bypassing cache for request', {
-        key,
-        scopeId: opts.scopeId,
-        resource: opts.resource,
-        error: error instanceof Error ? error.message : String(error),
-      });
+      console.error(
+        'Cache bypass flag read failed; bypassing cache for request',
+        {
+          key,
+          scopeId: opts.scopeId,
+          resource: opts.resource,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      );
       return fetcher();
     }
   }

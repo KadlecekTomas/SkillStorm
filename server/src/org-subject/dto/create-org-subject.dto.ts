@@ -1,5 +1,14 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsInt, IsOptional, IsString, IsUUID, Length, Max, Min } from 'class-validator';
+import {
+  IsBoolean,
+  IsInt,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Length,
+  Max,
+  Min,
+} from 'class-validator';
 import { Transform } from 'class-transformer';
 
 export class CreateOrgSubjectDto {
@@ -19,14 +28,20 @@ export class CreateOrgSubjectDto {
   @Transform(({ value }) => value?.trim())
   name?: string;
 
-  @ApiPropertyOptional({ description: 'Custom subject minimum grade', example: 1 })
+  @ApiPropertyOptional({
+    description: 'Custom subject minimum grade',
+    example: 1,
+  })
   @IsOptional()
   @IsInt()
   @Min(1)
   @Max(13)
   gradeFrom?: number;
 
-  @ApiPropertyOptional({ description: 'Custom subject maximum grade', example: 9 })
+  @ApiPropertyOptional({
+    description: 'Custom subject maximum grade',
+    example: 9,
+  })
   @IsOptional()
   @IsInt()
   @Min(1)

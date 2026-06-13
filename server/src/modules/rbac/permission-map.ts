@@ -16,11 +16,15 @@ export const PERMISSION_DESCRIPTIONS: Record<PermissionKey, string> = {
   [PermissionKey.VIEW_ANALYTICS]: 'View analytics',
   [PermissionKey.INVITE_STUDENTS]: 'Allows sharing invite links for students.',
   [PermissionKey.INVITE_TEACHERS]: 'Allows sharing invite links for teachers.',
-  [PermissionKey.VIEW_TEST_OVERVIEW]: 'Allows viewing the list of tests and aggregates (read-only).',
+  [PermissionKey.VIEW_TEST_OVERVIEW]:
+    'Allows viewing the list of tests and aggregates (read-only).',
   [PermissionKey.MANAGE_TESTS]: 'Allows creating, editing, and deleting tests.',
-  [PermissionKey.ASSIGN_TESTS]: 'Allows creating and managing assignments (assign test to class).',
-  [PermissionKey.VIEW_SUBMISSIONS]: 'Allows viewing submission list and detail.',
-  [PermissionKey.MANAGE_ASSIGNMENTS]: 'Allows full assignment lifecycle management.',
+  [PermissionKey.ASSIGN_TESTS]:
+    'Allows creating and managing assignments (assign test to class).',
+  [PermissionKey.VIEW_SUBMISSIONS]:
+    'Allows viewing submission list and detail.',
+  [PermissionKey.MANAGE_ASSIGNMENTS]:
+    'Allows full assignment lifecycle management.',
   [PermissionKey.VIEW_OWN_ASSIGNMENTS]:
     'Allows viewing assignments where the user is an intended recipient (enrolled in class or in assignment students).',
   [PermissionKey.VIEW_CLASS_ASSIGNMENTS]:

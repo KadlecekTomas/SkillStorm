@@ -26,7 +26,10 @@ import { ToggleSubjectLevelDto } from './dto/toggle-subject-level.dto';
 import { SubjectsService } from './subject.service';
 
 import { InvalidateScopes } from '@/common/cache/invalidate.decorator';
-import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
+import {
+  OrgOperation,
+  OrgOperationType,
+} from '@/common/decorators/org-operation.decorator';
 
 @ApiTags('Subjects')
 @ApiBearerAuth()
@@ -45,7 +48,12 @@ export class SubjectsController {
   @ApiQuery({ name: 'limit', required: false, example: 20 })
   @ApiQuery({ name: 'search', required: false, example: 'mat' })
   @ApiQuery({ name: 'includeLevels', required: false, example: false })
-  @ApiQuery({ name: 'includeInactive', required: false, example: false, description: 'Include inactive subjects' })
+  @ApiQuery({
+    name: 'includeInactive',
+    required: false,
+    example: false,
+    description: 'Include inactive subjects',
+  })
   @CacheTTL(0) // čtecí endpointy necacheujeme na HTTP vrstvě – používáme verziovanou cache v service
   findAll(@Req() req: RequestWithUser, @Query() q: QuerySubjectsDto) {
     return this.service.findAll(req.user, q);
@@ -86,7 +94,12 @@ export class SubjectsController {
     @Body() dto: ToggleSubjectLevelDto,
     @Req() req: RequestWithUser,
   ) {
-    return this.service.toggleSubjectLevel(subjectId, grade, dto.isEnabled, req.user);
+    return this.service.toggleSubjectLevel(
+      subjectId,
+      grade,
+      dto.isEnabled,
+      req.user,
+    );
   }
 
   // ---------- Subject → TopicLevels (přes Levels) ----------

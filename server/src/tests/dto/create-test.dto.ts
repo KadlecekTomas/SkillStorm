@@ -27,7 +27,9 @@ export class CreateTestDto {
   @IsEnum(PublishStatus)
   status?: PublishStatus;
 
-  @ApiProperty({ description: 'Subject UUID (must belong to the org, not deleted)' })
+  @ApiProperty({
+    description: 'Subject UUID (must belong to the org, not deleted)',
+  })
   @IsUUID()
   subjectId!: string;
 
@@ -45,14 +47,16 @@ export class CreateTestDto {
   allowedGrades?: SchoolGrade[];
 
   @ApiPropertyOptional({
-    description: 'AcademicYear UUID — defaults to the active year from OrgContext if omitted',
+    description:
+      'AcademicYear UUID — defaults to the active year from OrgContext if omitted',
   })
   @IsOptional()
   @IsUUID()
   academicYearId?: string;
 
   @ApiPropertyOptional({
-    description: 'CatalogTopic UUID — auto-creates TestAssignment rows for all matching TopicLevel records',
+    description:
+      'CatalogTopic UUID — auto-creates TestAssignment rows for all matching TopicLevel records',
   })
   @IsOptional()
   @IsUUID()

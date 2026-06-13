@@ -23,7 +23,10 @@ export class OrgSubjectService {
   } as const;
 
   async create(dto: CreateOrgSubjectDto, user: JwtPayload) {
-    if (user.systemRole !== SystemRole.SUPERADMIN && user.organizationId !== dto.organizationId) {
+    if (
+      user.systemRole !== SystemRole.SUPERADMIN &&
+      user.organizationId !== dto.organizationId
+    ) {
       throw new ForbiddenException('Subject must belong to your organization');
     }
 
@@ -32,12 +35,16 @@ export class OrgSubjectService {
     if (!subjectId) {
       const name = dto.name?.trim();
       if (!name) {
-        throw new BadRequestException('Missing subjectId or custom subject name');
+        throw new BadRequestException(
+          'Missing subjectId or custom subject name',
+        );
       }
       const gradeFrom = dto.gradeFrom ?? 1;
       const gradeTo = dto.gradeTo ?? 9;
       if (gradeFrom > gradeTo) {
-        throw new BadRequestException('gradeFrom must be less than or equal to gradeTo');
+        throw new BadRequestException(
+          'gradeFrom must be less than or equal to gradeTo',
+        );
       }
 
       const existingSubject = await this.prisma.subject.findFirst({
@@ -85,7 +92,9 @@ export class OrgSubjectService {
       },
     });
     if (existing) {
-      throw new BadRequestException('Subject already enabled for this organization');
+      throw new BadRequestException(
+        'Subject already enabled for this organization',
+      );
     }
     return this.prisma.orgSubject.create({
       data: {
@@ -137,7 +146,10 @@ export class OrgSubjectService {
       },
     });
     if (!subject) throw new NotFoundException('Subject not found');
-    if (user.systemRole !== SystemRole.SUPERADMIN && subject.organizationId !== user.organizationId) {
+    if (
+      user.systemRole !== SystemRole.SUPERADMIN &&
+      subject.organizationId !== user.organizationId
+    ) {
       throw new ForbiddenException('Subject not in your organization');
     }
     return subject;
@@ -146,7 +158,10 @@ export class OrgSubjectService {
   async update(id: string, dto: UpdateOrgSubjectDto, user: JwtPayload) {
     const current = await this.prisma.orgSubject.findUnique({ where: { id } });
     if (!current) throw new NotFoundException('Subject not found');
-    if (user.systemRole !== SystemRole.SUPERADMIN && current.organizationId !== user.organizationId) {
+    if (
+      user.systemRole !== SystemRole.SUPERADMIN &&
+      current.organizationId !== user.organizationId
+    ) {
       throw new ForbiddenException('Subject not in your organization');
     }
     if (dto.subjectId) {

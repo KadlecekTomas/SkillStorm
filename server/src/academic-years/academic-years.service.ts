@@ -21,10 +21,12 @@ export const CURRENT_YEAR_ALREADY_EXISTS = 'CURRENT_YEAR_ALREADY_EXISTS';
 /** Canonical: no academic year with isCurrent=true for the org. */
 export const NO_CURRENT_ACADEMIC_YEAR = 'NO_CURRENT_ACADEMIC_YEAR';
 /** @deprecated Kept for backward compatibility in error-code consumers; DB now enforces at-most-one. */
-export const MULTIPLE_CURRENT_ACADEMIC_YEARS = 'MULTIPLE_CURRENT_ACADEMIC_YEARS';
+export const MULTIPLE_CURRENT_ACADEMIC_YEARS =
+  'MULTIPLE_CURRENT_ACADEMIC_YEARS';
 /** Deprecated alias; emit alongside new code for one release. */
 export const NO_ACTIVE_ACADEMIC_YEAR_DEPRECATED = 'NO_ACTIVE_ACADEMIC_YEAR';
-export const MULTIPLE_ACTIVE_ACADEMIC_YEARS_DEPRECATED = 'MULTIPLE_ACTIVE_ACADEMIC_YEARS';
+export const MULTIPLE_ACTIVE_ACADEMIC_YEARS_DEPRECATED =
+  'MULTIPLE_ACTIVE_ACADEMIC_YEARS';
 
 type AcademicYearResponse = {
   id: string;
@@ -86,8 +88,11 @@ export class AcademicYearsService {
 
   async create(dto: CreateAcademicYearDto, user: JwtPayload) {
     const orgId = this.resolveOrgId(user);
-    const { startDate: startsAt, endDate: endsAt, label } =
-      deriveCzechSchoolYearFromStartYear(dto.startYear);
+    const {
+      startDate: startsAt,
+      endDate: endsAt,
+      label,
+    } = deriveCzechSchoolYearFromStartYear(dto.startYear);
 
     // Pre-flight guard: if caller explicitly requests isActive=true, reject when a
     // non-deleted current year already exists. Use activate() to switch years instead.
@@ -99,7 +104,8 @@ export class AcademicYearsService {
       if (existing) {
         throw new BadRequestException({
           code: CURRENT_YEAR_ALREADY_EXISTS,
-          message: 'Organizace již má aktivní školní rok. Pro přepnutí použijte endpoint /activate.',
+          message:
+            'Organizace již má aktivní školní rok. Pro přepnutí použijte endpoint /activate.',
         });
       }
     }
@@ -132,7 +138,10 @@ export class AcademicYearsService {
         });
       });
     } catch (err) {
-      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === 'P2002'
+      ) {
         throw new ConflictException({
           statusCode: 409,
           code: MULTIPLE_CURRENT_YEARS_FOR_ORG,
@@ -184,7 +193,10 @@ export class AcademicYearsService {
         });
       });
     } catch (err) {
-      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === 'P2002'
+      ) {
         throw new ConflictException({
           statusCode: 409,
           code: MULTIPLE_CURRENT_YEARS_FOR_ORG,
@@ -233,7 +245,8 @@ export class AcademicYearsService {
 
     if (!year) {
       throw new ConflictException({
-        message: 'Current academic year is not configured for this organization.',
+        message:
+          'Current academic year is not configured for this organization.',
         meta: {
           code: NO_CURRENT_ACADEMIC_YEAR,
           deprecatedCode: NO_ACTIVE_ACADEMIC_YEAR_DEPRECATED,

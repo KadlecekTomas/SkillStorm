@@ -32,7 +32,10 @@ import { AuditService } from '@/audit/audit.service';
 import { RiskService } from '@/risk/risk.service';
 import { TeacherAccessService } from '@/teacher-access/teacher-access.service';
 import { deriveStudentRiskMetrics } from './risk-overview.util';
-import type { ClassroomRiskOverviewResponseDto, ClassroomRiskOverviewStudentDto } from './dto/risk-overview.dto';
+import type {
+  ClassroomRiskOverviewResponseDto,
+  ClassroomRiskOverviewStudentDto,
+} from './dto/risk-overview.dto';
 import type {
   SubjectPerformanceResponseDto,
   SubjectPerformanceItemDto,
@@ -96,7 +99,9 @@ export class ClassSectionsService {
     };
   }
 
-  private activeEnrollmentCondition(yearId: string): Prisma.EnrollmentWhereInput {
+  private activeEnrollmentCondition(
+    yearId: string,
+  ): Prisma.EnrollmentWhereInput {
     return {
       yearId,
       status: { not: EnrollmentStatus.LEFT },
@@ -248,7 +253,9 @@ export class ClassSectionsService {
       throw new ForbiddenException('Missing organization context.');
     }
     if (dto.yearId && dto.academicYearId && dto.yearId !== dto.academicYearId) {
-      throw new BadRequestException('academicYearId a yearId se musí shodovat.');
+      throw new BadRequestException(
+        'academicYearId a yearId se musí shodovat.',
+      );
     }
     const yearId = dto.yearId ?? dto.academicYearId ?? null;
     if (!yearId) {
@@ -311,7 +318,8 @@ export class ClassSectionsService {
             yearId: resolvedYear.id,
             grade: dto.grade,
             section: dto.section,
-            label: dto.label ?? `${this.getGradeLabel(dto.grade)}.${dto.section}`,
+            label:
+              dto.label ?? `${this.getGradeLabel(dto.grade)}.${dto.section}`,
             teacherId,
           },
           select: {
@@ -428,10 +436,15 @@ export class ClassSectionsService {
     const cursorToken = rawCursor && rawCursor.length > 0 ? rawCursor : null;
     const isCursorMode = !!cursorToken;
     const effectiveDirection = isCursorMode ? direction : 'next';
-    if (!isCursorMode && typeof q.page === 'number' && !this.hasLoggedPageDeprecation) {
+    if (
+      !isCursorMode &&
+      typeof q.page === 'number' &&
+      !this.hasLoggedPageDeprecation
+    ) {
       this.hasLoggedPageDeprecation = true;
       this.logger.warn({
-        message: 'Deprecated page parameter ignored for classrooms cursor pagination',
+        message:
+          'Deprecated page parameter ignored for classrooms cursor pagination',
       });
     }
 
@@ -469,7 +482,10 @@ export class ClassSectionsService {
         { teacherId: teacher.id },
         {
           teachers: {
-            some: this.activeTeacherAccessCondition(teacher.id, resolvedYear.id),
+            some: this.activeTeacherAccessCondition(
+              teacher.id,
+              resolvedYear.id,
+            ),
           },
         },
       ];
@@ -503,7 +519,10 @@ export class ClassSectionsService {
         { teacherId: q.teacherId },
         {
           teachers: {
-            some: this.activeTeacherAccessCondition(q.teacherId, resolvedYear.id),
+            some: this.activeTeacherAccessCondition(
+              q.teacherId,
+              resolvedYear.id,
+            ),
           },
         },
       ];
@@ -526,13 +545,11 @@ export class ClassSectionsService {
       { id: 'desc' },
     ];
 
-    let decodedCursor:
-      | {
-          grade: SchoolGrade;
-          section: string;
-          id: string;
-        }
-      | null = null;
+    let decodedCursor: {
+      grade: SchoolGrade;
+      section: string;
+      id: string;
+    } | null = null;
     if (cursorToken) {
       decodedCursor = this.decodeClassroomCursor(cursorToken);
       const cursorExists = await this.prisma.classSection.findFirst({
@@ -574,104 +591,116 @@ export class ClassSectionsService {
       },
     });
 
-    return cacheGetOrSet(this.cache, cacheKey, ClassSectionsService.CLASSROOMS_CACHE_TTL_MS, async () => {
-      const take = safeLimit + 1;
-      const rows = await this.prisma.classSection.findMany({
-        where,
-        orderBy: effectiveDirection === 'prev' ? reverseOrderBy : orderBy,
-        take,
-        ...(decodedCursor
-          ? {
-              cursor: {
-                orgId_yearId_grade_section: {
-                  orgId: resolvedYear.orgId,
-                  yearId: resolvedYear.id,
-                  grade: decodedCursor.grade,
-                  section: decodedCursor.section,
+    return cacheGetOrSet(
+      this.cache,
+      cacheKey,
+      ClassSectionsService.CLASSROOMS_CACHE_TTL_MS,
+      async () => {
+        const take = safeLimit + 1;
+        const rows = await this.prisma.classSection.findMany({
+          where,
+          orderBy: effectiveDirection === 'prev' ? reverseOrderBy : orderBy,
+          take,
+          ...(decodedCursor
+            ? {
+                cursor: {
+                  orgId_yearId_grade_section: {
+                    orgId: resolvedYear.orgId,
+                    yearId: resolvedYear.id,
+                    grade: decodedCursor.grade,
+                    section: decodedCursor.section,
+                  },
+                },
+                skip: 1,
+              }
+            : {}),
+          include: {
+            teacher: {
+              select: {
+                id: true,
+                membership: {
+                  select: { user: { select: { name: true, email: true } } },
                 },
               },
-              skip: 1,
-            }
-          : {}),
-        include: {
-          teacher: {
-            select: {
-              id: true,
-              membership: {
-                select: { user: { select: { name: true, email: true } } },
+            },
+            _count: {
+              select: {
+                enrollments: {
+                  where: this.activeEnrollmentCondition(resolvedYear.id),
+                },
               },
             },
-          },
-          _count: {
-            select: {
-              enrollments: { where: this.activeEnrollmentCondition(resolvedYear.id) },
+            academicYear: {
+              select: { id: true, label: true, isCurrent: true },
             },
           },
-          academicYear: { select: { id: true, label: true, isCurrent: true } },
-        },
-      });
+        });
 
-      const hasMoreInRequestedDirection = rows.length > safeLimit;
-      const sliced = hasMoreInRequestedDirection ? rows.slice(0, safeLimit) : rows;
-      const pageRows =
-        effectiveDirection === 'prev' ? [...sliced].reverse() : sliced;
-      const data = pageRows.map((row) => ({
-        ...row,
-        studentCount: row._count.enrollments,
-      }));
+        const hasMoreInRequestedDirection = rows.length > safeLimit;
+        const sliced = hasMoreInRequestedDirection
+          ? rows.slice(0, safeLimit)
+          : rows;
+        const pageRows =
+          effectiveDirection === 'prev' ? [...sliced].reverse() : sliced;
+        const data = pageRows.map((row) => ({
+          ...row,
+          studentCount: row._count.enrollments,
+        }));
 
-      if (data.length === 0) {
+        if (data.length === 0) {
+          return {
+            data,
+            meta: {
+              limit: safeLimit,
+              hasNextPage: !!decodedCursor && effectiveDirection === 'prev',
+              hasPrevPage: !!decodedCursor && effectiveDirection === 'next',
+              nextCursor: null,
+              prevCursor: null,
+            },
+          };
+        }
+
+        const first = data[0]!;
+        const last = data[data.length - 1]!;
+        const hasPrevPage =
+          effectiveDirection === 'prev'
+            ? hasMoreInRequestedDirection
+            : !!decodedCursor;
+        const hasNextPage =
+          effectiveDirection === 'next'
+            ? hasMoreInRequestedDirection
+            : !!decodedCursor;
+        const nextCursor = hasNextPage
+          ? this.encodeClassroomCursor({
+              grade: last.grade,
+              section: last.section,
+              id: last.id,
+            })
+          : null;
+        const prevCursor = hasPrevPage
+          ? this.encodeClassroomCursor({
+              grade: first.grade,
+              section: first.section,
+              id: first.id,
+            })
+          : null;
+
         return {
           data,
           meta: {
             limit: safeLimit,
-            hasNextPage: !!decodedCursor && effectiveDirection === 'prev',
-            hasPrevPage: !!decodedCursor && effectiveDirection === 'next',
-            nextCursor: null,
-            prevCursor: null,
+            hasNextPage,
+            hasPrevPage,
+            nextCursor,
+            prevCursor,
           },
         };
-      }
-
-      const first = data[0]!;
-      const last = data[data.length - 1]!;
-      const hasPrevPage =
-        effectiveDirection === 'prev'
-          ? hasMoreInRequestedDirection
-          : !!decodedCursor;
-      const hasNextPage =
-        effectiveDirection === 'next'
-          ? hasMoreInRequestedDirection
-          : !!decodedCursor;
-      const nextCursor = hasNextPage
-        ? this.encodeClassroomCursor({
-            grade: last.grade,
-            section: last.section,
-            id: last.id,
-          })
-        : null;
-      const prevCursor = hasPrevPage
-        ? this.encodeClassroomCursor({
-            grade: first.grade,
-            section: first.section,
-            id: first.id,
-          })
-        : null;
-
-      return {
-        data,
-        meta: {
-          limit: safeLimit,
-          hasNextPage,
-          hasPrevPage,
-          nextCursor,
-          prevCursor,
-        },
-      };
-    }, {
-      scopeId,
-      resource: 'classrooms',
-    });
+      },
+      {
+        scopeId,
+        resource: 'classrooms',
+      },
+    );
   }
 
   // -------------------------
@@ -690,7 +719,9 @@ export class ClassSectionsService {
         teacher: {
           include: {
             membership: {
-              include: { user: { select: { id: true, name: true, email: true } } },
+              include: {
+                user: { select: { id: true, name: true, email: true } },
+              },
             },
           },
         },
@@ -746,12 +777,18 @@ export class ClassSectionsService {
           ? await this.prisma.teacherClassSection.findFirst({
               where: {
                 classSectionId: classSection.id,
-                ...this.activeTeacherAccessCondition(teacher.id, classSection.yearId),
+                ...this.activeTeacherAccessCondition(
+                  teacher.id,
+                  classSection.yearId,
+                ),
               },
               select: { id: true },
             })
           : null;
-        if (!teacher || (classSection.teacherId !== teacher.id && !hasScopedAccess)) {
+        if (
+          !teacher ||
+          (classSection.teacherId !== teacher.id && !hasScopedAccess)
+        ) {
           throw new ForbiddenException('Učitel nemá přístup k této třídě.');
         }
       } else if (role === OrganizationRole.STUDENT) {
@@ -763,16 +800,14 @@ export class ClassSectionsService {
           : null;
         const isEnrolled = student
           ? classSection.enrollments.some(
-              (enrollment: { studentId: string }) => enrollment.studentId === student.id,
+              (enrollment: { studentId: string }) =>
+                enrollment.studentId === student.id,
             )
           : false;
         if (!isEnrolled) {
           throw new ForbiddenException('Student nemá přístup k této třídě.');
         }
-      } else if (
-        role &&
-        !hasAtLeastRole(role, OrganizationRole.DIRECTOR)
-      ) {
+      } else if (role && !hasAtLeastRole(role, OrganizationRole.DIRECTOR)) {
         throw new ForbiddenException('Access denied.');
       }
     }
@@ -780,7 +815,10 @@ export class ClassSectionsService {
   }
 
   async listOrgSubjects(classSectionId: string, user: JwtPayload) {
-    const classSection = await this.resolveClassSectionScope(classSectionId, user);
+    const classSection = await this.resolveClassSectionScope(
+      classSectionId,
+      user,
+    );
     return this.listOrgSubjectsByClassSectionId(classSection.id);
   }
 
@@ -789,7 +827,10 @@ export class ClassSectionsService {
     dto: AttachOrgSubjectsDto,
     user: JwtPayload,
   ) {
-    const classSection = await this.resolveClassSectionScope(classSectionId, user);
+    const classSection = await this.resolveClassSectionScope(
+      classSectionId,
+      user,
+    );
     const uniqueOrgSubjectIds = Array.from(new Set(dto.orgSubjectIds ?? []));
 
     const subjects = await this.prisma.orgSubject.findMany({
@@ -825,7 +866,8 @@ export class ClassSectionsService {
       );
     }
 
-    const classGradeNumeric = ClassSectionsService.SCHOOL_GRADE_TO_NUM[classSection.grade];
+    const classGradeNumeric =
+      ClassSectionsService.SCHOOL_GRADE_TO_NUM[classSection.grade];
     if (classGradeNumeric === undefined) {
       throw new BadRequestException('Unsupported class grade value.');
     }
@@ -938,7 +980,9 @@ export class ClassSectionsService {
           userId: user.userId,
           organizationId: classSection.orgId,
         });
-        throw new ForbiddenException('Přístup k rizikovému přehledu mají pouze učitelé a ředitelé.');
+        throw new ForbiddenException(
+          'Přístup k rizikovému přehledu mají pouze učitelé a ředitelé.',
+        );
       }
 
       if (role === OrganizationRole.TEACHER) {
@@ -951,10 +995,7 @@ export class ClassSectionsService {
         if (!teacher || classSection.teacherId !== teacher.id) {
           throw new ForbiddenException('Učitel nemá přístup k této třídě.');
         }
-      } else if (
-        role &&
-        !hasAtLeastRole(role, OrganizationRole.DIRECTOR)
-      ) {
+      } else if (role && !hasAtLeastRole(role, OrganizationRole.DIRECTOR)) {
         throw new ForbiddenException('Access denied.');
       }
     }
@@ -1002,7 +1043,11 @@ export class ClassSectionsService {
     for (const s of submissions) {
       const maxScore = s.maxPoints ?? 0;
       const list = byMembershipId.get(s.studentId) ?? [];
-      list.push({ score: s.earnedPoints ?? null, submittedAt: s.submittedAt, maxScore });
+      list.push({
+        score: s.earnedPoints ?? null,
+        submittedAt: s.submittedAt,
+        maxScore,
+      });
       byMembershipId.set(s.studentId, list);
     }
 
@@ -1012,8 +1057,7 @@ export class ClassSectionsService {
       if (!student) continue;
       const membershipId = student.membership?.id;
       if (!membershipId) continue;
-      const displayName =
-        student.membership?.user?.name?.trim() || 'Žák';
+      const displayName = student.membership?.user?.name?.trim() || 'Žák';
       const rawSubs = byMembershipId.get(membershipId) ?? [];
       const risk = deriveStudentRiskMetrics({
         displayName,
@@ -1096,10 +1140,7 @@ export class ClassSectionsService {
         if (!teacher || classSection.teacherId !== teacher.id) {
           throw new ForbiddenException('Učitel nemá přístup k této třídě.');
         }
-      } else if (
-        role &&
-        !hasAtLeastRole(role, OrganizationRole.DIRECTOR)
-      ) {
+      } else if (role && !hasAtLeastRole(role, OrganizationRole.DIRECTOR)) {
         throw new ForbiddenException('Access denied.');
       }
     }
@@ -1132,7 +1173,11 @@ export class ClassSectionsService {
       {
         subject: { id: string; name: string };
         testIds: Set<string>;
-        submissions: { score: number; submittedAt: Date | null; maxScore: number }[];
+        submissions: {
+          score: number;
+          submittedAt: Date | null;
+          maxScore: number;
+        }[];
       }
     >();
 
@@ -1186,8 +1231,7 @@ export class ClassSectionsService {
         (s): s is typeof s & { submittedAt: Date } => s.submittedAt != null,
       );
       withDate.sort(
-        (a, b) =>
-          a.submittedAt.getTime() - b.submittedAt.getTime(),
+        (a, b) => a.submittedAt.getTime() - b.submittedAt.getTime(),
       );
       const n = withDate.length;
       let trend: SubjectPerformanceTrend = 'STABLE';
@@ -1330,7 +1374,11 @@ export class ClassSectionsService {
   async remove(id: string, user: JwtPayload) {
     const classSection = await this.prisma.classSection.findUnique({
       where: { id },
-      select: { id: true, orgId: true, academicYear: { select: { isCurrent: true } } },
+      select: {
+        id: true,
+        orgId: true,
+        academicYear: { select: { isCurrent: true } },
+      },
     });
     if (!classSection) throw new NotFoundException('Třída nebyla nalezena');
 
@@ -1355,7 +1403,13 @@ export class ClassSectionsService {
   ) {
     const cls = await this.prisma.classSection.findUnique({
       where: { id: classSectionId },
-      select: { id: true, orgId: true, yearId: true, teacherId: true, academicYear: { select: { isCurrent: true } } },
+      select: {
+        id: true,
+        orgId: true,
+        yearId: true,
+        teacherId: true,
+        academicYear: { select: { isCurrent: true } },
+      },
     });
     if (!cls) throw new NotFoundException('Třída nebyla nalezena.');
     if (!cls.academicYear?.isCurrent) {
@@ -1493,7 +1547,12 @@ export class ClassSectionsService {
         yearId: classSection.yearId,
         accessLevel: TeacherClassAccessLevel.EDIT,
       },
-      select: { id: true, teacherId: true, classSectionId: true, createdAt: true },
+      select: {
+        id: true,
+        teacherId: true,
+        classSectionId: true,
+        createdAt: true,
+      },
     });
 
     await this.invalidateClassroomReads(
@@ -1591,7 +1650,10 @@ export class ClassSectionsService {
     type WithTeachers = {
       teachers?: unknown;
       _count: { enrollments: number };
-      teacher: { id: string; membership: { user: { name: string | null } } | null } | null;
+      teacher: {
+        id: string;
+        membership: { user: { name: string | null } } | null;
+      } | null;
     };
     const mapClass = <T extends WithTeachers>(cls: T) => {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -1636,7 +1698,8 @@ export class ClassSectionsService {
     });
 
     // Bucket by ID to guarantee no class appears in more than one bucket.
-    const homeroom = allClasses.find((cls) => cls.teacherId === teacher.id) ?? null;
+    const homeroom =
+      allClasses.find((cls) => cls.teacherId === teacher.id) ?? null;
     const homeroomId = homeroom?.id ?? null;
 
     const teachingIds = new Set(
@@ -1647,7 +1710,9 @@ export class ClassSectionsService {
 
     return {
       homeroom: homeroom ? mapClass(homeroom) : null,
-      teachingClasses: allClasses.filter((cls) => teachingIds.has(cls.id)).map(mapClass),
+      teachingClasses: allClasses
+        .filter((cls) => teachingIds.has(cls.id))
+        .map(mapClass),
       otherClasses: [],
     };
   }

@@ -1,6 +1,16 @@
 // src/tests/dto/create-question.dto.ts
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsArray, IsEnum, IsInt, IsOptional, IsString, Min, MinLength, Validate, ValidateIf } from 'class-validator';
+import {
+  IsArray,
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  Min,
+  MinLength,
+  Validate,
+  ValidateIf,
+} from 'class-validator';
 import { QuestionType } from '@prisma/client';
 import { QuestionAnswersValidator } from './question-answers.validator';
 
@@ -23,7 +33,8 @@ export class CreateQuestionDto {
 
   @ApiPropertyOptional({
     example: 'true',
-    description: 'Single correct answer (TRUE_FALSE, FILL_IN_THE_BLANK, or single-choice MCQ)',
+    description:
+      'Single correct answer (TRUE_FALSE, FILL_IN_THE_BLANK, or single-choice MCQ)',
   })
   @ValidateIf((o) => o.correctAnswer !== undefined)
   @IsString()

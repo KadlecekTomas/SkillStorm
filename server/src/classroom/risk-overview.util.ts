@@ -52,7 +52,9 @@ function toPercent(s: SubmissionInput): number | null {
  * Pure function: derive normalized metrics for one student from their submissions.
  * All submissions must already be scoped to the relevant academic year.
  */
-export function deriveStudentRiskMetrics(input: StudentRiskInput): StudentRiskMetrics {
+export function deriveStudentRiskMetrics(
+  input: StudentRiskInput,
+): StudentRiskMetrics {
   const now = input.now ?? new Date();
 
   // Only submissions with valid score and maxScore contribute to statistics
@@ -92,8 +94,7 @@ export function deriveStudentRiskMetrics(input: StudentRiskInput): StudentRiskMe
       .map(toPercent)
       .filter((p): p is number => p != null);
     if (last2Pcts.length > 0 && prevPcts.length > 0) {
-      const last2Avg =
-        last2Pcts.reduce((s, x) => s + x, 0) / last2Pcts.length;
+      const last2Avg = last2Pcts.reduce((s, x) => s + x, 0) / last2Pcts.length;
       const prevAvg = prevPcts.reduce((s, x) => s + x, 0) / prevPcts.length;
       trendPercent = Math.round((last2Avg - prevAvg) * 100) / 100;
       if (last2Avg < prevAvg - DECLINE_THRESHOLD_PCT) {

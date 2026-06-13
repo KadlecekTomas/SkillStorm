@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Post,
+  Query,
+  Req,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Response } from 'express';
 import { InvitesService } from './invites.service';
@@ -16,7 +25,10 @@ import {
   setCsrfCookie,
   generateCsrfToken,
 } from '@/auth/token-cookies';
-import { OrgOperation, OrgOperationType } from '@/common/decorators/org-operation.decorator';
+import {
+  OrgOperation,
+  OrgOperationType,
+} from '@/common/decorators/org-operation.decorator';
 
 @ApiTags('Invites')
 @ApiStandardResponses()
@@ -28,7 +40,12 @@ export class InvitesController {
   @Post()
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @Permission(PermissionKey.MANAGE_STUDENTS, PermissionKey.MANAGE_TEACHERS, PermissionKey.INVITE_STUDENTS, PermissionKey.INVITE_TEACHERS)
+  @Permission(
+    PermissionKey.MANAGE_STUDENTS,
+    PermissionKey.MANAGE_TEACHERS,
+    PermissionKey.INVITE_STUDENTS,
+    PermissionKey.INVITE_TEACHERS,
+  )
   @ApiOperation({ summary: 'Create invite' })
   create(@Body() dto: CreateInviteDto, @Req() req: RequestWithUser) {
     return ok(this.service.createInvite(dto, req.user));
@@ -36,7 +53,9 @@ export class InvitesController {
 
   @Get('preview')
   @Public()
-  @ApiOperation({ summary: 'Preview invite by code (resolves type, org, class)' })
+  @ApiOperation({
+    summary: 'Preview invite by code (resolves type, org, class)',
+  })
   preview(
     @Query('inviteToken') inviteToken: string,
     @Query('code') code: string,
@@ -55,7 +74,11 @@ export class InvitesController {
     @Req() req: RequestWithUser,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const result = await this.service.acceptInvite(req.user.userId, dto, req.ip);
+    const result = await this.service.acceptInvite(
+      req.user.userId,
+      dto,
+      req.ip,
+    );
     setAuthCookies(res, result.tokens);
     setCsrfCookie(res, generateCsrfToken());
     return ok({
