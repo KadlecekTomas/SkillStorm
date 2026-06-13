@@ -90,12 +90,12 @@ services:
       dockerfile: Dockerfile
       target: runner
       args:
-        API_PROXY_TARGET: http://backend:4200
+        API_PROXY_TARGET: ${PROD_API_PROXY_TARGET:?PROD_API_PROXY_TARGET is required}
     restart: unless-stopped
     environment:
       NODE_ENV: production
       PORT: 3000
-      API_PROXY_TARGET: http://backend:4200
+      API_PROXY_TARGET: ${PROD_API_PROXY_TARGET:?PROD_API_PROXY_TARGET is required}
       ENABLE_RBAC_TELEMETRY_CLIENT: ${PROD_ENABLE_RBAC_TELEMETRY_CLIENT:-0}
       DEMO_MODE: "0"
       BETA_MODE: ${PROD_BETA_MODE:-}

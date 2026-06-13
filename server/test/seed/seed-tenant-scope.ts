@@ -15,6 +15,7 @@ import { bootstrapOrg } from 'test/e2e/helpers/bootstrap-org';
 type ActorSeed = {
   token: string;
   membershipId: string;
+  studentId?: string;
   userId: string;
 };
 
@@ -26,6 +27,8 @@ export type TenantScopeSeedResult = {
     teacher: ActorSeed;
     director: ActorSeed;
     student: ActorSeed;
+    subjectId: string;
+    catalogTopicId: string;
     testId: string;
     assignmentId: string;
     submissionId: string;
@@ -37,6 +40,8 @@ export type TenantScopeSeedResult = {
     teacher: ActorSeed;
     director: ActorSeed;
     student: ActorSeed;
+    subjectId: string;
+    catalogTopicId: string;
     testId: string;
     assignmentId: string;
     submissionId: string;
@@ -61,6 +66,100 @@ async function ensureActiveYear(
     select: { id: true },
   });
   return year.id;
+}
+
+async function ensureSubjectTopic(
+  prisma: PrismaService,
+  orgId: string,
+  grade: SchoolGrade,
+): Promise<{ subjectId: string; catalogTopicId: string; topicLevelId: string }> {
+  const catalogSubject = await prisma.catalogSubject.upsert({
+    where: { code: 'TENANT-RBAC-MATH' },
+    update: { isActive: true, deletedAt: null },
+    create: { code: 'TENANT-RBAC-MATH', name: 'Tenant RBAC Math' },
+    select: { id: true },
+  });
+
+  const subject = await prisma.subject.upsert({
+    where: { catalogSubjectId: catalogSubject.id },
+    update: { deletedAt: null, gradeFrom: 1, gradeTo: 9 },
+    create: {
+      catalogSubjectId: catalogSubject.id,
+      name: 'Tenant RBAC Math',
+      gradeFrom: 1,
+      gradeTo: 9,
+    },
+    select: { id: true },
+  });
+
+  await prisma.orgSubject.upsert({
+    where: {
+      organizationId_subjectId: {
+        organizationId: orgId,
+        subjectId: subject.id,
+      },
+    },
+    update: { isEnabled: true },
+    create: {
+      organizationId: orgId,
+      subjectId: subject.id,
+      isEnabled: true,
+      isCustom: false,
+    },
+  });
+
+  const subjectLevel = await prisma.subjectLevel.upsert({
+    where: {
+      subjectId_grade: {
+        subjectId: subject.id,
+        grade,
+      },
+    },
+    update: { isEnabled: true },
+    create: {
+      subjectId: subject.id,
+      grade,
+      label: `${grade} tenant RBAC`,
+      isEnabled: true,
+    },
+    select: { id: true },
+  });
+
+  const catalogTopic = await prisma.catalogTopic.upsert({
+    where: {
+      subjectId_name: {
+        subjectId: catalogSubject.id,
+        name: 'Tenant RBAC Topic',
+      },
+    },
+    update: { isActive: true, deletedAt: null },
+    create: {
+      subjectId: catalogSubject.id,
+      name: 'Tenant RBAC Topic',
+      order: 1,
+    },
+    select: { id: true },
+  });
+
+  const topicLevel = await prisma.topicLevel.upsert({
+    where: {
+      subjectLevelId_catalogTopicId_phase: {
+        subjectLevelId: subjectLevel.id,
+        catalogTopicId: catalogTopic.id,
+        phase: 'INTRO',
+      },
+    },
+    update: {},
+    create: {
+      subjectLevelId: subjectLevel.id,
+      catalogTopicId: catalogTopic.id,
+      name: 'Tenant RBAC Topic',
+      phase: 'INTRO',
+    },
+    select: { id: true },
+  });
+
+  return { subjectId: subject.id, catalogTopicId: catalogTopic.id, topicLevelId: topicLevel.id };
 }
 
 export async function seedTenantScope(
@@ -92,32 +191,32 @@ export async function seedTenantScope(
   const orgAYearId = await ensureActiveYear(
     prisma,
     orgAId,
-    '2024/2025',
-    new Date('2024-09-01T00:00:00.000Z'),
-    new Date('2025-08-31T23:59:59.999Z'),
-  );
-  const orgBYearId = await ensureActiveYear(
-    prisma,
-    orgBId,
     '2025/2026',
     new Date('2025-09-01T00:00:00.000Z'),
     new Date('2026-08-31T23:59:59.999Z'),
   );
+  const orgBYearId = await ensureActiveYear(
+    prisma,
+    orgBId,
+    '2026/2027',
+    new Date('2026-09-01T00:00:00.000Z'),
+    new Date('2027-08-31T23:59:59.999Z'),
+  );
 
   const bootA = await bootstrapOrg(prisma, {
     orgId: orgAId,
-    startDate: new Date('2024-09-01T00:00:00.000Z'),
-    endDate: new Date('2025-08-31T23:59:59.999Z'),
-    label: '2024/2025',
+    startDate: new Date('2025-09-01T00:00:00.000Z'),
+    endDate: new Date('2026-08-31T23:59:59.999Z'),
+    label: '2025/2026',
     grade: SchoolGrade.GRADE_7,
     section: 'A',
     classLabel: '7.A',
   });
   const bootB = await bootstrapOrg(prisma, {
     orgId: orgBId,
-    startDate: new Date('2025-09-01T00:00:00.000Z'),
-    endDate: new Date('2026-08-31T23:59:59.999Z'),
-    label: '2025/2026',
+    startDate: new Date('2026-09-01T00:00:00.000Z'),
+    endDate: new Date('2027-08-31T23:59:59.999Z'),
+    label: '2026/2027',
     grade: SchoolGrade.GRADE_8,
     section: 'B',
     classLabel: '8.B',
@@ -131,6 +230,9 @@ export async function seedTenantScope(
     where: { id: bootB.classSectionId },
     data: { yearId: orgBYearId },
   });
+
+  const topicA = await ensureSubjectTopic(prisma, orgAId, SchoolGrade.GRADE_7);
+  const topicB = await ensureSubjectTopic(prisma, orgBId, SchoolGrade.GRADE_8);
 
   const studentA = await prisma.student.upsert({
     where: { membershipId: ctxA.student!.membership.id },
@@ -168,6 +270,9 @@ export async function seedTenantScope(
   const testA = await prisma.test.create({
     data: {
       organizationId: orgAId,
+      subjectId: topicA.subjectId,
+      academicYearId: orgAYearId,
+      allowedGrades: [SchoolGrade.GRADE_7],
       title: 'Tenant Scope Test A',
       creatorId: ctxA.teacher!.membership.id,
       status: PublishStatus.PUBLISHED,
@@ -189,6 +294,9 @@ export async function seedTenantScope(
   const testB = await prisma.test.create({
     data: {
       organizationId: orgBId,
+      subjectId: topicB.subjectId,
+      academicYearId: orgBYearId,
+      allowedGrades: [SchoolGrade.GRADE_8],
       title: 'Tenant Scope Test B',
       creatorId: ctxB.teacher!.membership.id,
       status: PublishStatus.PUBLISHED,
@@ -205,6 +313,14 @@ export async function seedTenantScope(
       },
     },
     select: { id: true },
+  });
+
+  await prisma.testAssignment.createMany({
+    data: [
+      { testId: testA.id, topicLevelId: topicA.topicLevelId, isPrimary: true },
+      { testId: testB.id, topicLevelId: topicB.topicLevelId, isPrimary: true },
+    ],
+    skipDuplicates: true,
   });
 
   const now = Date.now();
@@ -288,8 +404,11 @@ export async function seedTenantScope(
       student: {
         token: ctxA.student!.accessToken,
         membershipId: ctxA.student!.membership.id,
+        studentId: studentA.id,
         userId: ctxA.student!.user.id,
       },
+      subjectId: topicA.subjectId,
+      catalogTopicId: topicA.catalogTopicId,
       testId: testA.id,
       assignmentId: assignmentA.id,
       submissionId: submissionA.id,
@@ -311,8 +430,11 @@ export async function seedTenantScope(
       student: {
         token: ctxB.student!.accessToken,
         membershipId: ctxB.student!.membership.id,
+        studentId: studentB.id,
         userId: ctxB.student!.user.id,
       },
+      subjectId: topicB.subjectId,
+      catalogTopicId: topicB.catalogTopicId,
       testId: testB.id,
       assignmentId: assignmentB.id,
       submissionId: submissionB.id,

@@ -44,6 +44,7 @@ Datum auditu: 2026-06-10
 | `docker compose -f docker-compose.prod.yml config` | PASS | Ověřeno se syntetickými `PROD_*` hodnotami; Postgres/Redis nemají publikované porty, backend není publikovaný, frontend publikuje pouze `PROD_FRONTEND_PORT`. |
 | `scripts/check-prod-env.sh` | PASS | Ověřeno se syntetickými `PROD_*` hodnotami; guard kontroluje zakázané fallback secrety, CSRF/Swagger, slabé markery a DB/Redis porty. |
 | `scripts/check-no-committed-env.sh` | PASS | Ověřuje přes `git ls-files`, že nejsou trackované reálné `.env` soubory. |
+| `npm --prefix server run test:e2e -- --runTestsByPath test/e2e/tenant-scope-fortress.e2e-spec.ts` | PASS | 15/15 tenant isolation/RBAC negativních e2e testů prošlo; sada odhalila a pokrývá opravu priority org-scoped RBAC policy proti globálnímu fallbacku. |
 
 ## Stabilization sprint 2026-06-13 (branch `feat/google-sso-identity`)
 
@@ -172,21 +173,37 @@ Revalidace: server typecheck PASS, client typecheck PASS, `prisma validate` PASS
 ## CI audit
 
 * Production gate: `.github/workflows/production-gate.yml` běží na push a pull request do `main` a `develop`.
-* Backend gate: `npm ci`, `npm run typecheck`, `npm run build` v `server`.
-* Frontend gate: `npm ci`, `npm run typecheck`, `npm run build` v `client`.
-* Prisma gate: `npx prisma validate` a `npx prisma generate` v `server`.
+* Backend gate: `npm ci`, `npm run prisma:generate`, `npm run typecheck`, `npm run build` v `server`; CI dodává syntetické `DATABASE_URL`, protože čistý runner nemá vygenerovaný Prisma client a `prebuild` spouští Prisma generate znovu.
+* Frontend gate: `npm ci`, `npm run typecheck`, `npm run build` v `client`; production build používá syntetické `API_PROXY_TARGET=http://backend:4200`, aby ověřil Docker-like proxy target bez produkčních secrets.
+* Frontend-only CI: `.github/workflows/frontend-ci.yml` nespouští fullstack Playwright e2e; ty vyžadují backend dependencies, DB a běžící backend.
+* Fullstack E2E: `.github/workflows/e2e.yml` instaluje server i client dependencies, startuje Postgres/Redis services, připraví Prisma DB a spouští `npm run test:e2e` přes lokální package scripts; Playwright startuje backend přes `npm --prefix ../server run start:e2e`, ne přes globální Nest CLI.
+* Frontend MSW policy: mock loader se v produkci nespouští, pokud není explicitně zapnutý přes `NEXT_PUBLIC_ENABLE_MSW=true`; protože loader zůstává dohledatelný build bundlerem, `msw` musí být explicitní devDependency dostupná v build stage.
+* Prisma gate: `npx prisma validate` a `npx prisma generate` v `server`; CI dodává syntetické `DATABASE_URL` bez reálných secrets.
 * Docker gate: `docker compose -f docker-compose.prod.yml config` běží se syntetickými `PROD_*` hodnotami v workflow env.
 * Env guards: `scripts/check-prod-env.sh` a `scripts/check-no-committed-env.sh` běží v CI.
 * Secrets: CI nepoužívá reálné produkční secrety; používá dlouhé syntetické hodnoty pouze pro render/validaci konfigurace.
+* Clean install parity: server typecheck závisí na explicitních `@types/express`, `@types/passport-jwt`, `@types/cookie-parser` a `@types/uuid` devDependencies.
 * Lint: lint není blocking production gate; historické lint kroky v `ci.yml` a `frontend-ci.yml` jsou non-blocking do plánovaného cleanupu.
+* Dependency follow-up: `npm audit` zranitelnosti jsou security backlog mimo tento CI parity fix; Prisma `package.json#prisma` warning bude řešen samostatně přes `prisma.config.ts`.
 * Migrace při deployi: `RUN_MIGRATIONS` existuje, ale runbook musí popsat rollback, lock a zero-downtime postup.
 * Backupy/monitoring: v repu není produkční backup strategie. Sentry je volitelné přes `SENTRY_DSN`, health a metrics moduly existují.
+
+## Production env parity
+
+| Skupina | Proměnné | Poznámka |
+|---|---|---|
+| Backend runtime env | `DATABASE_URL`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `COOKIE_SECRET`, `METRICS_INGEST_KEY`, `REDIS_URL`, `PUBLIC_APP_URL`, `API_URL`, `CORS_ORIGINS`, `ALLOW_CROSS_SITE_COOKIES`, `ALLOW_PUBLIC_ORG_CREATION`, `RUN_MIGRATIONS`, `RUN_SEED`, `SUPERADMIN_EMAIL`, `SUPERADMIN_PASSWORD`, `DISABLE_CSRF`, `ENABLE_SWAGGER` | Produkční compose mapuje z `PROD_*`; `DISABLE_CSRF=0` a `ENABLE_SWAGGER=0` jsou hard-coded guardy. |
+| Frontend build-time env | `API_PROXY_TARGET`, `BETA_MODE`, `ENABLE_RBAC_TELEMETRY_CLIENT` | `API_PROXY_TARGET` se vyhodnocuje v `next.config.ts` při `rewrites()` během `next build` i runtime startu. |
+| Frontend public env | `NEXT_PUBLIC_BETA_MODE`, `NEXT_PUBLIC_ENABLE_RBAC_TELEMETRY_CLIENT`, volitelně `NEXT_PUBLIC_AUTH_DEBUG`, `NEXT_PUBLIC_ENABLE_MSW`, `NEXT_PUBLIC_API_BASE_URL` | První dvě hodnoty se odvozují v `next.config.ts`; public hodnoty nejsou secrets. |
+| Docker input env `PROD_*` | `PROD_DATABASE_URL`, `PROD_JWT_ACCESS_SECRET`, `PROD_JWT_REFRESH_SECRET`, `PROD_COOKIE_SECRET`, `PROD_METRICS_INGEST_KEY`, `PROD_PUBLIC_APP_URL`, `PROD_API_URL`, `PROD_API_PROXY_TARGET`, `PROD_CORS_ORIGINS`, `PROD_ALLOW_CROSS_SITE_COOKIES`, `PROD_ALLOW_PUBLIC_ORG_CREATION`, `PROD_RUN_MIGRATIONS`, `PROD_RUN_SEED`, `PROD_FRONTEND_PORT`, `PROD_ENABLE_RBAC_TELEMETRY_CLIENT`, `PROD_BETA_MODE`, `PROD_SUPERADMIN_EMAIL`, `PROD_SUPERADMIN_PASSWORD` | `PROD_API_PROXY_TARGET=http://backend:4200` je non-secret Docker network config. |
+| CI synthetic env | Stejné `PROD_*` vstupy jako production compose plus backend/Prisma `DATABASE_URL=postgresql://skillstorm_ci:skillstorm_ci_password@localhost:5432/skillstorm_ci` a frontend build `API_PROXY_TARGET=http://backend:4200` | Hodnoty jsou syntetické, nereálné a slouží pouze k production gate render/build validaci. |
 
 ## Test audit
 
 * Unit testy: existují rozsáhlé Jest/Vitest testy na backend služby a frontend komponenty/policy.
 * E2E: Playwright testy existují pro auth, RBAC, multitenancy, seeded core flow, onboarding, logout a hlubší workflowy.
 * Ověřeno v auditu: reprezentativní token/scoring unit testy a frontend login/post-auth policy prošly.
+* Ověřeno v tenant/RBAC iteraci 2026-06-10: backend `tenant-scope-fortress` e2e sada prochází 15/15 a pokrývá cross-org test read/update, body `organizationId` spoofing, assignment/submission izolaci, cizí class/student přístup, org-scoped RBAC deny a student deny pro teacher/admin endpointy.
 * Neověřeno v auditu: plný e2e běh, protože vyžaduje běžící stack/seed a je časově dražší.
 
 Minimální testovací sada před production-ready:

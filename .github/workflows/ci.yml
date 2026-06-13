@@ -44,19 +44,15 @@ jobs:
           npm ci --include=dev
           npm run build
 
-      - name: 🧪 FE policy tests
+      - name: 🧪 FE component policy tests
         working-directory: ./client
         env:
           NODE_ENV: test
         run: |
           npx playwright install --with-deps
-          npm run test:fe-policy
+          npm run test:fe-components
 
       # === BACKEND ===
-      - name: 🧩 Ensure Nest CLI available
-        working-directory: ./server
-        run: npm install --save-dev @nestjs/cli
-
       - name: 🧱 Build backend & seed DB
         working-directory: ./server
         # --include=dev: NODE_ENV=production would otherwise omit devDeps

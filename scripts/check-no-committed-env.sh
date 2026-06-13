@@ -12,9 +12,14 @@ blocked="$(git ls-files | awk '
   $0 == "server/.env.local" ||
   $0 == "server/.env.production" ||
   $0 == "server/.env.test" ||
+  $0 == "server/.env.development" ||
+  $0 == "server/.env.staging" ||
   $0 == "client/.env" ||
   $0 == "client/.env.local" ||
   $0 == "client/.env.production" ||
+  $0 == "client/.env.test" ||
+  $0 == "client/.env.development" ||
+  $0 == "client/.env.staging" ||
   $0 ~ /(^|\/)\.env\..*\.local$/ {
     print
   }

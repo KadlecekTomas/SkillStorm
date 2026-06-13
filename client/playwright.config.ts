@@ -21,7 +21,7 @@ export default defineConfig({
 
   webServer: [
     {
-      command: 'npm run start:dev --prefix ../server',
+      command: 'npm --prefix ../server run start:e2e',
       url: 'http://127.0.0.1:4200/health',
       reuseExistingServer: true,
       timeout: 180_000,
