@@ -33,7 +33,19 @@ export class PrivacyService {
           email: anonymizedEmail,
           preferredLang: null,
           username: null,
+          // Invalidate all live sessions immediately: access tokens fail the
+          // tokenVersion check, refresh tokens are revoked below.
+          tokenVersion: { increment: 1 },
         },
+      }),
+      this.prisma.refreshToken.updateMany({
+        where: { userId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      }),
+      // External identities (SSO subject + e-mail) are PII and must not
+      // survive anonymization. Hard-delete instead of masking.
+      this.prisma.userIdentity.deleteMany({
+        where: { userId },
       }),
       this.prisma.submission.updateMany({
         where: { studentId: { in: membershipIds } },
@@ -67,9 +79,15 @@ export class PrivacyService {
     if (!userIds.length) return;
 
     // cleanup technical residues only, keep anonymized users/submissions
-    await this.prisma.refreshToken.deleteMany({ where: { userId: { in: userIds } } });
-    await this.prisma.revokedToken.deleteMany({ where: { userId: { in: userIds } } });
-    await this.prisma.userPermission.deleteMany({ where: { userId: { in: userIds } } });
+    await this.prisma.refreshToken.deleteMany({
+      where: { userId: { in: userIds } },
+    });
+    await this.prisma.revokedToken.deleteMany({
+      where: { userId: { in: userIds } },
+    });
+    await this.prisma.userPermission.deleteMany({
+      where: { userId: { in: userIds } },
+    });
   }
 
   // Audit log PII anonymization is handled by AuditRetentionService (runs at 03:15 UTC).
