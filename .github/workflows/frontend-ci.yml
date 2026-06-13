@@ -10,7 +10,28 @@ jobs:
   frontend-quality-gate:
     name: Frontend Quality Gate
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: skillstorm_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    env:
+      # Shared by the Playwright backend web-server (playwright.config.ts).
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/skillstorm_test?schema=public
+      JWT_SECRET: ci-secret
+      API_PROXY_TARGET: http://localhost:4200
 
     defaults:
       run:
@@ -43,11 +64,22 @@ jobs:
       - name: 🎭 Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
+      # Playwright's webServer boots the NestJS backend (npm run start:dev
+      # --prefix ../server). Without server deps the `nest` CLI is missing
+      # ("nest: not found") and there is no migrated DB to connect to.
+      - name: 🧩 Backend setup for E2E
+        working-directory: ./server
+        run: |
+          npm ci --include=dev
+          npm run prisma:generate
+          npx prisma migrate deploy
+
       - name: 🎬 Run E2E tests
         run: npm run test:e2e
         env:
           CI: true
-          BASE_URL: http://127.0.0.1:3000
+          # Frontend web-server in playwright.config starts on port 3001.
+          BASE_URL: http://127.0.0.1:3001
 
       - name: 🏗️ Build Next.js application
         run: npm run build

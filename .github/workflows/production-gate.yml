@@ -103,6 +103,9 @@ jobs:
       - name: Frontend build
         run: npm run build
         working-directory: client
+        # next.config.ts requires API_PROXY_TARGET in a production build.
+        env:
+          API_PROXY_TARGET: http://localhost:4200
 
   prisma:
     name: Prisma Validate and Generate
@@ -124,10 +127,16 @@ jobs:
         run: npm ci
         working-directory: server
 
+      # The datasource reads env("DATABASE_URL"); prisma validate/generate
+      # fail without it even though they do not connect to the database.
       - name: Prisma validate
         run: npx prisma validate
         working-directory: server
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/skillstorm_test?schema=public
 
       - name: Prisma generate
         run: npx prisma generate
         working-directory: server
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/skillstorm_test?schema=public
