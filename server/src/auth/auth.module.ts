@@ -7,6 +7,8 @@ import { PrismaModule } from '@/prisma/prisma.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { AuthCleanupService } from './auth-cleanup.service';
+import { GoogleSsoService } from './sso/google-sso.service';
+import { GoogleTokenVerifier } from './sso/google-token.verifier';
 import { JwtStrategy } from './jwt.strategy';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { GamificationModule } from '@/gamification/gamification.module';
@@ -35,7 +37,14 @@ import { getJwtAccessSecret } from './jwt-secrets';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, AuthCleanupService, JwtStrategy, JwtAuthGuard],
+  providers: [
+    AuthService,
+    AuthCleanupService,
+    GoogleSsoService,
+    GoogleTokenVerifier,
+    JwtStrategy,
+    JwtAuthGuard,
+  ],
   exports: [AuthService, JwtAuthGuard],
 })
 export class AuthModule {}

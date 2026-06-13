@@ -2,7 +2,6 @@ import {
   BadRequestException,
   Body,
   Controller,
-  ConflictException,
   ForbiddenException,
   GoneException,
   Get,
@@ -16,7 +15,9 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
+import { GoogleSsoService } from './sso/google-sso.service';
 import { LoginDto } from './dto/login.dto';
+import { GoogleSsoLoginDto } from './dto/google-sso.dto';
 import { RegisterDto } from './dto/register.dto';
 import { JoinOrganizationDto } from './dto/join-organization.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
@@ -47,7 +48,10 @@ import { NoHttpCache } from '@/common/cache/no-http-cache.decorator';
 @ApiStandardResponses()
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) { }
+  constructor(
+    private readonly authService: AuthService,
+    private readonly googleSsoService: GoogleSsoService,
+  ) {}
   private readonly logger = new Logger(AuthController.name);
 
   @Public()
@@ -69,13 +73,14 @@ export class AuthController {
       setCsrfCookie(res, generateCsrfToken());
 
       const orgId =
-        result.organization != null ? (result.organization as { id: string }).id : null;
+        result.organization != null
+          ? (result.organization as { id: string }).id
+          : null;
       const ctx = await this.authService.getMeContext(result.user.id, {
         organizationId: orgId,
       });
 
       return ok(ctx);
-
     } catch (error) {
       this.logger.error(
         'Register failed',
@@ -143,6 +148,48 @@ export class AuthController {
   }
 
   @Public()
+  @Post('sso/google')
+  @ApiOperation({
+    summary:
+      'Login with a Google ID token (organization-scoped SSO; gated by GOOGLE_SSO_ENABLED)',
+  })
+  @Throttle({ default: { limit: 10, ttl: 900 } })
+  async googleSso(
+    @Body() dto: GoogleSsoLoginDto,
+    @Req() req: Request & { requestId?: string },
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const requestId = req.requestId ?? null;
+    try {
+      const result = await this.googleSsoService.loginWithGoogle(dto);
+      setAuthCookies(res, result.tokens);
+      setCsrfCookie(res, generateCsrfToken());
+
+      const ctx = await this.authService.getMeContext(result.user.id, {
+        organizationId: result.user.organizationId ?? null,
+      });
+
+      this.logger.log(
+        JSON.stringify({
+          event: 'auth_sso_google_success',
+          userId: result.user.id,
+          requestId,
+        }),
+      );
+      return ok(ctx);
+    } catch (error) {
+      this.logger.warn(
+        JSON.stringify({
+          event: 'auth_sso_google_fail',
+          requestId,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      );
+      throw error;
+    }
+  }
+
+  @Public()
   @Post('refresh')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Refresh access token' })
@@ -166,10 +213,7 @@ export class AuthController {
   @Public()
   @Post('logout')
   @ApiBearerAuth()
-  async logout(
-    @Req() req: Request,
-    @Res({ passthrough: true }) res: Response,
-  ) {
+  async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const accessToken = req.headers.authorization?.split(' ')[1];
     const tokenFromCookie = req.cookies?.[REFRESH_TOKEN_COOKIE];
     const result = await this.authService.logout(
@@ -212,20 +256,21 @@ export class AuthController {
   @ApiOperation({ summary: 'Join organization by code' })
   @Throttle({ default: { limit: 5, ttl: 60 } })
   async joinOrganization(
-    @Body() dto: JoinOrganizationDto,
-    @Req() req: RequestWithUser,
-    @Res({ passthrough: true }) res: Response,
+    @Body() _dto: JoinOrganizationDto,
+    @Req() _req: RequestWithUser,
+    @Res({ passthrough: true }) _res: Response,
   ) {
     throw new GoneException('Legacy join disabled. Use invitation token.');
   }
-
-
 
   @Post('use-org')
   @AllowAnyOrgStatus()
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  @ApiOperation({ summary: 'Switch active organization (by orgId, persists lastActiveMembershipId)' })
+  @ApiOperation({
+    summary:
+      'Switch active organization (by orgId, persists lastActiveMembershipId)',
+  })
   @Throttle({ default: { limit: 10, ttl: 60 } })
   async useOrganization(
     @Req() req: RequestWithUser,
@@ -253,7 +298,10 @@ export class AuthController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @AllowAnyOrgStatus()
-  @ApiOperation({ summary: 'Switch active organization by membershipId (persists lastActiveMembershipId)' })
+  @ApiOperation({
+    summary:
+      'Switch active organization by membershipId (persists lastActiveMembershipId)',
+  })
   @Throttle({ default: { limit: 10, ttl: 60 } })
   async switchOrganization(
     @Req() req: RequestWithUser,
