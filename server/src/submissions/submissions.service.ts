@@ -24,6 +24,7 @@ import { createOrgReadinessError } from '@/shared/errors/org-readiness.error';
 import { OrgOperationType } from '@/common/decorators/org-operation.decorator';
 import { GamificationService } from '@/gamification/gamification.service';
 import { AuditService } from '@/audit/audit.service';
+import { AnalyticsSnapshotService } from '@/analytics/analytics-snapshot.service';
 import type { FocusEventType } from './dto/focus-events.dto';
 import type { JwtPayload } from '@/auth/types/jwt-payload';
 import type { OrgContext } from '@/common/org-context/org-context.types';
@@ -60,6 +61,7 @@ export class SubmissionsService {
     private readonly prisma: PrismaService,
     private readonly gamification: GamificationService,
     private readonly audit: AuditService,
+    private readonly analyticsSnapshot: AnalyticsSnapshotService,
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
   ) {}
 
@@ -717,6 +719,8 @@ export class SubmissionsService {
             },
           },
         });
+        // Immutable analytics snapshot (fail-closed: any error rolls back finish()).
+        await this.analyticsSnapshot.createSubmissionSnapshot(tx, id);
         return rejected;
       }
 
@@ -747,6 +751,9 @@ export class SubmissionsService {
           },
         },
       });
+
+      // Immutable analytics snapshot (fail-closed: any error rolls back finish()).
+      await this.analyticsSnapshot.createSubmissionSnapshot(tx, id);
 
       return updated;
     });

@@ -1010,6 +1010,116 @@ model Response {
   @@map("responses")
 }
 
+/// Immutable analytical snapshot of one SUBMITTED test attempt.
+/// Source of truth stays in Submission/Response; this row is a historically valid copy
+/// of the context at submit time. No relations to live tables (except ResponseFact) so the
+/// snapshot survives deletion/soft-delete of the live test/question/student. See
+/// docs/analytics/student-progress-prisma-models.md.
+model SubmissionFact {
+  id String @id @default(uuid()) @map("submission_fact_id")
+
+  // Source linkage (scalar)
+  submissionId String @unique @map("submission_id")
+  assignmentId String @map("assignment_id")
+  testId       String @map("test_id")
+  testVersion  Int    @map("test_version")
+
+  // Identity anchors (each solves a different problem)
+  organizationId String  @map("organization_id")
+  userId         String  @map("user_id")
+  membershipId   String  @map("membership_id")
+  studentId      String? @map("student_id")
+
+  // Historical context (frozen at submit time)
+  academicYearId   String? @map("academic_year_id")
+  classSectionId   String? @map("class_section_id")
+  subjectId        String? @map("subject_id")
+  catalogSubjectId String? @map("catalog_subject_id")
+  topicLevelId     String? @map("topic_level_id")
+  catalogTopicId   String? @map("catalog_topic_id")
+
+  // Result
+  attemptNo       Int   @map("attempt_no")
+  score           Int   @map("score")
+  maxScore        Int   @map("max_score")
+  percentage      Float @map("percentage")
+  questionCount   Int   @map("question_count")
+  correctCount    Int   @map("correct_count")
+  incorrectCount  Int   @map("incorrect_count")
+  unansweredCount Int   @default(0) @map("unanswered_count")
+
+  // Time
+  startedAt   DateTime? @map("started_at")
+  submittedAt DateTime  @map("submitted_at")
+  durationSec Int?      @map("duration_sec")
+
+  // Provenance / extensibility
+  dataQuality     AnalyticsDataQuality    @default(COMPLETE) @map("data_quality")
+  source          AnalyticsSnapshotSource @default(LIVE_SUBMIT)
+  snapshotVersion Int                     @default(1) @map("snapshot_version")
+  metadata        Json?
+  createdAt       DateTime                @default(now()) @map("created_at")
+
+  responseFacts ResponseFact[]
+
+  @@index([organizationId, userId, submittedAt])
+  @@index([userId, submittedAt])
+  @@index([membershipId, submittedAt])
+  @@index([studentId, submittedAt])
+  @@index([academicYearId, submittedAt])
+  @@index([subjectId, submittedAt])
+  @@index([catalogSubjectId, submittedAt])
+  @@index([topicLevelId, submittedAt])
+  @@index([catalogTopicId, submittedAt])
+  @@map("submission_facts")
+}
+
+/// Immutable per-question snapshot of one answer within a submitted attempt.
+/// Granularity for mastery and error analysis. Scalar IDs; only relation is to SubmissionFact.
+/// Does NOT store correctAnswerSnapshot/explanationSnapshot by design (see docs).
+model ResponseFact {
+  id String @id @default(uuid()) @map("response_fact_id")
+
+  submissionFactId String @map("submission_fact_id")
+  submissionId     String @map("submission_id")
+  responseId       String @unique @map("response_id")
+
+  organizationId String  @map("organization_id")
+  userId         String  @map("user_id")
+  membershipId   String  @map("membership_id")
+  studentId      String? @map("student_id")
+  academicYearId String? @map("academic_year_id")
+
+  questionId           String       @map("question_id")
+  questionOrder        Int?         @map("question_order")
+  questionType         QuestionType @map("question_type")
+  questionTextSnapshot String?      @map("question_text_snapshot")
+
+  topicLevelId   String?     @map("topic_level_id")
+  catalogTopicId String?     @map("catalog_topic_id")
+  subjectId      String?     @map("subject_id")
+  difficulty     Difficulty? @map("difficulty")
+
+  score         Int      @map("score")
+  maxScore      Int      @map("max_score")
+  isCorrect     Boolean? @map("is_correct")
+  corrected     Boolean  @default(false)
+  attemptNumber Int      @default(1) @map("attempt_number")
+
+  givenTextSnapshot String? @map("given_text_snapshot")
+
+  dataQuality     AnalyticsDataQuality @default(COMPLETE) @map("data_quality")
+  snapshotVersion Int                  @default(1) @map("snapshot_version")
+  responseTimeSec Int?                 @map("response_time_sec")
+  metadata        Json?
+  createdAt       DateTime             @default(now()) @map("created_at")
+
+  submissionFact SubmissionFact @relation(fields: [submissionFactId], references: [id], onDelete: Cascade)
+
+  @@index([submissionFactId])
+  @@map("response_facts")
+}
+
 model ImportBatch {
   id             String       @id @default(uuid()) @map("import_batch_id")
   organizationId String       @map("organization_id")
@@ -1301,6 +1411,21 @@ enum ImportStatus {
   PROCESSING
   DONE
   FAILED
+}
+
+/// Quality / completeness of an analytics snapshot. Only degrades on creation;
+/// promotion to COMPLETE is reserved for targeted corrective backfill.
+enum AnalyticsDataQuality {
+  COMPLETE
+  PARTIAL
+  LEGACY_INFERRED
+  BROKEN_REFERENCE
+}
+
+/// Origin of an analytics snapshot row.
+enum AnalyticsSnapshotSource {
+  LIVE_SUBMIT
+  BACKFILL
 }
 
 enum XpEventType {

@@ -4,6 +4,7 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { SubmissionsService, SUBMISSION_LOCKED_ERROR_CODE } from './submissions.service';
 import { PrismaService } from '@/prisma/prisma.service';
 import { GamificationService } from '@/gamification/gamification.service';
+import { AnalyticsSnapshotService } from '@/analytics/analytics-snapshot.service';
 import { AuditService } from '@/audit/audit.service';
 import { OrganizationRole } from '@prisma/client';
 
@@ -47,6 +48,10 @@ describe('SubmissionsService (integrity)', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: GamificationService, useValue: { awardXpForEvent: jest.fn() } },
         { provide: AuditService, useValue: { log: jest.fn() } },
+        {
+          provide: AnalyticsSnapshotService,
+          useValue: { createSubmissionSnapshot: jest.fn() },
+        },
         { provide: CACHE_MANAGER, useValue: { get: jest.fn(), set: jest.fn() } },
       ],
     }).compile();
