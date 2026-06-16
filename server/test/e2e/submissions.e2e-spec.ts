@@ -12,12 +12,28 @@ import {
   OrganizationRole,
   OrganizationType,
 } from '@prisma/client';
-import { authAs } from 'test/helpers';
-import { RegisterMode } from '@/auth/dto/register.dto';
+import { authAs, login } from 'test/helpers';
 
 function uniqueIp() {
   const rnd = () => Math.floor(Math.random() * 250) + 1;
   return `10.${rnd()}.${rnd()}.${rnd()}`;
+}
+
+/**
+ * Delete an assignment together with its submissions/responses.
+ * submissions_assignment_id_fkey is RESTRICT, so referencing rows must go first;
+ * submittedAt is cleared to bypass the response-lock trigger.
+ */
+async function deleteAssignmentDeep(prisma: PrismaService, id: string) {
+  await prisma.submission.updateMany({
+    where: { assignmentId: id },
+    data: { submittedAt: null },
+  });
+  await prisma.response.deleteMany({
+    where: { submission: { assignmentId: id } },
+  });
+  await prisma.submission.deleteMany({ where: { assignmentId: id } });
+  await prisma.assignment.delete({ where: { id } });
 }
 
 describe('Submissions (e2e)', () => {
@@ -109,39 +125,52 @@ describe('Submissions (e2e)', () => {
       login: superAuth.login,
     };
 
-    // Orgs
+    // Orgs (ACTIVE so execution flows like submissions are allowed)
     org = await prisma.organization.create({
-      data: { name: `E2E Org ${unique}`, type: OrganizationType.SCHOOL },
+      data: {
+        name: `E2E Org ${unique}`,
+        type: OrganizationType.SCHOOL,
+        status: $Enums.OrganizationStatus.ACTIVE,
+      },
       select: { id: true },
     });
     otherOrg = await prisma.organization.create({
-      data: { name: `E2E Other Org ${unique}`, type: OrganizationType.SCHOOL },
+      data: {
+        name: `E2E Other Org ${unique}`,
+        type: OrganizationType.SCHOOL,
+        status: $Enums.OrganizationStatus.ACTIVE,
+      },
       select: { id: true },
     });
 
-    // Teacher + Student + Outsider users
-    const regTeacher = await request(app.getHttpServer())
-      .post('/auth/register')
-      .set('X-Forwarded-For', uniqueIp())
-      .send({ ...teacher, role: OrganizationRole.TEACHER, mode: RegisterMode.INDIVIDUAL })
-      .expect(201);
-    const regStudent = await request(app.getHttpServer())
-      .post('/auth/register')
-      .set('X-Forwarded-For', uniqueIp())
-      .send({ ...student, role: OrganizationRole.STUDENT, mode: RegisterMode.INDIVIDUAL })
-      .expect(201);
-    const regOutsider = await request(app.getHttpServer())
-      .post('/auth/register')
-      .set('X-Forwarded-For', uniqueIp())
-      .send({ ...outsider, role: OrganizationRole.STUDENT, mode: RegisterMode.INDIVIDUAL })
-      .expect(201);
+    // Teacher + Student + Outsider users.
+    // INDIVIDUAL registration mode was removed; mint standalone accounts via authAs
+    // (CREATE_ORG under the hood) and attach the memberships we need manually below.
+    const regTeacher = await authAs(app, OrganizationRole.TEACHER, {
+      name: teacher.name,
+      email: teacher.email,
+      username: teacher.username,
+      password: teacher.password,
+    });
+    const regStudent = await authAs(app, OrganizationRole.STUDENT, {
+      name: student.name,
+      email: student.email,
+      username: student.username,
+      password: student.password,
+    });
+    const regOutsider = await authAs(app, OrganizationRole.STUDENT, {
+      name: outsider.name,
+      email: outsider.email,
+      username: outsider.username,
+      password: outsider.password,
+    });
 
     // Memberships
     const [mTeacher, mStudent, mOutsider] = await prisma.$transaction([
       prisma.membership.create({
         data: {
           organizationId: org.id,
-          userId: regTeacher.body.user.id,
+          userId: regTeacher.user.id,
           role: OrganizationRole.TEACHER,
         },
         select: { id: true },
@@ -149,7 +178,7 @@ describe('Submissions (e2e)', () => {
       prisma.membership.create({
         data: {
           organizationId: org.id,
-          userId: regStudent.body.user.id,
+          userId: regStudent.user.id,
           role: OrganizationRole.STUDENT,
         },
         select: { id: true },
@@ -157,7 +186,7 @@ describe('Submissions (e2e)', () => {
       prisma.membership.create({
         data: {
           organizationId: otherOrg.id,
-          userId: regOutsider.body.user.id,
+          userId: regOutsider.user.id,
           role: OrganizationRole.STUDENT,
         },
         select: { id: true },
@@ -168,50 +197,34 @@ describe('Submissions (e2e)', () => {
     studentMembershipId = mStudent.id;
     outsiderMembershipId = mOutsider.id;
 
-    // Logins
-    const tLogin = await request(app.getHttpServer())
-      .post('/auth/login')
-      .set('X-Forwarded-For', uniqueIp())
-      .send({ email: teacher.email, password: teacher.password })
-      .expect(201);
-    const tUseOrg = await request(app.getHttpServer())
-      .post('/auth/use-org')
-      .set('Authorization', `Bearer ${tLogin.body.sessionToken}`)
-      .send({ orgId: org.id })
-      .expect(201);
-    teacherToken = tUseOrg.body.sessionToken;
-
-    const sLogin = await request(app.getHttpServer())
-      .post('/auth/login')
-      .set('X-Forwarded-For', uniqueIp())
-      .send({ email: student.email, password: student.password })
-      .expect(201);
-    const sUseOrg = await request(app.getHttpServer())
-      .post('/auth/use-org')
-      .set('Authorization', `Bearer ${sLogin.body.sessionToken}`)
-      .send({ orgId: org.id })
-      .expect(201);
-    studentToken = sUseOrg.body.sessionToken;
-
-    const oLogin = await request(app.getHttpServer())
-      .post('/auth/login')
-      .set('X-Forwarded-For', uniqueIp())
-      .send({ email: outsider.email, password: outsider.password })
-      .expect(201);
-    const oUseOrg = await request(app.getHttpServer())
-      .post('/auth/use-org')
-      .set('Authorization', `Bearer ${oLogin.body.sessionToken}`)
-      .send({ orgId: otherOrg.id })
-      .expect(201);
-    outsiderToken = oUseOrg.body.sessionToken;
+    // Logins — use the shared login helper which logs in scoped to an org and
+    // returns the current access token shape (the old /auth/use-org two-step is gone).
+    teacherToken = await login(app, {
+      email: teacher.email,
+      password: teacher.password,
+      organizationId: org.id,
+    });
+    studentToken = await login(app, {
+      email: student.email,
+      password: student.password,
+      organizationId: org.id,
+    });
+    outsiderToken = await login(app, {
+      email: outsider.email,
+      password: outsider.password,
+      organizationId: otherOrg.id,
+    });
 
     // Academic year (required for assignments)
+    // Academic year window must contain "now" or submissions fail with YEAR_WINDOW_CLOSED.
+    const yearStartsAt = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+    const yearEndsAt = new Date(Date.now() + 300 * 24 * 60 * 60 * 1000);
     const academicYear = await prisma.academicYear.create({
       data: {
         orgId: org.id,
         label: `E2E ${unique}`,
-        startsAt: new Date('2024-09-01'),
-        endsAt: new Date('2025-08-31'),
+        startsAt: yearStartsAt,
+        endsAt: yearEndsAt,
         isCurrent: true,
       },
       select: { id: true },
@@ -222,13 +235,31 @@ describe('Submissions (e2e)', () => {
       data: {
         orgId: otherOrg.id,
         label: `E2E Other ${unique}`,
-        startsAt: new Date('2024-09-01'),
-        endsAt: new Date('2025-08-31'),
+        startsAt: yearStartsAt,
+        endsAt: yearEndsAt,
         isCurrent: true,
       },
       select: { id: true },
     });
     otherOrgAcademicYearId = otherYear.id;
+
+    // Org readiness (R2) requires a class section in the current year for both orgs.
+    await prisma.classSection.create({
+      data: {
+        orgId: org.id,
+        yearId: academicYearId,
+        grade: $Enums.SchoolGrade.GRADE_5,
+        section: `S${unique}`,
+      },
+    });
+    await prisma.classSection.create({
+      data: {
+        orgId: otherOrg.id,
+        yearId: otherOrgAcademicYearId,
+        grade: $Enums.SchoolGrade.GRADE_5,
+        section: `O${unique}`,
+      },
+    });
 
     // Test se 3 otázkami
     const createdTest = await prisma.test.create({
@@ -324,34 +355,30 @@ describe('Submissions (e2e)', () => {
   });
 
   afterAll(async () => {
-    // best-effort cleanup
+    // best-effort cleanup — robust, org-scoped (handles temp assignments from tests too)
     try {
-      await prisma.submission.deleteMany({ where: { assignmentId } });
-      await prisma.submission.deleteMany({
-        where: { assignmentId: closedAssignmentId },
-      });
-      await prisma.submission.deleteMany({
-        where: { assignmentId: futureAssignmentId },
-      });
-
-      await prisma.assignment.deleteMany({
-        where: {
-          id: { in: [assignmentId, closedAssignmentId, futureAssignmentId] },
-        },
-      });
-      await prisma.test.deleteMany({ where: { id: testId } });
-
-      await prisma.membership.deleteMany({
-        where: { organizationId: { in: [org.id, otherOrg.id] } },
-      });
-      await prisma.organization.deleteMany({
-        where: { id: { in: [org.id, otherOrg.id] } },
-      });
+      for (const orgId of [org?.id, otherOrg?.id].filter(Boolean) as string[]) {
+        await prisma.submission.updateMany({
+          where: { organizationId: orgId },
+          data: { submittedAt: null },
+        });
+        await prisma.response.deleteMany({
+          where: { submission: { organizationId: orgId } },
+        });
+        await prisma.submission.deleteMany({ where: { organizationId: orgId } });
+        await prisma.assignment.deleteMany({ where: { organizationId: orgId } });
+        await prisma.question.deleteMany({
+          where: { test: { organizationId: orgId } },
+        });
+        await prisma.test.deleteMany({ where: { organizationId: orgId } });
+        await prisma.classSection.deleteMany({ where: { orgId } });
+        await prisma.academicYear.deleteMany({ where: { orgId } });
+        await prisma.membership.deleteMany({ where: { organizationId: orgId } });
+        await prisma.organization.deleteMany({ where: { id: orgId } });
+      }
 
       await prisma.refreshToken.deleteMany({
-        where: {
-          userId: { in: [superUser.id] },
-        },
+        where: { userId: { in: [superUser.id] } },
       });
       await prisma.user.deleteMany({ where: { id: { in: [superUser.id] } } });
     } catch {}
@@ -518,7 +545,7 @@ describe('Submissions (e2e)', () => {
 
     expect([400, 403, 409]).toContain(res.status);
 
-    await prisma.assignment.delete({ where: { id: single.id } });
+    await deleteAssignmentDeep(prisma, single.id);
   });
 
   it('POST /submissions/:id/finish → 403 po deadline i pro rozpracovanou submission', async () => {
@@ -557,7 +584,7 @@ describe('Submissions (e2e)', () => {
 
     expect([403, 409]).toContain(res.status);
 
-    await prisma.assignment.delete({ where: { id: soon.id } });
+    await deleteAssignmentDeep(prisma, soon.id);
   });
 
   // ------------------------------------------------------------------
@@ -573,10 +600,12 @@ describe('Submissions (e2e)', () => {
   });
 
   it('PATCH /submissions/:id/responses → 404 na neexistující submission', async () => {
+    // Non-empty responses so the service performs the submission lookup (an empty
+    // responses array short-circuits to success before any lookup).
     await request(app.getHttpServer())
       .patch(`/submissions/${randomUUID()}/responses`)
       .set('Authorization', `Bearer ${studentToken}`)
-      .send({ responses: [] })
+      .send({ responses: [{ questionId: randomUUID(), givenText: 'x' }] })
       .expect(404);
   });
 
@@ -656,7 +685,7 @@ describe('Submissions (e2e)', () => {
     expect(sub?.status).toBe('APPROVED');
     expect(sub?.submittedAt).toBeTruthy();
 
-    await prisma.assignment.delete({ where: { id: concurrAssignment.id } });
+    await deleteAssignmentDeep(prisma, concurrAssignment.id);
   });
 
   it('POST /submissions/:id/finish → idempotentní (druhé finish vrátí 200/409/400, ale nezmění výsledek)', async () => {
@@ -695,7 +724,7 @@ describe('Submissions (e2e)', () => {
 
     expect([200, 400, 409]).toContain(done2.status);
 
-    await prisma.assignment.delete({ where: { id: tmpAssignment.id } });
+    await deleteAssignmentDeep(prisma, tmpAssignment.id);
   });
 
   it('PATCH /submissions/:id/responses → zákaz po dokončení (400/409/403)', async () => {
@@ -726,14 +755,19 @@ describe('Submissions (e2e)', () => {
       .send({ responses: [] })
       .expect(200);
 
+    // Non-empty responses so the lock guard is actually reached (empty array is a no-op).
+    const q = await prisma.question.findFirst({
+      where: { testId },
+      select: { id: true },
+    });
     const res = await request(app.getHttpServer())
       .patch(`/submissions/${s.body.id}/responses`)
       .set('Authorization', `Bearer ${studentToken}`)
-      .send({ responses: [] });
+      .send({ responses: [{ questionId: q!.id, givenText: 'x' }] });
 
     expect([400, 403, 409]).toContain(res.status);
 
-    await prisma.assignment.delete({ where: { id: tmpAssignment.id } });
+    await deleteAssignmentDeep(prisma, tmpAssignment.id);
   });
 
   it('PATCH /submissions/:id/responses after finish → 409 SUBMISSION_LOCKED (DB-level)', async () => {
@@ -773,7 +807,7 @@ describe('Submissions (e2e)', () => {
     expect(patchRes.status).toBe(409);
     expect(patchRes.body?.errorCode ?? patchRes.body?.error).toBe('SUBMISSION_LOCKED');
 
-    await prisma.assignment.delete({ where: { id: tmpAssignment.id } });
+    await deleteAssignmentDeep(prisma, tmpAssignment.id);
   });
 
   it('cross-org: GET /submissions/:id with submission from other org → 404 (no leak)', async () => {
@@ -816,6 +850,6 @@ describe('Submissions (e2e)', () => {
 
     expect([403, 404, 409]).toContain(res.status);
 
-    await prisma.assignment.delete({ where: { id: otherAss.id } });
+    await deleteAssignmentDeep(prisma, otherAss.id);
   });
 });
