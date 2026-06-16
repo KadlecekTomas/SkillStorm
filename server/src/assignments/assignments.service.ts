@@ -13,6 +13,8 @@ import { EnrollmentStatus, PermissionKey, PublishStatus } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
 import type { Assignment, Prisma } from '@prisma/client';
 import type { CreateAssignmentDto, UpdateAssignmentDto } from './dto';
+import type { TestSessionDto } from './dto/test-session.dto';
+import { SubmissionsService } from '@/submissions/submissions.service';
 import type { JwtPayload } from '@/auth/types/jwt-payload';
 import type {
   MyAssignmentDto,
@@ -80,6 +82,7 @@ export class AssignmentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly rbac: RbacService,
+    private readonly submissions: SubmissionsService,
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
   ) {}
 
@@ -1011,5 +1014,116 @@ export class AssignmentsService {
         ),
       };
     });
+  }
+
+  // ------- FOCUS TEST SESSION (student) -------------------------------------
+  /**
+   * Bootstraps a distraction-free test session for a student.
+   *
+   * Resume-first, never duplicate: if the student has an unsubmitted attempt it is
+   * resumed; otherwise a new attempt is created via SubmissionsService.create, which
+   * enforces access (targetType), the open/close window, the academic-year window and
+   * maxAttempts. The payload NEVER includes correctAnswer/correctAnswers.
+   */
+  async getOrCreateTestSession(
+    assignmentId: string,
+    user: JwtPayload,
+    ctx: OrgContext,
+  ): Promise<TestSessionDto> {
+    // 1) Assignment scoped to org → 404 cross-org (no existence leak).
+    const assignment = await this.findOneOrThrowScoped(assignmentId, ctx);
+
+    // 2) Resume the latest in-progress attempt for this student, if any.
+    let submission = await this.prisma.submission.findFirst({
+      where: {
+        organizationId: ctx.organizationId,
+        assignmentId: assignment.id,
+        studentId: ctx.membershipId,
+        submittedAt: null,
+        deletedAt: null,
+      },
+      orderBy: { attemptNo: 'desc' },
+      select: {
+        id: true,
+        attemptNo: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true,
+        submittedAt: true,
+      },
+    });
+
+    // 3) Otherwise start a new attempt. create() validates access + window + maxAttempts
+    //    and is idempotent on the unique constraint, so no duplicate active submission appears.
+    if (!submission) {
+      const created = await this.submissions.create(
+        { assignmentId: assignment.id },
+        user,
+        ctx,
+      );
+      submission = {
+        id: created.id,
+        attemptNo: created.attemptNo,
+        status: created.status,
+        createdAt: created.createdAt,
+        updatedAt: created.updatedAt,
+        submittedAt: created.submittedAt,
+      };
+    }
+
+    // 4) Sanitized test (answer key omitted) + persisted responses for rehydration.
+    const test = await this.prisma.test.findFirst({
+      where: withOrg({ id: assignment.testId }, ctx.organizationId),
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        questions: {
+          orderBy: [{ order: 'asc' }, { id: 'asc' }],
+          select: {
+            id: true,
+            text: true,
+            type: true,
+            options: { select: { id: true, text: true } },
+          },
+        },
+      },
+    });
+    if (!test) throw new NotFoundException('Test nenalezen');
+
+    const responses = await this.prisma.response.findMany({
+      where: { submissionId: submission.id },
+      select: { questionId: true, givenText: true },
+    });
+
+    return {
+      assignment: {
+        id: assignment.id,
+        title: test.title,
+        openAt: assignment.openAt.toISOString(),
+        closeAt: assignment.closeAt.toISOString(),
+        maxAttempts: assignment.maxAttempts,
+        timeLimitSec: assignment.timeLimitSec ?? null,
+        showExplain: assignment.showExplain,
+      },
+      test: {
+        id: test.id,
+        title: test.title,
+        description: test.description,
+        questions: test.questions,
+      },
+      submission: {
+        id: submission.id,
+        attemptNo: submission.attemptNo,
+        status: submission.status,
+        startedAt: submission.createdAt.toISOString(),
+        updatedAt: submission.updatedAt.toISOString(),
+        submittedAt: submission.submittedAt?.toISOString() ?? null,
+      },
+      responses: responses.map((r) => ({
+        questionId: r.questionId,
+        givenText: r.givenText,
+      })),
+    };
   }
 }

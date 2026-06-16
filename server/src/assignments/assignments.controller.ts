@@ -124,6 +124,26 @@ export class AssignmentsController {
     return ok(data);
   }
 
+  @Get(':assignmentId/test-session')
+  @Permission(PermissionKey.VIEW_OWN_ASSIGNMENTS)
+  @NoHttpCache()
+  @ApiOperation({
+    summary:
+      'Bootstrap a distraction-free test session: resume or start an attempt and return the sanitized test (no answer key)',
+  })
+  async testSession(
+    @Param('assignmentId') assignmentId: string,
+    @Req() req: RequestWithUser,
+  ) {
+    const ctx = await this.orgContext.get(req);
+    const session = await this.assignmentsService.getOrCreateTestSession(
+      assignmentId,
+      req.user,
+      ctx,
+    );
+    return ok(session);
+  }
+
   @Get(':id')
   @Permission(
     PermissionKey.VIEW_OWN_ASSIGNMENTS,

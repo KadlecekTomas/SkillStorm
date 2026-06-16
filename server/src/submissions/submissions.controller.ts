@@ -19,6 +19,7 @@ import { OrganizationRole, PermissionKey } from '@prisma/client';
 import {
   CreateSubmissionDto,
   FinishSubmissionDto,
+  FocusEventsDto,
   UpdateSubmissionDto,
 } from './dto';
 import { SubmissionsService } from './submissions.service';
@@ -72,6 +73,25 @@ export class SubmissionsController {
   ) {
     const ctx = await this.orgContext.get(req);
     return ok(this.submissionsService.finish(id, dto, req.user, ctx));
+  }
+
+  @Post(':id/focus-events')
+  @HttpCode(HttpStatus.ACCEPTED)
+  @Permission(OrganizationRole.STUDENT)
+  async focusEvents(
+    @Param('id') id: string,
+    @Body() dto: FocusEventsDto,
+    @Req() req: RequestWithUser,
+  ) {
+    const ctx = await this.orgContext.get(req);
+    const ipAddress = req.ip ?? null;
+    const userAgent = (req.headers['user-agent'] as string | undefined) ?? null;
+    return ok(
+      this.submissionsService.logFocusEvents(id, dto, req.user, ctx, {
+        ipAddress,
+        userAgent,
+      }),
+    );
   }
 
   @Get()

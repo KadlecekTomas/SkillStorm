@@ -23,6 +23,8 @@ import {
 import { createOrgReadinessError } from '@/shared/errors/org-readiness.error';
 import { OrgOperationType } from '@/common/decorators/org-operation.decorator';
 import { GamificationService } from '@/gamification/gamification.service';
+import { AuditService } from '@/audit/audit.service';
+import type { FocusEventType } from './dto/focus-events.dto';
 import type { JwtPayload } from '@/auth/types/jwt-payload';
 import type { OrgContext } from '@/common/org-context/org-context.types';
 import { assertTenantWhere, withOrg } from '@/common/prisma/tenant-scope';
@@ -57,6 +59,7 @@ export class SubmissionsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly gamification: GamificationService,
+    private readonly audit: AuditService,
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
   ) {}
 
@@ -959,5 +962,75 @@ export class SubmissionsService {
     }
 
     return this.sanitizeSubmission(submission, role);
+  }
+
+  /**
+   * Records Focus Test Mode telemetry (tab blur / visibility / connectivity) as audit signals.
+   *
+   * This is NOT anti-cheat: nothing is blocked and the student sees no warning. It only writes
+   * to the existing AuditLog (entityType TEST, entityId = submissionId, action `FOCUS_EVENT:*`)
+   * for later review. It never reads or mutates responses or submission status, so it remains
+   * safe to call even after the submission has been finished.
+   */
+  async logFocusEvents(
+    id: string,
+    dto: {
+      events: Array<{
+        type: FocusEventType;
+        clientTimestamp: number;
+        count?: number;
+      }>;
+    },
+    user: JwtUser,
+    ctx: OrgContext,
+    reqMeta: { ipAddress: string | null; userAgent: string | null },
+  ): Promise<{ success: boolean; recorded: number }> {
+    const membership = await this.getMembershipFromCtx(ctx);
+    if (String(membership.role) !== 'STUDENT') {
+      throw new ForbiddenException('Only students can log focus events.');
+    }
+
+    const submission = await this.prisma.submission.findUnique({
+      where: scopedSubmissionWhere(membership.organizationId, id),
+      select: {
+        id: true,
+        studentId: true,
+        testId: true,
+        assignmentId: true,
+        assignment: { select: { organizationId: true } },
+      },
+    });
+    if (!submission || !submission.assignment) {
+      throw new NotFoundException('Submission nenalezena');
+    }
+    if (submission.studentId !== membership.id) {
+      throw new ForbiddenException('Access denied');
+    }
+
+    const events = dto.events ?? [];
+    if (events.length === 0) return { success: true, recorded: 0 };
+
+    // Fire-and-forget at the AuditService level (it swallows missing-relation errors).
+    for (const e of events) {
+      await this.audit.log({
+        action: `FOCUS_EVENT:${e.type.toUpperCase()}`,
+        entityType: AuditEntityType.TEST,
+        entityId: submission.id,
+        userId: user.userId ?? null,
+        organizationId: membership.organizationId,
+        ipAddress: reqMeta.ipAddress,
+        userAgent: reqMeta.userAgent,
+        metadata: {
+          eventType: e.type,
+          submissionId: submission.id,
+          assignmentId: submission.assignmentId,
+          testId: submission.testId,
+          clientTimestamp: e.clientTimestamp,
+          count: e.count ?? 1,
+        },
+      });
+    }
+
+    return { success: true, recorded: events.length };
   }
 }

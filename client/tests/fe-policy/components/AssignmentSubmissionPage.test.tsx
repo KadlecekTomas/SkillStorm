@@ -82,15 +82,19 @@ describe("AssignmentSubmissionPage", () => {
 
     render(<AssignmentSubmissionPage />);
 
+    // The page is now a launcher into Focus Test Mode; on a failed assignment fetch it
+    // surfaces a graceful error instead of the test form.
     await waitFor(() => {
-      expect(screen.getByText(/Zadání se nepodařilo načíst/i)).toBeInTheDocument();
+      expect(
+        screen.getByText(/nepodařilo se načíst zadání/i),
+      ).toBeInTheDocument();
     });
 
     recordPolicyCheck(
       "Submissions",
       "submission-page-error-handling",
       true,
-      "Submission page handles missing assignment gracefully.",
+      "Submission launcher handles missing assignment gracefully.",
     );
   });
 });

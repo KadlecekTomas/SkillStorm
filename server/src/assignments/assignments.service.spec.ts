@@ -5,6 +5,7 @@ import { ConflictException } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
 import { AssignmentsService } from './assignments.service';
 import { RbacService } from '@/modules/rbac/rbac.service';
+import { SubmissionsService } from '@/submissions/submissions.service';
 import * as cacheUtils from '@/shared/cache/org-cache.utils';
 
 describe('AssignmentsService', () => {
@@ -23,6 +24,7 @@ describe('AssignmentsService', () => {
         AssignmentsService,
         { provide: PrismaService, useValue: prisma },
         { provide: RbacService, useValue: rbac },
+        { provide: SubmissionsService, useValue: { create: jest.fn() } },
         { provide: CACHE_MANAGER, useValue: cache },
       ],
     }).compile();
