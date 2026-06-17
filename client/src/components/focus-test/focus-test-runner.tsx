@@ -64,6 +64,8 @@ export function FocusTestRunner({
   // Questions changed since the last fully-synced state — a display-only hint for the
   // navigator. Derived in this component so the autosave hook stays untouched.
   const [pending, setPending] = useState<Set<string>>(() => new Set());
+  // Questions the student has opened. A visited-but-unanswered question reads as "rozepsaná".
+  const [visited, setVisited] = useState<Set<string>>(() => new Set());
 
   const ctl = useFocusTest(session, { onSubmitted });
   // Audit-only telemetry (blur / visibility / connectivity). Never blocks or warns the student.
@@ -89,6 +91,17 @@ export function FocusTestRunner({
 
   const question = questions[current];
 
+  // Mark the shown question as visited (so it can become "rozepsaná" if left unanswered).
+  useEffect(() => {
+    if (!question) return;
+    setVisited((prev) => {
+      if (prev.has(question.id)) return prev;
+      const next = new Set(prev);
+      next.add(question.id);
+      return next;
+    });
+  }, [question]);
+
   const persistFlags = useCallback(
     (next: Set<string>): void => {
       saveFlags(assignmentId, submissionId, next);
@@ -109,15 +122,19 @@ export function FocusTestRunner({
     [persistFlags],
   );
 
-  // ── navigator state per question (answered / flagged / pending-save) ──
+  // ── navigator state per question (answered / started / flagged / pending-save) ──
   const navItems: QuestionNavItem[] = useMemo(
     () =>
-      questions.map((q) => ({
-        answered: isAnswered(ctl.answers[q.id]),
-        flagged: flagged.has(q.id),
-        pending: pending.has(q.id),
-      })),
-    [questions, ctl.answers, pending, flagged],
+      questions.map((q) => {
+        const answered = isAnswered(ctl.answers[q.id]);
+        return {
+          answered,
+          started: !answered && visited.has(q.id),
+          flagged: flagged.has(q.id),
+          pending: pending.has(q.id),
+        };
+      }),
+    [questions, ctl.answers, pending, flagged, visited],
   );
 
   const flaggedCount = navItems.filter((i) => i.flagged).length;
@@ -128,6 +145,16 @@ export function FocusTestRunner({
     },
     [questions.length],
   );
+
+  // ── "Přeskočit": jump to the next still-unanswered question (cyclic). ──
+  const nextUnanswered = useMemo(() => {
+    for (let step = 1; step <= questions.length; step++) {
+      const i = (current + step) % questions.length;
+      const q = questions[i];
+      if (q && !isAnswered(ctl.answers[q.id])) return i;
+    }
+    return -1;
+  }, [questions, current, ctl.answers]);
 
   // ── keyboard control (disabled while any modal is open) ──
   const values = question ? optionValues(question) : [];
@@ -178,6 +205,7 @@ export function FocusTestRunner({
       variant="focus"
       title={session.test.title}
       progress={{
+        current,
         answered: ctl.answeredCount,
         total: ctl.totalQuestions,
         flagged: flaggedCount,
@@ -225,13 +253,25 @@ export function FocusTestRunner({
             >
               ← Předchozí
             </Button>
-            <button
-              type="button"
-              onClick={() => setMapOpen(true)}
-              className="rounded-xl px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 lg:hidden"
-            >
-              Mapa otázek
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setMapOpen(true)}
+                className="rounded-xl px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 lg:hidden"
+              >
+                Mapa otázek
+              </button>
+              <button
+                type="button"
+                data-testid="skip-question"
+                onClick={() => nextUnanswered !== -1 && goTo(nextUnanswered)}
+                disabled={nextUnanswered === -1}
+                className="rounded-xl px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-transparent"
+                title="Přejít na další nezodpovězenou otázku"
+              >
+                Přeskočit
+              </button>
+            </div>
             <Button
               type="button"
               variant="outline"

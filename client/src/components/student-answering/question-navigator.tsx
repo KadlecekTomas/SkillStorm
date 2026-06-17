@@ -8,6 +8,8 @@ export interface QuestionNavItem {
   flagged: boolean;
   /** Locally changed but not yet confirmed saved on the server. */
   pending: boolean;
+  /** Visited but left without a (current) answer — "rozepsaná". */
+  started: boolean;
 }
 
 export interface QuestionNavigatorProps {
@@ -31,7 +33,11 @@ function NavDot({
 }): JSX.Element {
   const label = [
     `Otázka ${index + 1}`,
-    item.answered ? "zodpovězeno" : "bez odpovědi",
+    item.answered
+      ? "zodpovězeno"
+      : item.started
+        ? "rozepsaná, bez odpovědi"
+        : "bez odpovědi",
     item.flagged ? "označeno k návratu" : null,
     item.pending ? "čeká na uložení" : null,
   ]
@@ -48,6 +54,7 @@ function NavDot({
       data-answered={item.answered}
       data-flagged={item.flagged}
       data-pending={item.pending}
+      data-started={item.started}
       data-current={isCurrent}
       className={cn(
         "relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border text-sm font-semibold transition-all duration-150 motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-emerald-500",
@@ -55,7 +62,9 @@ function NavDot({
           ? "border-slate-900 bg-slate-900 text-white"
           : item.answered
             ? "border-emerald-300 bg-emerald-50 text-emerald-700 hover:border-emerald-400"
-            : "border-slate-200 bg-white text-slate-500 hover:border-slate-400",
+            : item.started
+              ? "border-dashed border-slate-400 bg-white text-slate-700 hover:border-slate-500"
+              : "border-slate-200 bg-white text-slate-500 hover:border-slate-400",
       )}
     >
       {index + 1}
@@ -77,6 +86,7 @@ function NavDot({
 
 const LEGEND: Array<{ dot: string; label: string }> = [
   { dot: "bg-emerald-400", label: "Zodpovězeno" },
+  { dot: "bg-white border border-dashed border-slate-400", label: "Rozepsaná" },
   { dot: "bg-white border border-slate-300", label: "Bez odpovědi" },
   { dot: "bg-amber-400", label: "K návratu / čeká na uložení" },
 ];

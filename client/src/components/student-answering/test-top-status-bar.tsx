@@ -10,6 +10,8 @@ import type { AnsweringVariant } from "./answer-option";
 export interface TestTopStatusBarProps {
   variant: AnsweringVariant;
   title: string;
+  /** Zero-based index of the question currently shown. */
+  currentIndex: number;
   answeredCount: number;
   totalQuestions: number;
   flaggedCount: number;
@@ -24,6 +26,7 @@ export interface TestTopStatusBarProps {
 export function TestTopStatusBar({
   variant,
   title,
+  currentIndex,
   answeredCount,
   totalQuestions,
   flaggedCount,
@@ -37,6 +40,10 @@ export function TestTopStatusBar({
     totalQuestions > 0
       ? Math.round((answeredCount / totalQuestions) * 100)
       : 0;
+  const positionLabel =
+    totalQuestions > 0
+      ? `Otázka ${Math.min(currentIndex + 1, totalQuestions)} z ${totalQuestions}`
+      : "";
   const timeLow = timer != null && timer.hasLimit && timer.remaining <= 60;
 
   return (
@@ -50,15 +57,31 @@ export function TestTopStatusBar({
       )}
     >
       <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 sm:px-6">
-        <h1 className="mr-auto min-w-0 truncate text-base font-semibold text-slate-900">
-          {title}
-        </h1>
+        <div className="mr-auto flex min-w-0 flex-col">
+          <h1 className="min-w-0 truncate text-base font-semibold text-slate-900">
+            {title}
+          </h1>
+          {positionLabel && (
+            <span
+              data-testid="question-position"
+              aria-live="polite"
+              className="text-xs font-medium text-slate-500"
+            >
+              {positionLabel}
+            </span>
+          )}
+        </div>
 
         <div className="flex items-center gap-1.5 text-sm text-slate-600">
-          <span className="font-semibold tabular-nums text-slate-900">
-            {answeredCount}/{totalQuestions}
+          <span
+            data-testid="progress-percent"
+            className="font-semibold tabular-nums text-slate-900"
+          >
+            {progressPct} %
           </span>
-          <span className="hidden sm:inline">zodpovězeno</span>
+          <span className="hidden text-slate-500 sm:inline">
+            ({answeredCount}/{totalQuestions})
+          </span>
         </div>
 
         {flaggedCount > 0 && (
