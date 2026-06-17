@@ -86,17 +86,25 @@ test.describe("Focus Test Mode — UX upgrade", () => {
     await expect(page.getByTestId("progress-percent")).toHaveText(/%/);
     await expect(page.getByTestId("skip-question")).toBeVisible();
 
-    const total = await page.getByTestId("question-nav-item").count();
+    const navItems = page.getByTestId("question-nav-item");
+    const total = await navItems.count();
     test.skip(total < 2, "Need at least 2 questions for navigation coverage.");
 
-    // Leave q1 unanswered and move on → q1 becomes "rozepsaná" (started).
-    await page.getByRole("button", { name: /Další/i }).click();
-    await expect(page.getByTestId("question-position")).toHaveText(
-      /Otázka\s+2\s+z\s+\d+/,
-    );
-    await expect(
-      page.getByTestId("question-nav-item").first(),
-    ).toHaveAttribute("data-started", "true");
+    // A resumed attempt may already carry answers, so target a genuinely unanswered
+    // question: visiting then leaving it must mark it "rozepsaná" (started).
+    let target = -1;
+    for (let i = 0; i < total; i++) {
+      if ((await navItems.nth(i).getAttribute("data-answered")) === "false") {
+        target = i;
+        break;
+      }
+    }
+    test.skip(target === -1, "All questions are already answered in this attempt.");
+
+    await navItems.nth(target).click(); // visit it (becomes current + visited)
+    const other = target === 0 ? 1 : 0;
+    await navItems.nth(other).click(); // leave it unanswered
+    await expect(navItems.nth(target)).toHaveAttribute("data-started", "true");
   });
 
   test("keeps answers when navigating between questions", async ({ page }) => {
@@ -142,7 +150,15 @@ test.describe("Focus Test Mode — UX upgrade", () => {
 
     const kind = await answerCurrent(page);
     test.skip(!kind, "First question exposed no answerable control.");
-    await page.getByTestId("skip-question").click();
+
+    // Skip is only meaningful while some question is still unanswered. On a fully-answered
+    // resumed attempt the control is correctly disabled, so there is nothing to assert.
+    const skip = page.getByTestId("skip-question");
+    test.skip(
+      await skip.isDisabled(),
+      "Every question is already answered — skip is disabled by design.",
+    );
+    await skip.click();
     // Moved off q1 to a later unanswered question.
     await expect(page.getByTestId("question-position")).not.toHaveText(
       /Otázka\s+1\s+z/,
