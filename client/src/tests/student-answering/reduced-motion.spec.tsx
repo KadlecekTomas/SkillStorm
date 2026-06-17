@@ -19,8 +19,8 @@ const question: FocusQuestion = {
 };
 
 const navItems: QuestionNavItem[] = [
-  { answered: true, flagged: false, pending: false },
-  { answered: false, flagged: true, pending: true },
+  { answered: true, flagged: false, pending: false, started: false },
+  { answered: false, flagged: true, pending: true, started: false },
 ];
 
 describe("reduced motion", () => {

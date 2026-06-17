@@ -213,4 +213,55 @@ describe("FocusTestRunner", () => {
       "Praha",
     );
   });
+
+  it("shows the current position and skips to the next unanswered question", () => {
+    render(
+      <FocusTestRunner
+        session={makeSession()}
+        onSubmitted={vi.fn()}
+        onLeave={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId("question-position")).toHaveTextContent(
+      "Otázka 1 z 2",
+    );
+
+    // Skip jumps from q1 to the next unanswered question (q2, a fill input).
+    fireEvent.click(screen.getByTestId("skip-question"));
+    expect(screen.getByTestId("question-position")).toHaveTextContent(
+      "Otázka 2 z 2",
+    );
+    expect(screen.getByPlaceholderText("Napiš odpověď")).toBeTruthy();
+  });
+
+  it("marks a visited-but-unanswered question as started in the navigator", () => {
+    render(
+      <FocusTestRunner
+        session={makeSession()}
+        onSubmitted={vi.fn()}
+        onLeave={vi.fn()}
+      />,
+    );
+    // q1 is the current question and unanswered → it reads as started/rozepsaná.
+    const dots = screen.getAllByTestId("question-nav-item");
+    expect(dots[0]).toHaveAttribute("data-started", "true");
+    // q2 has not been visited yet → not started.
+    expect(dots[1]).toHaveAttribute("data-started", "false");
+  });
+
+  it("disables skip once every question is answered", () => {
+    render(
+      <FocusTestRunner
+        session={makeSession()}
+        onSubmitted={vi.fn()}
+        onLeave={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByDisplayValue("true")); // answer q1 (TRUE_FALSE)
+    fireEvent.click(screen.getByTestId("skip-question")); // move to q2
+    fireEvent.change(screen.getByPlaceholderText("Napiš odpověď"), {
+      target: { value: "Praha" },
+    });
+    expect(screen.getByTestId("skip-question")).toBeDisabled();
+  });
 });
