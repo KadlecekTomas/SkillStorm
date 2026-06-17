@@ -244,7 +244,7 @@ export function FocusTestRunner({
             variant="focus"
           />
 
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
             <Button
               type="button"
               variant="outline"
