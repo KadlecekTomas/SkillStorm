@@ -16,7 +16,11 @@ export default defineConfig({
   use: {
     baseURL: process.env.BASE_URL || 'http://127.0.0.1:3001',
     headless: true,
-    trace: 'on-first-retry',
+    // Diagnostics: keep a trace + screenshot for any failed test (artifacts are only produced
+    // on failure, so this is safe for the whole suite). 'on-first-retry' never fired because
+    // retries default to 0.
+    trace: 'retain-on-failure',
+    screenshot: 'only-on-failure',
   },
 
   webServer: [

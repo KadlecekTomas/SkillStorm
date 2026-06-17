@@ -1,5 +1,12 @@
-import { test, expect, type Page } from "@playwright/test";
-import { openFocusTest } from "./helpers/focus";
+import {
+  test,
+  expect,
+  type Page,
+  openFocusTest,
+  expectSaveStatus,
+  expectReviewDialogOpen,
+  expectSubmitBlockedBecause,
+} from "./helpers/focus";
 
 /**
  * Focus Test Mode — submit safety.
@@ -37,68 +44,80 @@ test.describe("Focus Test Mode — submit safety", () => {
   test("blocks submit when a save has failed and explains why", async ({
     page,
   }) => {
-    const id = await openFocusTest(page);
-    test.skip(!id, "No open assignment seeded for the student.");
-
-    // Force every autosave to fail.
-    await page.route(RESPONSES_ROUTE, (route) => route.abort());
-
-    await page.getByTestId("question-nav-item").first().click();
-    const changed = await makeDirtyChange(page);
-    test.skip(!changed, "First question exposed no answerable control.");
-
-    // Autosave settles into the error state (after the debounce + failed flush).
-    await expect(page.getByTestId("save-status")).toHaveAttribute(
-      "data-status",
-      "error",
-      { timeout: 10_000 },
+    const id = await test.step("student opens assigned focus test", () =>
+      openFocusTest(page));
+    test.skip(
+      !id,
+      "Skipped because the active student seed has no open assignment to open.",
     );
 
-    // The review dialog blocks the final submit and shows the reason.
-    await page.getByTestId("submit-test").click();
-    await expect(page.getByTestId("review-submit-dialog")).toBeVisible();
-    await expect(page.getByTestId("confirm-submit")).toBeDisabled();
-    await expect(page.getByTestId("review-save-error-warning")).toBeVisible();
+    await test.step("force every autosave to fail", () =>
+      page.route(RESPONSES_ROUTE, (route) => route.abort()));
 
-    // The student can still return to the test to recover.
-    await page.getByRole("button", { name: /zpět do testu/i }).click();
-    await expect(page.getByTestId("review-submit-dialog")).toBeHidden();
+    const changed = await test.step("make an answer dirty", async () => {
+      await page.getByTestId("question-nav-item").first().click();
+      return makeDirtyChange(page);
+    });
+    test.skip(
+      !changed,
+      "Skipped because the first question exposed no answer control to change.",
+    );
+
+    await test.step("save status settles into error", () =>
+      expectSaveStatus(page, "error"));
+
+    await test.step("review dialog blocks submit with a save-error reason", async () => {
+      await page.getByTestId("submit-test").click();
+      await expectReviewDialogOpen(page);
+      await expectSubmitBlockedBecause(page, "saveError");
+    });
+
+    await test.step("student can return to the test to recover", async () => {
+      await page.getByRole("button", { name: /zpět do testu/i }).click();
+      await expect(page.getByTestId("review-submit-dialog")).toBeHidden();
+    });
 
     await page.unroute(RESPONSES_ROUTE);
   });
 
   test("blocks submit while a save is still in flight", async ({ page }) => {
-    const id = await openFocusTest(page);
-    test.skip(!id, "No open assignment seeded for the student.");
+    const id = await test.step("student opens assigned focus test", () =>
+      openFocusTest(page));
+    test.skip(
+      !id,
+      "Skipped because the active student seed has no open assignment to open.",
+    );
 
     // Hold the autosave request open so the UI stays in the "saving" state deterministically.
     let release!: () => void;
     const held = new Promise<void>((resolve) => {
       release = resolve;
     });
-    await page.route(RESPONSES_ROUTE, async (route) => {
-      await held;
-      await route.continue();
+    await test.step("hold the autosave request open", () =>
+      page.route(RESPONSES_ROUTE, async (route) => {
+        await held;
+        await route.continue();
+      }));
+
+    const changed = await test.step("make an answer dirty", async () => {
+      await page.getByTestId("question-nav-item").first().click();
+      return makeDirtyChange(page);
     });
-
-    await page.getByTestId("question-nav-item").first().click();
-    const changed = await makeDirtyChange(page);
-    test.skip(!changed, "First question exposed no answerable control.");
-
-    await expect(page.getByTestId("save-status")).toHaveAttribute(
-      "data-status",
-      "saving",
-      { timeout: 10_000 },
+    test.skip(
+      !changed,
+      "Skipped because the first question exposed no answer control to change.",
     );
 
-    await page.getByTestId("submit-test").click();
-    await expect(page.getByTestId("review-submit-dialog")).toBeVisible();
-    await expect(page.getByTestId("confirm-submit")).toBeDisabled();
-    await expect(page.getByTestId("review-unsaved-warning")).toBeVisible();
+    await test.step("save status stays in-flight (saving)", () =>
+      expectSaveStatus(page, "saving"));
+
+    await test.step("review dialog blocks submit with an unsaved reason", async () => {
+      await page.getByTestId("submit-test").click();
+      await expectReviewDialogOpen(page);
+      await expectSubmitBlockedBecause(page, "saving");
+    });
 
     await page.getByRole("button", { name: /zpět do testu/i }).click();
-
-    // Release the held request and clean up.
     release();
     await page.unroute(RESPONSES_ROUTE);
   });

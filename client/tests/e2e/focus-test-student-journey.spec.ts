@@ -1,17 +1,21 @@
-import { test, expect, type Page } from "@playwright/test";
 import {
+  test,
+  expect,
+  type Page,
   openFocusTest,
   answerCurrent,
   firstUnansweredIndex,
   expectSaved,
+  expectFocusChromeHidden,
+  expectReviewDialogOpen,
 } from "./helpers/focus";
 
 /**
  * Focus Test Mode — main student journey (non-destructive).
  *
- * Walks the critical answering path with an assertion after every meaningful step. Every
- * assertion tolerates a resumed attempt that may already carry answers; the destructive submit
- * is opt-in. Tests are split by concern rather than bundled into one mega-flow.
+ * Walks the critical answering path with an assertion after every meaningful step. Steps make
+ * the failing phase obvious and diagnostics attach the UI state on failure. Every assertion
+ * tolerates a resumed attempt that may already carry answers; the destructive submit is opt-in.
  */
 
 async function answeredCountFromNav(page: Page): Promise<number> {
@@ -33,55 +37,79 @@ test.describe("Focus Test Mode — student journey", () => {
   test("renders a distraction-free shell with orientation controls", async ({
     page,
   }) => {
-    const id = await openFocusTest(page);
-    test.skip(!id, "No open assignment seeded for the student.");
-
-    // No dashboard chrome leaks in.
-    await expect(page.locator('a[href="/app/classrooms"]')).toHaveCount(0);
-    await expect(page.locator('a[href="/app/tests"]')).toHaveCount(0);
-
-    // Orientation controls are present.
-    await expect(page.getByTestId("test-top-status-bar")).toBeVisible();
-    await expect(page.getByTestId("question-position")).toHaveText(
-      /Otázka\s+\d+\s+z\s+\d+/,
+    const id = await test.step("student opens assigned focus test", () =>
+      openFocusTest(page));
+    test.skip(
+      !id,
+      "Skipped because the active student seed has no open assignment to open.",
     );
-    await expect(page.getByTestId("progress-percent")).toHaveText(/%/);
-    await expect(page.getByTestId("question-navigator").first()).toBeVisible();
-    await expect(page.getByTestId("question-card")).toBeVisible();
-    await expect(page.getByTestId("submit-test")).toBeVisible();
 
-    // Exactly one question is marked current for assistive tech.
-    await expect(page.locator('[data-testid="question-nav-item"][aria-current="true"]')).toHaveCount(1);
+    await test.step("focus shell has no dashboard chrome", () =>
+      expectFocusChromeHidden(page));
+
+    await test.step("orientation controls are present", async () => {
+      await expect(page.getByTestId("test-top-status-bar")).toBeVisible();
+      await expect(page.getByTestId("question-position")).toHaveText(
+        /Otázka\s+\d+\s+z\s+\d+/,
+      );
+      await expect(page.getByTestId("progress-percent")).toHaveText(/%/);
+      await expect(page.getByTestId("question-navigator").first()).toBeVisible();
+      await expect(page.getByTestId("question-card")).toBeVisible();
+      await expect(page.getByTestId("submit-test")).toBeVisible();
+    });
+
+    await test.step("exactly one question is marked current for a11y", async () => {
+      await expect(
+        page.locator('[data-testid="question-nav-item"][aria-current="true"]'),
+      ).toHaveCount(1);
+    });
   });
 
   test("answering a question reflects in the navigator and keeps progress consistent", async ({
     page,
   }) => {
-    const id = await openFocusTest(page);
-    test.skip(!id, "No open assignment seeded for the student.");
+    const id = await test.step("student opens assigned focus test", () =>
+      openFocusTest(page));
+    test.skip(
+      !id,
+      "Skipped because the active student seed has no open assignment to open.",
+    );
 
     const target = await firstUnansweredIndex(page);
-    test.skip(target === -1, "Resumed attempt is fully answered — nothing to add.");
+    test.skip(
+      target === -1,
+      "Skipped because the active local resumed attempt is already fully answered.",
+    );
 
     const items = page.getByTestId("question-nav-item");
-    await items.nth(target).click();
-    await expect(page.getByTestId("question-card")).toBeVisible();
+    const kind = await test.step("answer a still-unanswered question", async () => {
+      await items.nth(target).click();
+      await expect(page.getByTestId("question-card")).toBeVisible();
+      const k = await answerCurrent(page, "odpoved-journey");
+      if (k) await expectSaved(page);
+      return k;
+    });
+    test.skip(!kind, "Skipped because the targeted question has no answer control.");
 
-    const kind = await answerCurrent(page, "odpoved-journey");
-    test.skip(!kind, "Targeted question exposed no answerable control.");
-    await expectSaved(page);
+    await test.step("navigator dot flips to answered", () =>
+      expect(items.nth(target)).toHaveAttribute("data-answered", "true"));
 
-    // The navigator dot flips to answered…
-    await expect(items.nth(target)).toHaveAttribute("data-answered", "true");
-    // …and the percentage equals answered/total (progress matches the real count).
-    const answered = await answeredCountFromNav(page);
-    const total = await items.count();
-    expect(await readPercent(page)).toBe(Math.round((answered / total) * 100));
+    await test.step("progress percentage equals answered/total", async () => {
+      const answered = await answeredCountFromNav(page);
+      const total = await items.count();
+      expect(await readPercent(page)).toBe(
+        Math.round((answered / total) * 100),
+      );
+    });
   });
 
   test("covers each available answer control type", async ({ page }) => {
-    const id = await openFocusTest(page);
-    test.skip(!id, "No open assignment seeded for the student.");
+    const id = await test.step("student opens assigned focus test", () =>
+      openFocusTest(page));
+    test.skip(
+      !id,
+      "Skipped because the active student seed has no open assignment to open.",
+    );
 
     const items = page.getByTestId("question-nav-item");
     const total = await items.count();
@@ -91,110 +119,147 @@ test.describe("Focus Test Mode — student journey", () => {
     // Detect which control types the seed exposes, and demonstrate answering AT MOST ONE of
     // each kind on a currently-unanswered question (minimal mutation keeps the shared attempt
     // usable for the persistence/skip specs).
-    for (let i = 0; i < total && answered.size < 2; i++) {
-      await items.nth(i).click();
-      await expect(page.getByTestId("question-card")).toBeVisible();
-      const hasOption = await page
-        .getByTestId("answer-option")
-        .first()
-        .isVisible()
-        .catch(() => false);
-      const hasFill = await page
-        .getByPlaceholder("Napiš odpověď")
-        .isVisible()
-        .catch(() => false);
-      const kind = hasOption ? "option" : hasFill ? "fill" : null;
-      if (kind) present.add(kind);
-      const isUnanswered =
-        (await items.nth(i).getAttribute("data-answered")) === "false";
-      if (kind && isUnanswered && !answered.has(kind)) {
-        await answerCurrent(page, `odpoved-${i}`);
-        await expect(items.nth(i)).toHaveAttribute("data-answered", "true");
-        answered.add(kind);
+    await test.step("survey questions and answer one of each control type", async () => {
+      for (let i = 0; i < total && answered.size < 2; i++) {
+        await items.nth(i).click();
+        await expect(page.getByTestId("question-card")).toBeVisible();
+        const hasOption = await page
+          .getByTestId("answer-option")
+          .first()
+          .isVisible()
+          .catch(() => false);
+        const hasFill = await page
+          .getByPlaceholder("Napiš odpověď")
+          .isVisible()
+          .catch(() => false);
+        const kind = hasOption ? "option" : hasFill ? "fill" : null;
+        if (kind) present.add(kind);
+        const isUnanswered =
+          (await items.nth(i).getAttribute("data-answered")) === "false";
+        if (kind && isUnanswered && !answered.has(kind)) {
+          await answerCurrent(page, `odpoved-${i}`);
+          await expect(items.nth(i)).toHaveAttribute("data-answered", "true");
+          answered.add(kind);
+        }
       }
-    }
-    // The seed should expose at least one control type; both is ideal but not required.
-    expect(present.size, "no answerable control types found").toBeGreaterThan(0);
+    });
+
+    await test.step("at least one answerable control type is present", () => {
+      expect(present.size, "no answerable control types found").toBeGreaterThan(
+        0,
+      );
+    });
   });
 
   test("skip jumps to the next unanswered question, or is disabled when none remain", async ({
     page,
   }) => {
-    const id = await openFocusTest(page);
-    test.skip(!id, "No open assignment seeded for the student.");
+    const id = await test.step("student opens assigned focus test", () =>
+      openFocusTest(page));
+    test.skip(
+      !id,
+      "Skipped because the active student seed has no open assignment to open.",
+    );
 
     const skip = page.getByTestId("skip-question");
     await expect(skip).toBeVisible();
 
     if (await skip.isDisabled()) {
-      // Correct behaviour when every question is already answered.
-      expect(await firstUnansweredIndex(page)).toBe(-1);
+      await test.step("skip is disabled because everything is answered", async () => {
+        expect(await firstUnansweredIndex(page)).toBe(-1);
+      });
       return;
     }
 
-    await skip.click();
-    // Landed on a question that is itself not yet answered.
-    const currentDot = page.locator(
-      '[data-testid="question-nav-item"][aria-current="true"]',
-    );
-    await expect(currentDot).toHaveAttribute("data-answered", "false");
+    await test.step("skip lands on a not-yet-answered question", async () => {
+      await skip.click();
+      const currentDot = page.locator(
+        '[data-testid="question-nav-item"][aria-current="true"]',
+      );
+      await expect(currentDot).toHaveAttribute("data-answered", "false");
+    });
   });
 
   test("mark-for-review toggles and survives navigation", async ({ page }) => {
-    const id = await openFocusTest(page);
-    test.skip(!id, "No open assignment seeded for the student.");
+    const id = await test.step("student opens assigned focus test", () =>
+      openFocusTest(page));
+    test.skip(
+      !id,
+      "Skipped because the active student seed has no open assignment to open.",
+    );
     const items = page.getByTestId("question-nav-item");
-    test.skip((await items.count()) < 2, "Need at least 2 questions.");
+    test.skip(
+      (await items.count()) < 2,
+      "Skipped because the test has fewer than 2 questions to navigate between.",
+    );
 
-    // Flag question 1.
-    await items.nth(0).click();
     const flag = page.getByTestId("flag-question");
-    if ((await items.nth(0).getAttribute("data-flagged")) === "true") {
-      await flag.click(); // normalise to unflagged first
-    }
-    await flag.click();
-    await expect(items.nth(0)).toHaveAttribute("data-flagged", "true");
-    await expect(page.getByTestId("flagged-count")).toBeVisible();
+    await test.step("flag question 1", async () => {
+      await items.nth(0).click();
+      if ((await items.nth(0).getAttribute("data-flagged")) === "true") {
+        await flag.click(); // normalise to unflagged first
+      }
+      await flag.click();
+      await expect(items.nth(0)).toHaveAttribute("data-flagged", "true");
+      await expect(page.getByTestId("flagged-count")).toBeVisible();
+    });
 
-    // Navigate away and back — the flag persists.
-    await items.nth(1).click();
-    await items.nth(0).click();
-    await expect(items.nth(0)).toHaveAttribute("data-flagged", "true");
+    await test.step("flag survives navigating away and back", async () => {
+      await items.nth(1).click();
+      await items.nth(0).click();
+      await expect(items.nth(0)).toHaveAttribute("data-flagged", "true");
+    });
 
-    // Unflag → state clears.
-    await flag.click();
-    await expect(items.nth(0)).toHaveAttribute("data-flagged", "false");
+    await test.step("unflag clears the state", async () => {
+      await flag.click();
+      await expect(items.nth(0)).toHaveAttribute("data-flagged", "false");
+    });
   });
 
   test("review dialog summarises the attempt without submitting", async ({
     page,
   }) => {
-    const id = await openFocusTest(page);
-    test.skip(!id, "No open assignment seeded for the student.");
+    const id = await test.step("student opens assigned focus test", () =>
+      openFocusTest(page));
+    test.skip(
+      !id,
+      "Skipped because the active student seed has no open assignment to open.",
+    );
 
-    await page.getByTestId("submit-test").click();
-    await expect(page.getByTestId("review-submit-dialog")).toBeVisible();
-    await expect(page.getByTestId("progress-summary")).toBeVisible();
-    // A confirm action exists and is actionable online (we do not click it here).
-    await expect(page.getByTestId("confirm-submit")).toBeEnabled();
-    await page.getByRole("button", { name: /zpět do testu/i }).click();
-    await expect(page.getByTestId("review-submit-dialog")).toBeHidden();
+    await test.step("open the review dialog", async () => {
+      await page.getByTestId("submit-test").click();
+      await expectReviewDialogOpen(page);
+    });
+    await test.step("a confirm action is available online (not clicked)", () =>
+      expect(page.getByTestId("confirm-submit")).toBeEnabled());
+    await test.step("return to the test without submitting", async () => {
+      await page.getByRole("button", { name: /zpět do testu/i }).click();
+      await expect(page.getByTestId("review-submit-dialog")).toBeHidden();
+    });
   });
 
   test("submits once and prevents a double submit", async ({ page }) => {
     test.skip(
       process.env.FOCUS_ALLOW_SUBMIT !== "1",
-      "Requires isolated destructive submit seed (opt-in via FOCUS_ALLOW_SUBMIT=1).",
+      "Requires isolated destructive submit seed; disabled unless FOCUS_ALLOW_SUBMIT=1.",
     );
-    const id = await openFocusTest(page);
-    test.skip(!id, "No open assignment seeded for the student.");
+    const id = await test.step("student opens assigned focus test", () =>
+      openFocusTest(page));
+    test.skip(
+      !id,
+      "Skipped because the active student seed has no open assignment to open.",
+    );
 
-    await answerCurrent(page);
-    await expectSaved(page);
-    await page.getByTestId("submit-test").click();
-    const confirm = page.getByTestId("confirm-submit");
-    await confirm.click();
-    await expect(confirm).toBeDisabled(); // locked during submit → no double submit
-    await expect(page).toHaveURL(/\/app\/results\//, { timeout: 15_000 });
+    await test.step("answer and confirm saved", async () => {
+      await answerCurrent(page);
+      await expectSaved(page);
+    });
+    await test.step("submit once; confirm locks to prevent a double submit", async () => {
+      await page.getByTestId("submit-test").click();
+      const confirm = page.getByTestId("confirm-submit");
+      await confirm.click();
+      await expect(confirm).toBeDisabled();
+      await expect(page).toHaveURL(/\/app\/results\//, { timeout: 15_000 });
+    });
   });
 });

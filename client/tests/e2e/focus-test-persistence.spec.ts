@@ -1,5 +1,7 @@
-import { test, expect, type Page } from "@playwright/test";
 import {
+  test,
+  expect,
+  type Page,
   openFocusTest,
   firstUnansweredIndex,
   expectSaved,
@@ -45,51 +47,75 @@ async function expectAnswerPresent(
 
 test.describe("Focus Test Mode — persistence", () => {
   test("answers survive navigating between questions", async ({ page }) => {
-    const id = await openFocusTest(page);
-    test.skip(!id, "No open assignment seeded for the student.");
+    const id = await test.step("student opens assigned focus test", () =>
+      openFocusTest(page));
+    test.skip(
+      !id,
+      "Skipped because the active student seed has no open assignment to open.",
+    );
     const items = page.getByTestId("question-nav-item");
-    const total = await items.count();
-    test.skip(total < 2, "Need at least 2 questions.");
+    test.skip(
+      (await items.count()) < 2,
+      "Skipped because the test has fewer than 2 questions to navigate between.",
+    );
 
     const target = await firstUnansweredIndex(page);
-    test.skip(target === -1, "Resumed attempt is fully answered.");
+    test.skip(
+      target === -1,
+      "Skipped because the active local resumed attempt is already fully answered.",
+    );
 
-    await items.nth(target).click();
-    const kind = await answerAndDetect(page);
-    test.skip(!kind, "Targeted question exposed no answerable control.");
-    await expectSaved(page);
+    const kind = await test.step("answer a still-unanswered question", async () => {
+      await items.nth(target).click();
+      const k = await answerAndDetect(page);
+      if (k) await expectSaved(page);
+      return k;
+    });
+    test.skip(!kind, "Skipped because the targeted question has no answer control.");
 
-    // Navigate away (a different question) and back — value must be intact.
-    const other = target === 0 ? 1 : 0;
-    await items.nth(other).click();
-    await expect(page.getByTestId("question-card")).toBeVisible();
-    await items.nth(target).click();
-    await expectAnswerPresent(page, kind!);
-    await expect(items.nth(target)).toHaveAttribute("data-answered", "true");
+    await test.step("navigate away and back — the value is intact", async () => {
+      const other = target === 0 ? 1 : 0;
+      await items.nth(other).click();
+      await expect(page.getByTestId("question-card")).toBeVisible();
+      await items.nth(target).click();
+      await expectAnswerPresent(page, kind!);
+      await expect(items.nth(target)).toHaveAttribute("data-answered", "true");
+    });
   });
 
   test("answers survive a full page reload (resume)", async ({ page }) => {
-    const id = await openFocusTest(page);
-    test.skip(!id, "No open assignment seeded for the student.");
+    const id = await test.step("student opens assigned focus test", () =>
+      openFocusTest(page));
+    test.skip(
+      !id,
+      "Skipped because the active student seed has no open assignment to open.",
+    );
     const items = page.getByTestId("question-nav-item");
 
     const target = await firstUnansweredIndex(page);
-    test.skip(target === -1, "Resumed attempt is fully answered.");
+    test.skip(
+      target === -1,
+      "Skipped because the active local resumed attempt is already fully answered.",
+    );
 
-    await items.nth(target).click();
-    const kind = await answerAndDetect(page);
-    test.skip(!kind, "Targeted question exposed no answerable control.");
-    await expectSaved(page); // must be server-persisted before reload
-
-    await page.reload({ waitUntil: "commit" });
-    await expect(page.getByTestId("focus-test-root")).toBeVisible({
-      timeout: 15_000,
+    const kind = await test.step("answer and confirm server-persisted", async () => {
+      await items.nth(target).click();
+      const k = await answerAndDetect(page);
+      if (k) await expectSaved(page); // must be server-persisted before reload
+      return k;
     });
-    // The resumed session rehydrates from the backend: the answer is restored.
-    await page.getByTestId("question-nav-item").nth(target).click();
-    await expectAnswerPresent(page, kind!);
-    await expect(
-      page.getByTestId("question-nav-item").nth(target),
-    ).toHaveAttribute("data-answered", "true");
+    test.skip(!kind, "Skipped because the targeted question has no answer control.");
+
+    await test.step("reload resumes the session with the answer restored", async () => {
+      await page.reload({ waitUntil: "commit" });
+      await expect(page.getByTestId("focus-test-root")).toBeVisible({
+        timeout: 15_000,
+      });
+      await page.getByTestId("question-nav-item").nth(target).click();
+      await expectAnswerPresent(page, kind!);
+      await expect(
+        page.getByTestId("question-nav-item").nth(target),
+      ).toHaveAttribute("data-answered", "true");
+    });
   });
 });
