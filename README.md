@@ -25,6 +25,27 @@ PUBLIC_APP_URL=http://localhost:3000
 API_URL=http://localhost:4200
 ```
 
+### Rychlé spuštění dev stacku
+
+Lokální služby jsou v Docker Compose schované pod profilem `dev`. Pro spuštění celého dev stacku proto použij:
+
+```bash
+docker compose --profile dev up --build
+```
+
+Samotné `docker compose up --build` nespouštěj; bez profilu Docker Compose nemá vybranou žádnou službu a skončí hláškou `no service selected`.
+
+Kontrola běžících služeb:
+
+```bash
+docker compose --profile dev ps
+```
+
+URL po startu:
+
+- Frontend: [http://localhost:3000](http://localhost:3000)
+- Backend health: [http://localhost:4200/health](http://localhost:4200/health)
+
 ### 2. Spuštění databáze a Redis
 
 ```bash
@@ -48,7 +69,7 @@ docker compose --profile dev up -d backend frontend
 ### 5. Otevření aplikace
 
 - Frontend: [http://localhost:3000](http://localhost:3000)
-- Backend: [http://localhost:4200](http://localhost:4200)
+- Backend health: [http://localhost:4200/health](http://localhost:4200/health)
 
 ### 6. Ukončení aplikace
 
@@ -56,7 +77,7 @@ docker compose --profile dev up -d backend frontend
 docker compose --profile dev down
 ```
 
-Pokud chcete odstranit i  databázový volume:
+Nepoužívejte `down -v`, pokud nechcete smazat databázová volume. Pokud chcete odstranit i databázový volume:
 
 ```bash
 docker compose --profile dev down -v
