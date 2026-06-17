@@ -48,22 +48,72 @@ describe("ReviewBeforeSubmitDialog", () => {
     expect(onConfirm).not.toHaveBeenCalled();
   });
 
-  it("allows submit online and runs the confirm handler (force-sync owned by submit)", () => {
+  it("enables submit only when everything is safely saved", () => {
     const onConfirm = vi.fn();
     render(
       <ReviewBeforeSubmitDialog
         {...base}
-        online
-        hasUnsaved
-        saveStatus="saving"
+        saveStatus="saved"
+        hasUnsaved={false}
         onConfirm={onConfirm}
       />,
     );
-    // Unsaved answers are flagged as syncing, but submit stays available online.
     const confirm = screen.getByTestId("confirm-submit") as HTMLButtonElement;
     expect(confirm).not.toBeDisabled();
     fireEvent.click(confirm);
     expect(onConfirm).toHaveBeenCalledTimes(1);
+  });
+
+  it("blocks submit while answers are still saving", () => {
+    const onConfirm = vi.fn();
+    render(
+      <ReviewBeforeSubmitDialog
+        {...base}
+        saveStatus="saving"
+        hasUnsaved
+        onConfirm={onConfirm}
+      />,
+    );
+    const confirm = screen.getByTestId("confirm-submit") as HTMLButtonElement;
+    expect(confirm).toBeDisabled();
+    expect(screen.getByTestId("review-unsaved-warning")).toBeInTheDocument();
+    fireEvent.click(confirm);
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+
+  it("blocks submit while there are unsaved changes", () => {
+    render(
+      <ReviewBeforeSubmitDialog
+        {...base}
+        saveStatus="saved"
+        hasUnsaved
+        onConfirm={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId("confirm-submit")).toBeDisabled();
+    expect(screen.getByTestId("review-unsaved-warning")).toBeInTheDocument();
+  });
+
+  it("blocks submit and explains a failed save, keeping the back action", () => {
+    const onConfirm = vi.fn();
+    render(
+      <ReviewBeforeSubmitDialog
+        {...base}
+        saveStatus="error"
+        onConfirm={onConfirm}
+      />,
+    );
+    const confirm = screen.getByTestId("confirm-submit") as HTMLButtonElement;
+    expect(confirm).toBeDisabled();
+    expect(screen.getByTestId("review-save-error-warning")).toHaveTextContent(
+      /nepodařilo uložit/i,
+    );
+    fireEvent.click(confirm);
+    expect(onConfirm).not.toHaveBeenCalled();
+    // The student can still return to the test to recover.
+    expect(
+      screen.getByRole("button", { name: /zpět do testu/i }),
+    ).toBeEnabled();
   });
 
   it("surfaces a submit error returned by the submit flow", () => {
