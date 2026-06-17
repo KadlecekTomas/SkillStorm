@@ -172,9 +172,19 @@ describe("FocusTestRunner", () => {
       expect(localStorage.getItem(draftStorageKey("a1", "s1"))).not.toBeNull(),
     );
 
+    // Submit is gated on a safe save: wait until the answer is confirmed saved.
+    await waitFor(
+      () =>
+        expect(
+          screen.getByTestId("save-status").getAttribute("data-status"),
+        ).toBe("saved"),
+      { timeout: 3000 },
+    );
+
     // Submit now goes through the review-before-submit dialog.
     fireEvent.click(screen.getByTestId("submit-test"));
     const confirm = await screen.findByTestId("confirm-submit");
+    expect(confirm).not.toBeDisabled();
     fireEvent.click(confirm);
     await waitFor(() =>
       expect(onSubmitted).toHaveBeenCalledWith("s1"),

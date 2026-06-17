@@ -51,6 +51,11 @@ export function ReviewBeforeSubmitDialog({
 }: ReviewBeforeSubmitDialogProps): JSX.Element {
   const unanswered = Math.max(0, total - answered);
   const blockedOffline = !online;
+  // A submission must never finalize while answers are not safely persisted on the server.
+  const saveFailed = saveStatus === "error";
+  const saving = saveStatus === "saving";
+  const notSafelySaved = saving || saveFailed || hasUnsaved;
+  const submitDisabled = blockedOffline || notSafelySaved || submitting;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -99,10 +104,24 @@ export function ReviewBeforeSubmitDialog({
           </p>
         )}
 
-        {!blockedOffline && hasUnsaved && (
-          <p className="rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-600">
-            Některé odpovědi se ještě synchronizují. Před odevzdáním je bezpečně
-            uložíme.
+        {!blockedOffline && saveFailed && (
+          <p
+            data-testid="review-save-error-warning"
+            className="rounded-xl bg-red-50 px-3 py-2 text-sm font-medium text-red-700"
+          >
+            Odpovědi se nepodařilo uložit. Než budou bezpečně uložené, nelze
+            test odevzdat – vrať se do testu a počkej na uložení nebo odpověď
+            zadej znovu.
+          </p>
+        )}
+
+        {!blockedOffline && !saveFailed && (saving || hasUnsaved) && (
+          <p
+            data-testid="review-unsaved-warning"
+            className="rounded-xl bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800"
+          >
+            Odpovědi se ještě ukládají. Počkej prosím, než budou bezpečně
+            uložené – pak půjde test odevzdat.
           </p>
         )}
 
@@ -128,7 +147,7 @@ export function ReviewBeforeSubmitDialog({
             type="button"
             data-testid="confirm-submit"
             onClick={() => void onConfirm()}
-            disabled={blockedOffline || submitting}
+            disabled={submitDisabled}
             className={cn(
               "inline-flex h-11 items-center justify-center rounded-2xl px-5 text-sm font-semibold text-white shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-60",
               "bg-emerald-600 hover:bg-emerald-700",
