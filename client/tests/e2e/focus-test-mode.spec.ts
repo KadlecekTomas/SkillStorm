@@ -47,14 +47,17 @@ test.describe("Focus Test Mode", () => {
     await expect(page.getByTestId("focus-test-root")).toBeVisible({
       timeout: 15_000,
     });
-    await expect(page.locator('[data-testid="app-sidebar"]')).toHaveCount(0);
+    // The distraction-free shell must not leak the dashboard sidebar/nav.
+    await expect(page.locator('a[href="/app/classrooms"]')).toHaveCount(0);
+    await expect(page.locator('a[href="/app/tests"]')).toHaveCount(0);
     await expect(page.getByTestId("save-status")).toBeVisible();
 
     // 2) Answer the first question and wait for autosave to confirm.
-    const radios = page.locator('input[type="radio"]');
+    //    Options are large clickable cards with an sr-only radio, so click the option itself.
+    const option = page.getByTestId("answer-option").first();
     const fillInput = page.getByPlaceholder("Napiš odpověď");
-    if ((await radios.count()) > 0) {
-      await radios.first().check();
+    if (await option.isVisible().catch(() => false)) {
+      await option.click();
     } else {
       await fillInput.first().fill("autosave-check");
     }

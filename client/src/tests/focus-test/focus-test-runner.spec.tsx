@@ -172,7 +172,10 @@ describe("FocusTestRunner", () => {
       expect(localStorage.getItem(draftStorageKey("a1", "s1"))).not.toBeNull(),
     );
 
+    // Submit now goes through the review-before-submit dialog.
     fireEvent.click(screen.getByTestId("submit-test"));
+    const confirm = await screen.findByTestId("confirm-submit");
+    fireEvent.click(confirm);
     await waitFor(() =>
       expect(onSubmitted).toHaveBeenCalledWith("s1"),
     );
@@ -203,8 +206,9 @@ describe("FocusTestRunner", () => {
     await act(async () => {
       await Promise.resolve();
     });
-    // jump to question 2
-    fireEvent.click(screen.getByRole("button", { name: "2" }));
+    // jump to question 2 via the navigator (buttons now carry descriptive aria-labels)
+    const navItems = screen.getAllByTestId("question-nav-item");
+    fireEvent.click(navItems[1]!);
     expect((screen.getByDisplayValue("Praha") as HTMLInputElement).value).toBe(
       "Praha",
     );

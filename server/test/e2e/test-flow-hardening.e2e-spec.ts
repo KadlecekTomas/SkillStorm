@@ -55,12 +55,62 @@ async function getActiveYear(prisma: PrismaService, orgId: string) {
 }
 
 async function getSubject(prisma: PrismaService, orgId: string) {
-  const subject = await prisma.subject.findFirst({
-    where: { organizationId: orgId, deletedAt: null },
+  // Subject is global; it is linked to an org via OrgSubject (auto-provisioned on org setup).
+  const orgSubject = await prisma.orgSubject.findFirst({
+    where: { organizationId: orgId, isEnabled: true },
+    select: { subjectId: true },
+  });
+  if (!orgSubject) throw new Error(`No org subject for org ${orgId}`);
+  return orgSubject.subjectId;
+}
+
+let tfhTopicSeq = 0;
+/**
+ * Publishing now requires the test to be linked to a topic (TestAssignment) — otherwise
+ * assignability fails with NO_TOPIC_ASSIGNMENT (409). Build the catalog→subjectLevel→topicLevel
+ * chain for the test's subject and attach it. Idempotent enough for repeated use across orgs.
+ */
+async function ensureTopicAssignment(prisma: PrismaService, testId: string) {
+  const test = await prisma.test.findUnique({
+    where: { id: testId },
+    select: { subjectId: true },
+  });
+  if (!test?.subjectId) {
+    throw new Error(`ensureTopicAssignment: test ${testId} has no subjectId`);
+  }
+  const subject = await prisma.subject.findUnique({
+    where: { id: test.subjectId },
+    select: { catalogSubjectId: true },
+  });
+  if (!subject?.catalogSubjectId) {
+    throw new Error('ensureTopicAssignment: subject has no catalogSubjectId');
+  }
+  const seed = `${Date.now()}_${tfhTopicSeq++}`;
+  const catalogTopic = await prisma.catalogTopic.create({
+    data: { subjectId: subject.catalogSubjectId, name: `TFH Topic ${seed}` },
     select: { id: true },
   });
-  if (!subject) throw new Error(`No subject for org ${orgId}`);
-  return subject.id;
+  const subjectLevel = await prisma.subjectLevel.upsert({
+    where: {
+      subjectId_grade: { subjectId: test.subjectId, grade: SchoolGrade.GRADE_5 },
+    },
+    update: {},
+    create: { subjectId: test.subjectId, grade: SchoolGrade.GRADE_5 },
+    select: { id: true },
+  });
+  const topicLevel = await prisma.topicLevel.create({
+    data: { subjectLevelId: subjectLevel.id, catalogTopicId: catalogTopic.id },
+    select: { id: true },
+  });
+  await prisma.testAssignment.create({
+    data: { testId, topicLevelId: topicLevel.id, isPrimary: true },
+  });
+  // Publishing also requires non-empty allowedGrades. Only fill when the test left it
+  // empty, so describes that set specific grades (grade/allowed-grade guards) keep theirs.
+  await prisma.test.updateMany({
+    where: { id: testId, allowedGrades: { isEmpty: true } },
+    data: { allowedGrades: Object.values(SchoolGrade) },
+  });
 }
 
 async function createClassSection(
@@ -128,8 +178,8 @@ describe('Test Flow Hardening (e2e)', () => {
       await prisma.enrollment.deleteMany({ where: { orgId: orgId } });
       await prisma.classSection.deleteMany({ where: { orgId } });
       await prisma.student.deleteMany({ where: { orgId } });
-      await prisma.subjectLevel.deleteMany({ where: { subject: { organizationId: orgId } } });
-      await prisma.subject.deleteMany({ where: { organizationId: orgId } });
+      // Subjects are global (shared via OrgSubject) — drop only the org link, not the subject.
+      await prisma.orgSubject.deleteMany({ where: { organizationId: orgId } });
       await prisma.academicYear.deleteMany({ where: { orgId } });
       await prisma.membership.deleteMany({ where: { organizationId: orgId } });
       await prisma.organization.deleteMany({ where: { id: orgId } });
@@ -187,17 +237,12 @@ describe('Test Flow Hardening (e2e)', () => {
       );
     });
 
-    it('A2 — publish a test when subject is inactive → 400 TEST_NOT_ASSIGNABLE', async () => {
-      // Create a subject specifically for this test so we can deactivate it
-      const extraSubject = await prisma.subject.create({
-        data: { organizationId: orgId, name: `Inactive Subject ${Date.now()}` },
-        select: { id: true },
-      });
-
+    it('A2 — publish a test when subject is disabled for the org → 400', async () => {
+      // Use the org's provisioned subject, then disable it for this org via OrgSubject.
       const created = await request(app.getHttpServer())
         .post('/tests')
         .set('Authorization', `Bearer ${directorToken}`)
-        .send({ title: 'Inactive Subj Test A2', subjectId: extraSubject.id, academicYearId: yearId })
+        .send({ title: 'Inactive Subj Test A2', subjectId, academicYearId: yearId })
         .expect(201);
 
       const testId = unwrap(created).id as string;
@@ -214,12 +259,11 @@ describe('Test Flow Hardening (e2e)', () => {
         })
         .expect(201);
 
-      // Deactivate subject
-      await request(app.getHttpServer())
-        .patch(`/subjects/${extraSubject.id}/activation`)
-        .set('Authorization', `Bearer ${directorToken}`)
-        .send({ isActive: false })
-        .expect(200);
+      // Disable the subject for this organization (current model: OrgSubject.isEnabled).
+      await prisma.orgSubject.updateMany({
+        where: { organizationId: orgId, subjectId },
+        data: { isEnabled: false },
+      });
 
       const res = await request(app.getHttpServer())
         .patch(`/tests/${testId}`)
@@ -227,7 +271,9 @@ describe('Test Flow Hardening (e2e)', () => {
         .send({ status: 'PUBLISHED' })
         .expect(400);
 
-      expect(res.body.code ?? res.body.message).toMatch(/TEST_NOT_ASSIGNABLE/);
+      expect(res.body.code ?? res.body.message).toMatch(
+        /SUBJECT_NOT_ENABLED_FOR_ORGANIZATION|TEST_NOT_ASSIGNABLE/,
+      );
     });
   });
 
@@ -304,6 +350,7 @@ describe('Test Flow Hardening (e2e)', () => {
         .expect(201);
 
       // Publish
+      await ensureTopicAssignment(prisma, publishedTestId);
       await request(app.getHttpServer())
         .patch(`/tests/${publishedTestId}`)
         .set('Authorization', `Bearer ${directorToken}`)
@@ -423,6 +470,7 @@ describe('Test Flow Hardening (e2e)', () => {
       questionId = unwrap(qRes).id as string;
 
       // Publish
+      await ensureTopicAssignment(prisma, testId);
       await request(app.getHttpServer())
         .patch(`/tests/${testId}`)
         .set('Authorization', `Bearer ${directorToken}`)
@@ -558,6 +606,7 @@ describe('Test Flow Hardening (e2e)', () => {
           correctAnswer: 'yes',
         })
         .expect(201);
+      await ensureTopicAssignment(prisma, testIdOrg2);
       await request(app.getHttpServer())
         .patch(`/tests/${testIdOrg2}`)
         .set('Authorization', `Bearer ${ctx2.owner.accessToken}`)
@@ -635,6 +684,7 @@ describe('Test Flow Hardening (e2e)', () => {
     });
 
     it('E1 — two concurrent PUBLISH requests: exactly one succeeds, other gets 409 ALREADY_PUBLISHED', async () => {
+      await ensureTopicAssignment(prisma, testId);
       const publish = () =>
         request(app.getHttpServer())
           .patch(`/tests/${testId}`)
@@ -736,6 +786,7 @@ describe('Test Flow Hardening (e2e)', () => {
         .set('Authorization', `Bearer ${ctx2.owner.accessToken}`)
         .send({ text: 'Q?', type: QuestionType.FILL_IN_THE_BLANK, score: 1, correctAnswer: 'y' })
         .expect(201);
+      await ensureTopicAssignment(prisma, testIdOrg2);
       await request(app.getHttpServer())
         .patch(`/tests/${testIdOrg2}`)
         .set('Authorization', `Bearer ${ctx2.owner.accessToken}`)
@@ -839,6 +890,7 @@ describe('Test Flow Hardening (e2e)', () => {
       questionId = unwrap(qRes).id as string;
 
       // Publish + assign
+      await ensureTopicAssignment(prisma, testId);
       await request(app.getHttpServer())
         .patch(`/tests/${testId}`)
         .set('Authorization', `Bearer ${directorToken}`)
@@ -1012,6 +1064,7 @@ describe('Test Flow Hardening (e2e)', () => {
         .send({ text: 'Q?', type: QuestionType.FILL_IN_THE_BLANK, score: 1, correctAnswer: 'y' })
         .expect(201);
 
+      await ensureTopicAssignment(prisma, testId);
       await request(app.getHttpServer())
         .patch(`/tests/${testId}`)
         .set('Authorization', `Bearer ${directorToken}`)
@@ -1126,7 +1179,7 @@ describe('Test Flow Hardening (e2e)', () => {
 
       // Explicitly assign teacher to classB via TeacherClassSection.
       await prisma.teacherClassSection.create({
-        data: { teacherId: teacherRecord.id, classSectionId: classB.id },
+        data: { teacherId: teacherRecord.id, classSectionId: classB.id, yearId },
       });
 
       // Enroll student in classB.
@@ -1161,6 +1214,7 @@ describe('Test Flow Hardening (e2e)', () => {
         .send({ text: 'Q?', type: QuestionType.FILL_IN_THE_BLANK, score: 1, correctAnswer: 'y' })
         .expect(201);
 
+      await ensureTopicAssignment(prisma, testId);
       await request(app.getHttpServer())
         .patch(`/tests/${testId}`)
         .set('Authorization', `Bearer ${directorToken}`)
@@ -1296,6 +1350,7 @@ describe('Test Flow Hardening (e2e)', () => {
         .send({ text: 'Q?', type: QuestionType.FILL_IN_THE_BLANK, score: 1, correctAnswer: 'y' })
         .expect(201);
 
+      await ensureTopicAssignment(prisma, testId);
       await request(app.getHttpServer())
         .patch(`/tests/${testId}`)
         .set('Authorization', `Bearer ${directorToken}`)
@@ -1450,6 +1505,7 @@ describe('Test Flow Hardening (e2e)', () => {
         .send({ text: 'Q?', type: QuestionType.FILL_IN_THE_BLANK, score: 1, correctAnswer: 'y' })
         .expect(201);
 
+      await ensureTopicAssignment(prisma, testId);
       await request(app.getHttpServer())
         .patch(`/tests/${testId}`)
         .set('Authorization', `Bearer ${directorToken}`)
@@ -1543,6 +1599,7 @@ describe('Test Flow Hardening (e2e)', () => {
         .send({ text: 'Q?', type: QuestionType.FILL_IN_THE_BLANK, score: 1, correctAnswer: 'a' })
         .expect(201);
 
+      await ensureTopicAssignment(prisma, publishedTestId);
       await request(app.getHttpServer())
         .patch(`/tests/${publishedTestId}`)
         .set('Authorization', `Bearer ${directorToken}`)
@@ -1640,6 +1697,7 @@ describe('Test Flow Hardening (e2e)', () => {
         .send({ text: 'Q?', type: QuestionType.FILL_IN_THE_BLANK, score: 1, correctAnswer: 'a' })
         .expect(201);
 
+      await ensureTopicAssignment(prisma, publishedTestId);
       await request(app.getHttpServer())
         .patch(`/tests/${publishedTestId}`)
         .set('Authorization', `Bearer ${directorToken}`)
@@ -1660,13 +1718,20 @@ describe('Test Flow Hardening (e2e)', () => {
         })
         .expect(201);
 
-      // Create a NEW subject to prove subject-level settings no longer govern test assignment.
-      const newSubjectRes = await request(app.getHttpServer())
-        .post('/subjects')
-        .set('Authorization', `Bearer ${directorToken}`)
-        .send({ name: `Incompatible Subject I ${ts}`, organizationId: orgId })
-        .expect(201);
-      incompatibleSubjectId = (unwrap(newSubjectRes).id ?? unwrap(newSubjectRes)?.data?.id) as string;
+      // Create a NEW subject (global) + enable it for the org via OrgSubject (current model;
+      // there is no POST /subjects route anymore).
+      const incompatibleSubject = await prisma.subject.create({
+        data: { name: `Incompatible Subject I ${ts}` },
+        select: { id: true },
+      });
+      await prisma.orgSubject.create({
+        data: {
+          organizationId: orgId,
+          subjectId: incompatibleSubject.id,
+          isEnabled: true,
+        },
+      });
+      incompatibleSubjectId = incompatibleSubject.id;
     });
 
     it('I1 — removing an already assigned grade from allowedGrades → 400', async () => {
@@ -1755,6 +1820,7 @@ describe('Test Flow Hardening (e2e)', () => {
         .send({ text: 'Q?', type: QuestionType.FILL_IN_THE_BLANK, score: 1, correctAnswer: 'a' })
         .expect(201);
 
+      await ensureTopicAssignment(prisma, publishedTestId);
       await request(app.getHttpServer())
         .patch(`/tests/${publishedTestId}`)
         .set('Authorization', `Bearer ${directorToken}`)

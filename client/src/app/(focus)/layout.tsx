@@ -25,7 +25,7 @@ export default function FocusGroupLayout({
   return (
     <GuardBoundary>
       <OrganizationGate>
-        <BootstrapGate>
+        <BootstrapGate chrome={false}>
           <AppReadinessGate>{children}</AppReadinessGate>
         </BootstrapGate>
       </OrganizationGate>
