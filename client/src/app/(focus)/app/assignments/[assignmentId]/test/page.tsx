@@ -6,11 +6,11 @@ import { useParams, useRouter } from "next/navigation";
 import { fetchWithAuth, HttpError } from "@/lib/http/client";
 import { Button } from "@/components/ui/button";
 import { ErrorAlert } from "@/components/ui/alert";
-import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { withGuard } from "@/lib/guard/withGuard";
 import type { OrganizationRole } from "@/types";
 import type { FocusTestSession } from "@/lib/focus-test/types";
 import { FocusTestRunner } from "@/components/focus-test/focus-test-runner";
+import { FocusTestSkeleton } from "@/components/student-answering/focus-test-skeleton";
 
 type LoadState =
   | { kind: "loading" }
@@ -76,11 +76,7 @@ function FocusTestPage(): JSX.Element {
   }, [router]);
 
   if (state.kind === "loading") {
-    return (
-      <div className="grid min-h-dvh place-items-center bg-slate-50">
-        <LoadingSpinner label="Spouštím test…" />
-      </div>
-    );
+    return <FocusTestSkeleton />;
   }
 
   if (state.kind === "error") {

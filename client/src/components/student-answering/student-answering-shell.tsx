@@ -8,6 +8,8 @@ import { TestTopStatusBar } from "./test-top-status-bar";
 import type { AnsweringVariant } from "./answer-option";
 
 export interface AnsweringProgress {
+  /** Zero-based index of the question currently shown. */
+  current: number;
   answered: number;
   total: number;
   flagged: number;
@@ -58,6 +60,7 @@ export function StudentAnsweringShell({
       <TestTopStatusBar
         variant={variant}
         title={title}
+        currentIndex={progress.current}
         answeredCount={progress.answered}
         totalQuestions={progress.total}
         flaggedCount={progress.flagged}
