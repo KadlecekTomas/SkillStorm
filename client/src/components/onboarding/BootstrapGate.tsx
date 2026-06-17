@@ -11,9 +11,19 @@ import { Calendar } from "lucide-react";
 
 /**
  * School bootstrap gate: no /academic-years, /analytics, /audit until hasAcademicYear.
- * Always renders MainLayout + DashboardHeader (Logout visible). Then either "Setup školy" or children.
+ *
+ * By default renders MainLayout + DashboardHeader (Logout visible), then either "Setup školy"
+ * or children. Pass `chrome={false}` to keep ONLY the bootstrap guard while dropping the
+ * dashboard sidebar/header — used by the distraction-free Focus Test Mode shell, which must not
+ * leak any app chrome.
  */
-export function BootstrapGate({ children }: { children: ReactNode }): ReactNode {
+export function BootstrapGate({
+  children,
+  chrome = true,
+}: {
+  children: ReactNode;
+  chrome?: boolean;
+}): ReactNode {
   const { context, org } = useAuth();
   const mode = context?.mode ?? "personal";
   const bootstrap = org?.bootstrap;
@@ -22,11 +32,8 @@ export function BootstrapGate({ children }: { children: ReactNode }): ReactNode 
     org?.status === "ACTIVE" &&
     bootstrap?.hasAcademicYear === false;
 
-  return (
-    <MainLayout>
-      <DashboardHeader />
-      {needsSchoolSetup ? (
-        <div className="flex min-h-[70vh] items-center justify-center px-4 py-12">
+  const setupCard = (
+    <div className="flex min-h-[70vh] items-center justify-center px-4 py-12">
       <Card className="w-full max-w-xl border-slate-200 bg-gradient-to-br from-white via-slate-50 to-slate-50 p-8">
         <div className="space-y-6">
           <div className="flex items-center gap-4">
@@ -51,9 +58,21 @@ export function BootstrapGate({ children }: { children: ReactNode }): ReactNode 
         </div>
       </Card>
     </div>
-      ) : (
-        children
-      )}
+  );
+
+  // Chrome-free (Focus Test Mode): preserve the bootstrap guard, drop sidebar/header.
+  if (!chrome) {
+    return needsSchoolSetup ? (
+      <div className="min-h-dvh bg-slate-50">{setupCard}</div>
+    ) : (
+      <>{children}</>
+    );
+  }
+
+  return (
+    <MainLayout>
+      <DashboardHeader />
+      {needsSchoolSetup ? setupCard : children}
     </MainLayout>
   );
 }
