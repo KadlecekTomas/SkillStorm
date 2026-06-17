@@ -9,6 +9,7 @@ import { seed as seedOrgSubjects } from './org-subjects.seed';
 import { seed as seedMaterials } from './materials.seed';
 import { seed as seedTests } from './tests.seed';
 import { seed as seedAssignments } from './assignments.seed';
+import { seed as seedCrossOrg } from './cross-org.seed';
 import { seed as seedLevels } from './levels.seed';
 import { seed as seedPlatformAdmin } from './platform-admin.seed';
 import { seed as seedBadges } from './badges.seed';
@@ -27,6 +28,7 @@ export async function runSeedPipeline(prisma: PrismaClient) {
   await seedMaterials(prisma);
   await seedTests(prisma);
   await seedAssignments(prisma);
+  await seedCrossOrg(prisma);
   await validateSeed(prisma);
 }
 
@@ -36,7 +38,9 @@ async function ensureTeachersSeeded(prisma: PrismaClient) {
     console.warn(
       '⚠️ Seed guard: no teachers present after users seed. Aborting before subjects.',
     );
-    throw new Error('Teacher records missing. Re-run users seed before continuing.');
+    throw new Error(
+      'Teacher records missing. Re-run users seed before continuing.',
+    );
   }
 }
 
@@ -48,20 +52,19 @@ async function validateSeed(prisma: PrismaClient) {
     subjectCount,
     testCount,
     diagnosticAssignmentsMissingTopic,
-  ] =
-    await Promise.all([
-      prisma.user.count(),
-      prisma.teacher.count(),
-      prisma.student.count(),
-      prisma.subject.count(),
-      prisma.test.count(),
-      prisma.assignment.count({
-        where: {
-          testId: { in: Object.values(TEST_IDS) },
-          topicLevelId: null,
-        },
-      }),
-    ]);
+  ] = await Promise.all([
+    prisma.user.count(),
+    prisma.teacher.count(),
+    prisma.student.count(),
+    prisma.subject.count(),
+    prisma.test.count(),
+    prisma.assignment.count({
+      where: {
+        testId: { in: Object.values(TEST_IDS) },
+        topicLevelId: null,
+      },
+    }),
+  ]);
 
   console.log(
     `✅ Validation: Users=${userCount}, Teachers=${teacherCount}, Students=${studentCount}, Subjects=${subjectCount}, Tests=${testCount}`,
@@ -86,7 +89,12 @@ async function main() {
   await prisma.$disconnect();
 }
 
-main().catch(async (err) => {
-  console.error(err);
-  process.exitCode = 1;
-});
+// Only run the pipeline when index.ts is the entry point. Without this guard, importing
+// `runSeedPipeline` from here (e.g. e2e-seed.ts) also triggers `main()`, running the whole
+// pipeline a SECOND time concurrently and racing on org-settings creation (P2002).
+if (require.main === module) {
+  main().catch((err) => {
+    console.error(err);
+    process.exitCode = 1;
+  });
+}

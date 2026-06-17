@@ -77,8 +77,7 @@ export const TEST_IDS = {
   mathPercentages: '88888888-9999-4000-b000-000000000072',
 } as const;
 
-export const ACADEMIC_YEAR_ID =
-  '99999999-aaaa-4000-b000-000000000080';
+export const ACADEMIC_YEAR_ID = '99999999-aaaa-4000-b000-000000000080';
 
 export const CLASS_SECTION_IDS = {
   chodovickaA: 'aaaa1111-bbbb-4000-b000-000000000090',
@@ -91,3 +90,19 @@ export const ASSIGNMENT_IDS = {
   mathPercentages: 'bbbb2222-cccc-4000-b000-0000000000a2',
 } as const;
 export const DEFAULT_GRADE = SchoolGrade.GRADE_6;
+
+/**
+ * Cross-tenant negative fixture. A fully real, openable assignment in a SECOND organization
+ * (skillStormDemo) with its own teacher + student, so e2e can prove a student from another org
+ * (chodovicka) is denied access (404) — distinguishing tenant isolation from an unknown id.
+ * The assignment id is stable and referenced verbatim by the focus e2e cross-org test.
+ */
+export const CROSS_ORG = {
+  orgId: ORG_IDS.skillStormDemo,
+  academicYearId: '99999999-aaaa-4000-b000-0000000000b0',
+  classSectionId: 'aaaa1111-bbbb-4000-b000-0000000000b1',
+  testId: '88888888-9999-4000-b000-0000000000b2',
+  assignmentId: 'bbbb2222-cccc-4000-b000-0000000000b3',
+  teacherEmail: 'teacher.b@skillstorm.demo',
+  studentEmail: 'student.b@skillstorm.demo',
+} as const;

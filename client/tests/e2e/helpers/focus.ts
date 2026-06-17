@@ -39,6 +39,19 @@ const TEACHER_SEED = {
   email: process.env.FOCUS_SEED_TEACHER_EMAIL ?? "teacher@chodovicka.cz",
   password: process.env.FOCUS_SEED_PASSWORD ?? "SkillStorm123!",
 };
+// A student in a DIFFERENT org (skillStormDemo). Exists only in the canonical e2e seed.
+const CROSS_ORG_STUDENT = {
+  email: process.env.FOCUS_CROSS_ORG_STUDENT_EMAIL ?? "student.b@skillstorm.demo",
+  password: process.env.FOCUS_CROSS_ORG_PASSWORD ?? "SkillStorm123!",
+};
+
+/**
+ * A REAL assignment in another org (skillStormDemo), seeded by the canonical e2e seed
+ * (server `prisma/seed/cross-org.seed.ts` → CROSS_ORG.assignmentId). A student from another org
+ * must get a 404 / safe error for it. Kept in sync with that seed constant.
+ */
+export const CROSS_ORG_FOREIGN_ASSIGNMENT_ID =
+  "bbbb2222-cccc-4000-b000-0000000000b3";
 
 /** A syntactically valid but non-assigned/foreign assignment id (cross-tenant / unknown). */
 export const FOREIGN_ASSIGNMENT_ID = "11111111-1111-1111-1111-111111111111";
@@ -84,6 +97,14 @@ export async function loginTeacher(page: Page): Promise<boolean> {
   if (await attemptLogin(page, TEACHER_DEMO.email, TEACHER_DEMO.password))
     return true;
   return attemptLogin(page, TEACHER_SEED.email, TEACHER_SEED.password);
+}
+
+/**
+ * Best-effort login as the seeded student of the OTHER org. Returns false when that account is
+ * not present (e.g. the local DB uses the demo seed), which gates the cross-org test.
+ */
+export async function loginCrossOrgStudent(page: Page): Promise<boolean> {
+  return attemptLogin(page, CROSS_ORG_STUDENT.email, CROSS_ORG_STUDENT.password);
 }
 
 export async function findOpenAssignmentId(page: Page): Promise<string | null> {

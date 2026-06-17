@@ -3,10 +3,12 @@ import {
   expect,
   loginStudent,
   loginTeacher,
+  loginCrossOrgStudent,
   openFocusTest,
   expectFocusTestLoaded,
   ANY_ASSIGNMENT_ID,
   FOREIGN_ASSIGNMENT_ID,
+  CROSS_ORG_FOREIGN_ASSIGNMENT_ID,
 } from "./helpers/focus";
 
 /**
@@ -51,6 +53,38 @@ test.describe("Focus Test Mode — access & security", () => {
       await expect(
         page.getByRole("button", { name: /Zpět na zadání/i }),
       ).toBeVisible();
+    });
+  });
+
+  test("cross-org: a student cannot open another org's real assignment", async ({
+    page,
+  }) => {
+    // Gate on the canonical seed: the OTHER-org student must exist for this to be a true
+    // tenant-isolation test (a real foreign assignment), not just unknown-id handling.
+    const orgBPresent = await test.step("the other-org student exists in the seed", () =>
+      loginCrossOrgStudent(page));
+    test.skip(
+      !orgBPresent,
+      "Requires the canonical e2e seed (run server `npm run prisma:seed`): the cross-org org-B student is absent.",
+    );
+
+    await test.step("positive control: the OWNING org-B student CAN open it", async () => {
+      await page.goto(`/app/assignments/${CROSS_ORG_FOREIGN_ASSIGNMENT_ID}/test`, {
+        waitUntil: "commit",
+      });
+      await expectFocusTestLoaded(page);
+    });
+
+    await test.step("negative: a different-org student is denied with no test content", async () => {
+      await loginStudent(page); // org A (chodovicka / demo)
+      await page.goto(`/app/assignments/${CROSS_ORG_FOREIGN_ASSIGNMENT_ID}/test`, {
+        waitUntil: "commit",
+      });
+      await expect(page.getByText(/Test nelze spustit/i)).toBeVisible({
+        timeout: 15_000,
+      });
+      await expect(page.getByTestId("focus-test-root")).toHaveCount(0);
+      await expect(page.getByTestId("question-card")).toHaveCount(0);
     });
   });
 
