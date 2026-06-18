@@ -691,6 +691,24 @@ export default function SettingsPage(): React.JSX.Element {
         </Card>
       )}
 
+      {(can(PermissionKey.MANAGE_STUDENTS) ||
+        can(PermissionKey.MANAGE_TEACHERS)) && (
+        <Card className="md:col-span-2 flex flex-col gap-3 rounded-3xl border border-dashed border-slate-200 bg-slate-50/70 p-6">
+          <h3 className="text-lg font-semibold text-slate-900">
+            Google Workspace
+          </h3>
+          <p className="text-sm text-slate-600">
+            Jednorázový read-only import uživatelů, skupin a členství z Google
+            Workspace do tříd a zápisů.
+          </p>
+          <Button asChild className="w-fit rounded-2xl" variant="outline">
+            <Link href="/app/settings/integrations/google-workspace">
+              Otevřít onboarding
+            </Link>
+          </Button>
+        </Card>
+      )}
+
       {canManageSubjects && allSubjects.filter((s) => s.isEnabled).length > 0 && (
         <Card className="md:col-span-2 flex flex-col gap-3 p-6">
           <div className="flex flex-wrap items-start justify-between gap-3">

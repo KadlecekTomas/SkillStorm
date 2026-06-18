@@ -51,6 +51,7 @@ import { SupportModule } from './support/support.module';
 import { TestingModule } from './testing/testing.module';
 import { TeacherAccessModule } from './teacher-access/teacher-access.module';
 import { ImportsModule } from './imports/imports.module';
+import { GoogleWorkspaceModule } from './integrations/google-workspace/google-workspace.module';
 
 @Module({
   imports: [
@@ -118,6 +119,7 @@ import { ImportsModule } from './imports/imports.module';
     TestingModule,
     TeacherAccessModule,
     ImportsModule,
+    GoogleWorkspaceModule,
   ],
   providers: [
     { provide: APP_INTERCEPTOR, useClass: ResponseEnvelopeInterceptor },
