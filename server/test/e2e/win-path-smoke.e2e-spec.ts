@@ -159,6 +159,12 @@ describe('Win path smoke (e2e)', () => {
       })
       .expect(201);
     const orgSubjectId = (orgSubjectRes.body as { id: string }).id;
+    // POST /tests expects the SUBJECT id (org link resolved via OrgSubject)
+    const subjectIdForTest =
+      (orgSubjectRes.body as { subjectId?: string; subject?: { id?: string } })
+        .subjectId ??
+      (orgSubjectRes.body as { subject?: { id?: string } }).subject?.id;
+    expect(subjectIdForTest).toBeTruthy();
 
     // 4) Director attaches subject to class section and verifies list.
     await request(app.getHttpServer())
@@ -253,6 +259,22 @@ describe('Win path smoke (e2e)', () => {
 
     const teacherToken = await useOrg(app, teacherRegister.sessionToken, orgId);
 
+    // Results visibility is scoped to the teacher's classes — make the
+    // teacher the homeroom teacher of the class section.
+    const teacherEntity = await prisma.teacher.findFirst({
+      where: {
+        organizationId: orgId,
+        membershipId: teacherRegister.membership.id,
+        deletedAt: null,
+      },
+      select: { id: true },
+    });
+    expect(teacherEntity).toBeTruthy();
+    await prisma.classSection.update({
+      where: { id: classSectionId },
+      data: { teacherId: teacherEntity!.id },
+    });
+
     // Invariant: all tokens are scoped to the same active org context.
     const meDirector = await request(app.getHttpServer())
       .get('/auth/me')
@@ -280,11 +302,43 @@ describe('Win path smoke (e2e)', () => {
       .set('Authorization', `Bearer ${teacherToken}`)
       .send({
         title: `Win Path Test ${runId}`,
-        organizationId: orgId,
-        subjectId: orgSubjectId,
+        subjectId: subjectIdForTest,
+        allowedGrades: ['GRADE_5'],
       })
       .expect(201);
     const testId = (testCreateRes.body as { id: string }).id;
+
+    // Assignability requires a topic assignment; build the minimal catalog
+    // chain (CatalogSubject → CatalogTopic → SubjectLevel → TopicLevel) and
+    // link the test to it.
+    const catalogSubject = await prisma.catalogSubject.create({
+      data: { code: `WPS_${runId}`, name: `WPS Catalog ${runId}` },
+      select: { id: true },
+    });
+    const catalogTopic = await prisma.catalogTopic.create({
+      data: { subjectId: catalogSubject.id, name: `WPS Topic ${runId}` },
+      select: { id: true },
+    });
+    // org-subject provisioning already created levels for gradeFrom..gradeTo
+    const subjectLevel =
+      (await prisma.subjectLevel.findFirst({
+        where: { subjectId: subjectIdForTest!, grade: 'GRADE_5' },
+        select: { id: true },
+      })) ??
+      (await prisma.subjectLevel.create({
+        data: { subjectId: subjectIdForTest!, grade: 'GRADE_5' },
+        select: { id: true },
+      }));
+    const topicLevel = await prisma.topicLevel.create({
+      data: {
+        subjectLevelId: subjectLevel.id,
+        catalogTopicId: catalogTopic.id,
+      },
+      select: { id: true },
+    });
+    await prisma.testAssignment.create({
+      data: { testId, topicLevelId: topicLevel.id, isPrimary: true },
+    });
 
     // 8) Teacher adds valid MC question + options (strict assignability).
     const questionRes = await request(app.getHttpServer())
@@ -340,10 +394,12 @@ describe('Win path smoke (e2e)', () => {
     };
     expect(testDetail.assignability?.isAssignable).toBe(true);
     expect(testDetail.assignability?.reasons).toEqual({
+      missingAllowedGrades: 0,
       missingQuestions: 0,
       missingCorrectAnswers: 0,
       invalidOptions: 0,
       zeroPoints: 0,
+      noTopicAssignments: 0,
     });
 
     await request(app.getHttpServer())
@@ -436,7 +492,9 @@ describe('Win path smoke (e2e)', () => {
     expect(teacherResult).toBeDefined();
     expect(teacherResult?.assignmentId).toBe(assignmentId);
     expect(teacherResult?.classSectionId).toBe(classSectionId);
-    expect(teacherResult?.score).toBe(1);
+    // results items carry earned points (MC question worth 2), while
+    // finish returns the normalized 0..1 score asserted above
+    expect(teacherResult?.score).toBe(2);
     expect(teacherResult?.status).toBe('APPROVED');
     expect(teacherResult?.correctCount).toBe(1);
     expect(teacherResult?.incorrectCount).toBe(0);

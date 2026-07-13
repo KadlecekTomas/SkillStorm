@@ -42,6 +42,31 @@ Test.prototype.assert = function (err, res, fn) {
     }
     return originalFn.call(this, error, ...rest);
   };
+  // Compat shim: auth tokens moved from response bodies to httpOnly cookies,
+  // but many older specs still read `res.body.sessionToken`. Mirror the
+  // access-token cookie into the body so those assertions keep working
+  // without weakening the real API (which stays cookie-only).
+  if (res && res.headers && res.body && typeof res.body === 'object') {
+    const setCookie = res.headers['set-cookie'];
+    if (setCookie && res.body.sessionToken === undefined) {
+      const cookies = Array.isArray(setCookie) ? setCookie : [setCookie];
+      for (const c of cookies) {
+        const m = /^ss_at=([^;]+)/.exec(c); // ACCESS_TOKEN_COOKIE (src/auth/token-cookies.ts)
+        if (m && m[1]) {
+          try {
+            res.body.sessionToken = decodeURIComponent(m[1]);
+            if (res.body.data && typeof res.body.data === 'object') {
+              res.body.data.sessionToken = res.body.sessionToken;
+            }
+          } catch (_) {
+            // ignore malformed cookie values
+          }
+          break;
+        }
+      }
+    }
+  }
+
   if (
     res &&
     res.body &&
