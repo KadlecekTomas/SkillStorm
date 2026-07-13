@@ -28,6 +28,20 @@ const Test = require('supertest/lib/test');
 
 const originalAssert = Test.prototype.assert;
 Test.prototype.assert = function (err, res, fn) {
+  // Diagnostics: status-mismatch errors say only "expected 201, got 400" —
+  // append the response body so the failure cause is visible in logs. The
+  // assertion error is produced inside originalAssert, so wrap the callback.
+  const originalFn = fn;
+  fn = function (error, ...rest) {
+    if (error && res && res.body && /expected \d+ .*got \d+/.test(error.message || '')) {
+      try {
+        error.message += `\nresponse body: ${JSON.stringify(res.body).slice(0, 600)}`;
+      } catch (_) {
+        // ignore unserializable bodies
+      }
+    }
+    return originalFn.call(this, error, ...rest);
+  };
   if (
     res &&
     res.body &&
