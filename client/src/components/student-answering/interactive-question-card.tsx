@@ -2,6 +2,7 @@
 
 import type { JSX } from "react";
 import type { FocusQuestion } from "@/lib/focus-test/types";
+import type { AnsweringMode } from "@/config/answering-mode";
 import { isAnswered } from "@/lib/focus-test/draft-storage";
 import { cn } from "@/utils/cn";
 import { AnswerOption, type AnsweringVariant } from "./answer-option";
@@ -12,6 +13,9 @@ const TYPE_LABEL: Record<FocusQuestion["type"], string> = {
   FILL_IN_THE_BLANK: "Doplň odpověď",
 };
 
+/** Dekorativní ikony dlaždic v mladším režimu (design reference: YOUNG_TILE_ICONS). */
+const YOUNG_TILE_ICONS = ["🍎", "🌟", "🐸", "🎈"];
+
 export interface InteractiveQuestionCardProps {
   question: FocusQuestion;
   index: number;
@@ -21,6 +25,8 @@ export interface InteractiveQuestionCardProps {
   flagged: boolean;
   onToggleFlag: () => void;
   variant?: AnsweringVariant;
+  /** Věkový režim prezentace. Výchozí "old" = současný kompaktní vzhled. */
+  mode?: AnsweringMode;
 }
 
 /**
@@ -39,8 +45,10 @@ export function InteractiveQuestionCard({
   flagged,
   onToggleFlag,
   variant = "focus",
+  mode = "old",
 }: InteractiveQuestionCardProps): JSX.Element {
   const answered = isAnswered(value);
+  const young = mode === "young";
 
   return (
     <section
@@ -49,64 +57,89 @@ export function InteractiveQuestionCard({
       data-answered={answered}
       data-flagged={flagged}
       aria-labelledby={`q-${question.id}-text`}
-      className="space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-soft motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-1 motion-safe:duration-200"
+      className={cn(
+        "space-y-5 rounded-xl border border-line bg-canvas-alt p-6 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-1 motion-safe:duration-200",
+        young && "p-7 text-center",
+      )}
     >
-      <div className="flex items-start justify-between gap-4">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Otázka {index + 1} / {total}
-            </p>
-            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500">
-              {TYPE_LABEL[question.type]}
-            </span>
-          </div>
-          <span
+      <div
+        className={cn(
+          "flex items-start justify-between gap-4",
+          young && "justify-center",
+        )}
+      >
+        <div className={cn("space-y-1", young && "text-center")}>
+          <div
             className={cn(
-              "inline-flex items-center gap-1.5 text-xs font-medium",
-              answered ? "text-emerald-700" : "text-slate-400",
+              "flex items-center gap-2",
+              young && "justify-center",
             )}
           >
+            <p className="text-xs font-bold uppercase tracking-[.08em] text-ink-dim">
+              Otázka {index + 1} / {total}
+            </p>
+            {!young && (
+              <span className="rounded-full bg-surface px-2 py-0.5 text-[11px] font-semibold text-ink-muted">
+                {TYPE_LABEL[question.type]}
+              </span>
+            )}
+          </div>
+          {!young && (
             <span
-              aria-hidden="true"
               className={cn(
-                "h-1.5 w-1.5 rounded-full",
-                answered ? "bg-emerald-500" : "bg-slate-300",
+                "inline-flex items-center gap-1.5 text-xs font-medium",
+                answered ? "text-accent-deep" : "text-ink-dim",
               )}
-            />
-            {answered ? "Zodpovězeno" : "Bez odpovědi"}
-          </span>
+            >
+              <span
+                aria-hidden="true"
+                className={cn(
+                  "h-1.5 w-1.5 rounded-full",
+                  answered ? "bg-accent" : "bg-line-strong",
+                )}
+              />
+              {answered ? "Zodpovězeno" : "Bez odpovědi"}
+            </span>
+          )}
         </div>
 
-        <button
-          type="button"
-          onClick={onToggleFlag}
-          aria-pressed={flagged}
-          data-testid="flag-question"
-          className={cn(
-            "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-amber-500",
-            flagged
-              ? "border-amber-300 bg-amber-50 text-amber-700"
-              : "border-slate-200 bg-white text-slate-500 hover:border-amber-300 hover:text-amber-700",
-          )}
-        >
-          <svg
-            viewBox="0 0 20 20"
-            fill={flagged ? "currentColor" : "none"}
-            stroke="currentColor"
-            strokeWidth={flagged ? 0 : 1.6}
-            className="h-4 w-4"
-            aria-hidden="true"
+        {/* Flag je v mladším režimu skrytý (vizuální zjednodušení; logika flagů se nemění). */}
+        {!young && (
+          <button
+            type="button"
+            onClick={onToggleFlag}
+            aria-pressed={flagged}
+            data-testid="flag-question"
+            className={cn(
+              "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-semibold transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-streak",
+              flagged
+                ? "border-streak/50 bg-streak/10 text-streak"
+                : "border-line bg-canvas text-ink-muted hover:border-streak/50 hover:text-streak",
+            )}
           >
-            <path d="M5 3v14M5 4h9l-1.5 3L14 10H5" strokeLinejoin="round" />
-          </svg>
-          {flagged ? "Označeno" : "Označit k návratu"}
-        </button>
+            <svg
+              viewBox="0 0 20 20"
+              fill={flagged ? "currentColor" : "none"}
+              stroke="currentColor"
+              strokeWidth={flagged ? 0 : 1.6}
+              className="h-4 w-4"
+              aria-hidden="true"
+            >
+              <path d="M5 3v14M5 4h9l-1.5 3L14 10H5" strokeLinejoin="round" />
+            </svg>
+            {flagged ? "Označeno" : "Označit k návratu"}
+          </button>
+        )}
       </div>
 
       <p
         id={`q-${question.id}-text`}
-        className="text-lg font-medium leading-relaxed text-slate-900"
+        className={cn(
+          "leading-relaxed text-ink",
+          young
+            ? "text-[26px] font-extrabold leading-snug"
+            : "text-lg font-medium",
+        )}
       >
         {question.text}
       </p>
@@ -130,6 +163,8 @@ export function InteractiveQuestionCard({
               selected={value === opt.v}
               onSelect={onChange}
               variant={variant}
+              tile={young}
+              {...(young ? { tileIcon: i === 0 ? "👍" : "👎" } : {})}
             />
           ))}
         </div>
@@ -139,7 +174,7 @@ export function InteractiveQuestionCard({
         <div
           role="radiogroup"
           aria-label="Možnosti odpovědi"
-          className="space-y-3"
+          className={cn(young ? "grid grid-cols-1 gap-3.5 sm:grid-cols-2" : "space-y-3")}
         >
           {question.options.map((opt, i) => (
             <AnswerOption
@@ -151,6 +186,8 @@ export function InteractiveQuestionCard({
               selected={value === opt.text}
               onSelect={onChange}
               variant={variant}
+              tile={young}
+              {...(young ? { tileIcon: YOUNG_TILE_ICONS[i % YOUNG_TILE_ICONS.length] } : {})}
             />
           ))}
         </div>
@@ -158,7 +195,10 @@ export function InteractiveQuestionCard({
 
       {question.type === "FILL_IN_THE_BLANK" && (
         <input
-          className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-base transition-colors motion-reduce:transition-none focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+          className={cn(
+            "w-full rounded-2xl border border-line bg-canvas px-4 py-3 transition-colors motion-reduce:transition-none focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/40",
+            young ? "py-4 text-center text-xl font-bold" : "text-base",
+          )}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder="Napiš odpověď"

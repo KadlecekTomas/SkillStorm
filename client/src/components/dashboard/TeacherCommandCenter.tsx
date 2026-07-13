@@ -34,12 +34,12 @@ function getPrimaryClass(structure: ClassroomStructure | null) {
 
 function CardSkeleton() {
   return (
-    <div className="animate-pulse rounded-xl border border-slate-100 bg-white p-6 shadow-sm">
-      <div className="h-3 w-24 rounded bg-slate-100" />
+    <div className="animate-pulse rounded-xl border border-line bg-canvas-alt p-6">
+      <div className="h-3 w-24 rounded bg-surface" />
       <div className="mt-4 space-y-2">
-        <div className="h-3 w-full rounded bg-slate-100" />
-        <div className="h-3 w-3/4 rounded bg-slate-100" />
-        <div className="h-3 w-1/2 rounded bg-slate-100" />
+        <div className="h-3 w-full rounded bg-surface" />
+        <div className="h-3 w-3/4 rounded bg-surface" />
+        <div className="h-3 w-1/2 rounded bg-surface" />
       </div>
     </div>
   );

@@ -3,17 +3,22 @@
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/utils/cn";
 
+/*
+ * Pilulky (design reference: .pill) — plné signální barvy s bílým textem,
+ * tučné písmo, tabular-nums pro číselné hodnoty (XP, streak, procenta).
+ */
 const badgeVariants = cva(
-  "inline-flex items-center rounded-full px-3 py-1 text-xs font-medium",
+  "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[13px] font-bold tabular-nums",
   {
     variants: {
       variant: {
-        success: "bg-emerald-100 text-emerald-700",
-        info: "bg-blue-100 text-blue-700",
-        warning: "bg-amber-100 text-amber-700",
-        neutral: "bg-slate-100 text-slate-700",
-        secondary: "bg-slate-100 text-slate-800 border border-slate-200",
-        outline: "border border-slate-200 bg-transparent text-slate-700",
+        success: "bg-accent text-white",
+        info: "bg-xp text-white",
+        warning: "bg-streak text-white",
+        danger: "bg-danger text-white",
+        neutral: "bg-surface text-ink-muted",
+        secondary: "bg-accent-soft text-accent-deep",
+        outline: "border border-line-strong bg-transparent text-ink-muted",
       },
     },
     defaultVariants: {

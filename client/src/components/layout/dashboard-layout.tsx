@@ -66,9 +66,9 @@ export const DashboardLayout = ({ children }: DashboardLayoutProps): React.JSX.E
           }}
         />
       )}
-      <div className="space-y-3 rounded-3xl border border-dashed border-slate-200 bg-white/70 px-6 py-4">
+      <div className="space-y-3">
         {context?.mode === "organization" && (
-          <p className="text-base font-medium text-slate-700" aria-label="Aktuální školní rok">
+          <p className="text-sm font-medium text-ink-dim" aria-label="Aktuální školní rok">
             Školní rok{" "}
             {bootstrapState === "READY" && selectedYear
               ? selectedYear.name
@@ -78,23 +78,23 @@ export const DashboardLayout = ({ children }: DashboardLayoutProps): React.JSX.E
           </p>
         )}
         {isOffline && (
-          <div className="rounded-2xl border border-amber-200 bg-amber-50/80 px-4 py-2 text-sm font-medium text-amber-700">
+          <div className="rounded-xl border border-streak/40 bg-streak/10 px-4 py-2 text-sm font-semibold text-ink">
             Pracujete offline. Akce odešleme, jakmile se znovu připojíte.
           </div>
         )}
         {context?.mode === "personal" && (
-          <div className="rounded-3xl border border-emerald-200 bg-emerald-50/70 px-5 py-4">
+          <div className="rounded-xl border border-accent/30 bg-accent-soft/60 px-5 py-4">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                <p className="text-xs font-bold uppercase tracking-wide text-accent-deep">
                   Nejsi připojen ke škole
                 </p>
-                <p className="text-sm text-slate-600">
+                <p className="text-sm text-ink-muted">
                   Můžeš založit školu nebo se připojit pomocí kódu. Do té doby
                   jsou školní funkce nedostupné.
                 </p>
               </div>
-              <Button asChild variant="outline" className="rounded-2xl">
+              <Button asChild variant="secondary">
                 <Link href="/app/onboarding">Založit nebo se připojit</Link>
               </Button>
             </div>

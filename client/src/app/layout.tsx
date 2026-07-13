@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Inter } from "next/font/google";
 import "./globals.css";
 import { Suspense } from "react";
 import { AppErrorBoundary } from "@/components/layout/app-error-boundary";
@@ -6,6 +7,12 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+
+const inter = Inter({
+  subsets: ["latin", "latin-ext"],
+  variable: "--font-inter",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "SkillStorm Platform",
@@ -34,8 +41,8 @@ export default async function RootLayout({
   const MswLoader = await getMswLoader();
 
   return (
-    <html lang="en">
-      <body className="bg-secondary text-slate-900">
+    <html lang="en" className={inter.variable}>
+      <body className="bg-canvas text-ink">
         <AppErrorBoundary>
           <TooltipProvider>
             {MswLoader ? <MswLoader /> : null}

@@ -104,11 +104,11 @@ function CreateTestPage(): React.JSX.Element {
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div>
-        <Link href="/app/tests" className="text-sm text-slate-500 hover:text-slate-700">
+        <Link href="/app/tests" className="text-sm font-semibold text-ink-dim hover:text-ink">
           ← Zpět na testy
         </Link>
-        <h1 className="mt-2 text-2xl font-semibold text-slate-900">Vytvořit test</h1>
-        <p className="text-sm text-slate-500">Zadej název a popis. Po vytvoření můžeš přidat otázky a přiřadit třídě.</p>
+        <h1 className="mt-2 text-3xl font-extrabold text-ink">Vytvořit test</h1>
+        <p className="mt-1 text-sm text-ink-muted">Zadej název a popis. Po vytvoření můžeš přidat otázky a přiřadit třídě.</p>
       </div>
       {noSubjects && (
         <InfoAlert
@@ -116,10 +116,10 @@ function CreateTestPage(): React.JSX.Element {
           description="Nejdříve vytvořte předmět v nastavení organizace. Test musí být přiřazen k předmětu."
         />
       )}
-      <Card className="p-6">
+      <Card className="p-7">
         <form onSubmit={handleSubmit} className="space-y-4">
           <label className="block space-y-2">
-            <span className="text-sm font-medium text-slate-700">Název testu *</span>
+            <span className="text-[13px] font-bold text-ink-muted">Název testu *</span>
             <Input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -130,7 +130,7 @@ function CreateTestPage(): React.JSX.Element {
             />
           </label>
           <label className="block space-y-2">
-            <span className="text-sm font-medium text-slate-700">Popis (nepovinné)</span>
+            <span className="text-[13px] font-bold text-ink-muted">Popis (nepovinné)</span>
             <Input
               value={description}
               onChange={(e) => setDescription(e.target.value)}
@@ -139,13 +139,13 @@ function CreateTestPage(): React.JSX.Element {
             />
           </label>
           <label className="block space-y-2">
-            <span className="text-sm font-medium text-slate-700">Předmět *</span>
+            <span className="text-[13px] font-bold text-ink-muted">Předmět *</span>
             <select
               value={subjectId}
               onChange={(e) => setSubjectId(e.target.value)}
               required
               disabled={subjectsLoading || noSubjects}
-              className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm disabled:opacity-50"
+              className="h-11 w-full rounded-lg border border-line bg-canvas px-3.5 text-[15px] text-ink focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-50"
             >
               <option value="">{subjectsLoading ? "Načítám předměty…" : "Vyberte předmět"}</option>
               {subjects.map((s) => (
@@ -156,13 +156,13 @@ function CreateTestPage(): React.JSX.Element {
             </select>
           </label>
           <label className="block space-y-2">
-            <span className="text-sm font-medium text-slate-700">Téma testu *</span>
+            <span className="text-[13px] font-bold text-ink-muted">Téma testu *</span>
             <select
               value={catalogTopicId}
               onChange={(e) => setCatalogTopicId(e.target.value)}
               required
               disabled={!subjectId || topicsLoading}
-              className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm disabled:opacity-50"
+              className="h-11 w-full rounded-lg border border-line bg-canvas px-3.5 text-[15px] text-ink focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-50"
             >
               <option value="">
                 {!subjectId
@@ -179,25 +179,26 @@ function CreateTestPage(): React.JSX.Element {
                 </option>
               ))}
             </select>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-ink-dim">
               Téma určuje, jakou oblast znalostí test pokrývá – slouží pro diagnostiku žáků.
             </p>
           </label>
           <fieldset className="space-y-2">
-            <legend className="text-sm font-medium text-slate-700">Určeno pro ročníky *</legend>
-            <p className="text-sm text-slate-500">Vyberte, pro které ročníky je test pedagogicky určen.</p>
+            <legend className="text-[13px] font-bold text-ink-muted">Určeno pro ročníky *</legend>
+            <p className="text-sm text-ink-dim">Vyberte, pro které ročníky je test pedagogicky určen.</p>
             <div className="grid gap-2 sm:grid-cols-2">
               {ALL_SCHOOL_GRADES.map((grade) => {
                 const checked = allowedGrades.includes(grade);
                 return (
                   <label
                     key={grade}
-                    className={`flex items-center gap-3 rounded-md border px-3 py-2 text-sm ${
-                      checked ? "border-slate-900 bg-slate-50 text-slate-900" : "border-slate-200 text-slate-700"
+                    className={`flex cursor-pointer items-center gap-3 rounded-full border-2 px-4 py-2 text-sm font-bold transition-colors ${
+                      checked ? "border-accent bg-accent-soft text-accent-deep" : "border-line text-ink-muted hover:border-line-strong"
                     }`}
                   >
                     <input
                       type="checkbox"
+                      className="accent-[#58cc02]"
                       checked={checked}
                       onChange={(e) =>
                         setAllowedGrades((prev) =>
@@ -221,7 +222,7 @@ function CreateTestPage(): React.JSX.Element {
               {loading ? "Vytvářím…" : "Vytvořit test"}
             </Button>
             <Link href="/app/tests">
-              <Button type="button" variant="outline">Zrušit</Button>
+              <Button type="button" variant="secondary">Zrušit</Button>
             </Link>
           </div>
         </form>

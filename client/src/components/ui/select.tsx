@@ -16,7 +16,7 @@ export const SelectTrigger = React.forwardRef<
   <SelectPrimitive.Trigger
     ref={ref}
     className={cn(
-      "flex h-12 w-full items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-primary/40 data-[placeholder]:text-slate-400",
+      "flex h-11 w-full items-center justify-between rounded-lg border border-line bg-canvas px-3.5 text-[15px] text-ink focus:outline-none focus:ring-2 focus:ring-accent data-[placeholder]:text-ink-dim",
       className,
     )}
     {...props}
@@ -37,7 +37,7 @@ export const SelectContent = React.forwardRef<
     <SelectPrimitive.Content
       ref={ref}
       className={cn(
-        "relative z-50 max-h-96 min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-2xl border border-slate-100 bg-white text-slate-900 shadow-xl",
+        "relative z-50 max-h-96 min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-xl border border-line bg-canvas text-ink shadow-lg",
         position === "popper" &&
           "data-[side=bottom]:translate-y-1 data-[side=left]:-translate-x-1 data-[side=right]:translate-x-1 data-[side=top]:-translate-y-1",
         className,
@@ -66,7 +66,7 @@ export const SelectItem = React.forwardRef<
   <SelectPrimitive.Item
     ref={ref}
     className={cn(
-      "relative flex w-full cursor-pointer select-none items-center gap-2 rounded-xl px-3 py-2 text-sm text-slate-900 outline-none data-[highlighted]:bg-slate-100 data-[highlighted]:text-slate-900 data-[disabled]:pointer-events-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50",
+      "relative flex w-full cursor-pointer select-none items-center gap-2 rounded-lg px-3 py-2 text-sm text-ink outline-none data-[highlighted]:bg-accent-soft data-[highlighted]:text-accent-deep data-[disabled]:pointer-events-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50",
       className,
     )}
     {...props}
@@ -75,7 +75,7 @@ export const SelectItem = React.forwardRef<
       <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
     </span>
     <SelectPrimitive.ItemIndicator>
-      <Check className="h-4 w-4 text-primary" />
+      <Check className="h-4 w-4 text-accent-deep" />
     </SelectPrimitive.ItemIndicator>
   </SelectPrimitive.Item>
 ));

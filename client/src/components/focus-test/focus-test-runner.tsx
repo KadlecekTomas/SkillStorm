@@ -3,6 +3,7 @@
 import type { JSX } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/utils/cn";
 import { ErrorAlert, InfoAlert, WarningAlert } from "@/components/ui/alert";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
@@ -20,6 +21,8 @@ import {
   saveFlags,
 } from "@/lib/focus-test/flag-storage";
 import { useFocusTest } from "@/hooks/focus-test/use-focus-test";
+import type { AnsweringMode } from "@/config/answering-mode";
+import { PartakBlob, type PartakMood } from "@/components/partak";
 import { useFocusEventLogger } from "@/hooks/focus-test/use-focus-event-logger";
 import { useAnsweringKeyboard } from "@/hooks/focus-test/use-answering-keyboard";
 import { StudentAnsweringShell } from "@/components/student-answering/student-answering-shell";
@@ -32,6 +35,11 @@ import { ReviewBeforeSubmitDialog } from "@/components/student-answering/review-
 
 export interface FocusTestRunnerProps {
   session: FocusTestSession;
+  /**
+   * Věkový režim prezentace (default "old"). Čistě vizuální přepínač —
+   * autosave, submit i klávesnice běží v obou režimech stejně.
+   */
+  mode?: AnsweringMode;
   /** Called after a successful submit (navigate to results) and when the student leaves. */
   onSubmitted: (submissionId: string) => void;
   onLeave: () => void;
@@ -47,9 +55,11 @@ function optionValues(question: FocusQuestion): string[] {
 
 export function FocusTestRunner({
   session,
+  mode = "old",
   onSubmitted,
   onLeave,
 }: FocusTestRunnerProps): JSX.Element {
+  const young = mode === "young";
   const assignmentId = session.assignment.id;
   const submissionId = session.submission.id;
   const questions = session.test.questions;
@@ -66,6 +76,10 @@ export function FocusTestRunner({
   const [pending, setPending] = useState<Set<string>>(() => new Set());
   // Questions the student has opened. A visited-but-unanswered question reads as "rozepsaná".
   const [visited, setVisited] = useState<Set<string>>(() => new Set());
+
+  // Parťákova nálada reaguje na AKCI (výběr odpovědi), nikdy na správnost —
+  // sanitizovaný focus payload záměrně nenese answer key.
+  const [mascotMood, setMascotMood] = useState<PartakMood>("idle");
 
   const ctl = useFocusTest(session, { onSubmitted });
   // Audit-only telemetry (blur / visibility / connectivity). Never blocks or warns the student.
@@ -85,8 +99,12 @@ export function FocusTestRunner({
         return next;
       });
       ctl.setAnswer(questionId, value);
+      if (young) {
+        setMascotMood("happy");
+        window.setTimeout(() => setMascotMood("idle"), 900);
+      }
     },
-    [ctl],
+    [ctl, young],
   );
 
   const question = questions[current];
@@ -203,6 +221,7 @@ export function FocusTestRunner({
   return (
     <StudentAnsweringShell
       variant="focus"
+      mode={mode}
       title={session.test.title}
       progress={{
         current,
@@ -215,7 +234,12 @@ export function FocusTestRunner({
       timer={ctl.timer}
       onReview={() => setReviewOpen(true)}
     >
-      <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_248px] lg:gap-8">
+      <div
+        className={cn(
+          !young && "lg:grid lg:grid-cols-[minmax(0,1fr)_248px] lg:gap-8",
+          young && "mx-auto max-w-xl",
+        )}
+      >
         <div className="space-y-6">
           {ctl.autoSubmitPending && (
             <WarningAlert
@@ -233,6 +257,15 @@ export function FocusTestRunner({
             <ErrorAlert title="Chyba" description={ctl.submitError} />
           )}
 
+          {young && (
+            <div className="text-center" aria-hidden="true">
+              <PartakBlob size={96} mood={mascotMood} />
+              <p className="mt-1 text-[15px] font-semibold text-accent-deep">
+                {mascotMood === "happy" ? "Super, jedeme dál!" : "Zvládneš to! 💪"}
+              </p>
+            </div>
+          )}
+
           <InteractiveQuestionCard
             question={question}
             index={current}
@@ -242,6 +275,7 @@ export function FocusTestRunner({
             flagged={flagged.has(question.id)}
             onToggleFlag={() => toggleFlag(question.id)}
             variant="focus"
+            mode={mode}
           />
 
           <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
@@ -254,19 +288,21 @@ export function FocusTestRunner({
               ← Předchozí
             </Button>
             <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => setMapOpen(true)}
-                className="rounded-xl px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 lg:hidden"
-              >
-                Mapa otázek
-              </button>
+              {!young && (
+                <button
+                  type="button"
+                  onClick={() => setMapOpen(true)}
+                  className="rounded-xl px-3 py-2 text-sm font-semibold text-ink-muted hover:bg-surface lg:hidden"
+                >
+                  Mapa otázek
+                </button>
+              )}
               <button
                 type="button"
                 data-testid="skip-question"
                 onClick={() => nextUnanswered !== -1 && goTo(nextUnanswered)}
                 disabled={nextUnanswered === -1}
-                className="rounded-xl px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-transparent"
+                className="rounded-xl px-3 py-2 text-sm font-semibold text-ink-muted transition-colors hover:bg-surface disabled:opacity-40 disabled:hover:bg-transparent"
                 title="Přejít na další nezodpovězenou otázku"
               >
                 Přeskočit
@@ -282,26 +318,30 @@ export function FocusTestRunner({
             </Button>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-6">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-6">
             <Button type="button" variant="ghost" onClick={attemptLeave}>
               Ukončit bez odevzdání
             </Button>
-            <p className="hidden text-xs text-slate-400 sm:block">
-              Tip: šipkami přepínáš otázky, klávesami 1–9 vybíráš odpověď,
-              F označí otázku, Ctrl/⌘+Enter otevře kontrolu.
-            </p>
+            {!young && (
+              <p className="hidden text-xs text-ink-dim sm:block">
+                Tip: šipkami přepínáš otázky, klávesami 1–9 vybíráš odpověď,
+                F označí otázku, Ctrl/⌘+Enter otevře kontrolu.
+              </p>
+            )}
           </div>
         </div>
 
-        {/* Desktop rail */}
-        <aside className="hidden lg:block">
-          <div className="sticky top-24 space-y-4 rounded-2xl border border-slate-200 bg-white p-4">
-            <p className="text-sm font-semibold text-slate-700">
-              Přehled otázek
-            </p>
-            {navigator}
-          </div>
-        </aside>
+        {/* Desktop rail (jen starší režim) */}
+        {!young && (
+          <aside className="hidden lg:block">
+            <div className="sticky top-24 space-y-4 rounded-xl border border-line bg-canvas-alt p-4">
+              <p className="text-sm font-bold text-ink-muted">
+                Přehled otázek
+              </p>
+              {navigator}
+            </div>
+          </aside>
+        )}
       </div>
 
       {/* Mobile question map (bottom sheet) */}

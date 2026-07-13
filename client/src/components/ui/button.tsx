@@ -5,24 +5,30 @@ import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/utils/cn";
 
+/*
+ * Taktilní tlačítka (design reference: .tactile) — tvrdý spodní stín
+ * 0 4px 0 0 <deep barva> a stlačení translateY(2px) při :active.
+ * Barvu stínu určuje CSS proměnná --tactile-shadow (viz shadow-tactile
+ * v tailwind.config.ts), takže každá varianta nastaví jen svou barvu.
+ */
 const buttonVariants = cva(
-  "inline-flex items-center justify-center rounded-2xl text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-60 gap-2",
+  "inline-flex items-center justify-center rounded-2xl font-bold transition-all duration-100 focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-xp disabled:pointer-events-none disabled:opacity-60 gap-2",
   {
     variants: {
       variant: {
         default:
-          "bg-primary text-primary-foreground shadow-md hover:shadow-lg hover:bg-emerald-600",
+          "bg-accent text-white [--tactile-shadow:rgb(var(--accent-deep))] shadow-tactile hover:bg-accent-hover active:translate-y-[2px] active:shadow-tactile-pressed",
         secondary:
-          "bg-secondary text-secondary-foreground border border-slate-200 hover:bg-white shadow-sm",
+          "bg-transparent text-ink border-2 border-line-strong [--tactile-shadow:rgb(var(--line-strong))] shadow-tactile hover:bg-canvas-alt active:translate-y-[2px] active:shadow-tactile-pressed",
         outline:
-          "border border-slate-200 bg-white text-slate-900 hover:bg-slate-50",
-        ghost: "bg-transparent text-slate-900 hover:bg-slate-100",
+          "border border-line-strong bg-canvas text-ink font-semibold hover:bg-canvas-alt",
+        ghost: "bg-transparent text-ink font-semibold hover:bg-surface",
         destructive:
-          "bg-red-500 text-white hover:bg-red-600 focus-visible:ring-red-500",
+          "bg-danger text-white [--tactile-shadow:rgb(var(--danger-deep))] shadow-tactile hover:bg-danger-deep active:translate-y-[2px] active:shadow-tactile-pressed focus-visible:outline-danger",
       },
       size: {
-        sm: "h-9 px-4",
-        md: "h-11 px-6",
+        sm: "h-9 px-4 text-sm",
+        md: "h-11 px-6 text-[15px]",
         lg: "h-12 px-8 text-base",
         icon: "h-10 w-10 rounded-full",
       },
