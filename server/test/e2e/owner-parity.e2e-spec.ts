@@ -86,7 +86,7 @@ describe('Owner parity (e2e)', () => {
         email: memberEmail,
         username: `member_${unique()}`,
         password: 'Password123!',
-        mode: RegisterMode.INDIVIDUAL,
+        mode: RegisterMode.CREATE_ORG,
       })
       .expect(201);
 

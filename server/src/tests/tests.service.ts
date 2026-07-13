@@ -307,6 +307,23 @@ export class TestsService {
     return hasSubmissions ? 'LIMITED' : 'FULL';
   }
 
+  /**
+   * Edit mode for a VIEW context: unlike canEditTest (which throws for
+   * non-editors and backs mutating endpoints), a read of the detail by a
+   * same-org non-author teacher is legal and simply yields editMode 'NONE'.
+   */
+  private async resolveEditModeForView(
+    testId: string,
+    user: JwtPayload,
+  ): Promise<TestEditMode> {
+    try {
+      return await this.canEditTest(testId, user);
+    } catch (err) {
+      if (err instanceof ForbiddenException) return 'NONE';
+      throw err;
+    }
+  }
+
   async canEditTest(testId: string, user: JwtPayload): Promise<TestEditMode> {
     const test = await this.prisma.test.findUnique({
       where: { id: testId },
@@ -1055,7 +1072,7 @@ export class TestsService {
         select: this.buildTestProjection(OrganizationRole.DIRECTOR, 'detail'),
       });
       if (!teacherView) throw new NotFoundException('Test nenalezen');
-      const editMode = await this.canEditTest(id, user);
+      const editMode = await this.resolveEditModeForView(id, user);
       return this.mapTeacherView(teacherView, assignability, editMode);
     }
 
@@ -1106,7 +1123,7 @@ export class TestsService {
       select: this.buildTestProjection(user.organizationRole ?? null, 'detail'),
     });
     if (!teacherView) throw new NotFoundException('Test nenalezen');
-    const editMode = await this.canEditTest(id, user);
+    const editMode = await this.resolveEditModeForView(id, user);
     return this.mapTeacherView(teacherView, assignability, editMode);
   }
   async update(
@@ -1139,7 +1156,7 @@ export class TestsService {
 
     await this.ensureCanEditTest(user, current);
 
-    const editMode = await this.canEditTest(id, user);
+    const editMode = await this.resolveEditModeForView(id, user);
     if (
       editMode !== 'FULL' &&
       (dto.subjectId !== undefined || dto.allowedGrades !== undefined)

@@ -41,7 +41,7 @@ describe('Auth (e2e) – robust', () => {
     username: `u_${unique}`,
     password: 'Password123!',
     role: OrganizationRole.STUDENT,
-    mode: RegisterMode.INDIVIDUAL,
+    mode: RegisterMode.CREATE_ORG,
   };
 
   let accessToken = '';
@@ -129,7 +129,7 @@ describe('Auth (e2e) – robust', () => {
         name: 'Test User',
         email: `short-pw-${unique}@example.com`,
         password: 'abc12',
-        mode: RegisterMode.INDIVIDUAL,
+        mode: RegisterMode.CREATE_ORG,
       })
       .expect(400);
   });
@@ -142,7 +142,7 @@ describe('Auth (e2e) – robust', () => {
         name: 'Test User',
         email: `no-num-${unique}@example.com`,
         password: 'abcdefgh',
-        mode: RegisterMode.INDIVIDUAL,
+        mode: RegisterMode.CREATE_ORG,
       });
     expect([400, 429]).toContain(res.status);
   });
@@ -156,7 +156,7 @@ describe('Auth (e2e) – robust', () => {
         name: 'Valid Password User',
         email,
         password: 'abcd1234',
-        mode: RegisterMode.INDIVIDUAL,
+        mode: RegisterMode.CREATE_ORG,
       });
     expect([201, 429]).toContain(res.status);
     if (res.status !== 201) {

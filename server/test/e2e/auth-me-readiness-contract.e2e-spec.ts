@@ -129,7 +129,7 @@ describe('GET /auth/me – organization readiness contract (e2e)', () => {
   it('organization has no readiness fields when user has no org context', async () => {
     const auth = await authAs(app, OrganizationRole.STUDENT, {
       seed: `no_org_${Date.now()}`,
-      mode: RegisterMode.INDIVIDUAL,
+      mode: RegisterMode.CREATE_ORG,
     });
 
     const meRes = await request(app.getHttpServer())

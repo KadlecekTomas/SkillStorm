@@ -95,6 +95,20 @@ async function setupDb() {
       throw err;
     }
 
+    // Suites run sequentially in one worker but leak connections (apps that
+    // never close, module-level Prisma clients). Across ~70 suites that
+    // exhausts max_connections ("sorry, too many clients already") and every
+    // later suite fails in cascade. The test DB is dedicated (guard above),
+    // so terminating every other session at suite start is safe.
+    try {
+      await prisma.$queryRawUnsafe(`
+        SELECT pg_terminate_backend(pid) FROM pg_stat_activity
+        WHERE datname = current_database() AND pid <> pg_backend_pid()
+      `);
+    } catch (_) {
+      // Non-fatal: requires superuser/same-role; worst case old behavior.
+    }
+
     const isCI = process.env.CI === 'true' || process.env.CI === '1';
     if (!isCI) {
       const schemas = await prisma.$queryRawUnsafe(`

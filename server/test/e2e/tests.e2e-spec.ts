@@ -13,13 +13,18 @@ import {
   SchoolGrade,
   SystemRole,
 } from '@prisma/client';
-import { createSystemUser, setupOrgContext, useOrg } from 'test/helpers';
+import {
+  createOrgSubject,
+  createSystemUser,
+  setupOrgContext,
+  useOrg,
+} from 'test/helpers';
 
 type ActorCase = {
   name: string;
   token: () => string;
   listOrg: () => string;
-  createOrg: () => string;
+  createSubject: () => string;
   expectUpdate: number;
   expectDelete: number;
   expectList: number;
@@ -72,6 +77,10 @@ describe('Tests (e2e)', () => {
   let orgA: { id: string };
   let orgB: { id: string };
 
+  // subjects enabled per org (required by POST /tests)
+  let subjA: { subjectId: string; orgSubjectId: string };
+  let subjB: { subjectId: string; orgSubjectId: string };
+
   let ctxA: Awaited<ReturnType<typeof setupOrgContext>>;
   let ctxB: Awaited<ReturnType<typeof setupOrgContext>>;
 
@@ -113,6 +122,11 @@ describe('Tests (e2e)', () => {
       where: { id: { in: [orgA.id, orgB.id] } },
       data: { status: OrganizationStatus.ACTIVE },
     });
+
+    // POST /tests requires a subjectId enabled for the caller's org
+    // (org itself comes from the JWT context, not the body).
+    subjA = await createOrgSubject(prisma, orgA.id, { name: 'Tests Subj A' });
+    subjB = await createOrgSubject(prisma, orgB.id, { name: 'Tests Subj B' });
 
     const [yearA, yearB] = await Promise.all([
       prisma.academicYear.findFirst({
@@ -273,7 +287,7 @@ describe('Tests (e2e)', () => {
       .set('Authorization', `Bearer ${directorA.token}`)
       .send({
         title: 'Prověrka A1',
-        organizationId: orgA.id,
+        subjectId: subjA.subjectId,
         status: PublishStatus.DRAFT,
       })
       .expect(201);
@@ -289,26 +303,35 @@ describe('Tests (e2e)', () => {
     const ok = await request(app.getHttpServer())
       .post('/tests')
       .set('Authorization', `Bearer ${teacherUserA1.token}`)
-      .send({ title: 'Author Test', organizationId: orgA.id })
+      .send({ title: 'Author Test', subjectId: subjA.subjectId })
       .expect(201);
 
-    // cross-org forbidden
+    // cross-org: the body no longer selects the org (JWT context does).
+    // The nearest cross-org attack is a foreign org's subjectId → 400
+    // SUBJECT_NOT_ENABLED_FOR_ORGANIZATION, and organizationId in the body
+    // is rejected outright by forbidNonWhitelisted validation.
     await request(app.getHttpServer())
       .post('/tests')
       .set('Authorization', `Bearer ${teacherUserA1.token}`)
-      .send({ title: 'Nope', organizationId: orgB.id })
-      .expect(403);
+      .send({ title: 'Nope', subjectId: subjB.subjectId })
+      .expect(400);
+    await request(app.getHttpServer())
+      .post('/tests')
+      .set('Authorization', `Bearer ${teacherUserA1.token}`)
+      .send({ title: 'Nope', subjectId: subjA.subjectId, organizationId: orgB.id })
+      .expect(400);
 
     await prisma.test.delete({ where: { id: ok.body.id } });
   });
 
-  it('POST /tests (SUPERADMIN) → 201 libovolná org', async () => {
+  it('POST /tests (SUPERADMIN) → 201 v orgB po přepnutí kontextu (use-org)', async () => {
+    const orgBToken = await useOrg(app, superUser.token, orgB.id);
     const res = await request(app.getHttpServer())
       .post('/tests')
-      .set('Authorization', `Bearer ${superUser.token}`)
+      .set('Authorization', `Bearer ${orgBToken}`)
       .send({
         title: 'Global admin can create anywhere',
-        organizationId: orgB.id,
+        subjectId: subjB.subjectId,
       })
       .expect(201);
     await prisma.test.delete({ where: { id: res.body.id } });
@@ -353,12 +376,14 @@ describe('Tests (e2e)', () => {
     expect(idsA).toEqual(expect.arrayContaining(seedA.map((t) => t.id)));
     expect(idsA).not.toContain(seedB.id);
 
-    // SUPERADMIN orgB
+    // SUPERADMIN orgB — the organizationId query must match the JWT org
+    // context for everyone now; switching orgs goes through use-org.
+    const superTokenB = await useOrg(app, superUser.token, orgB.id);
     const listB = await request(app.getHttpServer())
       .get('/tests')
-      .set('Authorization', `Bearer ${superUser.token}`)
-      .query({ organizationId: orgB.id, page: 1, limit: 50 })
-      .expect(200);
+      .set('Authorization', `Bearer ${superTokenB}`)
+      .query({ organizationId: orgB.id, page: 1, limit: 50 });
+    expect(listB.status).toBe(200);
     const itemsB = Array.isArray(listB.body)
       ? listB.body
       : (listB.body.items ?? []);
@@ -444,6 +469,8 @@ describe('Tests (e2e)', () => {
       .set('Authorization', `Bearer ${teacherUserA2.token}`)
       .expect(200);
 
+    // non-author same-org teacher may view; edit is read-only
+    expect(res.body.editMode).toBe('NONE');
     expect(res.body.assignability).toBeDefined();
     expect(res.body.assignability).toMatchObject({
       isAssignable: expect.any(Boolean),
@@ -470,7 +497,7 @@ describe('Tests (e2e)', () => {
     const created = await request(app.getHttpServer())
       .post('/tests')
       .set('Authorization', `Bearer ${teacherUserA1.token}`)
-      .send({ title: 'Owned by A1', organizationId: orgA.id })
+      .send({ title: 'Owned by A1', subjectId: subjA.subjectId })
       .expect(201);
 
     // add scoreable question so publish is allowed
@@ -492,12 +519,21 @@ describe('Tests (e2e)', () => {
       .send({ title: 'Nope' })
       .expect(403);
 
-    // director can update
+    // director can update (plain rename — RBAC concern of this test)
     await request(app.getHttpServer())
       .patch(`/tests/${created.body.id}`)
       .set('Authorization', `Bearer ${directorA.token}`)
-      .send({ title: 'Director OK', status: PublishStatus.PUBLISHED })
+      .send({ title: 'Director OK' })
       .expect(200);
+
+    // publish hardening: without allowedGrades + topic assignment the test
+    // is not assignable → 409 (full publish path covered in test-flow-hardening)
+    const publishRes = await request(app.getHttpServer())
+      .patch(`/tests/${created.body.id}`)
+      .set('Authorization', `Bearer ${directorA.token}`)
+      .send({ status: PublishStatus.PUBLISHED })
+      .expect(409);
+    expect(publishRes.body.code).toBe('TEST_NOT_ASSIGNABLE');
 
     // author can update
     await request(app.getHttpServer())
@@ -518,7 +554,7 @@ describe('Tests (e2e)', () => {
     const created = await request(app.getHttpServer())
       .post('/tests')
       .set('Authorization', `Bearer ${teacherUserA1.token}`)
-      .send({ title: 'To-delete', organizationId: orgA.id })
+      .send({ title: 'To-delete', subjectId: subjA.subjectId })
       .expect(201);
 
     await request(app.getHttpServer())
@@ -558,7 +594,7 @@ describe('Tests (e2e)', () => {
       const created = await request(app.getHttpServer())
         .post('/tests')
         .set('Authorization', `Bearer ${teacherUserA1.token}`)
-        .send({ title: 'Teacher Flow Test', organizationId: orgA.id })
+        .send({ title: 'Teacher Flow Test', subjectId: subjA.subjectId })
         .expect(201);
 
       const testId = created.body.id as string;
@@ -592,7 +628,7 @@ describe('Tests (e2e)', () => {
       const created = await request(app.getHttpServer())
         .post('/tests')
         .set('Authorization', `Bearer ${directorA.token}`)
-        .send({ title: 'Director Flow Test', organizationId: orgA.id })
+        .send({ title: 'Director Flow Test', subjectId: subjA.subjectId })
         .expect(201);
 
       const testId = created.body.id as string;
@@ -628,7 +664,7 @@ describe('Tests (e2e)', () => {
       await request(app.getHttpServer())
         .post('/tests')
         .set('Authorization', `Bearer ${studentUser.token}`)
-        .send({ title: 'Forbidden', organizationId: orgA.id })
+        .send({ title: 'Forbidden', subjectId: subjA.subjectId })
         .expect(403);
 
       await request(app.getHttpServer())
@@ -646,19 +682,21 @@ describe('Tests (e2e)', () => {
       await prisma.test.delete({ where: { id: seeded.id } });
     });
 
-    it('Cross-org: teacher from orgA cannot create test in orgB (403)', async () => {
+    it('Cross-org: teacher from orgA cannot create test with orgB subject (400)', async () => {
+      // Org selection moved from the body to the JWT context; the remaining
+      // cross-org vector is a foreign subjectId, rejected by validateSubject.
       await request(app.getHttpServer())
         .post('/tests')
         .set('Authorization', `Bearer ${teacherUserA1.token}`)
-        .send({ title: 'Cross-org forbidden', organizationId: orgB.id })
-        .expect(403);
+        .send({ title: 'Cross-org forbidden', subjectId: subjB.subjectId })
+        .expect(400);
     });
 
     it('Soft-delete: teacher cannot add question to deleted test (404)', async () => {
       const created = await request(app.getHttpServer())
         .post('/tests')
         .set('Authorization', `Bearer ${directorA.token}`)
-        .send({ title: 'Soft-delete teacher case', organizationId: orgA.id })
+        .send({ title: 'Soft-delete teacher case', subjectId: subjA.subjectId })
         .expect(201);
 
       const testId = created.body.id as string;
@@ -682,7 +720,7 @@ describe('Tests (e2e)', () => {
     const createRes = await request(app.getHttpServer())
       .post('/tests')
       .set('Authorization', `Bearer ${teacherUserA1.token}`)
-      .send({ title: 'Draft with one question', organizationId: orgA.id })
+      .send({ title: 'Draft with one question', subjectId: subjA.subjectId })
       .expect(201);
 
     const created = createRes?.body?.data ?? createRes?.body;
@@ -723,7 +761,7 @@ describe('Tests (e2e)', () => {
     const created = await request(app.getHttpServer())
       .post('/tests')
       .set('Authorization', `Bearer ${teacherUserA1.token}`)
-      .send({ title: 'Nested Test', organizationId: orgA.id })
+      .send({ title: 'Nested Test', subjectId: subjA.subjectId })
       .expect(201);
 
     const testId = created.body.id as string;
@@ -813,7 +851,7 @@ describe('Tests (e2e)', () => {
     await request(app.getHttpServer())
       .post('/tests')
       .set('Authorization', `Bearer ${studentUser.token}`)
-      .send({ title: 'Student nope', organizationId: orgA.id })
+      .send({ title: 'Student nope', subjectId: subjA.subjectId })
       .expect(403);
 
     // prepare one test owned by A1
@@ -868,7 +906,8 @@ describe('Tests (e2e)', () => {
         name: 'SUPERADMIN',
         token: () => superUser.token,
         listOrg: () => orgA.id,
-        createOrg: () => orgB.id,
+        // superUser token is orgA-scoped (useOrg above) → create in orgA
+        createSubject: () => subjA.subjectId,
         expectUpdate: 200,
         expectDelete: 200,
         expectList: 200,
@@ -879,7 +918,7 @@ describe('Tests (e2e)', () => {
         name: 'DIRECTOR_A',
         token: () => directorA.token,
         listOrg: () => orgA.id,
-        createOrg: () => orgA.id,
+        createSubject: () => subjA.subjectId,
         expectUpdate: 200,
         expectDelete: 200,
         expectList: 200,
@@ -890,7 +929,7 @@ describe('Tests (e2e)', () => {
         name: 'DIRECTOR_B',
         token: () => directorB.token,
         listOrg: () => orgB.id,
-        createOrg: () => orgB.id,
+        createSubject: () => subjB.subjectId,
         expectUpdate: 404,
         expectDelete: 404,
         expectList: 200,
@@ -901,7 +940,7 @@ describe('Tests (e2e)', () => {
         name: 'TEACHER_A1_author',
         token: () => teacherUserA1.token,
         listOrg: () => orgA.id,
-        createOrg: () => orgA.id,
+        createSubject: () => subjA.subjectId,
         expectUpdate: 200,
         expectDelete: 403,
         expectList: 200,
@@ -912,7 +951,7 @@ describe('Tests (e2e)', () => {
         name: 'TEACHER_A2_other',
         token: () => teacherUserA2.token,
         listOrg: () => orgA.id,
-        createOrg: () => orgA.id,
+        createSubject: () => subjA.subjectId,
         expectUpdate: 403,
         expectDelete: 403,
         expectList: 200,
@@ -923,7 +962,7 @@ describe('Tests (e2e)', () => {
         name: 'TEACHER_B1_otherOrg',
         token: () => teacherUserB1.token,
         listOrg: () => orgB.id,
-        createOrg: () => orgB.id,
+        createSubject: () => subjB.subjectId,
         expectUpdate: 404,
         expectDelete: 403,
         expectList: 200,
@@ -934,11 +973,13 @@ describe('Tests (e2e)', () => {
         name: 'STUDENT',
         token: () => studentUser.token,
         listOrg: () => orgA.id,
-        createOrg: () => orgA.id,
+        createSubject: () => subjA.subjectId,
         expectUpdate: 403,
         expectDelete: 403,
         expectList: 200, // students mohou listovat v naší implementaci
-        expectDetail: [200],
+        // sample je DRAFT bez assignmentu → pro studenta neexistuje (404);
+        // pozitivní studentská viditelnost je v student-tests-visibility
+        expectDetail: [404],
         expectCreate: 403,
       },
     ] as const;
@@ -969,13 +1010,13 @@ describe('Tests (e2e)', () => {
 
     it.each(actors)(
       'RBAC create: $name',
-      async ({ token, createOrg, expectCreate }) => {
+      async ({ token, createSubject, expectCreate }) => {
         const res = await request(app.getHttpServer())
           .post('/tests')
           .set('Authorization', `Bearer ${token()}`)
           .send({
             title: `RBAC Create ${Date.now()}`,
-            organizationId: createOrg(),
+            subjectId: createSubject(),
           })
           .expect((r) => {
             if (
@@ -1442,7 +1483,7 @@ describe('Tests (e2e)', () => {
     const created = await request(app.getHttpServer())
       .post('/tests')
       .set('Authorization', `Bearer ${directorA.token}`)
-      .send({ title: 'Soft-Delete-Nested', organizationId: orgA.id })
+      .send({ title: 'Soft-Delete-Nested', subjectId: subjA.subjectId })
       .expect(201);
 
     const testId = created.body.id as string;
@@ -1511,16 +1552,11 @@ describe('Tests (e2e)', () => {
       }),
     ]);
 
-    const useOrg = await request(app.getHttpServer())
-      .post('/auth/use-org')
-      .set('Authorization', `Bearer ${superUser.token}`)
-      .send({ orgId: orgA.id })
-      .expect(201);
-    const scopedToken = useOrg.body.sessionToken;
-
+    // superUser.token is already orgA-scoped (beforeAll use-org); without an
+    // organizationId query the SUPERADMIN branch returns the global list.
     const res = await request(app.getHttpServer())
       .get('/tests')
-      .set('Authorization', `Bearer ${scopedToken}`)
+      .set('Authorization', `Bearer ${superUser.token}`)
       .query({ page: 1, limit: 100 })
       .expect(200);
 

@@ -45,7 +45,7 @@ describe('Invite/join teacher flow (e2e)', () => {
         email: teacherEmail,
         username: `invited_${Date.now()}`,
         password: teacherPassword,
-        mode: RegisterMode.INDIVIDUAL,
+        mode: RegisterMode.CREATE_ORG,
         role: OrganizationRole.TEACHER,
       })
       .expect(201);

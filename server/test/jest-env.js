@@ -25,6 +25,11 @@ process.env.DATABASE_URL = testUrl;
 
 // Bezpečné test flagy
 process.env.NODE_ENV = 'test';
+// E2E helpers register via CREATE_ORG + POST /organizations; without this
+// flag the app forbids public org creation. Previously it worked only by
+// accident (@prisma/client auto-loading server/.env into the worker).
+process.env.ALLOW_PUBLIC_ORG_CREATION =
+  process.env.ALLOW_PUBLIC_ORG_CREATION || 'true';
 process.env.DISABLE_STATS_CACHE = process.env.DISABLE_STATS_CACHE || '1';
 process.env.DISABLE_CSRF = process.env.DISABLE_CSRF || '1';
 process.env.DISABLE_THROTTLE = process.env.DISABLE_THROTTLE || '1';
