@@ -57,27 +57,27 @@ function NavDot({
       data-started={item.started}
       data-current={isCurrent}
       className={cn(
-        "relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border text-sm font-semibold transition-all duration-150 motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-emerald-500",
+        "relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border text-sm font-semibold transition-all duration-150 motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-accent",
         isCurrent
-          ? "border-slate-900 bg-slate-900 text-white"
+          ? "border-ink bg-ink text-white"
           : item.answered
-            ? "border-emerald-300 bg-emerald-50 text-emerald-700 hover:border-emerald-400"
+            ? "border-accent/50 bg-accent-soft text-accent-deep hover:border-accent"
             : item.started
-              ? "border-dashed border-slate-400 bg-white text-slate-700 hover:border-slate-500"
-              : "border-slate-200 bg-white text-slate-500 hover:border-slate-400",
+              ? "border-dashed border-ink-dim bg-canvas text-ink-muted hover:border-ink-muted"
+              : "border-line bg-canvas text-ink-dim hover:border-line-strong",
       )}
     >
       {index + 1}
       {item.flagged && (
         <span
           aria-hidden="true"
-          className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full border border-white bg-amber-400"
+          className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full border border-canvas bg-streak"
         />
       )}
       {item.pending && !item.flagged && (
         <span
           aria-hidden="true"
-          className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full border border-white bg-amber-400 motion-safe:animate-pulse"
+          className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full border border-canvas bg-streak motion-safe:animate-pulse"
         />
       )}
     </button>
@@ -85,10 +85,10 @@ function NavDot({
 }
 
 const LEGEND: Array<{ dot: string; label: string }> = [
-  { dot: "bg-emerald-400", label: "Zodpovězeno" },
-  { dot: "bg-white border border-dashed border-slate-400", label: "Rozepsaná" },
-  { dot: "bg-white border border-slate-300", label: "Bez odpovědi" },
-  { dot: "bg-amber-400", label: "K návratu / čeká na uložení" },
+  { dot: "bg-accent", label: "Zodpovězeno" },
+  { dot: "bg-canvas border border-dashed border-ink-dim", label: "Rozepsaná" },
+  { dot: "bg-canvas border border-line-strong", label: "Bez odpovědi" },
+  { dot: "bg-streak", label: "K návratu / čeká na uložení" },
 ];
 
 export function QuestionNavigator({
@@ -114,7 +114,7 @@ export function QuestionNavigator({
         </ol>
       </nav>
       {showLegend && (
-        <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
+        <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-dim">
           {LEGEND.map((l) => (
             <li key={l.label} className="flex items-center gap-1.5">
               <span className={cn("h-2.5 w-2.5 rounded-full", l.dot)} />

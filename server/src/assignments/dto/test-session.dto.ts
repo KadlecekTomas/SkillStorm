@@ -36,4 +36,12 @@ export interface TestSessionDto {
   };
   /** Persisted responses of the resumed submission so the client can rehydrate previously saved answers. */
   responses: Array<{ questionId: string; givenText: string }>;
+  /**
+   * Presentation hint for the age-appropriate answering UI on the client.
+   * Derived from the student's ACTIVE enrollment in the active academic year;
+   * null when the student has no enrollment (client falls back to the "old" mode).
+   */
+  student: {
+    grade: string | null;
+  };
 }

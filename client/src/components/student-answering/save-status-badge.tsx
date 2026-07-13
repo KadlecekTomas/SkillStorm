@@ -12,27 +12,27 @@ const CONFIG: Record<
   SaveStatus,
   { label: string; dot: string; text: string; pulse?: boolean }
 > = {
-  idle: { label: "Připraveno", dot: "bg-slate-300", text: "text-slate-500" },
+  idle: { label: "Připraveno", dot: "bg-line-strong", text: "text-ink-dim" },
   saving: {
     label: "Ukládám…",
-    dot: "bg-amber-400",
-    text: "text-amber-700",
+    dot: "bg-streak",
+    text: "text-streak",
     pulse: true,
   },
   saved: {
     label: "Uloženo",
-    dot: "bg-emerald-500",
-    text: "text-emerald-700",
+    dot: "bg-accent",
+    text: "text-accent-deep",
   },
   offline: {
     label: "Offline – uloženo v zařízení",
-    dot: "bg-slate-400",
-    text: "text-slate-600",
+    dot: "bg-ink-dim",
+    text: "text-ink-muted",
   },
   error: {
     label: "Čeká na synchronizaci",
-    dot: "bg-red-500",
-    text: "text-red-700",
+    dot: "bg-danger",
+    text: "text-danger-deep",
     pulse: true,
   },
 };

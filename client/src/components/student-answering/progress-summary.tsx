@@ -47,19 +47,19 @@ export function ProgressSummary({
       key: "answered",
       label: "Zodpovězeno",
       value: `${answered}/${total}`,
-      tone: "text-emerald-700",
+      tone: "text-accent-deep",
     },
     {
       key: "unanswered",
       label: "Bez odpovědi",
       value: unanswered,
-      tone: unanswered > 0 ? "text-slate-900" : "text-slate-400",
+      tone: unanswered > 0 ? "text-ink" : "text-ink-dim",
     },
     {
       key: "flagged",
       label: "K návratu",
       value: flagged,
-      tone: flagged > 0 ? "text-amber-700" : "text-slate-400",
+      tone: flagged > 0 ? "text-streak" : "text-ink-dim",
     },
     {
       key: "sync",
@@ -67,10 +67,10 @@ export function ProgressSummary({
       value: syncLabel,
       tone:
         saveStatus === "error"
-          ? "text-red-700"
+          ? "text-danger-deep"
           : saveStatus === "offline"
-            ? "text-slate-600"
-            : "text-slate-900",
+            ? "text-ink-muted"
+            : "text-ink",
     },
   ];
 
@@ -79,7 +79,7 @@ export function ProgressSummary({
       key: "time",
       label: "Zbývá",
       value: timerLabel,
-      tone: "text-slate-900",
+      tone: "text-ink",
     });
   }
 
@@ -97,13 +97,13 @@ export function ProgressSummary({
           key={s.key}
           className={cn(
             layout === "grid"
-              ? "rounded-xl border border-slate-100 bg-slate-50 px-3 py-2"
+              ? "rounded-xl border border-slate-100 bg-surface px-3 py-2"
               : "flex items-baseline gap-1.5",
           )}
         >
           <dt
             className={cn(
-              "text-xs font-medium text-slate-500",
+              "text-xs font-medium text-ink-dim",
               layout === "grid" && "mb-0.5",
             )}
           >

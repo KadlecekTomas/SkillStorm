@@ -1,8 +1,12 @@
 "use client";
 
 import type { JSX } from "react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import {
+  ANSWERING_MODE_QUERY_PARAM,
+  resolveAnsweringMode,
+} from "@/config/answering-mode";
 import { fetchWithAuth, HttpError } from "@/lib/http/client";
 import { Button } from "@/components/ui/button";
 import { ErrorAlert } from "@/components/ui/alert";
@@ -38,6 +42,16 @@ function FocusTestPage(): JSX.Element {
   const assignmentId = params.assignmentId;
   const router = useRouter();
   const [state, setState] = useState<LoadState>({ kind: "loading" });
+
+  // Demo/override query param (?mode=young|old). Presentation-only — never
+  // included in any backend request. Read from window to avoid a Suspense
+  // boundary requirement of useSearchParams.
+  const modeOverride = useMemo(() => {
+    if (typeof window === "undefined") return null;
+    return new URLSearchParams(window.location.search).get(
+      ANSWERING_MODE_QUERY_PARAM,
+    );
+  }, []);
 
   useEffect(() => {
     if (!assignmentId) return;
@@ -97,6 +111,7 @@ function FocusTestPage(): JSX.Element {
   return (
     <FocusTestRunner
       session={state.session}
+      mode={resolveAnsweringMode(state.session.student?.grade ?? null, modeOverride)}
       onSubmitted={onSubmitted}
       onLeave={onLeave}
     />

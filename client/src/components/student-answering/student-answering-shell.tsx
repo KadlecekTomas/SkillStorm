@@ -6,6 +6,7 @@ import type { TestTimerState } from "@/hooks/focus-test/use-test-timer";
 import { cn } from "@/utils/cn";
 import { TestTopStatusBar } from "./test-top-status-bar";
 import type { AnsweringVariant } from "./answer-option";
+import type { AnsweringMode } from "@/config/answering-mode";
 
 export interface AnsweringProgress {
   /** Zero-based index of the question currently shown. */
@@ -24,6 +25,8 @@ export interface StudentAnsweringShellProps {
   onlineStatus: boolean;
   onReview: () => void;
   reviewLabel?: string;
+  /** Věkový režim prezentace (default "old"). */
+  mode?: AnsweringMode;
   children: ReactNode;
 }
 
@@ -44,17 +47,19 @@ export function StudentAnsweringShell({
   onlineStatus,
   onReview,
   reviewLabel,
+  mode = "old",
   children,
 }: StudentAnsweringShellProps): JSX.Element {
   return (
     <div
       data-testid="focus-test-root"
       data-variant={variant}
+      data-mode={mode}
       className={cn(
         "min-h-dvh",
         variant === "practice"
-          ? "bg-gradient-to-b from-indigo-50/60 to-slate-50"
-          : "bg-slate-50",
+          ? "bg-gradient-to-b from-xp/5 to-canvas-alt"
+          : "bg-canvas-alt",
       )}
     >
       <TestTopStatusBar
@@ -68,6 +73,7 @@ export function StudentAnsweringShell({
         online={onlineStatus}
         timer={timer}
         onReview={onReview}
+        mode={mode}
         {...(reviewLabel ? { reviewLabel } : {})}
       />
 

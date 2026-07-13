@@ -1096,6 +1096,20 @@ export class AssignmentsService {
       select: { questionId: true, givenText: true },
     });
 
+    // Presentation-only hint: the student's grade (from the ACTIVE enrollment in the
+    // active year) drives the age-appropriate answering UI. Missing enrollment → null.
+    const enrollment = ctx.activeAcademicYearId
+      ? await this.prisma.enrollment.findFirst({
+          where: {
+            orgId: ctx.organizationId,
+            yearId: ctx.activeAcademicYearId,
+            status: 'ACTIVE',
+            student: { membershipId: ctx.membershipId, deletedAt: null },
+          },
+          select: { classSection: { select: { grade: true } } },
+        })
+      : null;
+
     return {
       assignment: {
         id: assignment.id,
@@ -1124,6 +1138,9 @@ export class AssignmentsService {
         questionId: r.questionId,
         givenText: r.givenText,
       })),
+      student: {
+        grade: enrollment?.classSection.grade ?? null,
+      },
     };
   }
 }

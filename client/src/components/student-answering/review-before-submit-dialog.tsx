@@ -78,7 +78,7 @@ export function ReviewBeforeSubmitDialog({
         {unanswered > 0 && (
           <p
             data-testid="review-unanswered-warning"
-            className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800"
+            className="rounded-xl bg-streak/10 px-3 py-2 text-sm text-ink"
           >
             Máš {unanswered}{" "}
             {unanswered === 1 ? "nezodpovězenou otázku" : "nezodpovězených otázek"}
@@ -87,7 +87,7 @@ export function ReviewBeforeSubmitDialog({
         )}
 
         {flagged > 0 && (
-          <p className="rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-600">
+          <p className="rounded-xl bg-surface px-3 py-2 text-sm text-ink-muted">
             {flagged}{" "}
             {flagged === 1 ? "otázka je označená" : "otázek je označených"} k
             návratu.
@@ -97,7 +97,7 @@ export function ReviewBeforeSubmitDialog({
         {blockedOffline && (
           <p
             data-testid="review-offline-warning"
-            className="rounded-xl bg-red-50 px-3 py-2 text-sm font-medium text-red-700"
+            className="rounded-xl bg-danger-soft px-3 py-2 text-sm font-medium text-danger-deep"
           >
             Jsi offline – test je uložený v zařízení, ale nelze ho odevzdat bez
             připojení k internetu. Připoj se a zkus to znovu.
@@ -107,7 +107,7 @@ export function ReviewBeforeSubmitDialog({
         {!blockedOffline && saveFailed && (
           <p
             data-testid="review-save-error-warning"
-            className="rounded-xl bg-red-50 px-3 py-2 text-sm font-medium text-red-700"
+            className="rounded-xl bg-danger-soft px-3 py-2 text-sm font-medium text-danger-deep"
           >
             Odpovědi se nepodařilo uložit. Než budou bezpečně uložené, nelze
             test odevzdat – vrať se do testu a počkej na uložení nebo odpověď
@@ -118,7 +118,7 @@ export function ReviewBeforeSubmitDialog({
         {!blockedOffline && !saveFailed && (saving || hasUnsaved) && (
           <p
             data-testid="review-unsaved-warning"
-            className="rounded-xl bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800"
+            className="rounded-xl bg-streak/10 px-3 py-2 text-sm font-medium text-ink"
           >
             Odpovědi se ještě ukládají. Počkej prosím, než budou bezpečně
             uložené – pak půjde test odevzdat.
@@ -128,7 +128,7 @@ export function ReviewBeforeSubmitDialog({
         {submitError && (
           <p
             data-testid="review-submit-error"
-            className="rounded-xl bg-red-50 px-3 py-2 text-sm font-medium text-red-700"
+            className="rounded-xl bg-danger-soft px-3 py-2 text-sm font-medium text-danger-deep"
           >
             {submitError}
           </p>
@@ -139,7 +139,7 @@ export function ReviewBeforeSubmitDialog({
             type="button"
             onClick={() => onOpenChange(false)}
             disabled={submitting}
-            className="inline-flex h-11 items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 text-sm font-medium text-slate-900 transition-colors hover:bg-slate-50 disabled:opacity-60"
+            className="inline-flex h-11 items-center justify-center rounded-2xl border-2 border-line-strong bg-transparent px-5 text-sm font-bold text-ink shadow-tactile transition-all duration-100 [--tactile-shadow:rgb(var(--line-strong))] hover:bg-canvas-alt active:translate-y-[2px] active:shadow-tactile-pressed disabled:opacity-60"
           >
             Zpět do testu
           </button>
@@ -149,8 +149,8 @@ export function ReviewBeforeSubmitDialog({
             onClick={() => void onConfirm()}
             disabled={submitDisabled}
             className={cn(
-              "inline-flex h-11 items-center justify-center rounded-2xl px-5 text-sm font-semibold text-white shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-60",
-              "bg-emerald-600 hover:bg-emerald-700",
+              "inline-flex h-11 items-center justify-center rounded-2xl px-5 text-sm font-bold text-white shadow-tactile transition-all duration-100 focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-xp disabled:cursor-not-allowed disabled:opacity-60",
+              "bg-accent [--tactile-shadow:rgb(var(--accent-deep))] hover:bg-accent-hover active:translate-y-[2px] active:shadow-tactile-pressed",
             )}
           >
             {submitting ? "Odevzdávám…" : "Odevzdat test"}
