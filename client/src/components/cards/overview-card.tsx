@@ -17,16 +17,16 @@ export const OverviewCard = ({
   value,
   delta,
   icon,
-  accent = "bg-emerald-50 text-emerald-600",
+  accent = "bg-accent-soft text-accent-deep",
 }: OverviewCardProps): React.JSX.Element => (
-  <Card className="space-y-3 rounded-xl border bg-white shadow-sm">
+  <Card className="space-y-3">
     <div className={cn("flex h-10 w-10 items-center justify-center rounded-lg", accent)}>
       {icon}
     </div>
     <div>
-      <p className="text-sm text-slate-500">{title}</p>
-      <p className="text-2xl font-semibold text-slate-900">{value}</p>
-      {delta && <p className="mt-0.5 text-sm text-slate-500">{delta}</p>}
+      <p className="text-sm font-semibold text-ink-muted">{title}</p>
+      <p className="text-3xl font-extrabold text-ink tabular-nums">{value}</p>
+      {delta && <p className="mt-0.5 text-sm text-ink-muted">{delta}</p>}
     </div>
   </Card>
 );

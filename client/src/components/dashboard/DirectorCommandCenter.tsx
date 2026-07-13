@@ -43,20 +43,20 @@ function formatDate(iso: string | null): string {
 function riskBadge(level: "LOW" | "MEDIUM" | "HIGH"): React.JSX.Element {
   if (level === "HIGH")
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-600">
+      <span className="inline-flex items-center gap-1 rounded-full bg-danger-soft px-2 py-0.5 text-xs font-bold text-danger-deep">
         <AlertTriangle className="h-3 w-3" />
         Vysoké riziko
       </span>
     );
   if (level === "MEDIUM")
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-600">
+      <span className="inline-flex items-center gap-1 rounded-full bg-streak/10 px-2 py-0.5 text-xs font-bold text-streak">
         <TrendingDown className="h-3 w-3" />
         Střední riziko
       </span>
     );
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-600">
+    <span className="inline-flex items-center gap-1 rounded-full bg-accent-soft px-2 py-0.5 text-xs font-bold text-accent-deep">
       V pořádku
     </span>
   );
@@ -75,38 +75,38 @@ function ClassRiskTable({
   });
   return (
     <Card className="p-0 overflow-hidden">
-      <div className="px-6 py-4 border-b border-slate-100">
-        <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
+      <div className="px-6 py-4 border-b border-line">
+        <p className="text-xs font-bold uppercase tracking-[.08em] text-ink-dim">
           Třídy
         </p>
-        <p className="text-base font-semibold text-slate-900">
+        <p className="text-base font-bold text-ink">
           Výkonnost tříd
         </p>
       </div>
       {sorted.length === 0 ? (
-        <p className="px-6 py-8 text-center text-sm text-slate-400">
+        <p className="px-6 py-8 text-center text-sm text-ink-dim">
           Žádné třídy v aktuálním roce.
         </p>
       ) : (
-        <div className="divide-y divide-slate-50">
+        <div className="divide-y divide-line/60">
           {sorted.map((cls) => (
             <div
               key={cls.id}
-              className="flex items-center gap-4 px-6 py-3 hover:bg-slate-50 transition-colors"
+              className="flex items-center gap-4 px-6 py-3 hover:bg-surface transition-colors"
             >
-              <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-slate-100 text-sm font-bold text-slate-700">
+              <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-surface text-sm font-extrabold text-ink">
                 {cls.label}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-slate-800">
+                <p className="truncate text-sm font-bold text-ink">
                   {cls.teacherName ?? "—"}
                 </p>
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-ink-dim">
                   {cls.studentCount} žáků · {cls.submissionsThisWeek} odevzdání tento týden
                 </p>
               </div>
               <div className="flex flex-shrink-0 flex-col items-end gap-1">
-                <span className="text-sm font-semibold text-slate-800">
+                <span className="text-sm font-semibold text-ink tabular-nums">
                   {cls.avgScore !== null ? `${cls.avgScore} %` : "—"}
                 </span>
                 {riskBadge(cls.riskLevel)}
@@ -126,45 +126,45 @@ function TeacherActivityList({
 }): React.JSX.Element {
   return (
     <Card className="p-0 overflow-hidden">
-      <div className="px-6 py-4 border-b border-slate-100">
-        <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
+      <div className="px-6 py-4 border-b border-line">
+        <p className="text-xs font-bold uppercase tracking-[.08em] text-ink-dim">
           Učitelé
         </p>
-        <p className="text-base font-semibold text-slate-900">
+        <p className="text-base font-bold text-ink">
           Aktivita učitelů
         </p>
       </div>
       {teachers.length === 0 ? (
-        <p className="px-6 py-8 text-center text-sm text-slate-400">
+        <p className="px-6 py-8 text-center text-sm text-ink-dim">
           Žádní učitelé v organizaci.
         </p>
       ) : (
-        <div className="divide-y divide-slate-50">
+        <div className="divide-y divide-line/60">
           {teachers.map((t) => (
             <div
               key={t.membershipId}
-              className="flex items-center gap-4 px-6 py-3 hover:bg-slate-50 transition-colors"
+              className="flex items-center gap-4 px-6 py-3 hover:bg-surface transition-colors"
             >
-              <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-indigo-50 text-sm font-semibold text-indigo-600">
+              <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-xp/10 text-sm font-bold text-xp">
                 {t.name.charAt(0).toUpperCase()}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-slate-800">
+                <p className="truncate text-sm font-bold text-ink">
                   {t.name}
                 </p>
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-ink-dim">
                   {t.testsCreated} testů · poslední aktivita{" "}
                   {formatDate(t.lastActivityAt)}
                 </p>
               </div>
               <div className="flex-shrink-0 text-right">
-                <p className="text-sm font-semibold text-slate-800">
+                <p className="text-sm font-semibold text-ink tabular-nums">
                   {t.submissionsThisWeek}
                 </p>
-                <p className="text-xs text-slate-400">tento týden</p>
+                <p className="text-xs text-ink-dim">tento týden</p>
               </div>
               {t.activeThisWeek ? (
-                <Activity className="h-4 w-4 flex-shrink-0 text-emerald-500" />
+                <Activity className="h-4 w-4 flex-shrink-0 text-accent" />
               ) : (
                 <div className="h-4 w-4 flex-shrink-0" />
               )}
@@ -184,34 +184,34 @@ function StudentRiskList({
   if (students.length === 0) return <></>;
   return (
     <Card className="p-0 overflow-hidden">
-      <div className="px-6 py-4 border-b border-slate-100">
-        <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
+      <div className="px-6 py-4 border-b border-line">
+        <p className="text-xs font-bold uppercase tracking-[.08em] text-ink-dim">
           Žáci v ohrožení
         </p>
-        <p className="text-base font-semibold text-slate-900">
+        <p className="text-base font-bold text-ink">
           Nejnižší průměry
         </p>
       </div>
-      <div className="divide-y divide-slate-50">
+      <div className="divide-y divide-line/60">
         {students.map((s) => (
           <div
             key={s.studentId}
-            className="flex items-center gap-4 px-6 py-3 hover:bg-slate-50 transition-colors"
+            className="flex items-center gap-4 px-6 py-3 hover:bg-surface transition-colors"
           >
-            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-red-50 text-sm font-semibold text-red-500">
+            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-danger-soft text-sm font-bold text-danger-deep">
               {s.displayName.charAt(0).toUpperCase()}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-slate-800">
+              <p className="truncate text-sm font-bold text-ink">
                 {s.displayName}
               </p>
-              <p className="text-xs text-slate-400">{s.classLabel}</p>
+              <p className="text-xs text-ink-dim">{s.classLabel}</p>
             </div>
             <div className="flex-shrink-0 text-right">
-              <p className="text-sm font-bold text-red-600">
+              <p className="text-sm font-bold text-danger tabular-nums">
                 {s.averageScorePercent} %
               </p>
-              <p className="text-xs text-slate-400">průměr</p>
+              <p className="text-xs text-ink-dim">průměr</p>
             </div>
           </div>
         ))}
@@ -222,12 +222,12 @@ function StudentRiskList({
 
 function CardSkeleton(): React.JSX.Element {
   return (
-    <div className="animate-pulse rounded-xl border border-slate-100 bg-white p-6 shadow-sm">
-      <div className="h-3 w-24 rounded bg-slate-100" />
+    <div className="animate-pulse rounded-xl border border-line bg-canvas-alt p-6">
+      <div className="h-3 w-24 rounded bg-surface" />
       <div className="mt-4 space-y-2">
-        <div className="h-3 w-full rounded bg-slate-100" />
-        <div className="h-3 w-3/4 rounded bg-slate-100" />
-        <div className="h-3 w-1/2 rounded bg-slate-100" />
+        <div className="h-3 w-full rounded bg-surface" />
+        <div className="h-3 w-3/4 rounded bg-surface" />
+        <div className="h-3 w-1/2 rounded bg-surface" />
       </div>
     </div>
   );
@@ -327,12 +327,12 @@ export function DirectorCommandCenter(): React.JSX.Element {
 
       {/* Next year ready banner */}
       {preparedNextYear && !bannerDismissed && (
-        <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-indigo-200 bg-indigo-50/70 px-5 py-4">
+        <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-xp/30 bg-xp/10 px-5 py-4">
           <div>
-            <p className="text-sm font-semibold text-indigo-800">
+            <p className="text-sm font-bold text-ink">
               Další školní rok {preparedNextYear.label} je připraven
             </p>
-            <p className="text-xs text-indigo-600">
+            <p className="text-xs text-ink-muted">
               Aktivujte ho, až budete připraveni zahájit nový rok.
             </p>
           </div>
@@ -341,7 +341,7 @@ export function DirectorCommandCenter(): React.JSX.Element {
               size="sm"
               onClick={() => void handleActivateNextYear()}
               disabled={activating}
-              className="rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white"
+              className="bg-xp text-white [--tactile-shadow:#0e7ab8] shadow-tactile hover:brightness-105 active:translate-y-[2px] active:shadow-tactile-pressed"
             >
               {activating ? "Aktivace…" : `Aktivovat ${preparedNextYear.label}`}
             </Button>
@@ -350,7 +350,7 @@ export function DirectorCommandCenter(): React.JSX.Element {
               variant="ghost"
               onClick={() => setBannerDismissed(true)}
               disabled={activating}
-              className="rounded-xl text-indigo-600 hover:bg-indigo-100"
+              className="text-ink-muted"
             >
               Zavřít
             </Button>
@@ -364,27 +364,27 @@ export function DirectorCommandCenter(): React.JSX.Element {
           title="Testy tento měsíc"
           value={loading ? "…" : String(data?.testsThisMonth ?? 0)}
           icon={<BookOpen className="h-5 w-5" />}
-          accent="bg-blue-50 text-blue-600"
+          accent="bg-xp/10 text-xp"
         />
         <OverviewCard
           title="Odevzdání tento týden"
           value={loading ? "…" : String(data?.submissionsThisWeek ?? 0)}
           icon={<CheckSquare className="h-5 w-5" />}
-          accent="bg-violet-50 text-violet-600"
+          accent="bg-accent-soft text-accent-deep"
         />
         <OverviewCard
           title="Aktivní učitelé"
           value={loading ? "…" : String(data?.activeTeachersThisWeek ?? 0)}
           delta="tento týden"
           icon={<Users className="h-5 w-5" />}
-          accent="bg-emerald-50 text-emerald-600"
+          accent="bg-accent-soft text-accent-deep"
         />
         <OverviewCard
           title="Aktivní třídy"
           value={loading ? "…" : String(data?.activeClassesThisWeek ?? 0)}
           delta="tento týden"
           icon={<LayoutGrid className="h-5 w-5" />}
-          accent="bg-amber-50 text-amber-600"
+          accent="bg-streak/10 text-streak"
         />
       </div>
 
@@ -406,10 +406,19 @@ export function DirectorCommandCenter(): React.JSX.Element {
         <StudentRiskList students={data?.atRiskStudents ?? []} />
       )}
 
+      {/* Proč vedení nevidí parťáky — záměrné designové rozhodnutí (viz design reference) */}
+      <div className="rounded-xl border border-line border-l-4 border-l-xp bg-canvas-alt px-5 py-4">
+        <p className="mb-1 text-sm font-bold text-ink">Proč tu nevidíte parťáky žáků?</p>
+        <p className="text-sm leading-relaxed text-ink-muted">
+          Motivační společník je viditelný pouze žákovi. Kdyby se stal metrikou pro vedení,
+          ztratil by svou hodnotu bezpečného prostoru — žáci by ho začali vnímat jako další známku.
+        </p>
+      </div>
+
       {/* Empty state — no data at all */}
       {!loading && !error && data?.classes.length === 0 && data?.teachers.length === 0 && (
-        <div className="rounded-xl border border-dashed border-slate-200 py-16 text-center">
-          <p className="text-sm text-slate-400">
+        <div className="rounded-xl border border-dashed border-line-strong py-16 text-center">
+          <p className="text-sm text-ink-dim">
             V aktuálním školním roce zatím neproběhla žádná aktivita.
           </p>
         </div>
