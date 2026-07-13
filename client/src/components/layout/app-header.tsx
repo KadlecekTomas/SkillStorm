@@ -22,8 +22,8 @@ export const AppHeader = (): React.JSX.Element => {
   );
 
   return (
-    <header className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-100 bg-white px-5 py-3 shadow-sm">
-      <h1 className="text-lg font-semibold text-slate-900">
+    <header className="flex flex-wrap items-center justify-between gap-3">
+      <h1 className="text-lg font-bold text-ink">
         {activeItem?.label ?? "Přehled"}
       </h1>
       <div className="flex items-center gap-2">

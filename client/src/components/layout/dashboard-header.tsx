@@ -1,6 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
+import { PartakEmblem } from "@/components/partak";
 import {
   Select,
   SelectContent,
@@ -51,9 +53,13 @@ export function DashboardHeader(): React.JSX.Element {
     (role === "TEACHER" || role === "DIRECTOR" || role === "OWNER");
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-dashed border-slate-200 bg-white/70 px-6 py-4">
-      <div className="flex flex-wrap items-baseline gap-4">
-        <p className="text-lg font-semibold text-slate-900">{title}</p>
+    <div className="flex flex-wrap items-center justify-between gap-4 border-b border-line pb-4">
+      <div className="flex flex-wrap items-center gap-4">
+        <Link href="/app" className="flex items-center gap-2 text-ink md:hidden" aria-label="SkillStorm — přehled">
+          <PartakEmblem size={26} />
+          <span className="text-base font-extrabold tracking-[-.01em]">SkillStorm</span>
+        </Link>
+        <p className="text-lg font-semibold text-ink-muted">{title}</p>
         {showBetaBadge && (
           <span
             className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800"
@@ -88,7 +94,7 @@ export function DashboardHeader(): React.JSX.Element {
           </Select>
         )}
         {role && (
-          <Badge variant="success" className="capitalize">
+          <Badge variant="secondary" className="capitalize">
             {role.toLowerCase()}
           </Badge>
         )}
