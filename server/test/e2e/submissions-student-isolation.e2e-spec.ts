@@ -372,7 +372,8 @@ describe('Submissions student isolation (e2e)', () => {
       .post('/submissions')
       .set('Authorization', `Bearer ${studentAToken}`)
       .send({ assignmentId: assignmentB.id })
-      .expect(403);
+      // cross-tenant assignment is masked as 404 (no existence oracle)
+      .expect(404);
 
     await prisma.assignment.deleteMany({ where: { id: assignmentB.id } }).catch(() => {});
     await prisma.classSection.deleteMany({ where: { id: classSectionB.id } }).catch(() => {});

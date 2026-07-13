@@ -77,18 +77,39 @@ describe('Student GET /tests visibility (e2e)', () => {
       organizationId: orgId,
     });
 
-    // 2. Create current academic year
-    const year = await prisma.academicYear.create({
-      data: {
-        orgId,
-        label: `STV_${Date.now()}`,
-        startsAt: new Date('2024-09-01'),
-        endsAt: new Date('2025-08-31'),
-        isCurrent: true,
-      },
+    // 2. Current academic year: the org bootstrap already created one
+    // (single-current partial index forbids a second) — reuse it and make
+    // sure its dates cover "now" (expired-year gate 409s otherwise).
+    const existingYear = await prisma.academicYear.findFirst({
+      where: { orgId, isCurrent: true },
       select: { id: true },
     });
+    const yearDates = {
+      startsAt: new Date('2025-09-01'),
+      endsAt: new Date('2027-08-31'),
+    };
+    const year = existingYear
+      ? await prisma.academicYear.update({
+          where: { id: existingYear.id },
+          data: yearDates,
+          select: { id: true },
+        })
+      : await prisma.academicYear.create({
+          data: {
+            orgId,
+            label: `STV_${Date.now()}`,
+            ...yearDates,
+            isCurrent: true,
+          },
+          select: { id: true },
+        });
     academicYearId = year.id;
+
+    // fresh orgs are PENDING → readiness guards 409 every year-scoped op
+    await prisma.organization.update({
+      where: { id: orgId },
+      data: { status: 'ACTIVE' },
+    });
 
     // 3. Create class section
     const cls = await prisma.classSection.create({
@@ -125,6 +146,8 @@ describe('Student GET /tests visibility (e2e)', () => {
         title: 'Student Visibility E2E Test',
         creatorId: teacherMembershipId,
         status: $Enums.PublishStatus.PUBLISHED,
+        // student visibility filters on the active academic year
+        academicYearId,
       },
       select: { id: true },
     });

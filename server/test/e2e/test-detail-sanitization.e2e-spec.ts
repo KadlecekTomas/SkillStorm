@@ -160,6 +160,8 @@ describe('Tests detail sanitization (e2e)', () => {
         organizationId: orgId,
         creatorId: director.membership.id,
         status: PublishStatus.PUBLISHED,
+        // student visibility filters on the active academic year
+        academicYearId: year!.id,
       },
       select: { id: true },
     });
@@ -270,7 +272,8 @@ describe('Tests detail sanitization (e2e)', () => {
     expect(directorPayload.questions.length).toBeGreaterThan(0);
     expect(directorPayload.questions[0]).toHaveProperty('correctAnswer');
     expect(directorPayload.questions[0]).toHaveProperty('correctAnswers');
-    expect(directorPayload.questions[0]).toHaveProperty('answers');
+    // raw `answers` relation is no longer projected — the snapshot-era
+    // teacher view exposes correctAnswer/correctAnswers only
   });
 
   it('student GET /tests does not list all organization tests', async () => {
