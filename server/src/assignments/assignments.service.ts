@@ -205,8 +205,6 @@ export class AssignmentsService {
         message: 'Test byl vytvořen pro jiný školní rok než je aktuální.',
       });
     }
-    await this.ensureTestAssignable(test.id);
-
     // 5) AcademicYear v rámci org a musí být aktivní
     if (!ctx.activeAcademicYearId) {
       throw new BadRequestException('Active academic year is not configured.');
@@ -236,6 +234,8 @@ export class AssignmentsService {
         where: { id: dto.classSectionId },
         select: { id: true, orgId: true, yearId: true, grade: true },
       });
+      // Tenancy before diagnostics: a foreign/unknown class must be an
+      // indistinguishable 404, never a report about the test's state.
       if (!cs || cs.orgId !== ctx.organizationId) {
         throw new NotFoundException('Class section nenalezena');
       }
@@ -343,6 +343,10 @@ export class AssignmentsService {
         );
       }
     }
+
+    // 9a) Test musí být připraven k přiřazení — až PO všech tenancy
+    // validacích výše, aby diagnostika neunikala přes cizí identifikátory.
+    await this.ensureTestAssignable(test.id);
 
     // 9) Vytvoření assignmentu (studentIds nejsou sloupec assignmentu)
     const {

@@ -1395,6 +1395,32 @@ export class TestsService {
     });
     if (!test) throw new NotFoundException('Test nenalezen');
 
+    // Tenancy FIRST: a cross-org caller must get an indistinguishable 404.
+    // The publish/assignability checks below return rich diagnostics
+    // (TEST_NOT_PUBLISHED, TEST_NOT_ASSIGNABLE + reasons) that would
+    // otherwise leak the existence and state of another org's test.
+    if (user.systemRole !== SystemRole.SUPERADMIN) {
+      if (!user.organizationId || user.organizationId !== test.organizationId) {
+        throw new NotFoundException('Test nenalezen');
+      }
+    }
+
+    const organizationId = test.organizationId;
+
+    if (dto.organizationId && dto.organizationId !== organizationId) {
+      throw new ForbiddenException('Invalid org scope for test assignment');
+    }
+
+    // Class-section tenancy before state checks: a foreign class must be an
+    // indistinguishable 404, never a diagnostic about the test's state.
+    const classSection = await this.prisma.classSection.findUnique({
+      where: { id: dto.classSectionId },
+      select: { id: true, orgId: true, yearId: true, grade: true },
+    });
+    if (!classSection || classSection.orgId !== organizationId) {
+      throw new NotFoundException('Class section nenalezena');
+    }
+
     if (test.status !== PublishStatus.PUBLISHED) {
       throw new BadRequestException({
         code: 'TEST_NOT_PUBLISHED',
@@ -1411,26 +1437,6 @@ export class TestsService {
         `issues=[${report.issues.map((i) => i.reason).join(',')}]`,
     );
     this.throwIfNotAssignable(report);
-
-    if (user.systemRole !== SystemRole.SUPERADMIN) {
-      if (!user.organizationId || user.organizationId !== test.organizationId) {
-        throw new NotFoundException('Test nenalezen');
-      }
-    }
-
-    const organizationId = test.organizationId;
-
-    if (dto.organizationId && dto.organizationId !== organizationId) {
-      throw new ForbiddenException('Invalid org scope for test assignment');
-    }
-
-    const classSection = await this.prisma.classSection.findUnique({
-      where: { id: dto.classSectionId },
-      select: { id: true, orgId: true, yearId: true, grade: true },
-    });
-    if (!classSection || classSection.orgId !== organizationId) {
-      throw new NotFoundException('Class section nenalezena');
-    }
 
     if (test.academicYearId && test.academicYearId !== classSection.yearId) {
       throw new BadRequestException({
