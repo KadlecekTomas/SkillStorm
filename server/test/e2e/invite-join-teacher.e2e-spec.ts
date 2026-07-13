@@ -5,6 +5,7 @@ import * as cookieParser from 'cookie-parser';
 import { AppModule } from '../../src/app.module';
 import { authAs } from '../helpers';
 import { InvitationType, OrganizationRole } from '@prisma/client';
+import { PrismaService } from '@/prisma/prisma.service';
 import { RegisterMode } from '@/auth/dto/register.dto';
 
 function uniqueEmail(prefix: string) {
@@ -35,6 +36,13 @@ describe('Invite/join teacher flow (e2e)', () => {
     const owner = await authAs(app, OrganizationRole.OWNER, {
       mode: RegisterMode.CREATE_ORG,
     });
+    // fresh orgs are PENDING → readiness guards 409 invite operations
+    await app
+      .get(PrismaService)
+      .organization.update({
+        where: { id: owner.organization.id },
+        data: { status: 'ACTIVE' },
+      });
 
     const teacherEmail = uniqueEmail('invite.teacher');
     const teacherPassword = 'Password123!';

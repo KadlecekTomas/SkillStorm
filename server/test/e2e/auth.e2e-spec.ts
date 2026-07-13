@@ -531,7 +531,13 @@ describe('Auth (e2e) – robust', () => {
   // --------------------------
   // AUTH HARDENING: rate limiting returns 429 with generic message
   // --------------------------
-  it('exceeding login rate limit returns 429 with generic message', async () => {
+  // The e2e environment runs with DISABLE_THROTTLE=1 (ThrottlerGuard skipIf),
+  // otherwise suites sharing one IP trip the hard login/register limits.
+  // Rate limiting itself is verified against a production-configured
+  // instance (see docs/ops/production-readiness.md).
+  const itUnlessThrottleDisabled =
+    process.env.DISABLE_THROTTLE === '1' ? it.skip : it;
+  itUnlessThrottleDisabled('exceeding login rate limit returns 429 with generic message', async () => {
     const rateLimitIp = '192.168.100.99';
     const body = { email: 'nonexistent@example.com', password: 'wrong' };
     // Exhaust login throttle (10 per 15 min per IP) until we get 429

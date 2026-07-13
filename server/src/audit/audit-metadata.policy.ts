@@ -24,6 +24,11 @@ export const AUDIT_METADATA_ALLOWLIST = new Set<string>([
   'counts',
   'result',
 
+  // registration audit trail (enum / internal id — no PII)
+  'mode',
+  'onboardingState',
+  'inviteId',
+
   // HTTP request context (PlatformMutationAuditInterceptor)
   // Note: 'body' is intentionally excluded — real values are PII risk.
   // The sanitizer transforms body → { bodyKeys, bodySize, bodyHasNested }.

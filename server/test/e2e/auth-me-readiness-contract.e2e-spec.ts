@@ -56,13 +56,9 @@ describe('GET /auth/me – organization readiness contract (e2e)', () => {
       mode: RegisterMode.CREATE_ORG,
     });
 
-    const createOrgRes = await request(app.getHttpServer())
-      .post('/organizations')
-      .set('Authorization', `Bearer ${auth.accessToken}`)
-      .send({ name: `Readiness Contract Org ${Date.now()}`, type: OrganizationType.SCHOOL })
-      .expect(201);
-
-    const orgId = unwrap(createOrgRes)?.id ?? createOrgRes.body?.id;
+    // authAs already provisioned this user's only organization
+    // (a second org per user is 409 by contract)
+    const orgId = auth.organization?.id as string;
     expect(orgId).toBeTruthy();
 
     const useOrgRes = await request(app.getHttpServer())
@@ -127,14 +123,25 @@ describe('GET /auth/me – organization readiness contract (e2e)', () => {
   });
 
   it('organization has no readiness fields when user has no org context', async () => {
-    const auth = await authAs(app, OrganizationRole.STUDENT, {
-      seed: `no_org_${Date.now()}`,
-      mode: RegisterMode.CREATE_ORG,
-    });
+    // A bare CREATE_ORG registration has no organization yet (onboarding
+    // pending) — authAs would provision one, so register directly.
+    const ts = Date.now();
+    const registerRes = await request(app.getHttpServer())
+      .post('/auth/register')
+      .send({
+        name: 'No Org User',
+        email: `no_org_${ts}@example.com`,
+        username: `no_org_${ts}`,
+        password: 'Password123!',
+        mode: RegisterMode.CREATE_ORG,
+      })
+      .expect(201);
+    const token = (unwrap(registerRes) ?? registerRes.body)?.sessionToken;
+    expect(token).toBeTruthy();
 
     const meRes = await request(app.getHttpServer())
       .get('/auth/me')
-      .set('Authorization', `Bearer ${auth.accessToken}`)
+      .set('Authorization', `Bearer ${token}`)
       .expect(200);
 
     const data = unwrap(meRes) ?? meRes.body;

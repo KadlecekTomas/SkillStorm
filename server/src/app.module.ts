@@ -73,17 +73,23 @@ import { ImportsModule } from './imports/imports.module';
         return { ttl }; // fallback in‑memory
       },
     }),
-    ThrottlerModule.forRoot([
-      {
-        ttl: process.env.DISABLE_THROTTLE === '1' ? 1 : 60,
-        limit:
-          process.env.DISABLE_THROTTLE === '1'
-            ? 10000
-            : process.env.DEMO_MODE === '1' || process.env.DEMO_MODE === 'true'
-              ? 1000
-              : 100,
-      },
-    ]),
+    ThrottlerModule.forRoot({
+      // Route-level @Throttle() overrides the default limits, so the test
+      // toggle must disable the guard itself — otherwise e2e suites hit the
+      // hard login/register limits (tests share one IP: no trust proxy).
+      skipIf: () => process.env.DISABLE_THROTTLE === '1',
+      throttlers: [
+        {
+          ttl: process.env.DISABLE_THROTTLE === '1' ? 1 : 60,
+          limit:
+            process.env.DISABLE_THROTTLE === '1'
+              ? 10000
+              : process.env.DEMO_MODE === '1' || process.env.DEMO_MODE === 'true'
+                ? 1000
+                : 100,
+        },
+      ],
+    }),
     PrismaModule,
     AuthModule,
     TeachersModule,

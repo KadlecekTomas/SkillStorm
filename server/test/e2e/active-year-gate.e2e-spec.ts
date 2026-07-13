@@ -37,6 +37,11 @@ describe('Active academic year gate (e2e)', () => {
     await prisma.$connect();
 
     const auth = await authAs(app, OrganizationRole.DIRECTOR, { seed: 'gate_dir' });
+    // must be ACTIVE — otherwise ORG_PENDING masks the year-gate under test
+    await prisma.organization.update({
+      where: { id: auth.organization.id },
+      data: { status: 'ACTIVE' },
+    });
     director = { token: auth.accessToken, orgId: auth.organization.id };
 
     const studentUser = await prisma.user.create({
@@ -58,6 +63,12 @@ describe('Active academic year gate (e2e)', () => {
     });
     studentMembershipId = membership.id;
 
+    // the org bootstrap created a current year — the gate under test needs
+    // an org with NO current year at all
+    await prisma.academicYear.updateMany({
+      where: { orgId: director.orgId },
+      data: { isCurrent: false },
+    });
     const year = await prisma.academicYear.create({
       data: {
         orgId: director.orgId,
