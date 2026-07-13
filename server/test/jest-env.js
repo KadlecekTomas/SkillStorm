@@ -1,33 +1,29 @@
 /* eslint-disable @typescript-eslint/no-var-requires */
 // CommonJS, ne ESM!
-const path = require('path');
-const fs = require('fs');
-const dotenv = require('dotenv');
+const { resolveTestDatabaseUrl } = require('./resolve-test-db-url');
 
-// Load .env.test if present; otherwise fall back to the tracked
-// .env.test.example so a fresh clone can run the suites without manual setup.
-const dotenvPath = path.resolve(__dirname, '..', '.env.test');
-const dotenvExamplePath = path.resolve(__dirname, '..', '.env.test.example');
-if (fs.existsSync(dotenvPath)) {
-  dotenv.config({ path: dotenvPath });
-} else if (fs.existsSync(dotenvExamplePath)) {
-  dotenv.config({ path: dotenvExamplePath });
+// The test database is configured EXCLUSIVELY via DATABASE_URL_TEST
+// (process env → .env.test → .env.test.example). Any inherited DATABASE_URL
+// (shell export, dev server env, @prisma/client auto-loading server/.env) is
+// discarded so a dev/prod URL can never leak into the destructive test
+// setup (`prisma migrate reset`, `DROP SCHEMA`). This is a hard rule with
+// no bypass — see server/scripts/db-safety.js.
+delete process.env.DATABASE_URL;
+
+const testUrl = resolveTestDatabaseUrl();
+if (!testUrl) {
+  throw new Error(
+    'DATABASE_URL_TEST není nastavená — testy odmítám spustit. ' +
+      'Nastav ji v server/.env.test (viz server/.env.test.example); ' +
+      'musí mířit na databázi, jejíž název končí na "_test".',
+  );
 }
 
-// Pokud chybí schema=, vytvoř izolované schema pro každý běh testu
-if (process.env.DATABASE_URL && !process.env.DATABASE_URL.includes('schema=')) {
-  const url = new URL(process.env.DATABASE_URL);
-  const schema = `e2e_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
-  url.searchParams.set('schema', schema);
-  process.env.DATABASE_URL = url.toString();
-}
+// Prisma and the app under test read DATABASE_URL; from here on it is
+// guaranteed to be the guarded test URL.
+process.env.DATABASE_URL = testUrl;
 
-// NEPŘIDÁVEJ ?schema=...  – nech tak, jak je v .env.test
-if (!process.env.DATABASE_URL) {
-  throw new Error('DATABASE_URL není nastavená (načítej z .env.test).');
-}
-
-// Bezpečné test flagem
+// Bezpečné test flagy
 process.env.NODE_ENV = 'test';
 process.env.DISABLE_STATS_CACHE = process.env.DISABLE_STATS_CACHE || '1';
 process.env.DISABLE_CSRF = process.env.DISABLE_CSRF || '1';

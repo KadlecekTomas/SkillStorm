@@ -1,8 +1,14 @@
-import { PrismaClient } from '@prisma/client';
+/* eslint-disable @typescript-eslint/no-var-requires */
+const { resolveTestDatabaseUrl } = require('./resolve-test-db-url');
 
-export default async () => {
-  const src = process.env.DATABASE_URL || process.env.BASE_DATABASE_URL;
+module.exports = async () => {
+  // Resolve the test DB exclusively via DATABASE_URL_TEST. The ambient
+  // DATABASE_URL is never used here: this runs in Jest's MAIN process, where
+  // requiring @prisma/client auto-loads server/.env — trusting it would point
+  // the destructive cleanup at the dev database.
+  const src = resolveTestDatabaseUrl();
   if (!src) return;
+  const { PrismaClient } = require('@prisma/client');
   const base = src.replace(/(\?|&)schema=[^&]+/, '').replace(/[?&]$/, '');
   const prisma = new PrismaClient({ datasources: { db: { url: base } } });
   try {

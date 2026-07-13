@@ -15,4 +15,8 @@ module.exports = {
   setupFiles: ['<rootDir>/test/jest-env.js'],
   setupFilesAfterEnv: ['<rootDir>/test/jest-setup-after.js'],
   globalTeardown: '<rootDir>/test/global-teardown.js',
+  // Suites share one test database and setupDb drops/recreates the public
+  // schema per suite — parallel workers race on DROP/CREATE SCHEMA and on
+  // concurrent `prisma generate`. Single worker keeps runs deterministic.
+  maxWorkers: 1,
 };

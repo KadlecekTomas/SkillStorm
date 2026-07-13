@@ -1,7 +1,12 @@
 /* eslint-disable @typescript-eslint/no-var-requires */
+const { assertTestDatabaseUrl } = require('../scripts/db-safety');
+
 // E2E canonical DATABASE_URL: use URL parsing so pathname (DB name) is never corrupted; enforce connection_limit=2.
 const dbUrl = process.env.DATABASE_URL;
 if (dbUrl) {
+  // Guard: this file drops schemas and runs `prisma migrate reset` — the
+  // target database name MUST end with "_test". No bypass exists.
+  assertTestDatabaseUrl(dbUrl, 'jest-setup-after');
   const url = new URL(dbUrl);
   const schema = url.searchParams.get('schema');
   if (schema && schema !== 'public') {
@@ -48,6 +53,11 @@ const PG_ACTIVITY_WARN_THRESHOLD = 20;
 async function setupDb() {
   const dbUrl = process.env.DATABASE_URL;
   if (!dbUrl) throw new Error('DATABASE_URL není nastavená');
+
+  // Guard immediately before the destructive part (DROP SCHEMA + migrate
+  // reset). Re-asserted here in case something mutated DATABASE_URL after
+  // module load.
+  assertTestDatabaseUrl(dbUrl, 'jest-setup-after setupDb');
 
   const url = new URL(dbUrl);
   const schema = url.searchParams.get('schema') ?? 'public';
