@@ -10,7 +10,8 @@ import {
   OrganizationType,
   SubmissionStatus,
 } from '@prisma/client';
-import { login, register } from 'test/helpers';
+import { login, register, useOrg } from 'test/helpers';
+import { bootstrapOrg } from 'test/e2e/helpers/bootstrap-org';
 
 describe('Stats (e2e)', () => {
   let app: INestApplication;
@@ -120,6 +121,7 @@ describe('Stats (e2e)', () => {
       data: {
         name: 'Stats Org A',
         type: OrganizationType.SCHOOL,
+        status: 'ACTIVE',
         memberships: {
           create: { userId: directorA.id, role: OrganizationRole.DIRECTOR },
         },
@@ -127,7 +129,7 @@ describe('Stats (e2e)', () => {
       select: { id: true, name: true },
     });
     // obnov claims s orgId
-    directorA.token = await login(app, directorA.login);
+    directorA.token = await login(app, { ...directorA.login, organizationId: orgA.id });
 
     await prisma.membership.create({
       data: {
@@ -136,11 +138,18 @@ describe('Stats (e2e)', () => {
         role: OrganizationRole.DIRECTOR,
       },
     });
+    // unscoped login lands in the superadmin's own PENDING org → 409;
+    // scope the token to orgA (ACTIVE, structure-ready)
+    superUser.token = await login(app, {
+      ...superUser.login,
+      organizationId: orgA.id,
+    });
 
     orgB = await prisma.organization.create({
       data: {
         name: 'Stats Org B',
         type: OrganizationType.SCHOOL,
+        status: 'ACTIVE',
       },
       select: { id: true, name: true },
     });
@@ -174,9 +183,9 @@ describe('Stats (e2e)', () => {
     });
 
     // Přiloguj učitele a studenty znovu, aby měli membershipId/organizationId v JWT (podle tvé auth implementace)
-    teacherA1.token = await login(app, teacherA1.login);
-    studentA1.token = await login(app, studentA1.login);
-    studentB1.token = await login(app, studentB1.login);
+    teacherA1.token = await login(app, { ...teacherA1.login, organizationId: orgA.id });
+    studentA1.token = await login(app, { ...studentA1.login, organizationId: orgA.id });
+    studentB1.token = await login(app, { ...studentB1.login, organizationId: orgB.id });
 
     // --- TESTS (orgA) ---
     tA1 = await prisma.test.create({
@@ -204,13 +213,45 @@ describe('Stats (e2e)', () => {
       data: {
         orgId: orgA.id,
         label: `Stats ${Date.now()}`,
-        startsAt: new Date('2024-09-01'),
-        endsAt: new Date('2025-08-31'),
+        // must cover "now" — the expired-year gate 409s year-scoped endpoints
+        startsAt: new Date('2025-09-01'),
+        endsAt: new Date('2027-08-31'),
         isCurrent: true,
       },
       select: { id: true },
     });
     academicYearId = year.id;
+
+    // Execution operations need R2_STRUCTURE_READY: at least one class
+    // section in the current year (and orgB mirrors it for its student).
+    await prisma.classSection.create({
+      data: {
+        orgId: orgA.id,
+        yearId: academicYearId,
+        grade: 'GRADE_7',
+        section: 'S',
+        label: '7.S',
+      },
+    });
+    const yearB = await prisma.academicYear.create({
+      data: {
+        orgId: orgB.id,
+        label: `StatsB ${Date.now()}`,
+        startsAt: new Date('2025-09-01'),
+        endsAt: new Date('2027-08-31'),
+        isCurrent: true,
+      },
+      select: { id: true },
+    });
+    await prisma.classSection.create({
+      data: {
+        orgId: orgB.id,
+        yearId: yearB.id,
+        grade: 'GRADE_7',
+        section: 'S',
+        label: '7.S',
+      },
+    });
 
     // Assignment pro tA1 (STUDENTS)
     aA1 = await prisma.assignment.create({
@@ -250,6 +291,7 @@ describe('Stats (e2e)', () => {
     await prisma.submission.createMany({
       data: [
         {
+          organizationId: orgA.id,
           assignmentId: aA1.id,
           studentId: mStudentA1.id,
           testId: tA1.id,
@@ -259,6 +301,7 @@ describe('Stats (e2e)', () => {
           attemptNo: 1,
         },
         {
+          organizationId: orgA.id,
           assignmentId: aA1.id,
           studentId: mStudentA1.id,
           testId: tA1.id,
@@ -268,6 +311,7 @@ describe('Stats (e2e)', () => {
           attemptNo: 2,
         },
         {
+          organizationId: orgA.id,
           assignmentId: aA1.id,
           studentId: mStudentA1.id,
           testId: tA1.id,
@@ -277,6 +321,7 @@ describe('Stats (e2e)', () => {
           attemptNo: 3,
         },
         {
+          organizationId: orgA.id,
           assignmentId: aA1.id,
           studentId: mStudentA1.id,
           testId: tA1.id,
@@ -289,6 +334,7 @@ describe('Stats (e2e)', () => {
     });
     // tA2: 8x APPROVED (0.80..0.87), 1x REJECTED (0.3)
     const approvedSubs = Array.from({ length: 8 }).map((_, i) => ({
+      organizationId: orgA.id,
       studentId: mStudentA1.id,
       testId: tA2.id,
       assignmentId: aA2.id,
@@ -300,6 +346,7 @@ describe('Stats (e2e)', () => {
     await prisma.submission.createMany({ data: approvedSubs });
     await prisma.submission.create({
       data: {
+        organizationId: orgA.id,
         studentId: mStudentA1.id,
         testId: tA2.id,
         assignmentId: aA2.id,
@@ -547,12 +594,7 @@ describe('Stats (e2e)', () => {
   });
 
   it('GET /stats/overview → SUPERADMIN je org-scoped podle tokenu [200]', async () => {
-    const useOrg = await request(app.getHttpServer())
-      .post('/auth/use-org')
-      .set('Authorization', `Bearer ${superUser.token}`)
-      .send({ orgId: orgA.id })
-      .expect(201);
-    const scopedToken = useOrg.body.sessionToken;
+    const scopedToken = await useOrg(app, superUser.token, orgA.id);
 
     const res = await request(app.getHttpServer())
       .get('/stats/overview')
@@ -569,10 +611,20 @@ describe('Stats (e2e)', () => {
 
   it('GET /dashboards/student → nově vytvořený user v vlastní org [200] a bez dat', async () => {
     const rLonely = await register(app, 'stats_lonely');
+    // a fresh org is PENDING and structure-less → execution ops 409/412;
+    // bring it to readiness (ACTIVE + current year + one class section)
+    await prisma.organization.update({
+      where: { id: rLonely.organization.id },
+      data: { status: 'ACTIVE' },
+    });
+    await bootstrapOrg(prisma, { orgId: rLonely.organization.id });
     const lonely = {
       id: rLonely.user.id,
       login: rLonely.login,
-      token: rLonely.accessToken,
+      token: await login(app, {
+        ...rLonely.login,
+        organizationId: rLonely.organization.id,
+      }),
     };
 
     const res = await request(app.getHttpServer())
@@ -622,13 +674,19 @@ describe('Stats (e2e)', () => {
       data: {
         name: 'Stats Org EMPTY',
         type: OrganizationType.SCHOOL,
+        status: 'ACTIVE',
         memberships: {
           create: { userId: dirEmpty.id, role: OrganizationRole.DIRECTOR },
         },
       },
       select: { id: true },
     });
-    dirEmpty.token = await login(app, dirEmpty.login);
+    // readiness: current year + one class section (adds no tests/submissions)
+    await bootstrapOrg(prisma, { orgId: emptyOrg.id });
+    dirEmpty.token = await login(app, {
+      ...dirEmpty.login,
+      organizationId: emptyOrg.id,
+    });
 
     const res = await request(app.getHttpServer())
       .get('/stats/overview')
@@ -658,6 +716,7 @@ describe('Stats (e2e)', () => {
     // přidej více submissionů pro studentA1/tA1
     await prisma.submission.createMany({
       data: Array.from({ length: 6 }).map((_, i) => ({
+        organizationId: orgA.id,
         assignmentId: aA1.id,
         studentId: mStudentA1.id,
         testId: tA1.id,
@@ -702,6 +761,7 @@ describe('Stats (e2e)', () => {
     // přidej jednu APPROVED
     await prisma.submission.create({
       data: {
+        organizationId: orgA.id,
         studentId: mStudentA1.id,
         testId: tA2.id,
         assignmentId: aA2.id,
