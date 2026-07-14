@@ -29,6 +29,7 @@
     "seed:demo:profile": "node prisma/demo-seed.js",
     "seed:full": "ts-node prisma/seed/full-walkthrough-seed.ts",
     "seed:defense-screenshots": "ts-node prisma/seed/defense-screenshot-seed.ts",
+    "seed:live-sessions": "ts-node prisma/seed/live-sessions.seed.ts",
     "seed:production": "ts-node prisma/seed/full-production-seed.ts",
     "seed:prod:a": "ts-node prisma/seed/full-production-seed.ts --variant=A",
     "seed:prod:b": "ts-node prisma/seed/full-production-seed.ts --variant=B",
