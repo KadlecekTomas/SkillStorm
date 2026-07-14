@@ -123,7 +123,9 @@ export async function resetPolicyData(prisma: PrismaClient) {
     prisma.membership.deleteMany(),
     prisma.subscription.deleteMany(),
     prisma.subscriptionPlan.deleteMany(),
-    prisma.auditLog.deleteMany(),
+    // AuditLog má runtime immutability middleware (deleteMany je blokované);
+    // úklid testovací DB jde raw SQL mimo Prisma client middleware.
+    prisma.$executeRawUnsafe('DELETE FROM audit_logs'),
     prisma.refreshToken.deleteMany(),
     prisma.revokedToken.deleteMany(),
     prisma.organization.deleteMany(),
@@ -335,7 +337,6 @@ export async function seedPolicyData(
 
   const subject = await prisma.subject.create({
     data: {
-      organizationId: orgA.id,
       catalogSubjectId: catalogSubject.id,
       name: 'Mathematics',
     },

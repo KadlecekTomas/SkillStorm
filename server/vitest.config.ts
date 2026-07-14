@@ -40,10 +40,17 @@ export default defineConfig({
     environment: 'node',
     threads: false,
     isolate: false,
+    // main.ts default-imports CJS packages (cookie-parser, compression, …);
+    // without interop the SSR transform passes the namespace object where the
+    // code expects the callable default export.
+    deps: { interopDefault: true },
   },
   resolve: {
     alias: {
+      // Keep in sync with tsconfig paths: the source tree imports via both
+      // `src/...` and `@/...` (the latter arrived with production hardening).
       src: resolve(rootDir, 'src'),
+      '@': resolve(rootDir, 'src'),
     },
   },
   plugins: [nestTsTransformPlugin()],

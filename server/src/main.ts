@@ -16,7 +16,7 @@ import {
   HttpStatus,
   ValidationPipe,
 } from '@nestjs/common';
-import * as cookieParser from 'cookie-parser';
+import * as cookieParserNs from 'cookie-parser';
 import { AppModule } from './app.module';
 import { PrismaService } from './prisma/prisma.service';
 import { Prisma } from '@prisma/client';
@@ -25,6 +25,12 @@ import { setupSwagger } from './swagger.config';
 import { CSRF_TOKEN_COOKIE } from './auth/token-cookies';
 import { randomUUID } from 'crypto';
 import { scrubSentryEvent, type SentryEventLike } from './infra/sentry-scrub';
+
+// CJS/ESM interop: v CommonJS buildu je volatelný export samotný namespace;
+// pod vitest module runnerem (policy suite) sedí na `.default`.
+const cookieParser =
+  (cookieParserNs as unknown as { default?: typeof cookieParserNs }).default ??
+  cookieParserNs;
 
 /** Request with correlation id set by middleware */
 type RequestWithId = { requestId?: string; headers: any; [k: string]: any };
