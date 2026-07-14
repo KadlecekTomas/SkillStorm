@@ -456,7 +456,7 @@ export function LiveBoard({ sessionId }: LiveBoardProps): JSX.Element {
               onClick={() => void handleFinish()}
               className="rounded-2xl bg-accent px-10 py-4 text-xl font-extrabold text-white shadow-tactile [--tactile-shadow:rgb(var(--accent-deep))] transition-all active:translate-y-[2px] active:shadow-tactile-pressed disabled:opacity-60"
             >
-              Ukončit bleskovku 🎉
+              {senior ? "Vyhodnotit" : "Ukončit bleskovku 🎉"}
             </button>
           ) : null}
         </footer>
@@ -530,8 +530,9 @@ function FinishScreen({
         >
           {testTitle}
         </p>
+        {/* Senior: žádné konfety, věcný quiz-night tón */}
         <h1 className="text-[clamp(2.5rem,6vw,5rem)] font-extrabold">
-          Hotovo! 🎉
+          {senior ? "Konec hry" : "Hotovo! 🎉"}
         </h1>
         <p className="text-2xl font-bold">
           Odehráno kol: {finish.playedRounds}
