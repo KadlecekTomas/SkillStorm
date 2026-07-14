@@ -96,41 +96,47 @@ export interface PolicySeedContext {
 const PASSWORD_BASE = 'PolicyUser#2024';
 
 export async function resetPolicyData(prisma: PrismaClient) {
-  await prisma.$transaction([
-    prisma.assignmentStudent.deleteMany(),
-    prisma.response.deleteMany(),
-    prisma.submission.deleteMany(),
-    prisma.assignment.deleteMany(),
-    prisma.testAssignment.deleteMany(),
-    prisma.option.deleteMany(),
-    prisma.answer.deleteMany(),
-    prisma.question.deleteMany(),
-    prisma.test.deleteMany(),
-    prisma.materialAssignment.deleteMany(),
-    prisma.learningMaterial.deleteMany(),
-    prisma.topicLevel.deleteMany(),
-    prisma.subjectLevel.deleteMany(),
-    prisma.subject.deleteMany(),
-    prisma.catalogTopic.deleteMany(),
-    prisma.catalogSubject.deleteMany(),
-    prisma.studentClassroom.deleteMany(),
-    prisma.enrollment.deleteMany(),
-    prisma.student.deleteMany(),
-    prisma.teacher.deleteMany(),
-    prisma.rolePermission.deleteMany(),
-    prisma.userPermission.deleteMany(),
-    prisma.permission.deleteMany(),
-    prisma.membership.deleteMany(),
-    prisma.subscription.deleteMany(),
-    prisma.subscriptionPlan.deleteMany(),
+  // Testovací wipe: submission-immutability trigger (SUBMISSION_LOCKED) by
+  // blokoval mazání responses schválených odevzdání; replica režim vypne
+  // triggery jen pro tuto transakci (běží výhradně proti testovací DB).
+  await prisma.$transaction(async (tx) => {
+    await tx.$executeRawUnsafe(
+      `SET LOCAL session_replication_role = 'replica'`,
+    );
+    await tx.assignmentStudent.deleteMany();
+    await tx.response.deleteMany();
+    await tx.submission.deleteMany();
+    await tx.assignment.deleteMany();
+    await tx.testAssignment.deleteMany();
+    await tx.option.deleteMany();
+    await tx.answer.deleteMany();
+    await tx.question.deleteMany();
+    await tx.test.deleteMany();
+    await tx.materialAssignment.deleteMany();
+    await tx.learningMaterial.deleteMany();
+    await tx.topicLevel.deleteMany();
+    await tx.subjectLevel.deleteMany();
+    await tx.subject.deleteMany();
+    await tx.catalogTopic.deleteMany();
+    await tx.catalogSubject.deleteMany();
+    await tx.studentClassroom.deleteMany();
+    await tx.enrollment.deleteMany();
+    await tx.student.deleteMany();
+    await tx.teacher.deleteMany();
+    await tx.rolePermission.deleteMany();
+    await tx.userPermission.deleteMany();
+    await tx.permission.deleteMany();
+    await tx.membership.deleteMany();
+    await tx.subscription.deleteMany();
+    await tx.subscriptionPlan.deleteMany();
     // AuditLog má runtime immutability middleware (deleteMany je blokované);
     // úklid testovací DB jde raw SQL mimo Prisma client middleware.
-    prisma.$executeRawUnsafe('DELETE FROM audit_logs'),
-    prisma.refreshToken.deleteMany(),
-    prisma.revokedToken.deleteMany(),
-    prisma.organization.deleteMany(),
-    prisma.user.deleteMany(),
-  ]);
+    await tx.$executeRawUnsafe('DELETE FROM audit_logs');
+    await tx.refreshToken.deleteMany();
+    await tx.revokedToken.deleteMany();
+    await tx.organization.deleteMany();
+    await tx.user.deleteMany();
+  });
 }
 
 async function createMember(

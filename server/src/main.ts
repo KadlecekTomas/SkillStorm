@@ -343,4 +343,11 @@ async function bootstrap() {
     await app.init();
   }
 }
-bootstrap();
+
+// Boot jen při přímém spuštění (node dist/main.js, nest start). Testové
+// suity importují createApp() a nesmí odpálit druhý bootstrap — pod vitest
+// ESM runnerem `require` neexistuje, v CJS buildu je require.main entry check.
+const isDirectRun = typeof require !== 'undefined' && require.main === module;
+if (isDirectRun) {
+  void bootstrap();
+}
