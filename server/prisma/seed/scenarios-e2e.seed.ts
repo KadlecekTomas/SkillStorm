@@ -343,6 +343,51 @@ async function main() {
     },
   });
 
+  // ── Bleskovka set: exactly 3 live-compatible questions (MC single/TF) ────
+  // The FITB in "Matematika 8.A" would be skipped by the live snapshot, so the
+  // live-session scenario gets its own 3-round set (finish appears after 3).
+  const testLive = await prisma.test.create({
+    data: {
+      organizationId: org.id,
+      title: 'Bleskovka scénář',
+      creatorId: teacherMember.membershipId,
+      status: 'PUBLISHED',
+      academicYearId: year.id,
+      subjectId: catalog.subjectId,
+      allowedGrades: [$Enums.SchoolGrade.GRADE_8],
+    },
+    select: { id: true },
+  });
+  await prisma.question.create({
+    data: {
+      testId: testLive.id,
+      text: 'Kolik je 9 × 8?',
+      type: 'MULTIPLE_CHOICE',
+      correctAnswer: '72',
+      order: 1,
+      options: { create: [{ text: '72' }, { text: '81' }, { text: '64' }, { text: '78' }] },
+    },
+  });
+  await prisma.question.create({
+    data: {
+      testId: testLive.id,
+      text: 'Je 15 dělitelné třemi?',
+      type: 'TRUE_FALSE',
+      correctAnswer: 'true',
+      order: 2,
+    },
+  });
+  await prisma.question.create({
+    data: {
+      testId: testLive.id,
+      text: 'Kolik je polovina z 90?',
+      type: 'MULTIPLE_CHOICE',
+      correctAnswer: '45',
+      order: 3,
+      options: { create: [{ text: '45' }, { text: '40' }, { text: '55' }] },
+    },
+  });
+
   // ── Ready-made assignment for 2.A (young mode): 2 MC (tiles) ─────────────
   const test2 = await prisma.test.create({
     data: {
