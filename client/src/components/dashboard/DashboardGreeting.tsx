@@ -29,18 +29,18 @@ function getTodayLabel(): string {
  */
 export function DashboardGreeting({ firstName, activeYearName, loading = false }: Props): React.JSX.Element {
   return (
-    <div className="sticky top-0 z-10 -mx-1 rounded-xl border border-slate-100 bg-white/95 px-6 py-4 shadow-sm backdrop-blur-sm">
+    <div className="sticky top-0 z-10 border-b border-line bg-canvas/95 px-1 py-4 backdrop-blur-sm">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <h2 className="text-2xl font-semibold text-slate-900">
+        <h2 className="text-3xl font-extrabold text-ink">
           {getGreeting()}, {loading ? "…" : firstName} 👋
         </h2>
-        <p className="text-sm text-slate-400">
+        <p className="text-sm text-ink-dim">
           {getTodayLabel()}
           {activeYearName && (
             <>
-              <span className="mx-2 text-slate-300">·</span>
+              <span className="mx-2 text-line-strong">·</span>
               školní rok{" "}
-              <span className="font-medium text-slate-600">{activeYearName}</span>
+              <span className="font-semibold text-ink-muted">{activeYearName}</span>
             </>
           )}
         </p>

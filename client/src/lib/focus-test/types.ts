@@ -38,6 +38,13 @@ export interface FocusTestSession {
     submittedAt: string | null;
   };
   responses: Array<{ questionId: string; givenText: string }>;
+  /**
+   * Presentation hint for the age-appropriate answering UI (viz config/answering-mode).
+   * Optional: starší payloady bez pole fungují dál (režim spadne na "old").
+   */
+  student?: {
+    grade: string | null;
+  };
 }
 
 /** Answers are kept as a single string per question (the student payload exposes no multi-select key). */

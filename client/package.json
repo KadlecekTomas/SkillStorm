@@ -17,7 +17,9 @@
     "test:rbac:client": "vitest run src/tests/rbac && playwright test tests/rbac/rbac-route.spec.ts",
     "test:fe-components": "vitest run tests/fe-policy/components",
     "test:fe-e2e": "playwright test tests/e2e/fe-policy",
-    "test:fe-policy": "node ./tests/fe-policy/reset-policy-score.mjs && npm run test:fe-components && npm run test:fe-e2e && vitest run tests/fe-policy/policy.summary.spec.ts"
+    "test:fe-policy": "node ./tests/fe-policy/reset-policy-score.mjs && npm run test:fe-components && npm run test:fe-e2e && vitest run tests/fe-policy/policy.summary.spec.ts",
+    "test:scenarios": "playwright test --config playwright.scenarios.config.ts",
+    "test:scenarios:ui": "playwright test --config playwright.scenarios.config.ts --ui"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",

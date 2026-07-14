@@ -23,23 +23,23 @@ export function PendingTasks({ pendingSubmissions }: Props): React.JSX.Element |
   if (pendingSubmissions === 0) return null;
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-amber-200 bg-amber-50 px-6 py-5">
+    <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-streak/40 bg-streak/10 px-6 py-5">
       <div className="flex items-start gap-4">
-        <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
+        <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-streak" />
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">
+          <p className="text-xs font-bold uppercase tracking-wide text-streak">
             Čeká na vyhodnocení
           </p>
-          <p className="mt-1 text-3xl font-semibold text-amber-900 tabular-nums">
+          <p className="mt-1 text-3xl font-extrabold text-ink tabular-nums">
             {pendingSubmissions}
           </p>
-          <p className="text-sm text-amber-700">{pluralSubmissions(pendingSubmissions)}</p>
+          <p className="text-sm text-ink-muted">{pluralSubmissions(pendingSubmissions)}</p>
         </div>
       </div>
       <button
         type="button"
         onClick={() => router.push("/app/results")}
-        className="shrink-0 rounded-md bg-amber-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-amber-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2"
+        className="shrink-0 rounded-2xl bg-streak px-5 py-2.5 text-sm font-bold text-white shadow-tactile transition-all duration-100 [--tactile-shadow:#c25e00] hover:brightness-105 focus:outline-none focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-xp active:translate-y-[2px] active:shadow-tactile-pressed"
       >
         Přejít na vyhodnocení →
       </button>

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { fetchWithAuth } from "@/lib/http/client";
+import { fetchWithAuth, HttpError } from "@/lib/http/client";
 import { useAuthStore, type OrganizationContext, type AuthPhase } from "@/store/use-auth-store";
 import { useAcademicYearStore } from "@/store/use-academic-year-store";
 import { useCurrentAcademicYearState } from "@/store/use-current-academic-year-state";
@@ -317,7 +317,15 @@ export const useAuth = (): UseAuthResult => {
         audit({ action: "LOGIN" });
         showToastOnce("Přihlášení proběhlo úspěšně! 🎉", { type: "success" });
       } catch (error) {
-        showToastOnce("Neplatné přihlašovací údaje ❌", { type: "error" });
+        // Rate limiting must read as such — not as "wrong credentials".
+        const status =
+          error instanceof HttpError ? error.status : undefined;
+        showToastOnce(
+          status === 429
+            ? "Příliš mnoho pokusů o přihlášení. Zkus to prosím za chvíli."
+            : "Neplatné přihlašovací údaje ❌",
+          { type: "error" },
+        );
         throw error;
       } finally {
         setLoading(false);

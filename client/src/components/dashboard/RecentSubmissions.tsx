@@ -30,9 +30,9 @@ function relativeTime(iso: string): string {
 }
 
 function scoreColor(score: number): string {
-  if (score < 50) return "text-red-600";
-  if (score < 70) return "text-amber-600";
-  return "text-green-600";
+  if (score < 50) return "text-danger";
+  if (score < 70) return "text-streak";
+  return "text-accent-deep";
 }
 
 export function RecentSubmissions({ items }: Props): React.JSX.Element {
@@ -40,16 +40,16 @@ export function RecentSubmissions({ items }: Props): React.JSX.Element {
   const visible = items.slice(0, 6);
 
   return (
-    <div className="rounded-xl border border-slate-100 bg-white shadow-sm">
+    <div className="rounded-xl border border-line bg-canvas-alt">
       {/* Section header */}
-      <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+      <div className="flex items-center justify-between border-b border-line px-6 py-4">
+        <h3 className="text-xs font-bold uppercase tracking-[.08em] text-ink-dim">
           Poslední odevzdání
         </h3>
         {items.length > 6 && (
           <button
             type="button"
-            className="text-xs text-slate-400 hover:text-slate-600"
+            className="text-xs font-semibold text-ink-dim hover:text-ink"
             onClick={() => router.push("/app/results")}
           >
             Zobrazit vše →
@@ -59,26 +59,26 @@ export function RecentSubmissions({ items }: Props): React.JSX.Element {
 
       {visible.length === 0 ? (
         <div className="flex flex-col items-center gap-2 py-10 text-center">
-          <ClipboardList className="h-8 w-8 text-slate-200" />
-          <p className="text-sm text-slate-400">Zatím žádné aktivity.</p>
+          <ClipboardList className="h-8 w-8 text-line-strong" />
+          <p className="text-sm text-ink-dim">Zatím žádné aktivity.</p>
         </div>
       ) : (
         <ul>
           {visible.map((item) => (
             <li
               key={item.id}
-              className="grid grid-cols-[1fr_auto] items-center gap-3 rounded-md px-6 py-3 hover:bg-gray-50"
+              className="grid grid-cols-[1fr_auto] items-center gap-3 rounded-lg px-6 py-3 transition-colors hover:bg-surface"
             >
               {/* Left: student + test */}
               <div className="min-w-0">
-                <p className="truncate text-sm text-slate-900">
-                  <span className="font-medium">
+                <p className="truncate text-sm text-ink">
+                  <span className="font-bold">
                     {item.studentName ?? "Anonymní žák"}
                   </span>
-                  <span className="mx-1.5 text-slate-300">·</span>
+                  <span className="mx-1.5 text-line-strong">·</span>
                   {item.testTitle}
                 </p>
-                <p className="mt-0.5 text-xs text-slate-400">
+                <p className="mt-0.5 text-xs text-ink-dim">
                   {relativeTime(item.submittedAt)}
                 </p>
               </div>
@@ -95,7 +95,7 @@ export function RecentSubmissions({ items }: Props): React.JSX.Element {
                     {Math.round(item.score)} %
                   </span>
                 ) : (
-                  <span className="text-xs text-slate-400">čeká na vyhodnocení</span>
+                  <span className="text-xs text-ink-dim">čeká na vyhodnocení</span>
                 )}
               </div>
             </li>

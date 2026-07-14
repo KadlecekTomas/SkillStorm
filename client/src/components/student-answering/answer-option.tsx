@@ -24,6 +24,14 @@ export interface AnswerOptionProps {
   variant?: AnsweringVariant;
   /** Practice feedback. Ignored in Focus Mode. */
   state?: AnswerOptionState;
+  /**
+   * Young-mode tile look: big centered tactile tile with an optional icon
+   * (design reference: young 2×2 grid). Presentation only — the radio overlay
+   * and selection semantics are identical to the default list look.
+   */
+  tile?: boolean;
+  /** Decorative emoji shown on tiles (young mode). */
+  tileIcon?: string;
 }
 
 export function AnswerOption({
@@ -36,6 +44,8 @@ export function AnswerOption({
   disabled = false,
   variant = "focus",
   state = "none",
+  tile = false,
+  tileIcon,
 }: AnswerOptionProps): JSX.Element {
   // Result styling is exclusive to Practice Mode and only after it is explicitly provided.
   const showResult = variant === "practice" && state !== "none";
@@ -46,19 +56,26 @@ export function AnswerOption({
       data-selected={selected}
       data-state={showResult ? state : undefined}
       className={cn(
-        "group relative flex w-full cursor-pointer items-center gap-3 rounded-2xl border px-4 py-3.5 text-left text-base transition-all duration-150 motion-reduce:transition-none",
-        "focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-emerald-500/70",
+        "group relative flex w-full cursor-pointer items-center gap-3 rounded-2xl border text-left transition-all duration-150 motion-reduce:transition-none",
+        "focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-accent/70",
         disabled && "cursor-not-allowed opacity-60",
+        tile
+          ? "flex-col justify-center gap-2 px-3 py-6 text-center text-xl font-extrabold shadow-tactile [--tactile-shadow:rgb(var(--line-strong))] active:translate-y-[2px] active:shadow-tactile-pressed"
+          : "px-4 py-3.5 text-base",
+        tile && selected && "[--tactile-shadow:rgb(var(--accent-deep))]",
         !showResult && selected
-          ? "border-emerald-500 bg-emerald-50/70 ring-1 ring-emerald-500"
+          ? "border-accent bg-accent-soft/70 ring-1 ring-accent"
           : !showResult &&
-              "border-slate-200 bg-white hover:border-emerald-400 hover:bg-slate-50",
+              cn(
+                "border-line bg-canvas hover:border-accent/60",
+                tile ? "border-2 border-line-strong" : "hover:bg-canvas-alt",
+              ),
         showResult &&
           state === "correct" &&
-          "border-emerald-500 bg-emerald-50 ring-1 ring-emerald-500",
+          "border-accent bg-accent-soft ring-1 ring-accent",
         showResult &&
           state === "incorrect" &&
-          "border-red-400 bg-red-50 ring-1 ring-red-400",
+          "border-danger bg-danger-soft ring-1 ring-danger",
       )}
     >
       {/*
@@ -76,13 +93,23 @@ export function AnswerOption({
         className="absolute inset-0 z-10 h-full w-full cursor-pointer rounded-2xl opacity-0 disabled:cursor-not-allowed"
       />
 
+      {tile && tileIcon && (
+        <span aria-hidden="true" className="text-3xl leading-none">
+          {tileIcon}
+        </span>
+      )}
+
       <span
         aria-hidden="true"
         className={cn(
           "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-xs font-semibold transition-colors motion-reduce:transition-none",
+          tile && "absolute right-2.5 top-2.5",
           selected
-            ? "border-emerald-500 bg-emerald-500 text-white"
-            : "border-slate-300 bg-white text-slate-400 group-hover:border-emerald-400",
+            ? "border-accent bg-accent text-white"
+            : cn(
+                "border-line-strong bg-canvas text-ink-dim group-hover:border-accent/60",
+                tile && "opacity-0",
+              ),
         )}
       >
         {selected ? (
@@ -99,11 +126,13 @@ export function AnswerOption({
             />
           </svg>
         ) : (
-          shortcut != null && shortcut <= 9 && <span>{shortcut}</span>
+          !tile && shortcut != null && shortcut <= 9 && <span>{shortcut}</span>
         )}
       </span>
 
-      <span className="font-medium text-slate-900">{label}</span>
+      <span className={cn("text-ink", tile ? "font-extrabold" : "font-medium")}>
+        {label}
+      </span>
     </label>
   );
 }

@@ -19,9 +19,9 @@ type Props = {
 
 function ScoreBar({ pct }: { pct: number }): React.JSX.Element {
   const fill =
-    pct < 50 ? "bg-red-500" : pct < 70 ? "bg-amber-400" : "bg-green-500";
+    pct < 50 ? "bg-danger" : pct < 70 ? "bg-streak" : "bg-accent";
   return (
-    <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
+    <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-surface">
       <div
         className={cn("h-full rounded-full", fill)}
         style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
@@ -31,9 +31,9 @@ function ScoreBar({ pct }: { pct: number }): React.JSX.Element {
 }
 
 function scoreTextColor(pct: number): string {
-  if (pct < 50) return "text-red-600 font-semibold";
-  if (pct < 70) return "text-amber-600";
-  return "text-green-600";
+  if (pct < 50) return "text-danger font-bold";
+  if (pct < 70) return "text-streak";
+  return "text-accent-deep";
 }
 
 /**
@@ -58,15 +58,15 @@ export function StudentsAtRisk({ primaryClass, structureLoading }: Props): React
     : [];
 
   return (
-    <div className="flex flex-col rounded-xl border border-slate-100 bg-white shadow-sm">
+    <div className="flex flex-col rounded-xl border border-line bg-canvas-alt">
       {/* Section header — always shows which class the data covers */}
-      <div className="flex items-start justify-between border-b border-slate-100 px-6 py-4">
+      <div className="flex items-start justify-between border-b border-line px-6 py-4">
         <div>
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <h3 className="text-xs font-bold uppercase tracking-[.08em] text-ink-dim">
             Žáci potřebující pomoc
           </h3>
           {primaryClass && !loading && (
-            <p className="mt-0.5 text-xs text-slate-400">
+            <p className="mt-0.5 text-xs text-ink-dim">
               {primaryClass.isHomeroom
                 ? `třídní třída · ${primaryClass.label}`
                 : `třída · ${primaryClass.label}`}
@@ -76,7 +76,7 @@ export function StudentsAtRisk({ primaryClass, structureLoading }: Props): React
         {!loading && primaryClass && (
           <button
             type="button"
-            className="text-xs text-slate-400 hover:text-slate-600"
+            className="text-xs font-semibold text-ink-dim hover:text-ink"
             onClick={() =>
               router.push(`/app/classrooms?highlight=${primaryClass.id}`)
             }
@@ -91,20 +91,20 @@ export function StudentsAtRisk({ primaryClass, structureLoading }: Props): React
           <div className="space-y-4 px-3 py-4">
             {[1, 2, 3].map((i) => (
               <div key={i} className="animate-pulse space-y-1">
-                <div className="h-3 w-32 rounded bg-slate-100" />
-                <div className="h-1.5 w-full rounded bg-slate-100" />
+                <div className="h-3 w-32 rounded bg-surface" />
+                <div className="h-1.5 w-full rounded bg-surface" />
               </div>
             ))}
           </div>
         ) : !primaryClass ? (
           <div className="flex flex-col items-center gap-2 py-10 text-center">
-            <Users className="h-8 w-8 text-slate-200" />
-            <p className="text-sm text-slate-400">Nemáte přiřazenou žádnou třídu.</p>
+            <Users className="h-8 w-8 text-line-strong" />
+            <p className="text-sm text-ink-dim">Nemáte přiřazenou žádnou třídu.</p>
           </div>
         ) : atRisk.length === 0 ? (
           <div className="flex flex-col items-center gap-2 py-10 text-center">
-            <AlertCircle className="h-8 w-8 text-green-300" />
-            <p className="text-sm text-slate-400">
+            <AlertCircle className="h-8 w-8 text-accent/50" />
+            <p className="text-sm text-ink-dim">
               Žádní žáci z {primaryClass.label} nevyžadují pozornost.
             </p>
           </div>
@@ -114,10 +114,10 @@ export function StudentsAtRisk({ primaryClass, structureLoading }: Props): React
               <li key={student.studentId}>
                 <Link
                   href={`/app/students/${student.studentId}`}
-                  className="flex flex-col gap-1 rounded-md px-3 py-3 hover:bg-gray-50"
+                  className="flex flex-col gap-1 rounded-lg px-3 py-3 transition-colors hover:bg-surface"
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-medium text-slate-900 truncate">
+                    <p className="text-sm font-bold text-ink truncate">
                       {student.displayName}
                     </p>
                     <span

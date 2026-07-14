@@ -1,22 +1,57 @@
 import type { Config } from "tailwindcss";
 import { fontFamily } from "tailwindcss/defaultTheme";
 
+/** Token z globals.css s podporou alpha modifikátorů (bg-accent/10 apod.). */
+const token = (name: string): string => `rgb(var(${name}) / <alpha-value>)`;
+
 const config: Config = {
   darkMode: ["class"],
   content: ["./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
       colors: {
+        /* Plochy */
+        canvas: {
+          DEFAULT: token("--canvas"),
+          alt: token("--canvas-alt"),
+        },
+        surface: token("--surface"),
+        /* Text */
+        ink: {
+          DEFAULT: token("--ink"),
+          muted: token("--ink-muted"),
+          dim: token("--ink-dim"),
+        },
+        /* Ohraničení */
+        line: {
+          DEFAULT: token("--line"),
+          strong: token("--line-strong"),
+        },
+        /* Akcent */
+        accent: {
+          DEFAULT: token("--accent"),
+          hover: token("--accent-hover"),
+          deep: token("--accent-deep"),
+          soft: token("--accent-soft"),
+        },
+        /* Signály */
+        streak: token("--streak"),
+        xp: token("--xp"),
+        danger: {
+          DEFAULT: token("--danger"),
+          deep: token("--danger-deep"),
+          soft: token("--danger-soft"),
+        },
+        /* Legacy aliasy — držet, dokud běží migrace starých obrazovek (Fáze 4) */
         primary: {
-          DEFAULT: "#16A34A",
-          foreground: "#F9FAFB",
+          DEFAULT: token("--accent"),
+          foreground: "#ffffff",
         },
         secondary: {
-          DEFAULT: "#F9FAFB",
-          foreground: "#111827",
+          DEFAULT: token("--canvas-alt"),
+          foreground: token("--ink"),
         },
-        muted: "#E5E7EB",
-        accent: "#10B981",
+        muted: token("--surface"),
         slate: {
           50: "#F9FAFB",
           100: "#F3F4F6",
@@ -31,14 +66,46 @@ const config: Config = {
         },
       },
       fontFamily: {
-        sans: ["Inter", "ui-sans-serif", "system-ui", "sans-serif", ...fontFamily.sans],
+        sans: [
+          "var(--font-inter)",
+          "Inter",
+          "ui-sans-serif",
+          "system-ui",
+          "sans-serif",
+          ...fontFamily.sans,
+        ],
       },
       borderRadius: {
-        xl: "1rem",
-        "2xl": "1.5rem",
+        xl: "0.75rem", // karty
+        "2xl": "1rem", // tlačítka, panely
       },
       boxShadow: {
         soft: "0 10px 30px rgba(15, 23, 42, 0.08)",
+        /* Taktilní tlačítka: barvu stínu určuje --tactile-shadow na prvku */
+        tactile: "0 4px 0 0 var(--tactile-shadow, rgb(var(--line-strong)))",
+        "tactile-sm": "0 3px 0 0 var(--tactile-shadow, rgb(var(--line-strong)))",
+        "tactile-pressed": "0 0 0 0 var(--tactile-shadow, rgb(var(--line-strong)))",
+      },
+      keyframes: {
+        bob: {
+          "0%, 100%": { transform: "translateY(0)" },
+          "50%": { transform: "translateY(-6px)" },
+        },
+        pop: {
+          "0%": { transform: "scale(.6)", opacity: "0" },
+          "70%": { transform: "scale(1.08)" },
+          "100%": { transform: "scale(1)", opacity: "1" },
+        },
+        wiggle: {
+          "0%, 100%": { transform: "rotate(0)" },
+          "25%": { transform: "rotate(-5deg)" },
+          "75%": { transform: "rotate(5deg)" },
+        },
+      },
+      animation: {
+        bob: "bob 2.6s ease-in-out infinite",
+        pop: "pop .35s ease-out both",
+        wiggle: "wiggle .5s ease-in-out",
       },
     },
   },

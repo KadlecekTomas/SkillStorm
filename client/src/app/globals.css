@@ -2,35 +2,82 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * SkillStorm design tokens — „Notion × Duolingo" systém.
+ *
+ * Hodnoty jsou RGB triplety, aby fungovaly Tailwind alpha modifikátory
+ * (bg-accent/10 apod.). Sémantická jména mapuje tailwind.config.ts.
+ *
+ * Dark mode (zatím neaktivní): doplnit blok `.dark { ... }` se stejnými
+ * názvy proměnných a jinými hodnotami — komponenty se nemění.
+ */
 :root {
-  --background: #f9fafb;
-  --foreground: #111827;
-  --card: #ffffff;
-  --card-foreground: #111827;
-  --muted: #e5e7eb;
+  /* Plochy — teplá bílá dokumentová plocha (Notion) */
+  --canvas: 255 255 255; /* #ffffff */
+  --canvas-alt: 251 250 248; /* #fbfaf8 */
+  --surface: 241 239 234; /* #f1efea */
+
+  /* Text */
+  --ink: 55 53 47; /* #37352f */
+  --ink-muted: 111 107 98; /* #6f6b62 */
+  --ink-dim: 160 156 146; /* #a09c92 */
+
+  /* Ohraničení */
+  --line: 233 231 226; /* #e9e7e2 */
+  --line-strong: 214 211 204; /* #d6d3cc */
+
+  /* Akcent — taktilní zelená (Duolingo) */
+  --accent: 88 204 2; /* #58cc02 */
+  --accent-hover: 76 173 0; /* #4cad00 */
+  --accent-deep: 61 138 0; /* #3d8a00 */
+  --accent-soft: 232 248 216; /* #e8f8d8 */
+
+  /* Signály */
+  --streak: 255 150 0; /* #ff9600 */
+  --xp: 28 176 246; /* #1cb0f6 */
+  --danger: 255 75 75; /* #ff4b4b */
+  --danger-deep: 201 47 47; /* #c92f2f */
+  --danger-soft: 255 236 236; /* #ffecec */
 }
 
 html {
-  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-inter), Inter, ui-sans-serif, system-ui, sans-serif;
 }
 
 body {
-  @apply bg-secondary text-slate-900 font-sans antialiased;
+  @apply bg-canvas text-ink font-sans antialiased;
 }
 
 * {
-  @apply border-slate-200;
+  @apply border-line;
 }
 
+::selection {
+  @apply bg-accent-soft;
+}
+
+/* Přechodné utility ze starého vizuálu — odstranit po dokončení migrace (Fáze 4) */
 .glass-panel {
-  @apply bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/70 border border-white/60;
+  @apply bg-canvas/80 backdrop-blur supports-[backdrop-filter]:bg-canvas/70 border border-line;
 }
 
 .gradient-border {
   border: 1px solid transparent;
   background:
-    linear-gradient(#fff, #fff) padding-box,
-    linear-gradient(120deg, rgba(22, 163, 74, 0.24), rgba(16, 185, 129, 0.24))
+    linear-gradient(rgb(var(--canvas)), rgb(var(--canvas))) padding-box,
+    linear-gradient(
+        120deg,
+        rgb(var(--accent) / 0.24),
+        rgb(var(--accent-deep) / 0.24)
+      )
       border-box;
-  border-radius: 1.5rem;
+  border-radius: 1rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-bob,
+  .animate-pop,
+  .animate-wiggle {
+    animation: none;
+  }
 }

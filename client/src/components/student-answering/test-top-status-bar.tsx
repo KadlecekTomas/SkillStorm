@@ -3,7 +3,9 @@
 import type { JSX } from "react";
 import type { SaveStatus } from "@/lib/focus-test/types";
 import type { TestTimerState } from "@/hooks/focus-test/use-test-timer";
+import type { AnsweringMode } from "@/config/answering-mode";
 import { cn } from "@/utils/cn";
+import { PartakEmblem } from "@/components/partak";
 import { SaveStatusBadge } from "./save-status-badge";
 import type { AnsweringVariant } from "./answer-option";
 
@@ -21,6 +23,8 @@ export interface TestTopStatusBarProps {
   /** Opens the review-before-submit dialog. Never submits directly. */
   onReview: () => void;
   reviewLabel?: string;
+  /** Věkový režim: "young" zjednodušuje bar (bez flagů, tlumený časovač). */
+  mode?: AnsweringMode;
 }
 
 export function TestTopStatusBar({
@@ -35,7 +39,9 @@ export function TestTopStatusBar({
   timer,
   onReview,
   reviewLabel = "Zkontrolovat a odevzdat",
+  mode = "old",
 }: TestTopStatusBarProps): JSX.Element {
+  const young = mode === "young";
   const progressPct =
     totalQuestions > 0
       ? Math.round((answeredCount / totalQuestions) * 100)
@@ -52,44 +58,51 @@ export function TestTopStatusBar({
       className={cn(
         "sticky top-0 z-20 border-b backdrop-blur",
         variant === "practice"
-          ? "border-indigo-100 bg-white/90"
-          : "border-slate-200 bg-white/90",
+          ? "border-xp/20 bg-canvas/90"
+          : "border-line bg-canvas/90",
       )}
     >
       <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 sm:px-6">
-        <div className="mr-auto flex min-w-0 flex-col">
-          <h1 className="min-w-0 truncate text-base font-semibold text-slate-900">
-            {title}
-          </h1>
-          {positionLabel && (
+        <div className="mr-auto flex min-w-0 items-center gap-3">
+          <span className="hidden shrink-0 sm:block" aria-hidden="true">
+            <PartakEmblem size={30} />
+          </span>
+          <div className="flex min-w-0 flex-col">
+            <h1 className="min-w-0 truncate text-base font-bold text-ink">
+              {title}
+            </h1>
+            {positionLabel && (
+              <span
+                data-testid="question-position"
+                aria-live="polite"
+                className="text-xs font-medium text-ink-muted"
+              >
+                {positionLabel}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {!young && (
+          <div className="flex items-center gap-1.5 text-sm text-ink-muted">
             <span
-              data-testid="question-position"
-              aria-live="polite"
-              className="text-xs font-medium text-slate-500"
+              data-testid="progress-percent"
+              className="font-bold tabular-nums text-ink"
             >
-              {positionLabel}
+              {progressPct} %
             </span>
-          )}
-        </div>
+            <span className="hidden text-ink-dim sm:inline">
+              ({answeredCount}/{totalQuestions})
+            </span>
+          </div>
+        )}
 
-        <div className="flex items-center gap-1.5 text-sm text-slate-600">
-          <span
-            data-testid="progress-percent"
-            className="font-semibold tabular-nums text-slate-900"
-          >
-            {progressPct} %
-          </span>
-          <span className="hidden text-slate-500 sm:inline">
-            ({answeredCount}/{totalQuestions})
-          </span>
-        </div>
-
-        {flaggedCount > 0 && (
+        {!young && flaggedCount > 0 && (
           <span
             data-testid="flagged-count"
-            className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700"
+            className="inline-flex items-center gap-1 rounded-full bg-streak/10 px-2.5 py-1 text-xs font-bold text-streak"
           >
-            <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+            <span className="h-1.5 w-1.5 rounded-full bg-streak" />
             {flaggedCount} k návratu
           </span>
         )}
@@ -99,10 +112,15 @@ export function TestTopStatusBar({
             data-testid="focus-timer"
             aria-live="polite"
             className={cn(
-              "rounded-md px-2 py-1 text-sm font-semibold tabular-nums",
+              "rounded-md px-2 py-1 tabular-nums",
+              // Mladší režim: časovač zůstává viditelný (běžící limit se nikdy neskrývá),
+              // jen je menší a tlumený; urgentní stav zvýrazňujeme v obou režimech.
+              young ? "text-xs font-semibold" : "text-sm font-bold",
               timeLow
-                ? "bg-red-50 text-red-700 motion-safe:animate-pulse"
-                : "text-slate-700",
+                ? "bg-danger-soft text-danger-deep motion-safe:animate-pulse"
+                : young
+                  ? "text-ink-dim"
+                  : "text-ink-muted",
             )}
           >
             {timer.hasLimit ? "⏱ " : "Konec "}
@@ -113,7 +131,7 @@ export function TestTopStatusBar({
         {!online && (
           <span
             data-testid="offline-indicator"
-            className="rounded-md bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600"
+            className="rounded-md bg-surface px-2 py-1 text-xs font-semibold text-ink-muted"
           >
             Offline
           </span>
@@ -126,10 +144,10 @@ export function TestTopStatusBar({
           onClick={onReview}
           data-testid="submit-test"
           className={cn(
-            "inline-flex h-9 items-center rounded-xl px-4 text-sm font-semibold text-white shadow-sm transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
+            "inline-flex h-10 items-center rounded-2xl px-4 text-sm font-bold text-white shadow-tactile transition-all duration-100 motion-reduce:transition-none focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-xp active:translate-y-[2px] active:shadow-tactile-pressed",
             variant === "practice"
-              ? "bg-indigo-600 hover:bg-indigo-700 focus-visible:ring-indigo-500"
-              : "bg-emerald-600 hover:bg-emerald-700 focus-visible:ring-emerald-500",
+              ? "bg-xp [--tactile-shadow:#0e7ab8] hover:brightness-105"
+              : "bg-accent [--tactile-shadow:rgb(var(--accent-deep))] hover:bg-accent-hover",
           )}
         >
           {reviewLabel}
@@ -137,7 +155,7 @@ export function TestTopStatusBar({
       </div>
 
       <div
-        className="h-1 w-full bg-slate-100"
+        className="h-1 w-full bg-surface"
         role="progressbar"
         aria-valuemin={0}
         aria-valuemax={100}
@@ -147,7 +165,7 @@ export function TestTopStatusBar({
         <div
           className={cn(
             "h-1 transition-all duration-300 motion-reduce:transition-none",
-            variant === "practice" ? "bg-indigo-500" : "bg-emerald-500",
+            variant === "practice" ? "bg-xp" : "bg-accent",
           )}
           style={{ width: `${progressPct}%` }}
         />
