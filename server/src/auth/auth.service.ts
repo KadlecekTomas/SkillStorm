@@ -944,7 +944,10 @@ export class AuthService {
     });
     if (!user) {
       this.logger.warn(
-        JSON.stringify({ event: 'auth_login_failed', reason: 'user_not_found' }),
+        JSON.stringify({
+          event: 'auth_login_failed',
+          reason: 'user_not_found',
+        }),
       );
       throw new UnauthorizedException('Operace se nezdařila.');
     }

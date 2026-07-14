@@ -24,10 +24,7 @@ import { ZodError } from 'zod';
 import { setupSwagger } from './swagger.config';
 import { CSRF_TOKEN_COOKIE } from './auth/token-cookies';
 import { randomUUID } from 'crypto';
-import {
-  scrubSentryEvent,
-  type SentryEventLike,
-} from './infra/sentry-scrub';
+import { scrubSentryEvent, type SentryEventLike } from './infra/sentry-scrub';
 
 /** Request with correlation id set by middleware */
 type RequestWithId = { requestId?: string; headers: any; [k: string]: any };
