@@ -31,7 +31,9 @@ setup('authenticate all roles', async ({ baseURL }) => {
 
   for (let i = 0; i < roles.length; i++) {
     const [role, email, organizationId] = roles[i]!;
-    const ctx = await playwrightRequest.newContext({ baseURL });
+    const ctx = await playwrightRequest.newContext({
+      baseURL: baseURL ?? 'http://127.0.0.1:3001',
+    });
     // The backend runs with throttling ON (the rate-limit block needs it).
     // Give each role login a distinct client IP (TRUST_PROXY=1 honours
     // X-Forwarded-For) so setup never shares a rate-limit bucket and stays

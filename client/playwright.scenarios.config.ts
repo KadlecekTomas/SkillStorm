@@ -20,7 +20,12 @@ const E2E_DATABASE_URL = assertTestDatabaseUrl(
   'playwright.scenarios webServer',
 );
 
-const { DATABASE_URL: _ignored, ...ambientEnv } = process.env;
+const { DATABASE_URL: _ignored, ...rawAmbient } = process.env;
+// Playwright's webServer.env is Record<string,string>; drop undefined values
+// (process.env is Record<string,string|undefined>).
+const ambientEnv = Object.fromEntries(
+  Object.entries(rawAmbient).filter(([, v]) => v !== undefined),
+) as Record<string, string>;
 
 const storage = (role: string) =>
   join(__dirname, 'tests', 'scenarios', '.auth', `${role}.json`);
