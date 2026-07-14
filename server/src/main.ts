@@ -24,6 +24,10 @@ import { ZodError } from 'zod';
 import { setupSwagger } from './swagger.config';
 import { CSRF_TOKEN_COOKIE } from './auth/token-cookies';
 import { randomUUID } from 'crypto';
+import {
+  scrubSentryEvent,
+  type SentryEventLike,
+} from './infra/sentry-scrub';
 
 /** Request with correlation id set by middleware */
 type RequestWithId = { requestId?: string; headers: any; [k: string]: any };
@@ -37,7 +41,14 @@ type RequestWithId = { requestId?: string; headers: any; [k: string]: any };
  * package is an OPTIONAL runtime dependency that may be absent at build time.
  */
 interface SentryLike {
-  init(options: { dsn: string }): void;
+  init(options: {
+    dsn: string;
+    environment?: string | undefined;
+    release?: string | undefined;
+    sendDefaultPii?: boolean;
+    maxBreadcrumbs?: number;
+    beforeSend?: (event: SentryEventLike) => SentryEventLike | null;
+  }): void;
   captureException(exception: unknown): void;
 }
 let sentryClient: SentryLike | null = null;
@@ -281,7 +292,16 @@ async function initSentryIfConfigured(): Promise<void> {
     // that need not be installed at build time.
     const moduleName = '@sentry/node';
     sentryClient = (await import(moduleName)) as unknown as SentryLike;
-    sentryClient.init({ dsn: process.env.SENTRY_DSN });
+    sentryClient.init({
+      dsn: process.env.SENTRY_DSN,
+      environment: process.env.SENTRY_ENVIRONMENT ?? process.env.NODE_ENV,
+      release: process.env.COMMIT_SHA ?? undefined,
+      // GDPR: no request bodies/headers/IPs, no user PII — and everything
+      // that does go out passes through the scrubber (see sentry-scrub.ts).
+      sendDefaultPii: false,
+      maxBreadcrumbs: 0,
+      beforeSend: (event) => scrubSentryEvent(event),
+    });
   } catch {
     // @sentry/node not installed
     sentryClient = null;

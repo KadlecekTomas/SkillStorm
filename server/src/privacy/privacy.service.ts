@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
 import { v4 as uuidv4 } from 'uuid';
 import { AuditEntityType } from '@prisma/client';
@@ -6,6 +6,7 @@ import { Cron } from '@nestjs/schedule';
 
 @Injectable()
 export class PrivacyService {
+  private readonly logger = new Logger(PrivacyService.name);
   constructor(private readonly prisma: PrismaService) {}
 
   async anonymizeUser(userId: string, triggeredBy: string): Promise<void> {
@@ -16,6 +17,13 @@ export class PrivacyService {
     if (!user) throw new NotFoundException('User not found');
     if (user.anonymized) return;
 
+    this.logger.log(
+      JSON.stringify({
+        event: 'user_anonymization_started',
+        userId,
+        triggeredBy,
+      }),
+    );
     const anonymizedEmail = `anon-${uuidv4()}@example.local`;
     const memberships = await this.prisma.membership.findMany({
       where: { userId, deletedAt: null },

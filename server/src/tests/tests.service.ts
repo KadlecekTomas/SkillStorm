@@ -1362,6 +1362,14 @@ export class TestsService {
       action: 'TEST_DELETE_SOFT',
       entityId: id,
     });
+    this.logger.log(
+      JSON.stringify({
+        event: 'test_soft_deleted',
+        testId: id,
+        organizationId: current.organizationId ?? null,
+        actorUserId: user.userId,
+      }),
+    );
     await bumpOrgVersion(
       this.cache,
       cacheScopeForUser(user.systemRole, current.organizationId),

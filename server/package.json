@@ -56,6 +56,7 @@
     "@nestjs/throttler": "^5.1.1",
     "@nestjs/typeorm": "^10.0.0",
     "@prisma/client": "^6.13.0",
+    "@sentry/node": "^10.65.0",
     "bcryptjs": "^3.0.3",
     "cache-manager": "^7.1.1",
     "cache-manager-redis-yet": "^5.1.5",
