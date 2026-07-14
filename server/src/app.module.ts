@@ -44,6 +44,7 @@ import { EnrollmentsModule } from './enrollments/enrollments.module';
 import { AcademicYearsModule } from './academic-years/academic-years.module';
 import { InvitesModule } from './invites/invites.module';
 import { EventsModule } from './events/events.module';
+import { LiveSessionsModule } from './live-sessions/live-sessions.module';
 import { PlatformModule } from './platform/platform.module';
 import { OrgSubjectModule } from './org-subject/org-subject.module';
 import { OrgContextModule } from './common/org-context/org-context.module';
@@ -120,6 +121,7 @@ import { ImportsModule } from './imports/imports.module';
     AcademicYearsModule,
     InvitesModule,
     EventsModule,
+    LiveSessionsModule,
     PlatformModule,
     OrgSubjectModule,
     OrgContextModule,
