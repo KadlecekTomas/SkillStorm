@@ -52,6 +52,30 @@ Hesla: `Scenar123!`. Účty v manifestu (`.manifest.json`, gitignored).
 | `security.scenario.ts` | 4 | cizí submission/test přes URL → chyba, session expiry → return-URL, login rate limit → srozumitelná 429 hláška |
 | `mobile.mobile.ts` | 5 | 390px bottom tabs + dlaždice + dosažitelné odevzdání; offline uprostřed odpovídání → autosave dožene, UI informuje |
 
+## CI
+
+Workflow `.github/workflows/e2e-scenarios.yml` (job na každém PR): postgres
+service s DB `skillstorm_test`, `npm run test:scenarios` (globalSetup migruje
++ seeduje, webServer nastartuje backend+frontend). Throttle ON, TRUST_PROXY=1.
+Doba běhu lokálně ~75 s/běh; CI job s instalací deps + Playwright browser
+odhadem ~5–6 min (pod 10 min → jeden job, není potřeba dělit na rychlou PR
+sadu a noční). Report se uploaduje jako artefakt při selhání.
+
+## Stabilita (proč to neflakuje)
+
+Sada je záměrně bez retry a bez nafouknutých timeoutů. Dvě příčiny flaku byly
+opraveny v kořeni:
+- **globalSetup NIKDY nedropuje DB** — jen `migrate deploy` + seed (wipe je
+  idempotentní). DROP by force-zavřel živá spojení backendu (Playwright
+  startuje webServer souběžně) a první login by spadl na „Server has closed
+  the connection".
+- **Náhodné klientské IP** pro každý kontext i login (X-Forwarded-For,
+  TRUST_PROXY=1). Fixní/čítačové IP kolidovaly napříč testy v 60s okně
+  globálního rate-limitu (100/60s) → těžký tok backbone učitele vyčerpal
+  bucket a pozdější test na téže IP dostal 429.
+
+3× po sobě od čerstvé DB: 3/3 zelené (17 passed/běh).
+
 ## Naučené kontrakty (pro budoucí úpravy)
 
 - Auth je **cookie-based**; tokeny se nečtou z těla. storageState per role.

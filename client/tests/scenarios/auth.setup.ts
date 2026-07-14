@@ -29,18 +29,25 @@ setup('authenticate all roles', async ({ baseURL }) => {
     ['otherOrgStudent', m.accounts.otherOrgStudent, m.foreignOrgId],
   ];
 
+  // The backend runs with throttling ON (the rate-limit block needs it).
+  // Setup logins must never share a login bucket — not within a run, and not
+  // across reruns inside the 900s window. A FIXED IP would accumulate across
+  // consecutive suite runs and eventually 429. Use a fresh RANDOM client IP
+  // per login (TRUST_PROXY=1 honours X-Forwarded-For), so every run and every
+  // role lands in its own bucket.
+  const randomIp = () =>
+    `10.${1 + Math.floor(Math.random() * 254)}.${Math.floor(
+      Math.random() * 254,
+    )}.${1 + Math.floor(Math.random() * 254)}`;
+
   for (let i = 0; i < roles.length; i++) {
     const [role, email, organizationId] = roles[i]!;
     const ctx = await playwrightRequest.newContext({
       baseURL: baseURL ?? 'http://127.0.0.1:3001',
     });
-    // The backend runs with throttling ON (the rate-limit block needs it).
-    // Give each role login a distinct client IP (TRUST_PROXY=1 honours
-    // X-Forwarded-For) so setup never shares a rate-limit bucket and stays
-    // reliable across reruns.
     const res = await ctx.post('/api/auth/login', {
       data: { email, password: m.password, organizationId },
-      headers: { 'X-Forwarded-For': `10.90.0.${i + 1}` },
+      headers: { 'X-Forwarded-For': randomIp() },
     });
     expect(res.ok(), `login for ${role} (${email})`).toBeTruthy();
     // /api/auth/me confirms the cookie session is live before we persist it

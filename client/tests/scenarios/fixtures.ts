@@ -15,6 +15,13 @@ type Fixtures = {
   asRole: (role: RoleKey) => Promise<{ context: BrowserContext; page: Page }>;
 };
 
+/** A random public-ish client IP for X-Forwarded-For (throttle isolation). */
+function randomClientIp(): string {
+  return `10.${1 + Math.floor(Math.random() * 254)}.${Math.floor(
+    Math.random() * 254,
+  )}.${1 + Math.floor(Math.random() * 254)}`;
+}
+
 export type RoleKey =
   | 'director'
   | 'teacher'
@@ -29,15 +36,16 @@ export const test = base.extend<Fixtures>({
   },
   asRole: async ({ browser }, use) => {
     const opened: BrowserContext[] = [];
-    let ipSeq = 0;
     const factory = async (role: RoleKey) => {
       // Backend throttling is ON (the rate-limit block needs it). Give every
-      // functional context a distinct client IP (TRUST_PROXY=1 honours
-      // X-Forwarded-For) so heavy flows never share a rate-limit bucket.
-      ipSeq += 1;
+      // functional context a fresh RANDOM client IP (TRUST_PROXY=1 honours
+      // X-Forwarded-For). A per-test counter would REUSE the same IPs across
+      // tests within the 60s global-limit window — a heavy flow (the backbone
+      // teacher fires dozens of requests) then exhausts that IP's bucket and a
+      // later test on the same IP gets 429. Random IPs never collide.
       const context = await browser.newContext({
         storageState: storageStateFor(role),
-        extraHTTPHeaders: { 'X-Forwarded-For': `10.80.${ipSeq}.1` },
+        extraHTTPHeaders: { 'X-Forwarded-For': randomClientIp() },
       });
       opened.push(context);
       const page = await context.newPage();

@@ -15,16 +15,26 @@ import type { Browser, BrowserContext, Page } from '@playwright/test';
 
 const PARALLEL = 10;
 
-/** A browser context authenticated as `email` via the login API (own IP). */
+/**
+ * A browser context authenticated as `email` via the login API. Uses a fresh
+ * RANDOM client IP so the login never shares a throttle bucket — with a fixed
+ * IP the login (900s window, limit 10) would accumulate across suite reruns
+ * and eventually 429.
+ */
+function randomIp(): string {
+  return `10.${1 + Math.floor(Math.random() * 254)}.${Math.floor(
+    Math.random() * 254,
+  )}.${1 + Math.floor(Math.random() * 254)}`;
+}
+
 async function authedContext(
   browser: Browser,
   email: string,
   password: string,
   organizationId: string,
-  ipSuffix: number,
 ): Promise<{ context: BrowserContext; page: Page }> {
   const context = await browser.newContext({
-    extraHTTPHeaders: { 'X-Forwarded-For': `10.60.${ipSuffix}.1` },
+    extraHTTPHeaders: { 'X-Forwarded-For': randomIp() },
   });
   const res = await context.request.post('/api/auth/login', {
     data: { email, password, organizationId },
@@ -75,8 +85,8 @@ test('10 students answer the same assignment in parallel — none lost', async (
   expect(emails).toHaveLength(PARALLEL);
 
   const sessions = await Promise.all(
-    emails.map((email, i) =>
-      authedContext(browser, email, manifest.password, manifest.orgId, i + 1),
+    emails.map((email) =>
+      authedContext(browser, email, manifest.password, manifest.orgId),
     ),
   );
 
@@ -143,7 +153,6 @@ test('a student who never submits is auto-submitted when the limit expires', asy
     email,
     manifest.password,
     manifest.orgId,
-    50,
   );
 
   await page.goto(`/app/assignments/${manifest.assignmentFast8AId}/test`, {
