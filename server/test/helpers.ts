@@ -258,6 +258,43 @@ export async function login(
 }
 
 /**
+ * Creates a Subject usable for POST /tests in the given org.
+ *
+ * Subject is a GLOBAL entity (no organizationId column); org linkage is the
+ * OrgSubject join row, and tests.service.validateSubject requires an enabled
+ * OrgSubject in the caller's org. Older specs that did
+ * `prisma.subject.create({ data: { organizationId } })` no longer compile.
+ */
+export async function createOrgSubject(
+  prisma: PrismaService,
+  organizationId: string,
+  options: {
+    name?: string;
+    catalogSubjectId?: string;
+    isEnabled?: boolean;
+  } = {},
+): Promise<{ subjectId: string; orgSubjectId: string }> {
+  const subject = await prisma.subject.create({
+    data: {
+      name: options.name ?? `Subject ${unique('subj', 's')}`,
+      ...(options.catalogSubjectId
+        ? { catalogSubjectId: options.catalogSubjectId }
+        : {}),
+    },
+    select: { id: true },
+  });
+  const orgSubject = await prisma.orgSubject.create({
+    data: {
+      organizationId,
+      subjectId: subject.id,
+      isEnabled: options.isEnabled ?? true,
+    },
+    select: { id: true },
+  });
+  return { subjectId: subject.id, orgSubjectId: orgSubject.id };
+}
+
+/**
  * Deterministic unique email for E2E to avoid 409 from duplicate email.
  */
 export function uniqueEmail(prefix: string): string {

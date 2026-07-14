@@ -25,6 +25,30 @@ services:
     networks:
       - app
 
+  # Dedicated, disposable test database — separate container, port, and
+  # volume from dev. Test tooling accepts it only because the DB name ends
+  # with "_test" (see server/scripts/db-safety.js).
+  # Start with: docker compose --profile test up -d postgres-test
+  postgres-test:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    profiles: ["test"]
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: skillstorm_test
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d skillstorm_test"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - pgdata_test:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_TEST_PORT:-5434}:5432"
+    networks:
+      - app
+
   redis:
     image: redis:7-alpine
     restart: unless-stopped
@@ -144,3 +168,4 @@ services:
 
 volumes:
   pgdata:
+  pgdata_test:

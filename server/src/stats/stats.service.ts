@@ -206,6 +206,7 @@ export class StatsService {
               where: submissionScope,
               distinct: ['testId'],
               select: { testId: true },
+              take: 5000, // safety cap — one row per distinct test
             }),
           ]);
 
@@ -484,6 +485,7 @@ export class StatsService {
             orgId: organizationId,
             ...(currentYear ? { yearId: currentYear.id } : {}),
           },
+          take: 500, // safety cap — classes of one school year
           select: {
             id: true,
             label: true,
@@ -506,6 +508,7 @@ export class StatsService {
         // Same teacher source as GET /teachers so homepage and teacher manager stay aligned.
         this.prisma.teacher.findMany({
           where: { organizationId, deletedAt: null },
+          take: 1000, // safety cap — teachers of one org
           select: {
             membershipId: true,
             membership: {
@@ -637,6 +640,7 @@ export class StatsService {
               test: { select: { creatorId: true } },
               submittedAt: true,
             },
+            take: DASHBOARD_SUBMISSION_LIMIT,
           })
         : Promise.resolve(
             [] as {

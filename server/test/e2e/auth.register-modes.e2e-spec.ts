@@ -86,14 +86,14 @@ describe('Auth registration modes (e2e)', () => {
 
   const decodeJwt = (token: string): any => jwtService.decode(token) ?? {};
 
-  it('REGISTER INDIVIDUAL – creates User without organization', async () => {
+  it('REGISTER CREATE_ORG – bare user: no org in DB, claims, or audit', async () => {
     const email = baseEmail();
     const payload = {
-      name: 'Individual User',
+      name: 'Bare User',
       email,
       password: 'Password123!',
       username: 'indiv_user',
-      mode: RegisterMode.INDIVIDUAL,
+      mode: RegisterMode.CREATE_ORG,
     };
 
     const res = await request(app.getHttpServer())
@@ -148,7 +148,7 @@ describe('Auth registration modes (e2e)', () => {
     const log = logs[0]!;
     expect(log.organizationId).toBeNull();
     const meta = (log.metadata ?? {}) as any;
-    expect(meta.mode).toBe(RegisterMode.INDIVIDUAL);
+    expect(meta.mode).toBe(RegisterMode.CREATE_ORG);
   });
 
   it('REGISTER CREATE_ORG – creates User only (onboarding pending, no organizationName)', async () => {
@@ -289,7 +289,7 @@ describe('Auth registration modes (e2e)', () => {
         email,
         password: 'Password123!',
         username: `joiner_${Date.now()}`,
-        mode: RegisterMode.INDIVIDUAL,
+        mode: RegisterMode.CREATE_ORG,
       })
       .expect(201);
 
@@ -342,7 +342,7 @@ describe('Auth registration modes (e2e)', () => {
       password: 'Password123!',
       username: 'dup_user',
       role: OrganizationRole.STUDENT,
-      mode: RegisterMode.INDIVIDUAL,
+      mode: RegisterMode.CREATE_ORG,
     };
 
     // first registration

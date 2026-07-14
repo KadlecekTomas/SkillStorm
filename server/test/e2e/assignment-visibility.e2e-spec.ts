@@ -79,18 +79,39 @@ describe('Assignment Visibility (enrollment source of truth) (e2e)', () => {
       organizationId: orgId,
     });
 
-    // 2. Create current academic year
-    const year = await prisma.academicYear.create({
-      data: {
-        orgId,
-        label: `VIS_${Date.now()}`,
-        startsAt: new Date('2024-09-01'),
-        endsAt: new Date('2025-08-31'),
-        isCurrent: true,
-      },
+    // 2. Current academic year: the org bootstrap already created one
+    // (single-current partial index forbids a second) — reuse it and make
+    // sure its dates cover "now" (expired-year gate 409s otherwise).
+    const existingYear = await prisma.academicYear.findFirst({
+      where: { orgId, isCurrent: true },
       select: { id: true },
     });
+    const yearDates = {
+      startsAt: new Date('2025-09-01'),
+      endsAt: new Date('2027-08-31'),
+    };
+    const year = existingYear
+      ? await prisma.academicYear.update({
+          where: { id: existingYear.id },
+          data: yearDates,
+          select: { id: true },
+        })
+      : await prisma.academicYear.create({
+          data: {
+            orgId,
+            label: `VIS_${Date.now()}`,
+            ...yearDates,
+            isCurrent: true,
+          },
+          select: { id: true },
+        });
     academicYearId = year.id;
+
+    // fresh orgs are PENDING → readiness guards 409 every year-scoped op
+    await prisma.organization.update({
+      where: { id: orgId },
+      data: { status: 'ACTIVE' },
+    });
 
     // 3. Create class section
     const cls = await prisma.classSection.create({
@@ -131,6 +152,9 @@ describe('Assignment Visibility (enrollment source of truth) (e2e)', () => {
         title: 'Visibility E2E Test',
         creatorId: teacherMembershipId,
         status: $Enums.PublishStatus.PUBLISHED,
+        academicYearId,
+        // assignability requires target grades
+        allowedGrades: [$Enums.SchoolGrade.GRADE_6, $Enums.SchoolGrade.GRADE_7],
       },
       select: { id: true },
     });
@@ -290,12 +314,12 @@ describe('Assignment Visibility (enrollment source of truth) (e2e)', () => {
       .set('Authorization', `Bearer ${studentToken}`)
       .expect(200);
 
-    expect(res.body).toHaveProperty('data');
-    expect(res.body.data).toHaveProperty('now');
-    expect(res.body.data).toHaveProperty('active');
-    expect(res.body.data).toHaveProperty('upcoming');
-    expect(res.body.data).toHaveProperty('closedUnsubmitted');
-    expect(res.body.data).toHaveProperty('completed');
+    const payload = res.body?.data ?? res.body;
+    expect(payload).toHaveProperty('now');
+    expect(payload).toHaveProperty('active');
+    expect(payload).toHaveProperty('upcoming');
+    expect(payload).toHaveProperty('closedUnsubmitted');
+    expect(payload).toHaveProperty('completed');
   });
 
   it('active bucket contains CLASS assignment for enrolled student', async () => {
@@ -304,7 +328,7 @@ describe('Assignment Visibility (enrollment source of truth) (e2e)', () => {
       .set('Authorization', `Bearer ${studentToken}`)
       .expect(200);
 
-    const overview = res.body.data;
+    const overview = res.body?.data ?? res.body;
     const activeIds = overview.active.map((a: any) => a.assignmentId);
     expect(activeIds).toContain(activeClassAssignmentId);
   });
@@ -315,7 +339,7 @@ describe('Assignment Visibility (enrollment source of truth) (e2e)', () => {
       .set('Authorization', `Bearer ${studentToken}`)
       .expect(200);
 
-    const overview = res.body.data;
+    const overview = res.body?.data ?? res.body;
     const activeIds = overview.active.map((a: any) => a.assignmentId);
     expect(activeIds).toContain(directStudentAssignmentId);
   });
@@ -326,7 +350,7 @@ describe('Assignment Visibility (enrollment source of truth) (e2e)', () => {
       .set('Authorization', `Bearer ${studentToken}`)
       .expect(200);
 
-    const overview = res.body.data;
+    const overview = res.body?.data ?? res.body;
     expect(overview.active).toHaveLength(2);
   });
 
@@ -336,7 +360,7 @@ describe('Assignment Visibility (enrollment source of truth) (e2e)', () => {
       .set('Authorization', `Bearer ${studentToken}`)
       .expect(200);
 
-    const upcomingIds = res.body.data.upcoming.map((a: any) => a.assignmentId);
+    const upcomingIds = (res.body?.data ?? res.body).upcoming.map((a: any) => a.assignmentId);
     expect(upcomingIds).toContain(upcomingClassAssignmentId);
   });
 
@@ -346,7 +370,7 @@ describe('Assignment Visibility (enrollment source of truth) (e2e)', () => {
       .set('Authorization', `Bearer ${studentToken}`)
       .expect(200);
 
-    const closedIds = res.body.data.closedUnsubmitted.map((a: any) => a.assignmentId);
+    const closedIds = (res.body?.data ?? res.body).closedUnsubmitted.map((a: any) => a.assignmentId);
     expect(closedIds).toContain(closedClassAssignmentId);
   });
 
@@ -356,7 +380,7 @@ describe('Assignment Visibility (enrollment source of truth) (e2e)', () => {
       .set('Authorization', `Bearer ${studentToken}`)
       .expect(200);
 
-    const overview = res.body.data;
+    const overview = res.body?.data ?? res.body;
     const allIds = [
       ...overview.active,
       ...overview.upcoming,
@@ -373,7 +397,7 @@ describe('Assignment Visibility (enrollment source of truth) (e2e)', () => {
       .set('Authorization', `Bearer ${studentToken}`)
       .expect(200);
 
-    const item = res.body.data.active[0];
+    const item = (res.body?.data ?? res.body).active[0];
     expect(item).toHaveProperty('assignmentId');
     expect(item).toHaveProperty('testId');
     expect(item).toHaveProperty('title');
@@ -406,7 +430,7 @@ describe('Assignment Visibility (enrollment source of truth) (e2e)', () => {
       .set('Authorization', `Bearer ${studentToken}`)
       .expect(200);
 
-    const overview = res.body.data;
+    const overview = res.body?.data ?? res.body;
     const activeIds = overview.active.map((a: any) => a.assignmentId);
 
     // Class assignment should no longer be visible
@@ -457,7 +481,7 @@ describe('Assignment Visibility (enrollment source of truth) (e2e)', () => {
       .expect(400);
 
     expect(res.body?.message ?? res.body?.error ?? JSON.stringify(res.body)).toMatch(
-      /no.*enrolled|CLASS_HAS_NO_ENROLLED_STUDENTS/i,
+      /no.*enrolled|CLASS_HAS_NO_ENROLLED_STUDENTS|nemá žádné aktivně zapsané/i,
     );
 
     await prisma.classSection.delete({ where: { id: emptyClass.id } }).catch(() => {});

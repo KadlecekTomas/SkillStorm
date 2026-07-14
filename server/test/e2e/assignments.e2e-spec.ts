@@ -74,6 +74,11 @@ describe('Assignments (e2e)', () => {
     });
 
     org = { id: ctx.organization.id };
+    // fresh orgs are PENDING → readiness guards 409 every execution op
+    await prisma.organization.update({
+      where: { id: org.id },
+      data: { status: $Enums.OrganizationStatus.ACTIVE },
+    });
     director = {
       id: ctx.owner.user.id,
       token: ctx.owner.accessToken,
@@ -105,21 +110,37 @@ describe('Assignments (e2e)', () => {
     );
     superUser = {
       id: superUserAuth.user.id,
-      token: await login(app, superUserAuth.login),
+      // unscoped login lands in the superadmin's own PENDING org → 409
+      token: await login(app, { ...superUserAuth.login, organizationId: org.id }),
       login: superUserAuth.login,
     };
 
-    // academic year (required for assignments)
-    const year = await prisma.academicYear.create({
-      data: {
-        orgId: org.id,
-        label: `E2E ${Date.now()}`,
-        startsAt: new Date('2024-09-01'),
-        endsAt: new Date('2025-08-31'),
-        isCurrent: true,
-      },
+    // academic year (required for assignments) — the org bootstrap already
+    // created a current year (single-current partial index forbids a second),
+    // so reuse it and make sure its dates cover "now" (expired-year gate 409s)
+    const existingYear = await prisma.academicYear.findFirst({
+      where: { orgId: org.id, isCurrent: true },
       select: { id: true },
     });
+    const yearDates = {
+      startsAt: new Date('2025-09-01'),
+      endsAt: new Date('2027-08-31'),
+    };
+    const year = existingYear
+      ? await prisma.academicYear.update({
+          where: { id: existingYear.id },
+          data: yearDates,
+          select: { id: true },
+        })
+      : await prisma.academicYear.create({
+          data: {
+            orgId: org.id,
+            label: `E2E ${Date.now()}`,
+            ...yearDates,
+            isCurrent: true,
+          },
+          select: { id: true },
+        });
     academicYearId = year.id;
 
     // one class section in active year so org is READY (RequireOrgReadyGuard allows execution)
@@ -139,6 +160,8 @@ describe('Assignments (e2e)', () => {
         title: 'E2E – Test A',
         creatorId: mTeacher.id,
         status: $Enums.PublishStatus.PUBLISHED,
+        // assignability requires target grades (NO_ALLOWED_GRADES → 400)
+        allowedGrades: [$Enums.SchoolGrade.GRADE_7],
       },
       select: { id: true },
     });
@@ -321,8 +344,9 @@ describe('Assignments (e2e)', () => {
     await request(app.getHttpServer())
       .post('/assignments')
       .set('Authorization', `Bearer ${director.token}`)
+      // cross-tenant resources are masked as 404 (no existence oracle)
       .send(mkPayload({ testId: foreignTest.id }))
-      .expect(400);
+      .expect(404);
 
     // cleanup
     await prisma.test.delete({ where: { id: foreignTest.id } });
@@ -346,11 +370,13 @@ describe('Assignments (e2e)', () => {
     });
     const foreignStudentM = otherCtx.actor.membership;
 
-    await request(app.getHttpServer())
+    const spoofRes = await request(app.getHttpServer())
       .post('/assignments')
       .set('Authorization', `Bearer ${director.token}`)
       .send(mkPayload({ createdById: foreignStudentM.id }))
-      .expect(400);
+      .expect(201);
+    // spoofed createdById must be neutralized — creator is the caller's org membership
+    expect(spoofRes.body.createdById).not.toBe(foreignStudentM.id);
 
     await prisma.membership.deleteMany({
       where: { organizationId: otherCtx.organization.id },
@@ -392,7 +418,7 @@ describe('Assignments (e2e)', () => {
     expect(res.body.testId).toBe(testA.id);
   });
 
-  it('GET /assignments/:id (STUDENT) → 403 do cizí org', async () => {
+  it('GET /assignments/:id (STUDENT) → 404 do cizí org (tenant masking)', async () => {
     // založ cizí org + assignment
     const otherCtx = await setupOrgContext(app, prisma, {
       role: 'DIRECTOR',
@@ -407,12 +433,15 @@ describe('Assignments (e2e)', () => {
       },
       select: { id: true },
     });
-    const otherYear = await prisma.academicYear.create({
+    const otherYear = (await prisma.academicYear.findFirst({
+      where: { orgId: otherCtx.organization.id, isCurrent: true },
+      select: { id: true },
+    })) ?? await prisma.academicYear.create({
       data: {
         orgId: otherCtx.organization.id,
         label: `Foreign ${Date.now()}`,
-        startsAt: new Date('2024-09-01'),
-        endsAt: new Date('2025-08-31'),
+        startsAt: new Date('2025-09-01'),
+        endsAt: new Date('2027-08-31'),
         isCurrent: true,
       },
       select: { id: true },
@@ -436,7 +465,8 @@ describe('Assignments (e2e)', () => {
     await request(app.getHttpServer())
       .get(`/assignments/${foreignAssignment.id}`)
       .set('Authorization', `Bearer ${student.token}`)
-      .expect(403);
+      // cross-tenant assignment is masked as 404 (no existence oracle)
+      .expect(404);
 
     // cleanup
     await prisma.assignment.delete({ where: { id: foreignAssignment.id } });
@@ -604,7 +634,8 @@ describe('Assignments (e2e)', () => {
       .expect(400);
   });
 
-  it('PATCH /assignments/:id (DIRECTOR) → 403 když se pokusí změnit identity fields', async () => {
+  it('PATCH /assignments/:id (DIRECTOR) → 400 když se pokusí změnit identity fields', async () => {
+    // immutable fields are absent from UpdateAssignmentDto → forbidNonWhitelisted 400
     await request(app.getHttpServer())
       .patch(`/assignments/${assignmentIdForGetPatchDelete}`)
       .set('Authorization', `Bearer ${director.token}`)
@@ -614,7 +645,7 @@ describe('Assignments (e2e)', () => {
         createdById: randomUUID(),
         studentIds: [randomUUID()],
       })
-      .expect(403);
+      .expect(400);
   });
 
   it('PATCH /assignments/:id (STUDENT) → 403', async () => {
@@ -634,6 +665,7 @@ describe('Assignments (e2e)', () => {
       data: {
         organizationId: org.id,
         testId: testA.id,
+        yearId: academicYearId,
         targetType: 'STUDENTS',
         openAt: new Date(Date.now() - 10_000).toISOString() as unknown as Date,
         closeAt: new Date(Date.now() + 10_000).toISOString() as unknown as Date,
@@ -705,7 +737,8 @@ describe('Assignments (e2e)', () => {
           classSectionId: randomUUID(), // neexistuje
         }),
       )
-      .expect(400);
+      // unknown/cross-tenant classSection is masked as 404
+      .expect(404);
   });
 
   it('GET /assignments/:id → 400 na nevalidní UUID (pokud používáš pipe/validator na Param)', async () => {

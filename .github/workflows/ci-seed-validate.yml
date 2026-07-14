@@ -18,7 +18,7 @@ jobs:
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: skillstorm
+          POSTGRES_DB: skillstorm_test
         options: >-
           --health-cmd="pg_isready -U postgres"
           --health-interval=10s
@@ -26,7 +26,8 @@ jobs:
           --health-retries=5
 
     env:
-      DATABASE_URL: postgres://postgres:postgres@localhost:5432/skillstorm
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/skillstorm_test
+      DATABASE_URL_TEST: postgres://postgres:postgres@localhost:5432/skillstorm_test
 
     steps:
       - name: 🧩 Checkout repository

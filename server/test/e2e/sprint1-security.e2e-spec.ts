@@ -446,15 +446,17 @@ describe('Sprint 1 security hardening (e2e)', () => {
     ).rejects.toThrow();
   });
 
-  it('API blocks creating second active academic year (409), DB prevents direct SQL', async () => {
-    const secondActive = await request(app.getHttpServer())
+  it('API blocks creating second active academic year (400), DB prevents direct SQL', async () => {
+    // Contract: POST with isActive=true while a current year exists is a
+    // 400 CURRENT_YEAR_ALREADY_EXISTS (switching goes through /activate).
+    await request(app.getHttpServer())
       .post('/academic-years')
       .set('Authorization', `Bearer ${directorA.token}`)
       .send({
         startYear: 2026,
         isActive: true,
       })
-      .expect(201);
+      .expect(400);
 
     const activeCount = await prisma.academicYear.count({
       where: { orgId: orgA.id, isCurrent: true },

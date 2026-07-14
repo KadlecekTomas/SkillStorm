@@ -3,7 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import type { CacheModuleOptions } from '@nestjs/cache-manager';
 import { CacheModule } from '@nestjs/cache-manager';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
-import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerGuard, ThrottlerModule, seconds } from '@nestjs/throttler';
 
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
@@ -73,17 +73,26 @@ import { ImportsModule } from './imports/imports.module';
         return { ttl }; // fallback in‑memory
       },
     }),
-    ThrottlerModule.forRoot([
-      {
-        ttl: process.env.DISABLE_THROTTLE === '1' ? 1 : 60,
-        limit:
-          process.env.DISABLE_THROTTLE === '1'
-            ? 10000
-            : process.env.DEMO_MODE === '1' || process.env.DEMO_MODE === 'true'
-              ? 1000
-              : 100,
-      },
-    ]),
+    ThrottlerModule.forRoot({
+      // Route-level @Throttle() overrides the default limits, so the test
+      // toggle must disable the guard itself — otherwise e2e suites hit the
+      // hard login/register limits (tests share one IP: no trust proxy).
+      skipIf: () => process.env.DISABLE_THROTTLE === '1',
+      throttlers: [
+        {
+          // v5 ttl is MILLISECONDS — bare 60 meant a 60 ms window (i.e. no
+          // real limiting). seconds() makes the intent explicit.
+          ttl: process.env.DISABLE_THROTTLE === '1' ? 1 : seconds(60),
+          limit:
+            process.env.DISABLE_THROTTLE === '1'
+              ? 10000
+              : process.env.DEMO_MODE === '1' ||
+                  process.env.DEMO_MODE === 'true'
+                ? 1000
+                : 100,
+        },
+      ],
+    }),
     PrismaModule,
     AuthModule,
     TeachersModule,

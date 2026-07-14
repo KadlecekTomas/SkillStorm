@@ -135,6 +135,7 @@ export class OrgSubjectService {
         subject: { select: this.subjectSelect },
       },
       orderBy: [{ subject: { name: 'asc' } }, { id: 'asc' }],
+      take: 500, // safety cap — subjects enabled for one org
     });
   }
 

@@ -307,6 +307,23 @@ export class TestsService {
     return hasSubmissions ? 'LIMITED' : 'FULL';
   }
 
+  /**
+   * Edit mode for a VIEW context: unlike canEditTest (which throws for
+   * non-editors and backs mutating endpoints), a read of the detail by a
+   * same-org non-author teacher is legal and simply yields editMode 'NONE'.
+   */
+  private async resolveEditModeForView(
+    testId: string,
+    user: JwtPayload,
+  ): Promise<TestEditMode> {
+    try {
+      return await this.canEditTest(testId, user);
+    } catch (err) {
+      if (err instanceof ForbiddenException) return 'NONE';
+      throw err;
+    }
+  }
+
   async canEditTest(testId: string, user: JwtPayload): Promise<TestEditMode> {
     const test = await this.prisma.test.findUnique({
       where: { id: testId },
@@ -1055,7 +1072,7 @@ export class TestsService {
         select: this.buildTestProjection(OrganizationRole.DIRECTOR, 'detail'),
       });
       if (!teacherView) throw new NotFoundException('Test nenalezen');
-      const editMode = await this.canEditTest(id, user);
+      const editMode = await this.resolveEditModeForView(id, user);
       return this.mapTeacherView(teacherView, assignability, editMode);
     }
 
@@ -1106,7 +1123,7 @@ export class TestsService {
       select: this.buildTestProjection(user.organizationRole ?? null, 'detail'),
     });
     if (!teacherView) throw new NotFoundException('Test nenalezen');
-    const editMode = await this.canEditTest(id, user);
+    const editMode = await this.resolveEditModeForView(id, user);
     return this.mapTeacherView(teacherView, assignability, editMode);
   }
   async update(
@@ -1139,7 +1156,7 @@ export class TestsService {
 
     await this.ensureCanEditTest(user, current);
 
-    const editMode = await this.canEditTest(id, user);
+    const editMode = await this.resolveEditModeForView(id, user);
     if (
       editMode !== 'FULL' &&
       (dto.subjectId !== undefined || dto.allowedGrades !== undefined)
@@ -1223,6 +1240,7 @@ export class TestsService {
       const assignedGrades = await this.prisma.assignment.findMany({
         where: { testId: id },
         select: { classSection: { select: { grade: true } } },
+        take: 1000, // safety cap — assignments of one test across years
       });
       const gradesInUse = [
         ...new Set(
@@ -1344,6 +1362,14 @@ export class TestsService {
       action: 'TEST_DELETE_SOFT',
       entityId: id,
     });
+    this.logger.log(
+      JSON.stringify({
+        event: 'test_soft_deleted',
+        testId: id,
+        organizationId: current.organizationId ?? null,
+        actorUserId: user.userId,
+      }),
+    );
     await bumpOrgVersion(
       this.cache,
       cacheScopeForUser(user.systemRole, current.organizationId),
@@ -1378,6 +1404,32 @@ export class TestsService {
     });
     if (!test) throw new NotFoundException('Test nenalezen');
 
+    // Tenancy FIRST: a cross-org caller must get an indistinguishable 404.
+    // The publish/assignability checks below return rich diagnostics
+    // (TEST_NOT_PUBLISHED, TEST_NOT_ASSIGNABLE + reasons) that would
+    // otherwise leak the existence and state of another org's test.
+    if (user.systemRole !== SystemRole.SUPERADMIN) {
+      if (!user.organizationId || user.organizationId !== test.organizationId) {
+        throw new NotFoundException('Test nenalezen');
+      }
+    }
+
+    const organizationId = test.organizationId;
+
+    if (dto.organizationId && dto.organizationId !== organizationId) {
+      throw new ForbiddenException('Invalid org scope for test assignment');
+    }
+
+    // Class-section tenancy before state checks: a foreign class must be an
+    // indistinguishable 404, never a diagnostic about the test's state.
+    const classSection = await this.prisma.classSection.findUnique({
+      where: { id: dto.classSectionId },
+      select: { id: true, orgId: true, yearId: true, grade: true },
+    });
+    if (!classSection || classSection.orgId !== organizationId) {
+      throw new NotFoundException('Class section nenalezena');
+    }
+
     if (test.status !== PublishStatus.PUBLISHED) {
       throw new BadRequestException({
         code: 'TEST_NOT_PUBLISHED',
@@ -1394,26 +1446,6 @@ export class TestsService {
         `issues=[${report.issues.map((i) => i.reason).join(',')}]`,
     );
     this.throwIfNotAssignable(report);
-
-    if (user.systemRole !== SystemRole.SUPERADMIN) {
-      if (!user.organizationId || user.organizationId !== test.organizationId) {
-        throw new NotFoundException('Test nenalezen');
-      }
-    }
-
-    const organizationId = test.organizationId;
-
-    if (dto.organizationId && dto.organizationId !== organizationId) {
-      throw new ForbiddenException('Invalid org scope for test assignment');
-    }
-
-    const classSection = await this.prisma.classSection.findUnique({
-      where: { id: dto.classSectionId },
-      select: { id: true, orgId: true, yearId: true, grade: true },
-    });
-    if (!classSection || classSection.orgId !== organizationId) {
-      throw new NotFoundException('Class section nenalezena');
-    }
 
     if (test.academicYearId && test.academicYearId !== classSection.yearId) {
       throw new BadRequestException({

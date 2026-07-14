@@ -6,6 +6,7 @@ import { AppModule } from '../../src/app.module';
 import { PrismaService } from '@/prisma/prisma.service';
 import { OrganizationRole } from '@prisma/client';
 import { RegisterMode } from '@/auth/dto/register.dto';
+import { useOrg } from 'test/helpers';
 
 const unique = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
@@ -71,9 +72,22 @@ describe('Owner parity (e2e)', () => {
       .expect(201);
 
     const ownerBody = unwrap(ownerRes);
-    const ownerToken = ownerBody.sessionToken as string;
+    const registerToken = ownerBody.sessionToken as string;
     const ownerId = ownerBody.user.id as string;
-    const orgId = ownerBody.organization.id as string;
+
+    // CREATE_ORG registration creates the user only; the organization is
+    // provisioned in the onboarding step (POST /organizations).
+    const orgRes = await request(app.getHttpServer())
+      .post('/organizations')
+      .set('Authorization', `Bearer ${registerToken}`)
+      .send({ name: `Owner Org ${unique()}` })
+      .expect(201);
+    const orgId = unwrap(orgRes).id as string;
+    await prisma.organization.update({
+      where: { id: orgId },
+      data: { status: 'ACTIVE' },
+    });
+    const ownerToken = await useOrg(app, registerToken, orgId);
 
     createdUserIds.push(ownerId);
     createdOrgIds.push(orgId);
@@ -86,7 +100,7 @@ describe('Owner parity (e2e)', () => {
         email: memberEmail,
         username: `member_${unique()}`,
         password: 'Password123!',
-        mode: RegisterMode.INDIVIDUAL,
+        mode: RegisterMode.CREATE_ORG,
       })
       .expect(201);
 

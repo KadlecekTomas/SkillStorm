@@ -6,7 +6,7 @@ import {
   Headers,
   Post,
 } from '@nestjs/common';
-import { Throttle } from '@nestjs/throttler';
+import { Throttle, seconds } from '@nestjs/throttler';
 import { MetricsService } from './metrics.service';
 import { RecordRbacMetricDto } from './dto/record-rbac-metric.dto';
 import { Public } from '@/common/decorators/public.decorator';
@@ -19,7 +19,7 @@ export class MetricsController {
 
   @Post('rbac')
   @Public()
-  @Throttle({ default: { limit: 20, ttl: 60 } })
+  @Throttle({ default: { limit: 20, ttl: seconds(60) } })
   async record(
     @Body() dto: RecordRbacMetricDto,
     @Headers('x-metrics-key') ingestKey?: string,

@@ -16,11 +16,15 @@ const PACKAGE_JSON_PATH =
 export interface HealthPayload {
   status: 'ok';
   timestamp: string;
+  version: string;
+  commitHash: string | null;
   checks: {
     process: 'ok';
     db: 'ok';
+    migrations: 'ok';
     redis: 'ok' | 'disabled';
   };
+  lastMigration: string | null;
 }
 
 export interface VersionPayload {
@@ -42,16 +46,51 @@ export class HealthService {
 
   async getHealth(): Promise<HealthPayload> {
     await this.checkDatabase();
+    const lastMigration = await this.checkMigrations();
     const redis = await this.checkRedis();
     return {
       status: 'ok',
       timestamp: new Date().toISOString(),
+      version: this.versionInfo.version,
+      commitHash: this.versionInfo.commitHash,
       checks: {
         process: 'ok',
         db: 'ok',
+        migrations: 'ok',
         redis,
       },
+      lastMigration,
     };
+  }
+
+  /**
+   * Migrations check: fails the health endpoint when any migration is
+   * recorded as started but not finished (crashed/rolled-back deploy) —
+   * uptime monitoring then alerts before users hit schema-drift errors.
+   * Returns the name of the last applied migration for the payload.
+   */
+  private async checkMigrations(): Promise<string | null> {
+    try {
+      const rows = await this.prisma.$queryRawUnsafe<
+        { migration_name: string; finished_at: Date | null }[]
+      >(
+        'SELECT migration_name, finished_at FROM _prisma_migrations ' +
+          'WHERE rolled_back_at IS NULL ORDER BY started_at DESC LIMIT 5',
+      );
+      const unfinished = rows.find((r) => r.finished_at === null);
+      if (unfinished) {
+        throw new ServiceUnavailableException({
+          status: 'error',
+          checks: { migrations: 'pending' },
+          message: `Migration not finished: ${unfinished.migration_name}`,
+        });
+      }
+      return rows[0]?.migration_name ?? null;
+    } catch (error) {
+      if (error instanceof ServiceUnavailableException) throw error;
+      this.logger.warn(`Migrations health check skipped: ${error}`);
+      return null;
+    }
   }
 
   getVersion(): VersionPayload {

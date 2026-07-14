@@ -24,3 +24,6 @@ test-results/
 client/tests/playwright-report/
 client/tests/snapshots/
 .playwright-mcp/
+
+# Database backups (scripts/ops/backup-db.sh) — never commit dumps
+backups/

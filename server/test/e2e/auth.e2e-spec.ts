@@ -41,7 +41,7 @@ describe('Auth (e2e) – robust', () => {
     username: `u_${unique}`,
     password: 'Password123!',
     role: OrganizationRole.STUDENT,
-    mode: RegisterMode.INDIVIDUAL,
+    mode: RegisterMode.CREATE_ORG,
   };
 
   let accessToken = '';
@@ -129,7 +129,7 @@ describe('Auth (e2e) – robust', () => {
         name: 'Test User',
         email: `short-pw-${unique}@example.com`,
         password: 'abc12',
-        mode: RegisterMode.INDIVIDUAL,
+        mode: RegisterMode.CREATE_ORG,
       })
       .expect(400);
   });
@@ -142,7 +142,7 @@ describe('Auth (e2e) – robust', () => {
         name: 'Test User',
         email: `no-num-${unique}@example.com`,
         password: 'abcdefgh',
-        mode: RegisterMode.INDIVIDUAL,
+        mode: RegisterMode.CREATE_ORG,
       });
     expect([400, 429]).toContain(res.status);
   });
@@ -156,7 +156,7 @@ describe('Auth (e2e) – robust', () => {
         name: 'Valid Password User',
         email,
         password: 'abcd1234',
-        mode: RegisterMode.INDIVIDUAL,
+        mode: RegisterMode.CREATE_ORG,
       });
     expect([201, 429]).toContain(res.status);
     if (res.status !== 201) {
@@ -531,7 +531,13 @@ describe('Auth (e2e) – robust', () => {
   // --------------------------
   // AUTH HARDENING: rate limiting returns 429 with generic message
   // --------------------------
-  it('exceeding login rate limit returns 429 with generic message', async () => {
+  // The e2e environment runs with DISABLE_THROTTLE=1 (ThrottlerGuard skipIf),
+  // otherwise suites sharing one IP trip the hard login/register limits.
+  // Rate limiting itself is verified against a production-configured
+  // instance (see docs/ops/production-readiness.md).
+  const itUnlessThrottleDisabled =
+    process.env.DISABLE_THROTTLE === '1' ? it.skip : it;
+  itUnlessThrottleDisabled('exceeding login rate limit returns 429 with generic message', async () => {
     const rateLimitIp = '192.168.100.99';
     const body = { email: 'nonexistent@example.com', password: 'wrong' };
     // Exhaust login throttle (10 per 15 min per IP) until we get 429

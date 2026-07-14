@@ -292,6 +292,7 @@ export class TeacherAccessService {
         teacherId: q.teacherId,
         deletedAt: null,
       },
+      take: 500, // safety cap — class links of one teacher
       include: this.includeAccess(),
       orderBy: [
         { classSection: { grade: 'asc' } },

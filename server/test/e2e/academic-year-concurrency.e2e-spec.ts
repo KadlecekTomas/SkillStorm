@@ -15,7 +15,7 @@ import { AppModule } from '../../src/app.module';
 import { PrismaService } from '@/prisma/prisma.service';
 import { OrganizationRole } from '@prisma/client';
 import { OrganizationType } from '@prisma/client';
-import { authAs } from 'test/helpers';
+import { authAs, useOrg } from 'test/helpers';
 import { RegisterMode } from '@/auth/dto/register.dto';
 import { MULTIPLE_CURRENT_YEARS_FOR_ORG } from '@/academic-years/academic-years.service';
 
@@ -55,22 +55,19 @@ describe('Academic year concurrency – one current per org (e2e)', () => {
       mode: RegisterMode.CREATE_ORG,
     });
 
-    const createOrgRes = await request(app.getHttpServer())
-      .post('/organizations')
-      .set('Authorization', `Bearer ${auth.accessToken}`)
-      .send({ name: `Concurrency Org ${Date.now()}`, type: OrganizationType.SCHOOL })
-      .expect(201);
-
-    const orgId = unwrap(createOrgRes)?.id ?? createOrgRes.body?.id;
+    // authAs already provisioned this user's one-and-only organization
+    // (creating a second org for the same user is 409 by contract now),
+    // and tokens travel in cookies — useOrg() extracts the fresh one.
+    const orgId = auth.organization?.id;
     expect(orgId).toBeTruthy();
 
-    const useOrgRes = await request(app.getHttpServer())
-      .post('/auth/use-org')
-      .set('Authorization', `Bearer ${auth.accessToken}`)
-      .send({ orgId })
-      .expect(201);
-    const token =
-      (unwrap(useOrgRes) ?? useOrgRes.body)?.sessionToken ?? useOrgRes.body?.sessionToken;
+    // year-scoped endpoints 409 with ORG_PENDING until the org is ACTIVE
+    await prisma.organization.update({
+      where: { id: orgId },
+      data: { status: 'ACTIVE' },
+    });
+
+    const token = await useOrg(app, auth.accessToken, orgId);
     expect(token).toBeTruthy();
 
     const server = app.getHttpServer();
@@ -84,22 +81,33 @@ describe('Academic year concurrency – one current per org (e2e)', () => {
     let idA: string;
     let idB: string;
     if (years.length >= 2) {
-      idA = years[0].id;
-      idB = years[1].id;
+      idA = years[0]!.id;
+      idB = years[1]!.id;
     } else {
-      const yearA = years[0];
+      const yearA = years[0]!;
       const createB = await request(server)
         .post('/academic-years')
         .set('Authorization', `Bearer ${token}`)
-        .send({ startYear: 2026, isActive: false })
+        // far-future startYear: the org bootstrap may already own the label
+        // for the current school year (@@unique([orgId, label]) → P2002/409)
+        .send({ startYear: 2030, isActive: false })
         .expect(201);
       idB = unwrap(createB)?.id ?? createB.body?.id;
       idA = yearA.id;
     }
 
+    // The zero-current state is unreachable through the API now (org-context
+    // layer rejects any request with NO_CURRENT_ACADEMIC_YEAR), so start from
+    // the valid state — yearA current — and race two switches. The invariant
+    // under test: whatever the interleaving, the DB ends with EXACTLY ONE
+    // current year (partial unique index academic_year_single_current_per_org).
     await prisma.academicYear.updateMany({
       where: { orgId },
       data: { isCurrent: false },
+    });
+    await prisma.academicYear.update({
+      where: { id: idA },
+      data: { isCurrent: true },
     });
 
     const [resA, resB] = await Promise.all([
@@ -111,24 +119,25 @@ describe('Academic year concurrency – one current per org (e2e)', () => {
         .set('Authorization', `Bearer ${token}`),
     ]);
 
-    const okRes = resA.status === 200 ? resA : resB;
-    const conflictRes = resA.status === 409 ? resA : resB;
-    expect(okRes.status).toBe(200);
-    expect(conflictRes.status).toBe(409);
-
-    const conflictCode =
-      conflictRes.body?.code ?? conflictRes.body?.meta?.code ?? conflictRes.body?.response?.code;
-    expect(conflictCode).toBe(MULTIPLE_CURRENT_YEARS_FOR_ORG);
+    // Each request is individually valid: allowed outcomes are 200 (winner or
+    // idempotent re-activate) and 409 MULTIPLE_CURRENT_YEARS_FOR_ORG (loser of
+    // the P2002 race window). At least one must succeed; nothing else may leak.
+    for (const res of [resA, resB]) {
+      expect([200, 409]).toContain(res.status);
+      if (res.status === 409) {
+        const code =
+          res.body?.code ?? res.body?.meta?.code ?? res.body?.response?.code;
+        expect(code).toBe(MULTIPLE_CURRENT_YEARS_FOR_ORG);
+      }
+    }
+    expect([resA.status, resB.status]).toContain(200);
 
     const currentInDb = await prisma.academicYear.findMany({
       where: { orgId, isCurrent: true },
       select: { id: true },
     });
     expect(currentInDb.length).toBe(1);
-    const currentId = currentInDb[0]!.id;
-    const okYearId = unwrap(okRes)?.id ?? okRes.body?.id;
-    expect(okYearId).toBeTruthy();
-    expect(currentId).toBe(okYearId);
+    expect([idA, idB]).toContain(currentInDb[0]!.id);
 
     await prisma.academicYear.deleteMany({ where: { orgId } }).catch(() => {});
     await prisma.membership.deleteMany({ where: { organizationId: orgId } }).catch(() => {});

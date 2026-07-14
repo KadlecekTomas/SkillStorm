@@ -22,6 +22,9 @@ const nextConfig: NextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  // Readable stack traces in Sentry: ship browser source maps. Upload to
+  // Sentry (optional) is documented in docs/ops/monitoring.md.
+  productionBrowserSourceMaps: true,
   // Closed beta: noindex in production so search engines do not index
   async headers() {
     if (process.env.NODE_ENV !== "production") return [];

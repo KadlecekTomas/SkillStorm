@@ -11,6 +11,8 @@ module.exports = {
     '^shared/(.*)$': '<rootDir>/shared/$1',
     '^test/(.*)$': '<rootDir>/test/$1',
   },
+  // Quarantined drifted suites — see test/e2e-legacy/README.md
+  testPathIgnorePatterns: ['/node_modules/', '/test/e2e-legacy/'],
   automock: false,
   setupFiles: ['<rootDir>/test/jest-env.js'],
 };

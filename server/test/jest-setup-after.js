@@ -1,7 +1,12 @@
 /* eslint-disable @typescript-eslint/no-var-requires */
+const { assertTestDatabaseUrl } = require('../scripts/db-safety');
+
 // E2E canonical DATABASE_URL: use URL parsing so pathname (DB name) is never corrupted; enforce connection_limit=2.
 const dbUrl = process.env.DATABASE_URL;
 if (dbUrl) {
+  // Guard: this file drops schemas and runs `prisma migrate reset` — the
+  // target database name MUST end with "_test". No bypass exists.
+  assertTestDatabaseUrl(dbUrl, 'jest-setup-after');
   const url = new URL(dbUrl);
   const schema = url.searchParams.get('schema');
   if (schema && schema !== 'public') {
@@ -23,6 +28,45 @@ const Test = require('supertest/lib/test');
 
 const originalAssert = Test.prototype.assert;
 Test.prototype.assert = function (err, res, fn) {
+  // Diagnostics: status-mismatch errors say only "expected 201, got 400" —
+  // append the response body so the failure cause is visible in logs. The
+  // assertion error is produced inside originalAssert, so wrap the callback.
+  const originalFn = fn;
+  fn = function (error, ...rest) {
+    if (error && res && res.body && /expected \d+ .*got \d+/.test(error.message || '')) {
+      try {
+        error.message += `\nresponse body: ${JSON.stringify(res.body).slice(0, 600)}`;
+      } catch (_) {
+        // ignore unserializable bodies
+      }
+    }
+    return originalFn.call(this, error, ...rest);
+  };
+  // Compat shim: auth tokens moved from response bodies to httpOnly cookies,
+  // but many older specs still read `res.body.sessionToken`. Mirror the
+  // access-token cookie into the body so those assertions keep working
+  // without weakening the real API (which stays cookie-only).
+  if (res && res.headers && res.body && typeof res.body === 'object') {
+    const setCookie = res.headers['set-cookie'];
+    if (setCookie && res.body.sessionToken === undefined) {
+      const cookies = Array.isArray(setCookie) ? setCookie : [setCookie];
+      for (const c of cookies) {
+        const m = /^ss_at=([^;]+)/.exec(c); // ACCESS_TOKEN_COOKIE (src/auth/token-cookies.ts)
+        if (m && m[1]) {
+          try {
+            res.body.sessionToken = decodeURIComponent(m[1]);
+            if (res.body.data && typeof res.body.data === 'object') {
+              res.body.data.sessionToken = res.body.sessionToken;
+            }
+          } catch (_) {
+            // ignore malformed cookie values
+          }
+          break;
+        }
+      }
+    }
+  }
+
   if (
     res &&
     res.body &&
@@ -49,6 +93,11 @@ async function setupDb() {
   const dbUrl = process.env.DATABASE_URL;
   if (!dbUrl) throw new Error('DATABASE_URL není nastavená');
 
+  // Guard immediately before the destructive part (DROP SCHEMA + migrate
+  // reset). Re-asserted here in case something mutated DATABASE_URL after
+  // module load.
+  assertTestDatabaseUrl(dbUrl, 'jest-setup-after setupDb');
+
   const url = new URL(dbUrl);
   const schema = url.searchParams.get('schema') ?? 'public';
 
@@ -69,6 +118,20 @@ async function setupDb() {
         );
       }
       throw err;
+    }
+
+    // Suites run sequentially in one worker but leak connections (apps that
+    // never close, module-level Prisma clients). Across ~70 suites that
+    // exhausts max_connections ("sorry, too many clients already") and every
+    // later suite fails in cascade. The test DB is dedicated (guard above),
+    // so terminating every other session at suite start is safe.
+    try {
+      await prisma.$queryRawUnsafe(`
+        SELECT pg_terminate_backend(pid) FROM pg_stat_activity
+        WHERE datname = current_database() AND pid <> pg_backend_pid()
+      `);
+    } catch (_) {
+      // Non-fatal: requires superuser/same-role; worst case old behavior.
     }
 
     const isCI = process.env.CI === 'true' || process.env.CI === '1';

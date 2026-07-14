@@ -38,7 +38,7 @@ describe('Invite entry invariant (e2e)', () => {
         email,
         password: 'Password123!',
         username: `inv_${Date.now()}`,
-        mode: RegisterMode.INDIVIDUAL,
+        mode: RegisterMode.CREATE_ORG,
       })
       .expect(201);
 

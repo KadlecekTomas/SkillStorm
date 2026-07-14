@@ -85,8 +85,8 @@ describe('AcademicYearExpiredGuard (e2e)', () => {
     teacherMembershipId = teacherMembership.id;
 
     const teacherLoginRes = await login(app, {
-      email: teacherUser.email,
-      login: teacherUser.email,
+      email: teacherUser.email!,
+      login: teacherUser.email!,
       password: 'x',
       organizationId: orgId,
     }).catch(() => null);

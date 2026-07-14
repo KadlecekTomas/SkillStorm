@@ -50,13 +50,13 @@ describe('Academic year invariant (e2e)', () => {
     });
     const token = auth.accessToken;
 
-    const createOrgRes = await request(app.getHttpServer())
-      .post('/organizations')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ name: `Current Org ${Date.now()}`, type: OrganizationType.SCHOOL })
-      .expect(201);
-
-    const orgId = unwrap(createOrgRes)?.id ?? createOrgRes.body?.id;
+    // authAs already provisioned this user's only organization (a second
+    // org per user is 409 by contract); activate it for year-scoped ops
+    const orgId = auth.organization?.id as string;
+    await prisma.organization.update({
+      where: { id: orgId },
+      data: { status: 'ACTIVE' },
+    });
     expect(orgId).toBeTruthy();
 
     const useOrgRes = await request(app.getHttpServer())
@@ -88,13 +88,13 @@ describe('Academic year invariant (e2e)', () => {
     });
     const token = auth.accessToken;
 
-    const createOrgRes = await request(app.getHttpServer())
-      .post('/organizations')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ name: `No Active Org ${Date.now()}`, type: OrganizationType.SCHOOL })
-      .expect(201);
-
-    const orgId = unwrap(createOrgRes)?.id ?? createOrgRes.body?.id;
+    // authAs already provisioned this user's only organization (a second
+    // org per user is 409 by contract); activate it for year-scoped ops
+    const orgId = auth.organization?.id as string;
+    await prisma.organization.update({
+      where: { id: orgId },
+      data: { status: 'ACTIVE' },
+    });
     await prisma.academicYear.updateMany({ where: { orgId }, data: { isCurrent: false } });
 
     const useOrgRes = await request(app.getHttpServer())
@@ -125,13 +125,13 @@ describe('Academic year invariant (e2e)', () => {
       mode: RegisterMode.CREATE_ORG,
     });
 
-    const createOrgRes = await request(app.getHttpServer())
-      .post('/organizations')
-      .set('Authorization', `Bearer ${auth.accessToken}`)
-      .send({ name: `Multi Active Org ${Date.now()}`, type: OrganizationType.SCHOOL })
-      .expect(201);
-
-    const orgId = unwrap(createOrgRes)?.id ?? createOrgRes.body?.id;
+    // authAs already provisioned this user's only organization (a second
+    // org per user is 409 by contract); activate it for year-scoped ops
+    const orgId = auth.organization?.id as string;
+    await prisma.organization.update({
+      where: { id: orgId },
+      data: { status: 'ACTIVE' },
+    });
     expect(orgId).toBeTruthy();
 
     // Org has exactly one current year from registration
@@ -167,14 +167,11 @@ describe('Academic year invariant (e2e)', () => {
     });
     const token = auth.accessToken;
 
-    const createOrgRes = await request(app.getHttpServer())
-      .post('/organizations')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ name: `Invariant Org ${Date.now()}`, type: OrganizationType.SCHOOL })
-      .expect(201);
-
-    const org = unwrap(createOrgRes);
-    const orgId = org?.id ?? createOrgRes.body?.id;
+    const orgId = auth.organization?.id as string;
+    await prisma.organization.update({
+      where: { id: orgId },
+      data: { status: 'ACTIVE' },
+    });
     expect(orgId).toBeTruthy();
 
     const useOrgRes = await request(app.getHttpServer())
@@ -210,12 +207,11 @@ describe('Academic year invariant (e2e)', () => {
       seed: `compat_${Date.now()}`,
       mode: RegisterMode.CREATE_ORG,
     });
-    const createOrgRes = await request(app.getHttpServer())
-      .post('/organizations')
-      .set('Authorization', `Bearer ${auth.accessToken}`)
-      .send({ name: `Compat Org ${Date.now()}`, type: OrganizationType.SCHOOL })
-      .expect(201);
-    const orgId = unwrap(createOrgRes)?.id ?? createOrgRes.body?.id;
+    const orgId = auth.organization?.id as string;
+    await prisma.organization.update({
+      where: { id: orgId },
+      data: { status: 'ACTIVE' },
+    });
     const useOrgRes = await request(app.getHttpServer())
       .post('/auth/use-org')
       .set('Authorization', `Bearer ${auth.accessToken}`)
@@ -249,14 +245,11 @@ describe('Academic year invariant (e2e)', () => {
     });
     const token = auth.accessToken;
 
-    const createOrgRes = await request(app.getHttpServer())
-      .post('/organizations')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ name: `Invariant Org 2 ${Date.now()}`, type: OrganizationType.SCHOOL })
-      .expect(201);
-
-    const org = unwrap(createOrgRes);
-    const orgId = org?.id ?? createOrgRes.body?.id;
+    const orgId = auth.organization?.id as string;
+    await prisma.organization.update({
+      where: { id: orgId },
+      data: { status: 'ACTIVE' },
+    });
     expect(orgId).toBeTruthy();
 
     const useOrgRes = await request(app.getHttpServer())
@@ -274,17 +267,26 @@ describe('Academic year invariant (e2e)', () => {
     const firstActive = unwrap(activeRes);
     expect(firstActive?.isActive).toBe(true);
 
+    // Contract change: POST with isActive=true is rejected (400
+    // CURRENT_YEAR_ALREADY_EXISTS) while a current year exists — switching
+    // goes through /activate. Verify both halves of the invariant.
+    await request(app.getHttpServer())
+      .post('/academic-years')
+      .set('Authorization', `Bearer ${newToken}`)
+      .send({ startYear: 2030, isActive: true })
+      .expect(400);
+
     const createYearRes = await request(app.getHttpServer())
       .post('/academic-years')
       .set('Authorization', `Bearer ${newToken}`)
-      .send({
-        startYear: 2026,
-        isActive: true,
-      })
+      .send({ startYear: 2030, isActive: false })
       .expect(201);
-
     const created = unwrap(createYearRes);
-    expect(created?.isActive).toBe(true);
+
+    await request(app.getHttpServer())
+      .patch(`/academic-years/${created?.id}/activate`)
+      .set('Authorization', `Bearer ${newToken}`)
+      .expect(200);
 
     const count = await prisma.academicYear.count({
       where: { orgId, isCurrent: true },
@@ -296,7 +298,7 @@ describe('Academic year invariant (e2e)', () => {
       select: { id: true, label: true },
     });
     expect(activeRow?.id).toBe(created?.id);
-    expect(activeRow?.label).toBe('2026/2027');
+    expect(activeRow?.label).toBe('2030/2031');
 
     await prisma.academicYear.deleteMany({ where: { orgId } }).catch(() => {});
     await prisma.membership.deleteMany({ where: { organizationId: orgId } }).catch(() => {});
@@ -309,12 +311,11 @@ describe('Academic year invariant (e2e)', () => {
       mode: RegisterMode.CREATE_ORG,
     });
     const token = auth.accessToken;
-    const createOrgRes = await request(app.getHttpServer())
-      .post('/organizations')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ name: `Inv Rej Org ${Date.now()}`, type: OrganizationType.SCHOOL })
-      .expect(201);
-    const orgId = unwrap(createOrgRes)?.id ?? createOrgRes.body?.id;
+    const orgId = auth.organization?.id as string;
+    await prisma.organization.update({
+      where: { id: orgId },
+      data: { status: 'ACTIVE' },
+    });
     const useOrgRes = await request(app.getHttpServer())
       .post('/auth/use-org')
       .set('Authorization', `Bearer ${token}`)
@@ -339,12 +340,11 @@ describe('Academic year invariant (e2e)', () => {
       mode: RegisterMode.CREATE_ORG,
     });
     const token = auth.accessToken;
-    const createOrgRes = await request(app.getHttpServer())
-      .post('/organizations')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ name: `Inv Rej2 Org ${Date.now()}`, type: OrganizationType.SCHOOL })
-      .expect(201);
-    const orgId = unwrap(createOrgRes)?.id ?? createOrgRes.body?.id;
+    const orgId = auth.organization?.id as string;
+    await prisma.organization.update({
+      where: { id: orgId },
+      data: { status: 'ACTIVE' },
+    });
     const useOrgRes = await request(app.getHttpServer())
       .post('/auth/use-org')
       .set('Authorization', `Bearer ${token}`)

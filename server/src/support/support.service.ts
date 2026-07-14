@@ -317,6 +317,7 @@ export class SupportService {
         ...(filters.category ? { category: filters.category } : {}),
       },
       orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
+      take: 500, // safety cap — platform triage view, newest first per status
       select: {
         id: true,
         organizationId: true,

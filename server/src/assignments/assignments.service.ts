@@ -205,8 +205,6 @@ export class AssignmentsService {
         message: 'Test byl vytvořen pro jiný školní rok než je aktuální.',
       });
     }
-    await this.ensureTestAssignable(test.id);
-
     // 5) AcademicYear v rámci org a musí být aktivní
     if (!ctx.activeAcademicYearId) {
       throw new BadRequestException('Active academic year is not configured.');
@@ -236,6 +234,8 @@ export class AssignmentsService {
         where: { id: dto.classSectionId },
         select: { id: true, orgId: true, yearId: true, grade: true },
       });
+      // Tenancy before diagnostics: a foreign/unknown class must be an
+      // indistinguishable 404, never a report about the test's state.
       if (!cs || cs.orgId !== ctx.organizationId) {
         throw new NotFoundException('Class section nenalezena');
       }
@@ -343,6 +343,10 @@ export class AssignmentsService {
         );
       }
     }
+
+    // 9a) Test musí být připraven k přiřazení — až PO všech tenancy
+    // validacích výše, aby diagnostika neunikala přes cizí identifikátory.
+    await this.ensureTestAssignable(test.id);
 
     // 9) Vytvoření assignmentu (studentIds nejsou sloupec assignmentu)
     const {
@@ -675,6 +679,7 @@ export class AssignmentsService {
               classSectionId: { in: classSectionIds },
             },
             select: assignmentWithTestSelect,
+            take: 1000, // safety cap — grows with school-year usage
           })
         : [],
       this.prisma.assignment.findMany({
@@ -684,6 +689,7 @@ export class AssignmentsService {
           students: { some: { studentId: membershipId } },
         },
         select: assignmentWithTestSelect,
+        take: 1000, // safety cap — grows with school-year usage
       }),
     ]);
 
@@ -708,6 +714,7 @@ export class AssignmentsService {
               assignmentId: { in: assignmentIds },
               deletedAt: null,
             },
+            take: 2000, // safety cap — one student's submissions
             select: {
               id: true,
               assignmentId: true,
@@ -954,6 +961,7 @@ export class AssignmentsService {
       const orgAssignments = await this.prisma.assignment.findMany({
         where: withOrg({}, orgId),
         select: { id: true },
+        take: 10_000, // safety cap — id-only visibility scope, grows with usage
       });
       orgAssignments.forEach((a) => idSets.add(a.id));
     }

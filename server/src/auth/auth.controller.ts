@@ -25,7 +25,7 @@ import { Public } from '@/common/decorators/public.decorator';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { Request, Response } from 'express';
 import { RequestWithUser } from '@/types/request-with-user';
-import { Throttle } from '@nestjs/throttler';
+import { Throttle, seconds } from '@nestjs/throttler';
 import {
   REFRESH_TOKEN_COOKIE,
   clearAuthCookies,
@@ -57,7 +57,7 @@ export class AuthController {
   @Public()
   @Post('register')
   @ApiOperation({ summary: 'Register a new user' })
-  @Throttle({ default: { limit: 3, ttl: 60 } })
+  @Throttle({ default: { limit: 3, ttl: seconds(60) } })
   async register(
     @Body() dto: RegisterDto,
     @Req() req: Request,
@@ -109,7 +109,7 @@ export class AuthController {
   @Public()
   @Post('login')
   @ApiOperation({ summary: 'Login user' })
-  @Throttle({ default: { limit: 10, ttl: 900 } })
+  @Throttle({ default: { limit: 10, ttl: seconds(900) } })
   async login(
     @Body() dto: LoginDto,
     @Req() req: Request & { requestId?: string },
@@ -153,7 +153,7 @@ export class AuthController {
     summary:
       'Login with a Google ID token (organization-scoped SSO; gated by GOOGLE_SSO_ENABLED)',
   })
-  @Throttle({ default: { limit: 10, ttl: 900 } })
+  @Throttle({ default: { limit: 10, ttl: seconds(900) } })
   async googleSso(
     @Body() dto: GoogleSsoLoginDto,
     @Req() req: Request & { requestId?: string },
@@ -194,7 +194,7 @@ export class AuthController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Refresh access token' })
   @HttpCode(HttpStatus.OK)
-  @Throttle({ default: { limit: 20, ttl: 600 } })
+  @Throttle({ default: { limit: 20, ttl: seconds(600) } })
   async refresh(
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
@@ -254,7 +254,7 @@ export class AuthController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Join organization by code' })
-  @Throttle({ default: { limit: 5, ttl: 60 } })
+  @Throttle({ default: { limit: 5, ttl: seconds(60) } })
   async joinOrganization(
     @Body() _dto: JoinOrganizationDto,
     @Req() _req: RequestWithUser,
@@ -271,7 +271,7 @@ export class AuthController {
     summary:
       'Switch active organization (by orgId, persists lastActiveMembershipId)',
   })
-  @Throttle({ default: { limit: 10, ttl: 60 } })
+  @Throttle({ default: { limit: 10, ttl: seconds(60) } })
   async useOrganization(
     @Req() req: RequestWithUser,
     @Body() dto: UseOrgDto,
@@ -302,7 +302,7 @@ export class AuthController {
     summary:
       'Switch active organization by membershipId (persists lastActiveMembershipId)',
   })
-  @Throttle({ default: { limit: 10, ttl: 60 } })
+  @Throttle({ default: { limit: 10, ttl: seconds(60) } })
   async switchOrganization(
     @Req() req: RequestWithUser,
     @Body() dto: SwitchOrganizationDto,
@@ -327,7 +327,7 @@ export class AuthController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Change password (authenticated user)' })
-  @Throttle({ default: { limit: 5, ttl: 60 } })
+  @Throttle({ default: { limit: 5, ttl: seconds(60) } })
   async changePassword(
     @Req() req: RequestWithUser,
     @Body() dto: ChangePasswordDto,
@@ -343,7 +343,7 @@ export class AuthController {
   @Public()
   @Post('forgot-password')
   @ApiOperation({ summary: 'Request password reset email' })
-  @Throttle({ default: { limit: 5, ttl: 900 } })
+  @Throttle({ default: { limit: 5, ttl: seconds(900) } })
   async forgotPassword(@Body() dto: ForgotPasswordDto, @Req() req: Request) {
     const ctx = {
       ipAddress: req.ip ?? null,
@@ -355,7 +355,7 @@ export class AuthController {
   @Public()
   @Post('reset-password')
   @ApiOperation({ summary: 'Reset password with token' })
-  @Throttle({ default: { limit: 5, ttl: 900 } })
+  @Throttle({ default: { limit: 5, ttl: seconds(900) } })
   async resetPassword(@Body() dto: ResetPasswordDto, @Req() req: Request) {
     const ctx = {
       ipAddress: req.ip ?? null,

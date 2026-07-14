@@ -74,7 +74,12 @@ describe('RbacService (unit)', () => {
     expect(prismaMock.rolePermission.findFirst).toHaveBeenCalledTimes(1);
 
     emitRbacInvalidation({ organizationId: 'org-1' });
-    prismaMock.rolePermission.findFirst.mockResolvedValueOnce(null);
+    // Org-scoped lookup answers definitively (allowed: false); a bare `null`
+    // would fall through to the org-null fallback query and hit the base
+    // mock's `allowed: true` again (canUser does `orgScoped ?? global`).
+    prismaMock.rolePermission.findFirst.mockResolvedValueOnce({
+      allowed: false,
+    });
     const afterInvalidation = await service.canUser(
       'user-1',
       'org-1',

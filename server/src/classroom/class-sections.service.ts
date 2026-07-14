@@ -184,6 +184,7 @@ export class ClassSectionsService {
           some: { classSectionId },
         },
       },
+      take: 500, // safety cap — subjects of one class section
       include: {
         subject: {
           select: {
@@ -1695,6 +1696,8 @@ export class ClassSectionsService {
         },
       },
       orderBy: [{ grade: 'asc' }, { section: 'asc' }, { id: 'asc' }],
+
+      take: 500, // safety cap — classes of one teacher/year
     });
 
     // Bucket by ID to guarantee no class appears in more than one bucket.

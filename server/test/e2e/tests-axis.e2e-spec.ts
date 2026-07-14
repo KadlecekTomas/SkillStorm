@@ -2,12 +2,12 @@
 /**
  * Test–Subject–AcademicYear axis hardening (e2e)
  *
- * 1. Cross-tenant subject   → 400 SUBJECT_NOT_FOUND
+ * 1. Cross-tenant subject   → 400 SUBJECT_NOT_ENABLED_FOR_ORGANIZATION
  * 2. Cross-tenant year      → 400 INVALID_ACADEMIC_YEAR
  * 3. Missing subjectId      → 400 (ValidationPipe)
  * 4. academicYearId omitted → 201 + response uses active year (NO_ACTIVE_ACADEMIC_YEAR path not hit)
  * 5. GET filter by subjectId → only matching tests returned
- * 6. Soft-deleted subject   → 400 SUBJECT_NOT_FOUND
+ * 6. Soft-deleted subject   → 400 SUBJECT_NOT_ENABLED_FOR_ORGANIZATION
  */
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test as NestTest } from '@nestjs/testing';
@@ -16,7 +16,7 @@ import { OrganizationStatus } from '@prisma/client';
 import { AppModule } from '@/app.module';
 import { HttpExceptionFilter } from '@/infra/http-exception.filter';
 import { PrismaService } from '@/prisma/prisma.service';
-import { setupOrgContext } from 'test/helpers';
+import { createOrgSubject, setupOrgContext } from 'test/helpers';
 
 const unwrap = (res: request.Response) => res.body?.data ?? res.body;
 
@@ -85,17 +85,11 @@ describe('Tests Axis — Subject & AcademicYear invariant guards (e2e)', () => {
     yearBId = yearB.id;
 
     const [subjectA, subjectB] = await Promise.all([
-      prisma.subject.create({
-        data: { organizationId: orgAId, name: 'Axis Subject A' },
-        select: { id: true },
-      }),
-      prisma.subject.create({
-        data: { organizationId: orgBId, name: 'Axis Subject B' },
-        select: { id: true },
-      }),
+      createOrgSubject(prisma, orgAId, { name: 'Axis Subject A' }),
+      createOrgSubject(prisma, orgBId, { name: 'Axis Subject B' }),
     ]);
-    subjectAId = subjectA.id;
-    subjectBId = subjectB.id;
+    subjectAId = subjectA.subjectId;
+    subjectBId = subjectB.subjectId;
   });
 
   afterAll(async () => {
@@ -103,7 +97,7 @@ describe('Tests Axis — Subject & AcademicYear invariant guards (e2e)', () => {
       await prisma.test.deleteMany({
         where: { organizationId: { in: [orgAId, orgBId] } },
       });
-      await prisma.subject.deleteMany({
+      await prisma.orgSubject.deleteMany({
         where: { organizationId: { in: [orgAId, orgBId] } },
       });
       await prisma.membership.deleteMany({
@@ -127,7 +121,7 @@ describe('Tests Axis — Subject & AcademicYear invariant guards (e2e)', () => {
 
   // ----- 1. Cross-tenant subject -----
 
-  it('POST /tests with cross-tenant subjectId → 400 SUBJECT_NOT_FOUND', async () => {
+  it('POST /tests with cross-tenant subjectId → 400 SUBJECT_NOT_ENABLED_FOR_ORGANIZATION', async () => {
     const res = await request(app.getHttpServer())
       .post('/tests')
       .set('Authorization', `Bearer ${tokenA}`)
@@ -138,7 +132,7 @@ describe('Tests Axis — Subject & AcademicYear invariant guards (e2e)', () => {
       })
       .expect(400);
 
-    expect(res.body.code).toBe('SUBJECT_NOT_FOUND');
+    expect(res.body.code).toBe('SUBJECT_NOT_ENABLED_FOR_ORGANIZATION');
   });
 
   // ----- 2. Cross-tenant academicYear -----
@@ -213,15 +207,14 @@ describe('Tests Axis — Subject & AcademicYear invariant guards (e2e)', () => {
     }
   });
 
-  // ----- 6. Soft-deleted subject → 400 SUBJECT_NOT_FOUND -----
+  // ----- 6. Soft-deleted subject → 400 SUBJECT_NOT_ENABLED_FOR_ORGANIZATION -----
 
-  it('POST /tests with soft-deleted subjectId → 400 SUBJECT_NOT_FOUND', async () => {
-    const toDelete = await prisma.subject.create({
-      data: { organizationId: orgAId, name: 'Ephemeral Subject' },
-      select: { id: true },
+  it('POST /tests with soft-deleted subjectId → 400 SUBJECT_NOT_ENABLED_FOR_ORGANIZATION', async () => {
+    const toDelete = await createOrgSubject(prisma, orgAId, {
+      name: 'Ephemeral Subject',
     });
     await prisma.subject.update({
-      where: { id: toDelete.id },
+      where: { id: toDelete.subjectId },
       data: { deletedAt: new Date() },
     });
 
@@ -230,15 +223,16 @@ describe('Tests Axis — Subject & AcademicYear invariant guards (e2e)', () => {
       .set('Authorization', `Bearer ${tokenA}`)
       .send({
         title: 'Soft-deleted subject test',
-        subjectId: toDelete.id,
+        subjectId: toDelete.subjectId,
         academicYearId: yearAId,
       })
       .expect(400);
 
-    expect(res.body.code).toBe('SUBJECT_NOT_FOUND');
+    expect(res.body.code).toBe('SUBJECT_NOT_ENABLED_FOR_ORGANIZATION');
 
     // Cleanup — force-delete the soft-deleted subject
-    await prisma.subject.delete({ where: { id: toDelete.id } });
+    await prisma.orgSubject.deleteMany({ where: { subjectId: toDelete.subjectId } });
+    await prisma.subject.delete({ where: { id: toDelete.subjectId } });
   });
 
   // ----- 7. Soft-deleted academic year -----
@@ -263,9 +257,12 @@ describe('Tests Axis — Subject & AcademicYear invariant guards (e2e)', () => {
       });
     });
 
-    it('7a — POST without academicYearId (fallback path) → 400 NO_ACTIVE_ACADEMIC_YEAR', async () => {
-      // ctx.activeAcademicYearId still points to yearAId (isCurrent=true, cache may be warm)
-      // resolveAcademicYear verifies against DB with deletedAt=null → not found
+    // RequireCurrentAcademicYearGuard now checks deletedAt too and rejects the
+    // request with 409 NO_CURRENT_ACADEMIC_YEAR before the handler runs, so the
+    // service-level 400 paths are unreachable over HTTP for a soft-deleted
+    // CURRENT year (they still guard direct service use / non-current years).
+
+    it('7a — POST without academicYearId (fallback path) → 409 NO_CURRENT_ACADEMIC_YEAR', async () => {
       const res = await request(app.getHttpServer())
         .post('/tests')
         .set('Authorization', `Bearer ${tokenA}`)
@@ -274,13 +271,12 @@ describe('Tests Axis — Subject & AcademicYear invariant guards (e2e)', () => {
           subjectId: subjectAId,
           // no academicYearId — triggers fallback
         })
-        .expect(400);
+        .expect(409);
 
-      expect(res.body.code).toBe('NO_ACTIVE_ACADEMIC_YEAR');
+      expect(JSON.stringify(res.body)).toContain('NO_CURRENT_ACADEMIC_YEAR');
     });
 
-    it('7b — POST with explicit soft-deleted academicYearId → 400 INVALID_ACADEMIC_YEAR', async () => {
-      // Explicit yearAId provided but deletedAt is set — service rejects it
+    it('7b — POST with explicit soft-deleted academicYearId → 409 NO_CURRENT_ACADEMIC_YEAR', async () => {
       const res = await request(app.getHttpServer())
         .post('/tests')
         .set('Authorization', `Bearer ${tokenA}`)
@@ -289,9 +285,9 @@ describe('Tests Axis — Subject & AcademicYear invariant guards (e2e)', () => {
           subjectId: subjectAId,
           academicYearId: yearAId,
         })
-        .expect(400);
+        .expect(409);
 
-      expect(res.body.code).toBe('INVALID_ACADEMIC_YEAR');
+      expect(JSON.stringify(res.body)).toContain('NO_CURRENT_ACADEMIC_YEAR');
     });
   });
 });

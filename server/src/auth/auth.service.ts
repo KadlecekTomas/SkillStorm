@@ -943,12 +943,23 @@ export class AuthService {
       where: { email: dto.email },
     });
     if (!user) {
-      this.logger.warn('Failed login – user not found');
+      this.logger.warn(
+        JSON.stringify({
+          event: 'auth_login_failed',
+          reason: 'user_not_found',
+        }),
+      );
       throw new UnauthorizedException('Operace se nezdařila.');
     }
 
     if (user.status !== UserStatus.ACTIVE || user.deletedAt) {
-      this.logger.warn('Failed login – disabled account');
+      this.logger.warn(
+        JSON.stringify({
+          event: 'auth_login_failed',
+          reason: 'account_disabled',
+          userId: user.id,
+        }),
+      );
       throw new UnauthorizedException('Account disabled');
     }
 
@@ -957,7 +968,13 @@ export class AuthService {
       user.passwordHash,
     );
     if (!isPasswordValid) {
-      this.logger.warn('Failed login – invalid password');
+      this.logger.warn(
+        JSON.stringify({
+          event: 'auth_login_failed',
+          reason: 'invalid_password',
+          userId: user.id,
+        }),
+      );
       throw new UnauthorizedException('Operace se nezdařila.');
     }
 
@@ -1004,7 +1021,13 @@ export class AuthService {
         lastLoginAt: updatedUser.lastLoginAt, // ← propsáno ven
       },
     };
-    this.logger.log(`Login result for ${updatedUser.id}`);
+    this.logger.log(
+      JSON.stringify({
+        event: 'auth_login_success',
+        userId: updatedUser.id,
+        organizationId: membership?.organizationId ?? null,
+      }),
+    );
     return response;
   }
 
