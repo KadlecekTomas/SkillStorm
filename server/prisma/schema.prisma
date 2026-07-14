@@ -9,39 +9,39 @@ datasource db {
 }
 
 model User {
-  id                String             @id @default(uuid()) @map("user_id")
-  email             String?            @unique @db.VarChar(320)
-  username          String?            @unique @db.VarChar(64)
-  passwordHash      String             @map("password_hash") @db.VarChar(255)
-  name              String             @db.VarChar(150)
-  preferredLang     String?            @map("preferred_lang") @db.VarChar(10)
-  systemRole        SystemRole?        @map("system_role")
-  status            UserStatus         @default(ACTIVE)
-  lastLoginAt         DateTime?          @map("last_login_at")
-  passwordChangedAt   DateTime?          @map("password_changed_at")
-  tokenVersion        Int                @default(0) @map("token_version")
-  lastActiveMembershipId String?       @unique @map("last_active_membership_id")
-  createdAt         DateTime           @default(now()) @map("created_at")
-  updatedAt         DateTime           @updatedAt @map("updated_at")
-  deletedAt         DateTime?          @map("deleted_at")
-  anonymized        Boolean            @default(false)
-  anonymizedAt      DateTime?          @map("anonymized_at")
-  isPlatformAdmin   Boolean            @default(false) @map("is_platform_admin")
-  analyticsEvents   AnalyticsEvent[]
-  auditLogs         AuditLog[]
-  supportTickets    SupportTicket[]
-  assignedSupportTickets SupportTicket[] @relation("SupportAssignedTo")
-  resolvedSupportTickets SupportTicket[] @relation("SupportResolvedBy")
-  materialPurchases MaterialPurchase[]
-  memberships       Membership[]
-  idempotencyKeys IdempotencyKey[]
-  refreshTokens       RefreshToken[]
-  revokedTokens      RevokedToken[]
-  passwordResetTokens PasswordResetToken[]
-  userPermissions     UserPermission[]
-  identities          UserIdentity[]
-  lastActiveMembership Membership?     @relation("LastActiveMembership", fields: [lastActiveMembershipId], references: [id], onDelete: SetNull)
-  ownedOrganizations   Organization[]   @relation("OrganizationOwner")
+  id                     String               @id @default(uuid()) @map("user_id")
+  email                  String?              @unique @db.VarChar(320)
+  username               String?              @unique @db.VarChar(64)
+  passwordHash           String               @map("password_hash") @db.VarChar(255)
+  name                   String               @db.VarChar(150)
+  preferredLang          String?              @map("preferred_lang") @db.VarChar(10)
+  systemRole             SystemRole?          @map("system_role")
+  status                 UserStatus           @default(ACTIVE)
+  lastLoginAt            DateTime?            @map("last_login_at")
+  passwordChangedAt      DateTime?            @map("password_changed_at")
+  tokenVersion           Int                  @default(0) @map("token_version")
+  lastActiveMembershipId String?              @unique @map("last_active_membership_id")
+  createdAt              DateTime             @default(now()) @map("created_at")
+  updatedAt              DateTime             @updatedAt @map("updated_at")
+  deletedAt              DateTime?            @map("deleted_at")
+  anonymized             Boolean              @default(false)
+  anonymizedAt           DateTime?            @map("anonymized_at")
+  isPlatformAdmin        Boolean              @default(false) @map("is_platform_admin")
+  analyticsEvents        AnalyticsEvent[]
+  auditLogs              AuditLog[]
+  supportTickets         SupportTicket[]
+  assignedSupportTickets SupportTicket[]      @relation("SupportAssignedTo")
+  resolvedSupportTickets SupportTicket[]      @relation("SupportResolvedBy")
+  materialPurchases      MaterialPurchase[]
+  memberships            Membership[]
+  idempotencyKeys        IdempotencyKey[]
+  refreshTokens          RefreshToken[]
+  revokedTokens          RevokedToken[]
+  passwordResetTokens    PasswordResetToken[]
+  userPermissions        UserPermission[]
+  identities             UserIdentity[]
+  lastActiveMembership   Membership?          @relation("LastActiveMembership", fields: [lastActiveMembershipId], references: [id], onDelete: SetNull)
+  ownedOrganizations     Organization[]       @relation("OrganizationOwner")
 
   @@index([username])
   @@map("users")
@@ -85,6 +85,8 @@ model Organization {
   submissions       Submission[]
   supportTickets    SupportTicket[]
   userIdentities    UserIdentity[]
+  liveSessions      LiveSession[]
+  classPartaks      ClassPartak[]
 
   @@index([name])
   @@index([city])
@@ -166,31 +168,33 @@ model IdempotencyKey {
 }
 
 model Membership {
-  id                 String                  @id @default(uuid()) @map("membership_id")
-  userId             String                  @map("user_id")
-  organizationId     String                  @map("organization_id")
+  id                 String                   @id @default(uuid()) @map("membership_id")
+  userId             String                   @map("user_id")
+  organizationId     String                   @map("organization_id")
   role               OrganizationRole
-  xp                 Int                     @default(0)
-  level              Int                     @default(1)
-  avatarType         String?                 @map("avatar_type") @db.VarChar(50)
-  createdAt          DateTime                @default(now()) @map("created_at")
-  updatedAt          DateTime                @updatedAt @map("updated_at")
-  deletedAt          DateTime?               @map("deleted_at")
+  xp                 Int                      @default(0)
+  level              Int                      @default(1)
+  avatarType         String?                  @map("avatar_type") @db.VarChar(50)
+  createdAt          DateTime                 @default(now()) @map("created_at")
+  updatedAt          DateTime                 @updatedAt @map("updated_at")
+  deletedAt          DateTime?                @map("deleted_at")
   assignmentStudents AssignmentStudent[]
-  createdAssignments Assignment[]            @relation("AssignmentCreatedBy")
+  createdAssignments Assignment[]             @relation("AssignmentCreatedBy")
   exportedLogs       ExportLog[]
   importedBatches    ImportBatch[]
   createdMaterials   LearningMaterial[]
   achievements       MembershipAchievement[]
-  badges            MembershipBadge[]
-  organization       Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  user               User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  lastActiveFor      User?                   @relation("LastActiveMembership")
+  badges             MembershipBadge[]
+  organization       Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user               User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastActiveFor      User?                    @relation("LastActiveMembership")
   student            Student?
   submissions        Submission[]
   teacher            Teacher?
   createdTests       Test[]
   xpEvents           XpEvent[]
+  hostedLiveSessions LiveSession[]            @relation("HostedLiveSessions")
+  liveParticipations LiveSessionParticipant[]
 
   @@unique([userId, organizationId])
   @@index([organizationId, role])
@@ -249,14 +253,14 @@ model MembershipAchievement {
 }
 
 model BadgeDefinition {
-  id          String           @id @default(uuid()) @map("badge_definition_id")
-  code        String           @unique @db.VarChar(100)
-  name        String           @db.VarChar(150)
-  description String?          @db.VarChar(255)
-  iconKey     String?          @map("icon_key") @db.VarChar(100)
-  xpReward    Int?             @map("xp_reward")
-  createdAt   DateTime         @default(now()) @map("created_at")
-  updatedAt   DateTime         @updatedAt @map("updated_at")
+  id          String            @id @default(uuid()) @map("badge_definition_id")
+  code        String            @unique @db.VarChar(100)
+  name        String            @db.VarChar(150)
+  description String?           @db.VarChar(255)
+  iconKey     String?           @map("icon_key") @db.VarChar(100)
+  xpReward    Int?              @map("xp_reward")
+  createdAt   DateTime          @default(now()) @map("created_at")
+  updatedAt   DateTime          @updatedAt @map("updated_at")
   awards      MembershipBadge[]
 
   @@index([code])
@@ -264,13 +268,13 @@ model BadgeDefinition {
 }
 
 model MembershipBadge {
-  id               String          @id @default(uuid()) @map("membership_badge_id")
-  membershipId     String          @map("membership_id")
-  badgeDefinitionId String         @map("badge_definition_id")
-  awardedAt        DateTime        @default(now()) @map("awarded_at")
-  metadata         Json?
-  badgeDefinition  BadgeDefinition @relation(fields: [badgeDefinitionId], references: [id], onDelete: Cascade)
-  membership       Membership      @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  id                String          @id @default(uuid()) @map("membership_badge_id")
+  membershipId      String          @map("membership_id")
+  badgeDefinitionId String          @map("badge_definition_id")
+  awardedAt         DateTime        @default(now()) @map("awarded_at")
+  metadata          Json?
+  badgeDefinition   BadgeDefinition @relation(fields: [badgeDefinitionId], references: [id], onDelete: Cascade)
+  membership        Membership      @relation(fields: [membershipId], references: [id], onDelete: Cascade)
 
   @@unique([membershipId, badgeDefinitionId])
   @@index([membershipId, awardedAt])
@@ -350,11 +354,11 @@ model SubscriptionPlan {
 }
 
 model RefreshToken {
-  id        String   @id @default(uuid()) @map("refresh_token_id")
-  token     String   @unique @db.Text
-  userId    String   @map("user_id")
-  createdAt DateTime @default(now()) @map("created_at")
-  expiresAt DateTime @map("expires_at")
+  id        String    @id @default(uuid()) @map("refresh_token_id")
+  token     String    @unique @db.Text
+  userId    String    @map("user_id")
+  createdAt DateTime  @default(now()) @map("created_at")
+  expiresAt DateTime  @map("expires_at")
   revokedAt DateTime? @map("revoked_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -375,12 +379,12 @@ model RevokedToken {
 }
 
 model PasswordResetToken {
-  id        String   @id @default(uuid()) @map("password_reset_token_id")
-  tokenHash String   @unique @map("token_hash") @db.VarChar(64)
-  userId    String   @map("user_id")
-  expiresAt DateTime @map("expires_at")
+  id        String    @id @default(uuid()) @map("password_reset_token_id")
+  tokenHash String    @unique @map("token_hash") @db.VarChar(64)
+  userId    String    @map("user_id")
+  expiresAt DateTime  @map("expires_at")
   usedAt    DateTime? @map("used_at")
-  createdAt DateTime @default(now()) @map("created_at")
+  createdAt DateTime  @default(now()) @map("created_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -413,26 +417,26 @@ model AuditLog {
 }
 
 model SupportTicket {
-  id             String       @id @default(uuid()) @map("support_ticket_id")
-  organizationId String       @map("organization_id")
-  userId         String       @map("user_id")
-  category       String       @db.VarChar(100)
+  id             String                @id @default(uuid()) @map("support_ticket_id")
+  organizationId String                @map("organization_id")
+  userId         String                @map("user_id")
+  category       String                @db.VarChar(100)
   message        String
-  page           String?      @db.VarChar(255)
+  page           String?               @db.VarChar(255)
   metadata       Json?
-  status         SupportTicketStatus @default(OPEN)
+  status         SupportTicketStatus   @default(OPEN)
   priority       SupportTicketPriority @default(MEDIUM)
-  assignedToId   String?      @map("assigned_to_id")
-  internalNote   String?      @map("internal_note")
-  resolutionNote String?      @map("resolution_note")
-  resolvedById   String?      @map("resolved_by_id")
-  resolvedAt     DateTime?    @map("resolved_at")
-  createdAt      DateTime     @default(now()) @map("created_at")
-  updatedAt      DateTime     @updatedAt @map("updated_at")
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  assignedTo     User?        @relation("SupportAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
-  resolvedBy     User?        @relation("SupportResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
+  assignedToId   String?               @map("assigned_to_id")
+  internalNote   String?               @map("internal_note")
+  resolutionNote String?               @map("resolution_note")
+  resolvedById   String?               @map("resolved_by_id")
+  resolvedAt     DateTime?             @map("resolved_at")
+  createdAt      DateTime              @default(now()) @map("created_at")
+  updatedAt      DateTime              @updatedAt @map("updated_at")
+  organization   Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assignedTo     User?                 @relation("SupportAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
+  resolvedBy     User?                 @relation("SupportResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
 
   @@index([organizationId, status, createdAt])
   @@index([userId, createdAt])
@@ -460,22 +464,22 @@ model AnalyticsEvent {
 
 /// @deprecated Legacy invite model. Use Invite instead.
 model Invitation {
-  id                    String         @id @default(uuid()) @map("invitation_id")
-  organizationId        String         @map("organization_id")
-  type                  InvitationType @default(ORG_ONLY)
+  id                    String            @id @default(uuid()) @map("invitation_id")
+  organizationId        String            @map("organization_id")
+  type                  InvitationType    @default(ORG_ONLY)
   role                  OrganizationRole?
-  classSectionId        String?        @map("class_section_id")
-  yearId                String?        @map("academic_year_id")
-  code                  String         @unique @db.VarChar(64)
-  expiresAt             DateTime       @map("expires_at")
-  maxUses               Int            @default(1) @map("max_uses")
-  usedCount             Int            @default(0) @map("used_count")
-  revokedAt             DateTime?      @map("revoked_at")
-  createdAt             DateTime       @default(now()) @map("created_at")
-  createdByMembershipId String?        @map("created_by_membership_id")
-  organization          Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  classSection          ClassSection?  @relation(fields: [classSectionId], references: [id], onDelete: Cascade)
-  academicYear          AcademicYear?  @relation(fields: [yearId], references: [id], onDelete: Cascade)
+  classSectionId        String?           @map("class_section_id")
+  yearId                String?           @map("academic_year_id")
+  code                  String            @unique @db.VarChar(64)
+  expiresAt             DateTime          @map("expires_at")
+  maxUses               Int               @default(1) @map("max_uses")
+  usedCount             Int               @default(0) @map("used_count")
+  revokedAt             DateTime?         @map("revoked_at")
+  createdAt             DateTime          @default(now()) @map("created_at")
+  createdByMembershipId String?           @map("created_by_membership_id")
+  organization          Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  classSection          ClassSection?     @relation(fields: [classSectionId], references: [id], onDelete: Cascade)
+  academicYear          AcademicYear?     @relation(fields: [yearId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
   @@index([code])
@@ -513,15 +517,15 @@ enum InvitationType {
 }
 
 model AcademicYear {
-  id            String         @id @default(uuid()) @map("academic_year_id")
-  orgId         String         @map("organization_id")
-  label         String
-  startsAt      DateTime
-  endsAt        DateTime
-  isCurrent     Boolean        @default(false)
-  createdAt     DateTime       @default(now()) @map("created_at")
-  deletedAt     DateTime?      @map("deleted_at")
-  organization  Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  id                   String                @id @default(uuid()) @map("academic_year_id")
+  orgId                String                @map("organization_id")
+  label                String
+  startsAt             DateTime
+  endsAt               DateTime
+  isCurrent            Boolean               @default(false)
+  createdAt            DateTime              @default(now()) @map("created_at")
+  deletedAt            DateTime?             @map("deleted_at")
+  organization         Organization          @relation(fields: [orgId], references: [id], onDelete: Cascade)
   assignments          Assignment[]
   classSections        ClassSection[]
   enrollments          Enrollment[]
@@ -536,42 +540,44 @@ model AcademicYear {
 }
 
 model PromotionLog {
-  id                    String   @id @default(uuid()) @map("promotion_log_id")
-  organizationId        String   @map("organization_id")
-  fromYearId            String   @map("from_year_id")
-  toYearId              String   @map("to_year_id")
-  executedAt            DateTime @default(now()) @map("executed_at")
-  executedBy            String   @map("executed_by")
-  classesCreatedCount   Int      @default(0) @map("classes_created_count")
-  studentsMigratedCount Int      @default(0) @map("students_migrated_count")
-  enrollmentsSkippedCount Int    @default(0) @map("enrollments_skipped_count")
-  skippedClassesCount   Int      @default(0) @map("skipped_classes_count")
-  durationMs            Int      @default(0) @map("duration_ms")
-  organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  id                      String       @id @default(uuid()) @map("promotion_log_id")
+  organizationId          String       @map("organization_id")
+  fromYearId              String       @map("from_year_id")
+  toYearId                String       @map("to_year_id")
+  executedAt              DateTime     @default(now()) @map("executed_at")
+  executedBy              String       @map("executed_by")
+  classesCreatedCount     Int          @default(0) @map("classes_created_count")
+  studentsMigratedCount   Int          @default(0) @map("students_migrated_count")
+  enrollmentsSkippedCount Int          @default(0) @map("enrollments_skipped_count")
+  skippedClassesCount     Int          @default(0) @map("skipped_classes_count")
+  durationMs              Int          @default(0) @map("duration_ms")
+  organization            Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, fromYearId])
   @@map("promotion_logs")
 }
 
 model ClassSection {
-  id                String             @id @default(uuid()) @map("class_section_id")
-  orgId             String             @map("organization_id")
-  yearId            String             @map("academic_year_id")
+  id                String                   @id @default(uuid()) @map("class_section_id")
+  orgId             String                   @map("organization_id")
+  yearId            String                   @map("academic_year_id")
   grade             SchoolGrade
   section           String
   label             String?
-  teacherId         String?            @map("teacher_id")
-  createdAt         DateTime           @default(now()) @map("created_at")
+  teacherId         String?                  @map("teacher_id")
+  createdAt         DateTime                 @default(now()) @map("created_at")
   assignments       Assignment[]
-  academicYear      AcademicYear       @relation(fields: [yearId], references: [id], onDelete: Cascade)
-  organization      Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  teacher           Teacher?           @relation("Homeroom", fields: [teacherId], references: [id])
+  academicYear      AcademicYear             @relation(fields: [yearId], references: [id], onDelete: Cascade)
+  organization      Organization             @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  teacher           Teacher?                 @relation("Homeroom", fields: [teacherId], references: [id])
   enrollments       Enrollment[]
   orgSubjects       ClassSectionOrgSubject[]
   studentClassrooms StudentClassroom[]
   invitations       Invitation[]
   invites           Invite[]
   teachers          TeacherClassSection[]
+  liveSessions      LiveSession[]
+  classPartak       ClassPartak?
 
   @@unique([orgId, yearId, grade, section])
   @@unique([id, yearId])
@@ -839,20 +845,20 @@ model MaterialPurchase {
 }
 
 model OrgSubject {
-  id              String             @id @default(uuid()) @map("org_subject_id")
-  organizationId  String             @map("organization_id")
-  subjectId       String             @map("subject_id")
-  isEnabled       Boolean            @default(true) @map("is_enabled")
-  isCustom        Boolean            @default(false) @map("is_custom")
-  organization    Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  subject         Subject            @relation(fields: [subjectId], references: [id], onDelete: Cascade)
-  classSections   ClassSectionOrgSubject[]
-  createdAt       DateTime           @default(now()) @map("created_at")
-  updatedAt       DateTime           @updatedAt @map("updated_at")
+  id             String                   @id @default(uuid()) @map("org_subject_id")
+  organizationId String                   @map("organization_id")
+  subjectId      String                   @map("subject_id")
+  isEnabled      Boolean                  @default(true) @map("is_enabled")
+  isCustom       Boolean                  @default(false) @map("is_custom")
+  organization   Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  subject        Subject                  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  classSections  ClassSectionOrgSubject[]
+  createdAt      DateTime                 @default(now()) @map("created_at")
+  updatedAt      DateTime                 @updatedAt @map("updated_at")
 
+  @@unique([organizationId, subjectId])
   @@index([organizationId])
   @@index([subjectId])
-  @@unique([organizationId, subjectId])
   @@map("org_subjects")
 }
 
@@ -889,6 +895,7 @@ model Test {
   questions            Question[]
   submissions          Submission[]
   assignments          TestAssignment[]
+  liveSessions         LiveSession[]
   creator              Membership       @relation(fields: [creatorId], references: [id], onDelete: Cascade)
   organization         Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   subject              Subject?         @relation(fields: [subjectId], references: [id], onDelete: Restrict)
@@ -917,18 +924,19 @@ model TestAssignment {
 }
 
 model Question {
-  id             String       @id @default(uuid()) @map("question_id")
+  id             String             @id @default(uuid()) @map("question_id")
   text           String
   type           QuestionType
   order          Int?
-  testId         String       @map("test_id")
+  testId         String             @map("test_id")
   correctAnswer  String?
   correctAnswers String[]
-  score          Int          @default(1)
+  score          Int                @default(1)
   answers        Answer[]
   options        Option[]
-  test           Test         @relation(fields: [testId], references: [id], onDelete: Cascade)
+  test           Test               @relation(fields: [testId], references: [id], onDelete: Cascade)
   responses      Response[]
+  liveRounds     LiveSessionRound[]
 
   @@map("questions")
 }
@@ -968,8 +976,8 @@ model Submission {
   updatedAt      DateTime         @updatedAt @map("updated_at")
   isAnonymous    Boolean          @default(false)
   responses      Response[]
-  assignment     Assignment      @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
-  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assignment     Assignment       @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   student        Membership       @relation(fields: [studentId], references: [id], onDelete: Cascade)
   test           Test             @relation(fields: [testId], references: [id], onDelete: Cascade)
 
@@ -1000,14 +1008,118 @@ model Response {
   explanation           String?
   attemptNumber         Int        @default(1) @map("attempt_number")
   corrected             Boolean?   @default(false)
-  createdAt     DateTime   @default(now()) @map("created_at")
-  updatedAt     DateTime   @updatedAt @map("updated_at")
-  question      Question   @relation(fields: [questionId], references: [id], onDelete: Cascade)
-  submission    Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  createdAt             DateTime   @default(now()) @map("created_at")
+  updatedAt             DateTime   @updatedAt @map("updated_at")
+  question              Question   @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  submission            Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
 
   @@index([submissionId])
   @@index([questionId])
   @@map("responses")
+}
+
+/// Bleskovka — živé cvičení pro celou třídu. MVP = BOARD_ONLY (režim B):
+/// vše běží na učitelově obrazovce, žádná data o jednotlivých žácích.
+/// Švy pro režim A (DEVICES) viz docs/live-sessions.md.
+model LiveSession {
+  id             String                   @id @default(uuid()) @map("live_session_id")
+  organizationId String                   @map("organization_id")
+  hostId         String                   @map("host_membership_id")
+  classSectionId String?                  @map("class_section_id")
+  testId         String                   @map("test_id")
+  mode           LiveSessionMode          @default(BOARD_ONLY)
+  status         LiveSessionStatus        @default(DRAFT)
+  ageMode        LiveAgeMode              @map("age_mode")
+  countdownSec   Int?                     @map("countdown_sec")
+  startedAt      DateTime?                @map("started_at")
+  finishedAt     DateTime?                @map("finished_at")
+  xpAwarded      Boolean                  @default(false) @map("xp_awarded")
+  createdAt      DateTime                 @default(now()) @map("created_at")
+  updatedAt      DateTime                 @updatedAt @map("updated_at")
+  organization   Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  host           Membership               @relation("HostedLiveSessions", fields: [hostId], references: [id], onDelete: Cascade)
+  classSection   ClassSection?            @relation(fields: [classSectionId], references: [id], onDelete: SetNull)
+  test           Test                     @relation(fields: [testId], references: [id], onDelete: Restrict)
+  rounds         LiveSessionRound[]
+  participants   LiveSessionParticipant[]
+  xpEvents       ClassPartakXpEvent[]
+
+  @@index([organizationId, status])
+  @@index([hostId, createdAt])
+  @@map("live_sessions")
+}
+
+/// Jedno kolo bleskovky. Otázka je nasnapshotovaná při startu session —
+/// pozdější editace zdrojového testu běžící/ukončenou bleskovku neovlivní.
+/// correctKeySnapshot NIKDY neopouští server před revealem (viz service).
+model LiveSessionRound {
+  id                 String            @id @default(uuid()) @map("live_session_round_id")
+  sessionId          String            @map("live_session_id")
+  order              Int
+  questionId         String?           @map("question_id")
+  questionText       String            @map("question_text")
+  optionsSnapshot    Json              @map("options_snapshot")
+  correctKeySnapshot String            @map("correct_key_snapshot")
+  outcome            LiveRoundOutcome?
+  revealedAt         DateTime?         @map("revealed_at")
+  completedAt        DateTime?         @map("completed_at")
+  session            LiveSession       @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  question           Question?         @relation(fields: [questionId], references: [id], onDelete: SetNull)
+
+  @@unique([sessionId, order])
+  @@map("live_session_rounds")
+}
+
+/// Režim A (DEVICES) — tabulka NAVRŽENA, v režimu B se NIKDY nezapisuje.
+/// Záměr (GDPR): BOARD_ONLY bleskovka je anonymní na úrovni třídy — o dětech
+/// se neukládá vůbec nic. `nickname` je přezdívka zadaná při joinu (ne jméno),
+/// `membershipId` se vyplní jen u autentizovaného joinu. Viz docs/live-sessions.md.
+model LiveSessionParticipant {
+  id           String      @id @default(uuid()) @map("live_session_participant_id")
+  sessionId    String      @map("live_session_id")
+  nickname     String      @db.VarChar(50)
+  joinToken    String      @unique @map("join_token")
+  membershipId String?     @map("membership_id")
+  joinedAt     DateTime    @default(now()) @map("joined_at")
+  lastSeenAt   DateTime?   @map("last_seen_at")
+  session      LiveSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  membership   Membership? @relation(fields: [membershipId], references: [id], onDelete: SetNull)
+
+  @@index([sessionId])
+  @@map("live_session_participants")
+}
+
+/// Kolektivní parťák třídy. XP POUZE za odehraná kola a dokončené bleskovky,
+/// NIKDY za správnost odpovědí (vynuceno typy ClassPartakXpType).
+/// Žádné srovnávání tříd v UI ani API — stejné pravidlo jako u individuálního parťáka.
+model ClassPartak {
+  id             String               @id @default(uuid()) @map("class_partak_id")
+  organizationId String               @map("organization_id")
+  classSectionId String               @unique @map("class_section_id")
+  xp             Int                  @default(0)
+  stage          Int                  @default(1)
+  createdAt      DateTime             @default(now()) @map("created_at")
+  updatedAt      DateTime             @updatedAt @map("updated_at")
+  organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  classSection   ClassSection         @relation(fields: [classSectionId], references: [id], onDelete: Cascade)
+  xpEvents       ClassPartakXpEvent[]
+
+  @@index([organizationId])
+  @@map("class_partaks")
+}
+
+model ClassPartakXpEvent {
+  id            String            @id @default(uuid()) @map("class_partak_xp_event_id")
+  classPartakId String            @map("class_partak_id")
+  sessionId     String?           @map("live_session_id")
+  type          ClassPartakXpType @map("event_type")
+  value         Int
+  createdAt     DateTime          @default(now()) @map("created_at")
+  classPartak   ClassPartak       @relation(fields: [classPartakId], references: [id], onDelete: Cascade)
+  session       LiveSession?      @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  @@index([classPartakId, createdAt])
+  @@map("class_partak_xp_events")
 }
 
 /// Immutable analytical snapshot of one SUBMITTED test attempt.
@@ -1426,6 +1538,38 @@ enum AnalyticsDataQuality {
 enum AnalyticsSnapshotSource {
   LIVE_SUBMIT
   BACKFILL
+}
+
+enum LiveSessionMode {
+  BOARD_ONLY // režim B — MVP: vše na učitelově obrazovce
+  DEVICES // režim A — žáci na vlastních zařízeních (zatím neimplementováno)
+}
+
+enum LiveSessionStatus {
+  DRAFT
+  RUNNING
+  FINISHED
+}
+
+/// Věkový režim projekce bleskovky (čistě prezentační + tempo).
+enum LiveAgeMode {
+  YOUNG // 1.–3. ZŠ
+  MIDDLE // 4.–9. ZŠ (default při neznámém ročníku)
+  SENIOR // SŠ
+}
+
+/// Výsledek kola v režimu B — zadává učitel, žádné počítání jednotlivých dětí.
+enum LiveRoundOutcome {
+  MOSTLY_CORRECT
+  SPLIT
+  MOSTLY_WRONG
+}
+
+/// Jediné povolené zdroje XP třídního parťáka. Správnost odpovědí
+/// (LiveRoundOutcome) do XP záměrně NIKDY nevstupuje.
+enum ClassPartakXpType {
+  ROUND_PLAYED
+  SESSION_FINISHED
 }
 
 enum XpEventType {
