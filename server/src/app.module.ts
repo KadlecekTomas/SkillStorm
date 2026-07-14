@@ -3,7 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import type { CacheModuleOptions } from '@nestjs/cache-manager';
 import { CacheModule } from '@nestjs/cache-manager';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
-import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerGuard, ThrottlerModule, seconds } from '@nestjs/throttler';
 
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
@@ -80,7 +80,9 @@ import { ImportsModule } from './imports/imports.module';
       skipIf: () => process.env.DISABLE_THROTTLE === '1',
       throttlers: [
         {
-          ttl: process.env.DISABLE_THROTTLE === '1' ? 1 : 60,
+          // v5 ttl is MILLISECONDS — bare 60 meant a 60 ms window (i.e. no
+          // real limiting). seconds() makes the intent explicit.
+          ttl: process.env.DISABLE_THROTTLE === '1' ? 1 : seconds(60),
           limit:
             process.env.DISABLE_THROTTLE === '1'
               ? 10000

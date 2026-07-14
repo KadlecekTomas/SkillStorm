@@ -1,6 +1,6 @@
 import { Controller, Get, Query, Req, Res, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { Throttle } from '@nestjs/throttler';
+import { Throttle, seconds } from '@nestjs/throttler';
 import type { Response } from 'express';
 import { Observable } from 'rxjs';
 import { EventsService } from './events.service';
@@ -22,6 +22,8 @@ import {
  * Rate limit: 20 connections per 60 s per IP (inherits global throttler).
  */
 @ApiTags('Events')
+// rbac-checked: inline — SSE handler verifies caller org matches the
+// requested orgId (or SUPERADMIN) before opening the stream.
 @Controller('events')
 @OrgOperation(OrgOperationType.AUTHORING)
 export class EventsController {
@@ -30,7 +32,7 @@ export class EventsController {
   @Get('students')
   @Sse()
   @UseGuards(JwtAuthGuard)
-  @Throttle({ default: { limit: 20, ttl: 60 } })
+  @Throttle({ default: { limit: 20, ttl: seconds(60) } })
   @ApiOperation({
     summary: 'SSE stream: student-joined events for an organization',
   })

@@ -30,6 +30,8 @@ import { AuditDataScopeService } from './audit-data-scope.service';
 @ApiTags('Audit')
 @ApiStandardResponses()
 @ApiBearerAuth()
+// rbac-checked: inline — handler hard-scopes to the caller's org and
+// requires DIRECTOR/OWNER role explicitly (no PermissionKey covers audit).
 @Controller('audit')
 @AllowAnyOrgStatus()
 @UseGuards(JwtAuthGuard)

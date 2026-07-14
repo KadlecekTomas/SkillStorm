@@ -9,7 +9,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { Throttle } from '@nestjs/throttler';
+import { Throttle, seconds } from '@nestjs/throttler';
 import { Response } from 'express';
 import { InvitesService } from './invites.service';
 import { JwtAuthGuard } from '@/auth/guards/jwt-auth.guard';
@@ -49,7 +49,7 @@ export class InvitationsController {
 
   @Get('preview')
   @Public()
-  @Throttle({ default: { limit: 10, ttl: 60 } })
+  @Throttle({ default: { limit: 10, ttl: seconds(60) } })
   @ApiOperation({ summary: 'Preview invitation by token' })
   preview(@Query('token') token: string, @Req() req: RequestWithUser) {
     return ok(this.service.preview(token ?? '', req.ip));
@@ -58,7 +58,7 @@ export class InvitationsController {
   @Post('accept')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @Throttle({ default: { limit: 10, ttl: 60 } })
+  @Throttle({ default: { limit: 10, ttl: seconds(60) } })
   @ApiOperation({
     summary: 'Accept invitation by token (idempotent if already member)',
   })

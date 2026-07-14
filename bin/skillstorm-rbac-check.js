@@ -33,7 +33,12 @@ const walk = (dir) => {
     const hasDecorator =
       content.includes("@Permission(") ||
       content.includes("@Roles(") ||
-      content.includes("@Public(");
+      content.includes("@Public(") ||
+      // platform admin stack: SystemRole/PlatformAccessLevel guards
+      content.includes("@RequirePlatformAccess(") ||
+      content.includes("@RequireSystemRole(") ||
+      // explicit opt-out: handler enforces RBAC inline (must justify why)
+      content.includes("rbac-checked: inline");
     if (!hasDecorator) {
       controllersMissing.push(path.relative(SERVER_SRC, fullPath));
     }

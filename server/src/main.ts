@@ -158,6 +158,19 @@ export async function createApp(): Promise<INestApplication> {
   }
   const app = await NestFactory.create(AppModule, options);
   app.getHttpAdapter().getInstance().set('etag', false);
+  // Behind a reverse proxy (Render, nginx) req.ip is the proxy address —
+  // the throttler would then rate-limit the whole school as one client.
+  // TRUST_PROXY=1 trusts one proxy hop (or a specific value, see Express docs).
+  const trustProxy = process.env.TRUST_PROXY;
+  if (trustProxy && trustProxy !== '0') {
+    app
+      .getHttpAdapter()
+      .getInstance()
+      .set(
+        'trust proxy',
+        /^\d+$/.test(trustProxy) ? Number(trustProxy) : trustProxy,
+      );
+  }
   app.use(cookieParser());
 
   // Request correlation id (generate if missing; log on errors)
