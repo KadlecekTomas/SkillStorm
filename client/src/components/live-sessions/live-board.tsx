@@ -347,7 +347,9 @@ export function LiveBoard({ sessionId }: LiveBoardProps): JSX.Element {
                 const dimmed = revealed !== null && !isCorrect;
                 return (
                   <div
-                    key={option.key}
+                    // klíč per kolo: recyklovaný DOM node by 300ms přeléval
+                    // zvýraznění správné odpovědi minulého kola do nové otázky
+                    key={`${round.id}-${option.key}`}
                     data-testid={`live-option-${option.key}`}
                     data-correct={isCorrect || undefined}
                     className={cn(
@@ -399,11 +401,11 @@ export function LiveBoard({ sessionId }: LiveBoardProps): JSX.Element {
           </main>
         ) : null}
 
-        {/* Parťák komentuje (young) */}
+        {/* Parťák (young) — komentuje výsledek minulého kola, dokud se neodhalí další */}
         {young ? (
           <div className="pointer-events-none fixed bottom-2 left-4 flex items-end gap-2">
-            <PartakBlob size={96} mood={revealed ? "happy" : "idle"} />
-            {revealed && lastOutcome ? (
+            <PartakBlob size={96} mood={lastOutcome ? "happy" : "idle"} />
+            {!revealed && lastOutcome ? (
               <span className="mb-6 max-w-56 rounded-2xl border border-line bg-canvas px-4 py-2 text-lg font-bold text-ink shadow-tactile-sm">
                 {YOUNG_PARTAK_COMMENTS[lastOutcome]}
               </span>
