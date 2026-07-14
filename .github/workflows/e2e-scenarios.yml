@@ -1,0 +1,94 @@
+name: E2E Scenarios
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  NODE_VERSION: "20"
+  # The scenario suite is driven ENTIRELY by DATABASE_URL_TEST: globalSetup
+  # recreates + migrates + seeds it, and the guard (server/scripts/db-safety.js)
+  # refuses anything whose DB name is not skillstorm_test.
+  DATABASE_URL_TEST: postgresql://postgres:postgres@localhost:5432/skillstorm_test
+  JWT_SECRET: ciSyntheticAccessSecret1234567890abcdef
+  JWT_ACCESS_SECRET: ciSyntheticAccessSecret1234567890abcdef
+  JWT_REFRESH_SECRET: ciSyntheticRefreshSecret1234567890abcdef
+  COOKIE_SECRET: ciSyntheticCookieSecret1234567890abcdef
+  METRICS_INGEST_KEY: ciSyntheticMetricsKey1234567890abcdef
+  CORS_ORIGINS: http://127.0.0.1:3001,http://localhost:3001
+  PUBLIC_APP_URL: http://127.0.0.1:3001
+  API_URL: http://127.0.0.1:4200
+  API_PROXY_TARGET: http://127.0.0.1:4200
+  BASE_URL: http://127.0.0.1:3001
+  # Throttling stays ON: the rate-limit security scenario needs it. TRUST_PROXY
+  # lets the suite address distinct client IPs via X-Forwarded-For.
+  DISABLE_THROTTLE: "0"
+  TRUST_PROXY: "1"
+  DISABLE_CSRF: "1"
+  CI: "true"
+
+jobs:
+  scenarios:
+    name: Playwright scenarios (real browser + backend)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: skillstorm_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d skillstorm_test"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            server/package-lock.json
+            client/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm ci --include=dev
+        working-directory: server
+
+      - name: Prisma generate
+        run: npm run prisma:generate
+        working-directory: server
+
+      - name: Install frontend dependencies
+        run: npm ci --include=dev
+        working-directory: client
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+        working-directory: client
+
+      # globalSetup recreates+migrates+seeds the DB; webServer boots
+      # backend :4200 (guarded to the test DB) + frontend :3001.
+      - name: Run scenario suite
+        run: npm run test:scenarios
+        working-directory: client
+
+      - name: Upload report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scenarios-report
+          path: |
+            client/playwright-report-scenarios
+            client/test-results
+          retention-days: 7
