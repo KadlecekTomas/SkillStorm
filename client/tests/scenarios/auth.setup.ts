@@ -25,6 +25,7 @@ setup('authenticate all roles', async ({ baseURL }) => {
     ['teacher', m.accounts.teacher, m.orgId],
     ['student8a', m.accounts.student8a, m.orgId],
     ['student2a', m.accounts.student2a, m.orgId],
+    ['studentHs', m.accounts.studentHs, m.orgId],
     ['otherOrgStudent', m.accounts.otherOrgStudent, m.foreignOrgId],
   ];
 

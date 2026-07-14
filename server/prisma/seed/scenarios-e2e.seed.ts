@@ -37,6 +37,7 @@ export const SCENARIO_ACCOUNTS = {
   teacher: 'teacher@scenar.test',
   student2a: 'student-2a-01@scenar.test', // young
   student8a: 'student-8a-01@scenar.test', // old
+  studentHs: 'student-hs-01@scenar.test', // HS grade → old fallback
   otherOrgDirector: 'director@druha.test',
   otherOrgStudent: 'student@druha.test',
 };
@@ -145,7 +146,11 @@ async function ensureCatalog(organizationId: string) {
     update: { isActive: true, deletedAt: null, order: 1 },
     create: { subjectId: catalogSubject.id, name: 'Základní počty', order: 1, isActive: true },
   });
-  for (const grade of [$Enums.SchoolGrade.GRADE_2, $Enums.SchoolGrade.GRADE_8]) {
+  for (const grade of [
+    $Enums.SchoolGrade.GRADE_2,
+    $Enums.SchoolGrade.GRADE_8,
+    $Enums.SchoolGrade.HIGH_SCHOOL_YEAR_1,
+  ]) {
     const subjectLevel = await prisma.subjectLevel.upsert({
       where: { subjectId_grade: { subjectId: subject.id, grade } },
       update: { isEnabled: true },
@@ -320,7 +325,8 @@ async function main() {
       order: 3,
     },
   });
-  await prisma.assignment.create({
+  const assignment8A = await prisma.assignment.create({
+    select: { id: true },
     data: {
       organizationId: org.id,
       yearId: year.id,
@@ -329,7 +335,7 @@ async function main() {
       classSectionId: class8AId,
       openAt: new Date(Date.now() - 3_600_000),
       closeAt: new Date(Date.now() + 7 * 86_400_000),
-      maxAttempts: 1,
+      maxAttempts: 5,
       timeLimitSec: 600,
       shuffle: false,
       showExplain: 'NEVER',
@@ -370,7 +376,8 @@ async function main() {
       options: { create: [{ text: '5' }, { text: '4' }, { text: '6' }, { text: '23' }] },
     },
   });
-  await prisma.assignment.create({
+  const assignment2A = await prisma.assignment.create({
+    select: { id: true },
     data: {
       organizationId: org.id,
       yearId: year.id,
@@ -379,8 +386,59 @@ async function main() {
       classSectionId: class2AId,
       openAt: new Date(Date.now() - 3_600_000),
       closeAt: new Date(Date.now() + 7 * 86_400_000),
-      maxAttempts: 1,
+      maxAttempts: 5,
       timeLimitSec: 600,
+      shuffle: false,
+      showExplain: 'NEVER',
+      createdById: teacherMember.membershipId,
+    },
+  });
+
+  // ── HS class (unparsable grade → answering mode falls back to "old") ─────
+  const classHS = await prisma.classSection.create({
+    data: {
+      orgId: org.id,
+      yearId: year.id,
+      grade: $Enums.SchoolGrade.HIGH_SCHOOL_YEAR_1,
+      section: 'A',
+      label: '1.SŠ',
+      teacherId: teacher.id,
+    },
+    select: { id: true },
+  });
+  await enrollStudent('student-hs-01@scenar.test', 'Žák 1.SŠ', classHS.id);
+  const testHS = await prisma.test.create({
+    data: {
+      organizationId: org.id,
+      title: 'Test 1.SŠ',
+      creatorId: teacherMember.membershipId,
+      status: 'PUBLISHED',
+      academicYearId: year.id,
+      subjectId: catalog.subjectId,
+      allowedGrades: [$Enums.SchoolGrade.HIGH_SCHOOL_YEAR_1],
+    },
+    select: { id: true },
+  });
+  await prisma.question.create({
+    data: {
+      testId: testHS.id,
+      text: 'Je 11 prvočíslo?',
+      type: 'TRUE_FALSE',
+      correctAnswer: 'true',
+      order: 1,
+    },
+  });
+  const assignmentHS = await prisma.assignment.create({
+    select: { id: true },
+    data: {
+      organizationId: org.id,
+      yearId: year.id,
+      testId: testHS.id,
+      targetType: 'CLASS',
+      classSectionId: classHS.id,
+      openAt: new Date(Date.now() - 3_600_000),
+      closeAt: new Date(Date.now() + 7 * 86_400_000),
+      maxAttempts: 5,
       shuffle: false,
       showExplain: 'NEVER',
       createdById: teacherMember.membershipId,
@@ -487,6 +545,9 @@ async function main() {
     class2AId: class2AId,
     subjectId: catalog.subjectId,
     catalogTopicId: catalog.catalogTopicId,
+    assignment8AId: assignment8A.id,
+    assignment2AId: assignment2A.id,
+    assignmentHSId: assignmentHS.id,
     foreignOrgId: org2.id,
     foreignTestId: foreignTest.id,
     foreignAssignmentId: foreignAssignment.id,
