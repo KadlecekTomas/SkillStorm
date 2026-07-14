@@ -95,7 +95,12 @@ export default defineConfig({
       name: 'mobile',
       testMatch: /.*\.mobile\.ts/,
       dependencies: ['setup'],
-      use: { ...devices['Pixel 5'] },
+      use: {
+        ...devices['Pixel 5'],
+        // young 2.A student (tiles) for the mobile student flow
+        storageState: storage('student2a'),
+        extraHTTPHeaders: { 'X-Forwarded-For': '10.70.0.1' },
+      },
     },
   ],
 });
