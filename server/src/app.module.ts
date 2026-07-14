@@ -84,7 +84,8 @@ import { ImportsModule } from './imports/imports.module';
           limit:
             process.env.DISABLE_THROTTLE === '1'
               ? 10000
-              : process.env.DEMO_MODE === '1' || process.env.DEMO_MODE === 'true'
+              : process.env.DEMO_MODE === '1' ||
+                  process.env.DEMO_MODE === 'true'
                 ? 1000
                 : 100,
         },

@@ -211,6 +211,8 @@ export class AnalyticsService {
         },
       },
       orderBy: { submittedAt: 'asc' },
+
+      take: 20_000, // safety cap — analytics window per student/class
     });
 
     const items: StudentTimelineItem[] = submissions.map((s) => ({
@@ -357,6 +359,8 @@ export class AnalyticsService {
           },
         },
       },
+
+      take: 20_000, // safety cap — analytics window per student/class
     });
 
     type Bucket = {
@@ -475,6 +479,8 @@ export class AnalyticsService {
           },
         },
       },
+
+      take: 20_000, // safety cap — analytics window per student/class
     });
 
     type TopicBucket = {
@@ -607,6 +613,8 @@ export class AnalyticsService {
           },
         },
       },
+
+      take: 20_000, // safety cap — analytics window per student/class
     });
 
     type ErrorBucket = {
@@ -748,6 +756,8 @@ export class AnalyticsService {
           },
         },
       },
+
+      take: 20_000, // safety cap — analytics window per student/class
     });
 
     type TopicBucket = {

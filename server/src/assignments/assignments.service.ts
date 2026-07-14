@@ -679,6 +679,7 @@ export class AssignmentsService {
               classSectionId: { in: classSectionIds },
             },
             select: assignmentWithTestSelect,
+            take: 1000, // safety cap — grows with school-year usage
           })
         : [],
       this.prisma.assignment.findMany({
@@ -688,6 +689,7 @@ export class AssignmentsService {
           students: { some: { studentId: membershipId } },
         },
         select: assignmentWithTestSelect,
+        take: 1000, // safety cap — grows with school-year usage
       }),
     ]);
 
@@ -712,6 +714,7 @@ export class AssignmentsService {
               assignmentId: { in: assignmentIds },
               deletedAt: null,
             },
+            take: 2000, // safety cap — one student's submissions
             select: {
               id: true,
               assignmentId: true,
@@ -958,6 +961,7 @@ export class AssignmentsService {
       const orgAssignments = await this.prisma.assignment.findMany({
         where: withOrg({}, orgId),
         select: { id: true },
+        take: 10_000, // safety cap — id-only visibility scope, grows with usage
       });
       orgAssignments.forEach((a) => idSets.add(a.id));
     }

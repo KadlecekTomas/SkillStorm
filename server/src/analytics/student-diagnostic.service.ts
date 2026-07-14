@@ -321,6 +321,8 @@ export class StudentDiagnosticService {
         },
       },
       orderBy: [{ submission: { submittedAt: 'desc' } }, { createdAt: 'desc' }],
+
+      take: 20_000, // safety cap — diagnostic window per student
     });
 
     const records: DiagnosticRecord[] = responses.map((response) => {

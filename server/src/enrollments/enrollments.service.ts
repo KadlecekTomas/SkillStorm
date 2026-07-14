@@ -505,6 +505,7 @@ export class EnrollmentsService {
     const queryEnrollments = () =>
       this.prisma.enrollment.findMany({
         where: { classSectionId, status: { not: EnrollmentStatus.LEFT } },
+        take: 500, // safety cap — roster of one class
         include: {
           student: {
             include: {

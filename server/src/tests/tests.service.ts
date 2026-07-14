@@ -1240,6 +1240,7 @@ export class TestsService {
       const assignedGrades = await this.prisma.assignment.findMany({
         where: { testId: id },
         select: { classSection: { select: { grade: true } } },
+        take: 1000, // safety cap — assignments of one test across years
       });
       const gradesInUse = [
         ...new Set(
