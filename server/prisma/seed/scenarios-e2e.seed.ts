@@ -394,6 +394,25 @@ async function main() {
     },
   });
 
+  // ── Short-limit 8.A assignment for the auto-submit scenario ─────────────
+  const assignmentFast = await prisma.assignment.create({
+    select: { id: true },
+    data: {
+      organizationId: org.id,
+      yearId: year.id,
+      testId: test8.id,
+      targetType: 'CLASS',
+      classSectionId: class8AId,
+      openAt: new Date(Date.now() - 3_600_000),
+      closeAt: new Date(Date.now() + 7 * 86_400_000),
+      maxAttempts: 5,
+      timeLimitSec: 20, // short: the client auto-submits on expiry
+      shuffle: false,
+      showExplain: 'NEVER',
+      createdById: teacherMember.membershipId,
+    },
+  });
+
   // ── HS class (unparsable grade → answering mode falls back to "old") ─────
   const classHS = await prisma.classSection.create({
     data: {
@@ -548,6 +567,7 @@ async function main() {
     assignment8AId: assignment8A.id,
     assignment2AId: assignment2A.id,
     assignmentHSId: assignmentHS.id,
+    assignmentFast8AId: assignmentFast.id,
     foreignOrgId: org2.id,
     foreignTestId: foreignTest.id,
     foreignAssignmentId: foreignAssignment.id,

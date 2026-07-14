@@ -20,6 +20,7 @@ export interface ScenarioManifest {
   assignment8AId: string;
   assignment2AId: string;
   assignmentHSId: string;
+  assignmentFast8AId: string;
   foreignOrgId: string;
   foreignTestId: string;
   foreignAssignmentId: string;
