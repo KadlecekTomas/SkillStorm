@@ -16,18 +16,28 @@ setup('authenticate all roles', async ({ baseURL }) => {
   mkdirSync(STORAGE_DIR, { recursive: true });
   const m = loadManifest();
 
-  const roles: Array<[string, string]> = [
-    ['director', m.accounts.director],
-    ['teacher', m.accounts.teacher],
-    ['student8a', m.accounts.student8a],
-    ['student2a', m.accounts.student2a],
-    ['otherOrgStudent', m.accounts.otherOrgStudent],
+  // [role, email, orgId] — passing organizationId scopes the JWT to that org
+  // (a plain single-org login does NOT put organizationRole in the token, so
+  // role-gated pages would 403). scenar.* users belong to orgId; the other-org
+  // student belongs to foreignOrgId.
+  const roles: Array<[string, string, string]> = [
+    ['director', m.accounts.director, m.orgId],
+    ['teacher', m.accounts.teacher, m.orgId],
+    ['student8a', m.accounts.student8a, m.orgId],
+    ['student2a', m.accounts.student2a, m.orgId],
+    ['otherOrgStudent', m.accounts.otherOrgStudent, m.foreignOrgId],
   ];
 
-  for (const [role, email] of roles) {
+  for (let i = 0; i < roles.length; i++) {
+    const [role, email, organizationId] = roles[i]!;
     const ctx = await playwrightRequest.newContext({ baseURL });
+    // The backend runs with throttling ON (the rate-limit block needs it).
+    // Give each role login a distinct client IP (TRUST_PROXY=1 honours
+    // X-Forwarded-For) so setup never shares a rate-limit bucket and stays
+    // reliable across reruns.
     const res = await ctx.post('/api/auth/login', {
-      data: { email, password: m.password },
+      data: { email, password: m.password, organizationId },
+      headers: { 'X-Forwarded-For': `10.90.0.${i + 1}` },
     });
     expect(res.ok(), `login for ${role} (${email})`).toBeTruthy();
     // /api/auth/me confirms the cookie session is live before we persist it

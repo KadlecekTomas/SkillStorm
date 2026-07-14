@@ -68,6 +68,13 @@ async function wipe() {
   // FK order: responses/submissions/assignments → tests → enrollments →
   // students/teachers → class sections → memberships → years → orgs → users
   if (orgIds.length > 0) {
+  // The responses_lock_after_submit trigger blocks DELETE on responses of a
+  // SUBMITTED submission. Clear submittedAt first (allowed — the trigger
+  // guards responses, not submissions) so the wipe can proceed.
+  await prisma.submission.updateMany({
+    where: { organizationId: { in: orgIds }, submittedAt: { not: null } },
+    data: { submittedAt: null },
+  });
   await prisma.response.deleteMany({
     where: { submission: { organizationId: { in: orgIds } } },
   });
@@ -109,6 +116,67 @@ async function createUserWithMembership(
   return { userId: user.id, membershipId: user.memberships[0]!.id };
 }
 
+/**
+ * Provisions a subject + catalog + topic levels for GRADE_2 and GRADE_8 and
+ * enables it for the org, so the teacher can create a test through the UI
+ * wizard (which requires a subject and a catalog topic). Returns ids the
+ * backbone scenario needs. Catalog rows are global → upsert by stable code.
+ */
+async function ensureCatalog(organizationId: string) {
+  const catalogSubject = await prisma.catalogSubject.upsert({
+    where: { code: 'SCENAR_MAT' },
+    update: { name: 'Matematika', isActive: true, deletedAt: null },
+    create: { code: 'SCENAR_MAT', name: 'Matematika', isActive: true },
+  });
+  const subject =
+    (await prisma.subject.findFirst({
+      where: { catalogSubjectId: catalogSubject.id },
+    })) ??
+    (await prisma.subject.create({
+      data: {
+        catalogSubjectId: catalogSubject.id,
+        name: 'Matematika',
+        gradeFrom: 1,
+        gradeTo: 9,
+      },
+    }));
+  const catalogTopic = await prisma.catalogTopic.upsert({
+    where: { subjectId_name: { subjectId: catalogSubject.id, name: 'Základní počty' } },
+    update: { isActive: true, deletedAt: null, order: 1 },
+    create: { subjectId: catalogSubject.id, name: 'Základní počty', order: 1, isActive: true },
+  });
+  for (const grade of [$Enums.SchoolGrade.GRADE_2, $Enums.SchoolGrade.GRADE_8]) {
+    const subjectLevel = await prisma.subjectLevel.upsert({
+      where: { subjectId_grade: { subjectId: subject.id, grade } },
+      update: { isEnabled: true },
+      create: { subjectId: subject.id, grade, order: 1, isEnabled: true },
+    });
+    await prisma.topicLevel.upsert({
+      where: {
+        subjectLevelId_catalogTopicId_phase: {
+          subjectLevelId: subjectLevel.id,
+          catalogTopicId: catalogTopic.id,
+          phase: $Enums.TopicPhase.INTRO,
+        },
+      },
+      update: { name: 'Základní počty' },
+      create: {
+        subjectLevelId: subjectLevel.id,
+        catalogTopicId: catalogTopic.id,
+        name: 'Základní počty',
+        phase: $Enums.TopicPhase.INTRO,
+        order: 1,
+      },
+    });
+  }
+  await prisma.orgSubject.upsert({
+    where: { organizationId_subjectId: { organizationId, subjectId: subject.id } },
+    update: { isEnabled: true },
+    create: { organizationId, subjectId: subject.id, isEnabled: true },
+  });
+  return { subjectId: subject.id, catalogTopicId: catalogTopic.id };
+}
+
 async function main() {
   await wipe();
   const passwordHash = await bcrypt.hash(SCENARIO_PASSWORD, 10);
@@ -128,6 +196,8 @@ async function main() {
     },
     select: { id: true },
   });
+
+  const catalog = await ensureCatalog(org.id);
 
   await createUserWithMembership(
     SCENARIO_ACCOUNTS.director,
@@ -217,6 +287,7 @@ async function main() {
       creatorId: teacherMember.membershipId,
       status: 'PUBLISHED',
       academicYearId: year.id,
+      subjectId: catalog.subjectId,
       allowedGrades: [$Enums.SchoolGrade.GRADE_8],
     },
     select: { id: true },
@@ -274,6 +345,7 @@ async function main() {
       creatorId: teacherMember.membershipId,
       status: 'PUBLISHED',
       academicYearId: year.id,
+      subjectId: catalog.subjectId,
       allowedGrades: [$Enums.SchoolGrade.GRADE_2],
     },
     select: { id: true },
@@ -413,6 +485,8 @@ async function main() {
     orgId: org.id,
     class8AId: class8AId,
     class2AId: class2AId,
+    subjectId: catalog.subjectId,
+    catalogTopicId: catalog.catalogTopicId,
     foreignOrgId: org2.id,
     foreignTestId: foreignTest.id,
     foreignAssignmentId: foreignAssignment.id,

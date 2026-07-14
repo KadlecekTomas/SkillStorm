@@ -28,9 +28,15 @@ export const test = base.extend<Fixtures>({
   },
   asRole: async ({ browser }, use) => {
     const opened: BrowserContext[] = [];
+    let ipSeq = 0;
     const factory = async (role: RoleKey) => {
+      // Backend throttling is ON (the rate-limit block needs it). Give every
+      // functional context a distinct client IP (TRUST_PROXY=1 honours
+      // X-Forwarded-For) so heavy flows never share a rate-limit bucket.
+      ipSeq += 1;
       const context = await browser.newContext({
         storageState: storageStateFor(role),
+        extraHTTPHeaders: { 'X-Forwarded-For': `10.80.${ipSeq}.1` },
       });
       opened.push(context);
       const page = await context.newPage();
