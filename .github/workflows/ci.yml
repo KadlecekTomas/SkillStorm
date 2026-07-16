@@ -95,6 +95,11 @@ jobs:
 
       - name: 🔐 RBAC frontend tests
         working-directory: ./client
+        # development, ne test: v NODE_ENV=test main.ts záměrně neotevírá
+        # port (e2e init-only režim) a playwright webServer by čekal na
+        # /health donekonečna.
+        env:
+          NODE_ENV: development
         run: npm run test:rbac:client
 
       - name: 🎮 Gamification tests
