@@ -11,6 +11,7 @@
     "start": "node dist/main.js",
     "start:dev": "nest start --watch",
     "start:e2e": "node scripts/assert-test-db.js && nest start",
+    "start:e2e:dist": "node scripts/assert-test-db.js && node dist/main.js",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
     "lint": "eslint \"src/**/*.{ts,tsx}\" \"tests/**/*.ts\"",

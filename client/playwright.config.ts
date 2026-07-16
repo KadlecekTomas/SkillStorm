@@ -41,10 +41,14 @@ export default defineConfig({
 
   webServer: [
     {
-      command: 'npm --prefix ../server run start:e2e',
+      // CI: dist je v jobu už zbuildovaný a `nest start` (studená tsc
+      // kompilace) na 2-core runneru nestihne ani 300 s → bootuj z dist.
+      // Lokálně zůstává nest start (žádná závislost na čerstvém buildu).
+      command: process.env.CI
+        ? 'npm --prefix ../server run start:e2e:dist'
+        : 'npm --prefix ../server run start:e2e',
       url: 'http://127.0.0.1:4200/health',
       reuseExistingServer: true,
-      // 2-core CI runner kompiluje celý Nest projekt z čista; 180 s nestačí.
       // Pipe výstupů: bez nich timeout nic neřekne o příčině.
       stdout: 'pipe',
       stderr: 'pipe',
