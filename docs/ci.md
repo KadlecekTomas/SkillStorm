@@ -54,6 +54,16 @@ návrat kterékoli další suity do gate = opravit podle vzorů ve scénářové
   a vitest alias mapa musí znát `@/` i `src/`.
 - **AuditLog má runtime immutability middleware** — testovací cleanupy ho
   obcházejí raw SQL (`DELETE FROM audit_logs`), nikdy přes Prisma client.
+- **`NODE_ENV=test` znamená init-only backend**: `bootstrap()` v tomto režimu
+  záměrně nevolá `app.listen()`. Krok, který bootuje server pro Playwright
+  (webServer čekající na `/health`), musí běžet s `NODE_ENV=development` —
+  s `test` čeká na port donekonečna, s `production` narazí na env/CSRF
+  validace.
+- **`nest start` v CI nestíhá**: studená tsc kompilace na 2-core runneru
+  překročí i 300 s. Playwright webServer proto v CI (`CI=1`) bootuje
+  z hotového `dist` (`start:e2e:dist`); joby, které ho používají, musí mít
+  `npm run build` v předchozím kroku. WebServer má `stdout/stderr: 'pipe'`,
+  ať timeout není němý.
 
 ## Branch protection — doporučené required checks pro `main`
 
