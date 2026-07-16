@@ -44,7 +44,11 @@ export default defineConfig({
       command: 'npm --prefix ../server run start:e2e',
       url: 'http://127.0.0.1:4200/health',
       reuseExistingServer: true,
-      timeout: 180_000,
+      // 2-core CI runner kompiluje celý Nest projekt z čista; 180 s nestačí.
+      // Pipe výstupů: bez nich timeout nic neřekne o příčině.
+      stdout: 'pipe',
+      stderr: 'pipe',
+      timeout: 300_000,
       env: withDefinedEnv({
         ...ambientEnv,
         NODE_ENV: process.env.NODE_ENV || 'development',
@@ -61,7 +65,9 @@ export default defineConfig({
         'npm run dev -- --hostname 127.0.0.1 --port 3001',
       url: 'http://127.0.0.1:3001',
       reuseExistingServer: true,
-      timeout: 180_000,
+      stdout: 'pipe',
+      stderr: 'pipe',
+      timeout: 300_000,
       env: withDefinedEnv({
         ...ambientEnv,
         PORT: '3001',
