@@ -1701,13 +1701,20 @@ export class ClassSectionsService {
     });
 
     // Bucket by ID to guarantee no class appears in more than one bucket.
+    // A teacher can be homeroom teacher of multiple classes: the first one
+    // (sorted by grade/section) is the primary `homeroom`, the rest go into
+    // `teachingClasses` even without a TeacherClassSection row.
     const homeroom =
       allClasses.find((cls) => cls.teacherId === teacher.id) ?? null;
     const homeroomId = homeroom?.id ?? null;
 
     const teachingIds = new Set(
       allClasses
-        .filter((cls) => cls.id !== homeroomId && cls.teachers.length > 0)
+        .filter(
+          (cls) =>
+            cls.id !== homeroomId &&
+            (cls.teacherId === teacher.id || cls.teachers.length > 0),
+        )
         .map((cls) => cls.id),
     );
 
