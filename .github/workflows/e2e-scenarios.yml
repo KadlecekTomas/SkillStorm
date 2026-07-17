@@ -77,6 +77,14 @@ jobs:
         run: npx playwright install --with-deps chromium
         working-directory: client
 
+      # Playwright launches webServer BEFORE globalSetup, so on a fresh CI
+      # database the backend would boot against zero tables and crash in
+      # onModuleInit (RBAC sync). Migrate explicitly first; globalSetup's own
+      # migrate+seed then run as no-op/refresh.
+      - name: Migrate test database
+        run: DATABASE_URL="$DATABASE_URL_TEST" npx prisma migrate deploy
+        working-directory: server
+
       # globalSetup recreates+migrates+seeds the DB; webServer boots
       # backend :4200 (guarded to the test DB) + frontend :3001.
       - name: Run scenario suite

@@ -17,15 +17,40 @@ const prisma = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
 async function main() {
   console.log('🌱 Starting full SkillStorm E2E seed...');
 
-  // 🧹 Clean up to prevent unique constraint errors in CI
-  await prisma.testAssignment.deleteMany({});
-  await prisma.response.deleteMany({});
-  await prisma.submission.deleteMany({});
-  await prisma.assignment.deleteMany({});
-  await prisma.option.deleteMany({});
-  await prisma.answer.deleteMany({});
-  await prisma.question.deleteMany({});
-  await prisma.test.deleteMany({});
+  // 🧹 Clean up to prevent unique constraint errors in CI.
+  // The submission-immutability DB trigger (SUBMISSION_LOCKED) blocks deleting
+  // responses of approved submissions; for a *_test-only wipe we disable
+  // triggers for this one transaction (SET LOCAL ends with the transaction,
+  // and the assertTestDatabaseUrl guard above means this never touches a
+  // real database).
+  await prisma.$transaction(async (tx) => {
+    await tx.$executeRawUnsafe(
+      `SET LOCAL session_replication_role = 'replica'`,
+    );
+    await tx.testAssignment.deleteMany({});
+    await tx.response.deleteMany({});
+    await tx.submission.deleteMany({});
+    await tx.assignment.deleteMany({});
+    await tx.option.deleteMany({});
+    await tx.answer.deleteMany({});
+    await tx.question.deleteMany({});
+    await tx.test.deleteMany({});
+    // Subject/catalog domain too: the pipeline's idempotent upserts assume
+    // either its own rows or an empty domain. Leftovers from other suites
+    // (e.g. the policy scorecard run in the same CI job) would otherwise
+    // resolve a foreign "Mathematics" subject with no matching topic levels.
+    await tx.materialPurchase.deleteMany({});
+    await tx.materialAssignment.deleteMany({});
+    await tx.learningMaterial.deleteMany({});
+    await tx.topicLevel.deleteMany({});
+    await tx.subjectLevel.deleteMany({});
+    await tx.teacherSubject.deleteMany({});
+    await tx.classSectionOrgSubject.deleteMany({});
+    await tx.orgSubject.deleteMany({});
+    await tx.catalogTopic.deleteMany({});
+    await tx.subject.deleteMany({});
+    await tx.catalogSubject.deleteMany({});
+  });
 
   await runSeedPipeline(prisma);
 
