@@ -62,6 +62,19 @@ Advance běží uvnitř stávající finish transakce. Dvojitou ochranu dávají
 - `@@unique([progressId, stepIndex])` — souběžné finishe dvou session téže
   třídy se serializují přes P2002 + jeden retry s přečtenou pozicí.
 
+## R6 — Vzkaz minulé třídy: reveal pojistka (schváleno ráno 2026-07-17)
+
+Doplnění od Tomáše při schválení Bloku 1: `epilogueMessage` píše učitel
+dokončené kampaně, ale budoucí třídě se NIKDY nezobrazí automaticky.
+Model: přijímající `CampaignProgress` má `predecessorProgressId` (snapshot
+zdroje vzkazu při startu kampaně — nejnovější COMPLETED progress téže
+kampaně v téže org s neprázdným vzkazem, mimo vlastní třídu)
+a `predecessorMessageRevealedAt`. Kontrakt stejný jako u correctKey:
+- projekční/board endpoint vzkaz NEVRACÍ, dokud `revealedAt` není nastaven,
+- učitel budoucí třídy má teacher-only preview endpoint (přečte si ho první),
+- explicitní `POST .../predecessor-message/reveal` teprve vzkaz pustí na
+  projekci (idempotentní).
+
 ## R5 — Cílení kampaně podle ročníku, ne podle LiveAgeMode
 
 `LiveAgeMode` (YOUNG ≤ 3. třída) nesedí na hranici 1./2. stupně (5./6. třída).

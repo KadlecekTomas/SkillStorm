@@ -48,45 +48,46 @@ model User {
 }
 
 model Organization {
-  id                String                @id @default(uuid()) @map("organization_id")
-  name              String                @db.VarChar(255)
-  address           String?               @db.VarChar(255)
-  city              String?               @db.VarChar(100)
-  country           String?               @db.VarChar(100)
-  type              OrganizationType      @default(SCHOOL)
-  status            OrganizationStatus    @default(PENDING)
-  ownerUserId       String?               @unique @map("owner_user_id")
-  createdAt         DateTime              @default(now()) @map("created_at")
-  updatedAt         DateTime              @updatedAt @map("updated_at")
-  deletedAt         DateTime?             @map("deleted_at")
-  owner             User?                 @relation("OrganizationOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
-  academicYears     AcademicYear[]
-  analyticsEvents   AnalyticsEvent[]
-  assignments       Assignment[]
-  enrollments       Enrollment[]
-  auditLogs         AuditLog[]
-  classSections     ClassSection[]
-  exportLogs        ExportLog[]
-  importBatches     ImportBatch[]
-  learningMaterials LearningMaterial[]
-  materialPurchases MaterialPurchase[]
-  memberships       Membership[]
-  settings          OrganizationSettings?
-  rolePermissions   RolePermission[]
-  students          Student[]
-  orgSubjects       OrgSubject[]
-  subscriptions     Subscription[]
-  teachers          Teacher[]
-  tests             Test[]
-  userPermissions   UserPermission[]
-  invitations       Invitation[]
-  invites           Invite[]
-  promotionLogs     PromotionLog[]
-  submissions       Submission[]
-  supportTickets    SupportTicket[]
-  userIdentities    UserIdentity[]
-  liveSessions      LiveSession[]
-  classPartaks      ClassPartak[]
+  id                 String                @id @default(uuid()) @map("organization_id")
+  name               String                @db.VarChar(255)
+  address            String?               @db.VarChar(255)
+  city               String?               @db.VarChar(100)
+  country            String?               @db.VarChar(100)
+  type               OrganizationType      @default(SCHOOL)
+  status             OrganizationStatus    @default(PENDING)
+  ownerUserId        String?               @unique @map("owner_user_id")
+  createdAt          DateTime              @default(now()) @map("created_at")
+  updatedAt          DateTime              @updatedAt @map("updated_at")
+  deletedAt          DateTime?             @map("deleted_at")
+  owner              User?                 @relation("OrganizationOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  academicYears      AcademicYear[]
+  analyticsEvents    AnalyticsEvent[]
+  assignments        Assignment[]
+  enrollments        Enrollment[]
+  auditLogs          AuditLog[]
+  classSections      ClassSection[]
+  exportLogs         ExportLog[]
+  importBatches      ImportBatch[]
+  learningMaterials  LearningMaterial[]
+  materialPurchases  MaterialPurchase[]
+  memberships        Membership[]
+  settings           OrganizationSettings?
+  rolePermissions    RolePermission[]
+  students           Student[]
+  orgSubjects        OrgSubject[]
+  subscriptions      Subscription[]
+  teachers           Teacher[]
+  tests              Test[]
+  userPermissions    UserPermission[]
+  invitations        Invitation[]
+  invites            Invite[]
+  promotionLogs      PromotionLog[]
+  submissions        Submission[]
+  supportTickets     SupportTicket[]
+  userIdentities     UserIdentity[]
+  liveSessions       LiveSession[]
+  classPartaks       ClassPartak[]
+  campaignProgresses CampaignProgress[]
 
   @@index([name])
   @@index([city])
@@ -558,26 +559,27 @@ model PromotionLog {
 }
 
 model ClassSection {
-  id                String                   @id @default(uuid()) @map("class_section_id")
-  orgId             String                   @map("organization_id")
-  yearId            String                   @map("academic_year_id")
-  grade             SchoolGrade
-  section           String
-  label             String?
-  teacherId         String?                  @map("teacher_id")
-  createdAt         DateTime                 @default(now()) @map("created_at")
-  assignments       Assignment[]
-  academicYear      AcademicYear             @relation(fields: [yearId], references: [id], onDelete: Cascade)
-  organization      Organization             @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  teacher           Teacher?                 @relation("Homeroom", fields: [teacherId], references: [id])
-  enrollments       Enrollment[]
-  orgSubjects       ClassSectionOrgSubject[]
-  studentClassrooms StudentClassroom[]
-  invitations       Invitation[]
-  invites           Invite[]
-  teachers          TeacherClassSection[]
-  liveSessions      LiveSession[]
-  classPartak       ClassPartak?
+  id                 String                   @id @default(uuid()) @map("class_section_id")
+  orgId              String                   @map("organization_id")
+  yearId             String                   @map("academic_year_id")
+  grade              SchoolGrade
+  section            String
+  label              String?
+  teacherId          String?                  @map("teacher_id")
+  createdAt          DateTime                 @default(now()) @map("created_at")
+  assignments        Assignment[]
+  academicYear       AcademicYear             @relation(fields: [yearId], references: [id], onDelete: Cascade)
+  organization       Organization             @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  teacher            Teacher?                 @relation("Homeroom", fields: [teacherId], references: [id])
+  enrollments        Enrollment[]
+  orgSubjects        ClassSectionOrgSubject[]
+  studentClassrooms  StudentClassroom[]
+  invitations        Invitation[]
+  invites            Invite[]
+  teachers           TeacherClassSection[]
+  liveSessions       LiveSession[]
+  classPartak        ClassPartak?
+  campaignProgresses CampaignProgress[]
 
   @@unique([orgId, yearId, grade, section])
   @@unique([id, yearId])
@@ -1022,27 +1024,31 @@ model Response {
 /// vše běží na učitelově obrazovce, žádná data o jednotlivých žácích.
 /// Švy pro režim A (DEVICES) viz docs/live-sessions.md.
 model LiveSession {
-  id             String                   @id @default(uuid()) @map("live_session_id")
-  organizationId String                   @map("organization_id")
-  hostId         String                   @map("host_membership_id")
-  classSectionId String?                  @map("class_section_id")
-  testId         String                   @map("test_id")
-  mode           LiveSessionMode          @default(BOARD_ONLY)
-  status         LiveSessionStatus        @default(DRAFT)
-  ageMode        LiveAgeMode              @map("age_mode")
-  countdownSec   Int?                     @map("countdown_sec")
-  startedAt      DateTime?                @map("started_at")
-  finishedAt     DateTime?                @map("finished_at")
-  xpAwarded      Boolean                  @default(false) @map("xp_awarded")
-  createdAt      DateTime                 @default(now()) @map("created_at")
-  updatedAt      DateTime                 @updatedAt @map("updated_at")
-  organization   Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  host           Membership               @relation("HostedLiveSessions", fields: [hostId], references: [id], onDelete: Cascade)
-  classSection   ClassSection?            @relation(fields: [classSectionId], references: [id], onDelete: SetNull)
-  test           Test                     @relation(fields: [testId], references: [id], onDelete: Restrict)
-  rounds         LiveSessionRound[]
-  participants   LiveSessionParticipant[]
-  xpEvents       ClassPartakXpEvent[]
+  id                 String                   @id @default(uuid()) @map("live_session_id")
+  organizationId     String                   @map("organization_id")
+  hostId             String                   @map("host_membership_id")
+  classSectionId     String?                  @map("class_section_id")
+  testId             String                   @map("test_id")
+  mode               LiveSessionMode          @default(BOARD_ONLY)
+  status             LiveSessionStatus        @default(DRAFT)
+  ageMode            LiveAgeMode              @map("age_mode")
+  countdownSec       Int?                     @map("countdown_sec")
+  startedAt          DateTime?                @map("started_at")
+  finishedAt         DateTime?                @map("finished_at")
+  xpAwarded          Boolean                  @default(false) @map("xp_awarded")
+  /// Volitelná vazba na kampaň — bleskovka bez kampaně funguje beze změny.
+  campaignProgressId String?                  @map("campaign_progress_id")
+  createdAt          DateTime                 @default(now()) @map("created_at")
+  updatedAt          DateTime                 @updatedAt @map("updated_at")
+  organization       Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  host               Membership               @relation("HostedLiveSessions", fields: [hostId], references: [id], onDelete: Cascade)
+  classSection       ClassSection?            @relation(fields: [classSectionId], references: [id], onDelete: SetNull)
+  test               Test                     @relation(fields: [testId], references: [id], onDelete: Restrict)
+  campaignProgress   CampaignProgress?        @relation(fields: [campaignProgressId], references: [id], onDelete: SetNull)
+  campaignStepUnlock CampaignStepUnlock?
+  rounds             LiveSessionRound[]
+  participants       LiveSessionParticipant[]
+  xpEvents           ClassPartakXpEvent[]
 
   @@index([organizationId, status])
   @@index([hostId, createdAt])
@@ -1120,6 +1126,65 @@ model ClassPartakXpEvent {
 
   @@index([classPartakId, createdAt])
   @@map("class_partak_xp_events")
+}
+
+/// Rozehraná kampaň jedné třídy (Výprava/Mise). Kampaň samotná NENÍ v DB —
+/// definice žije v server/content/campaigns/*.json (registry, zod validace
+/// při bootu); campaignId je slug ze souboru. Třída může mít rozehráno víc
+/// kampaní současně. Postup POUZE za dokončené bleskovky s ≥1 odehraným
+/// kolem — správnost (outcome) do postupu NIKDY nevstupuje.
+model CampaignProgress {
+  id                           String                 @id @default(uuid()) @map("campaign_progress_id")
+  organizationId               String                 @map("organization_id")
+  classSectionId               String                 @map("class_section_id")
+  campaignId                   String                 @map("campaign_id")
+  campaignType                 CampaignType           @map("campaign_type")
+  status                       CampaignProgressStatus @default(ACTIVE)
+  position                     Int                    @default(0)
+  totalSteps                   Int                    @map("total_steps")
+  /// Mise: vzkaz budoucí třídě, píše učitel po dokončení kampaně.
+  epilogueMessage              String?                @map("epilogue_message") @db.VarChar(500)
+  epilogueSubmittedAt          DateTime?              @map("epilogue_submitted_at")
+  /// Snapshot zdroje vzkazu minulé třídy (při startu kampaně). Vzkaz se na
+  /// projekci NIKDY nedostane před explicitním revealem učitele TÉTO třídy —
+  /// stejný kontrakt jako correctKey u kol.
+  predecessorProgressId        String?                @map("predecessor_progress_id")
+  predecessorMessageRevealedAt DateTime?              @map("predecessor_message_revealed_at")
+  startedAt                    DateTime               @default(now()) @map("started_at")
+  completedAt                  DateTime?              @map("completed_at")
+  createdAt                    DateTime               @default(now()) @map("created_at")
+  updatedAt                    DateTime               @updatedAt @map("updated_at")
+  organization                 Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  classSection                 ClassSection           @relation(fields: [classSectionId], references: [id], onDelete: Cascade)
+  predecessor                  CampaignProgress?      @relation("CampaignEpilogueChain", fields: [predecessorProgressId], references: [id], onDelete: SetNull)
+  successors                   CampaignProgress[]     @relation("CampaignEpilogueChain")
+  stepUnlocks                  CampaignStepUnlock[]
+  sessions                     LiveSession[]
+
+  @@unique([classSectionId, campaignId])
+  @@index([organizationId, classSectionId])
+  @@index([organizationId, campaignId, status])
+  @@map("campaign_progresses")
+}
+
+/// 1 řádek = 1 odemčená zastávka (Výprava) / kapitola (Mise). Zároveň JE
+/// sbírkou samolepek i nástěnkou fragmentů — assety žijí v campaign JSON
+/// pod stepKey. Třídní úroveň, o jednotlivých dětech nic (jako režim B).
+/// sessionId @unique = idempotenční kotva: jedna session posune max o 1 krok.
+model CampaignStepUnlock {
+  id           String           @id @default(uuid()) @map("campaign_step_unlock_id")
+  progressId   String           @map("campaign_progress_id")
+  stepIndex    Int              @map("step_index")
+  stepKey      String           @map("step_key")
+  sessionId    String?          @unique @map("live_session_id")
+  /// Kolik kol session odehrála — rekapitulace + kosmetika, NIKDY podmínka.
+  roundsPlayed Int              @map("rounds_played")
+  unlockedAt   DateTime         @default(now()) @map("unlocked_at")
+  progress     CampaignProgress @relation(fields: [progressId], references: [id], onDelete: Cascade)
+  session      LiveSession?     @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  @@unique([progressId, stepIndex])
+  @@map("campaign_step_unlocks")
 }
 
 /// Immutable analytical snapshot of one SUBMITTED test attempt.
@@ -1570,6 +1635,18 @@ enum LiveRoundOutcome {
 enum ClassPartakXpType {
   ROUND_PLAYED
   SESSION_FINISHED
+}
+
+/// Formát kampaně: Výprava (1. stupeň, kooperativní cesta) / Mise (2. stupeň
+/// + SŠ, seriálová záhada). Definice obsahu žije v content registry (JSON).
+enum CampaignType {
+  EXPEDITION
+  MISSION
+}
+
+enum CampaignProgressStatus {
+  ACTIVE
+  COMPLETED
 }
 
 enum XpEventType {
