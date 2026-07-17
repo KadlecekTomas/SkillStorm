@@ -2,6 +2,39 @@
 
 Formát: každé rozhodnutí má možnosti, výběr a důvod. Ráno projít.
 
+## R7 — Oprava wipe scénářového seedu (pre-existing, odhaleno kampaněmi)
+
+`scenarios-e2e.seed.ts` wipe nemazal live sessions; `LiveSession→Test` je
+RESTRICT, takže `test.deleteMany` padal při KAŽDÉM druhém lokálním běhu
+scénářů (poprvé to odhalil kampaňový scénář — bleskovkové scénáře běžely
+dosud vždy nad čerstvou DB). Doplněny delete pro campaign_step_unlocks,
+campaign_progresses, class_partak_xp_events, class_partaks, live_sessions
+(před tests). CI to nevidělo, protože tam se DB zakládá vždy čistá.
+
+## Otevřené otázky pro Tomáše (ráno)
+
+1. **Obsah je draft** — texty Výpravy (7–9 let) i Archivu projít; zejména
+   tón K3 a epilogue prompt.
+2. **K1 fragment „datum z příštího týdne"** — teď literál („zápis
+   z pondělí — příští týden"). Chceme šablonovou proměnnou s reálným datem
+   (např. `{{nextMonday}}` doplněné na serveru)? Rozhodl jsem se ji zatím
+   nezavádět (obsah = statická data).
+3. **Vstup na kampaňovou projekci** — board je zatím dosažitelný jen přes
+   setup dialog (po bleskovce) a přímou URL. Přidat kartu „Kampaně" na
+   dashboard učitele / detail třídy?
+4. **Učitel s více homerooms**: `getMyStructure` vrací jen PRVNÍ homeroom
+   (bucket), další třídy bez úvazku ve struktuře nejsou → dialog Bleskovky
+   je nenabídne. Obešel jsem to v seedech úvazkem (TeacherClassSection),
+   ale je to kandidát na samostatnou opravu.
+5. **„Hrát znovu"** — dokončená kampaň se pro tutéž třídu nedá restartovat
+   (unique [classSectionId, campaignId]). Příští školní rok je to nová
+   ClassSection, takže tam problém není. OK?
+6. **Vzkaz předchůdce se snapshotuje při STARTU kampaně** — třída, která
+   začala dřív, než předchůdce vzkaz nahrál, ho nikdy nedostane. Přijatelné
+   (jednodušší, deterministické), nebo dohledávat i později?
+7. **Epilogue jen u Mise** — Výprava vzkaz budoucí třídě nemá (záměr:
+   smyčka patří k příběhu Archivu). Chceme obdobu i pro Výpravu?
+
 ## R1 — Campaign není DB tabulka, ale soubor v content registry
 
 **Možnosti:**
