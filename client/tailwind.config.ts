@@ -74,6 +74,8 @@ const config: Config = {
           "sans-serif",
           ...fontFamily.sans,
         ],
+        /* Terminál/archiv motiv Misí — IBM Plex Mono */
+        mono: ["var(--font-plex-mono)", "IBM Plex Mono", ...fontFamily.mono],
       },
       borderRadius: {
         xl: "0.75rem", // karty
