@@ -159,7 +159,8 @@ export type ContentItem = {
   id: string;
   title: string;
   description?: string | null;
-  subject?: string | null;
+  /** API vrací relaci Subject (objekt), starší mock data plain string. */
+  subject?: string | { name: string } | null;
   contentType: ContentType;
   scope: ContentScope;
   educationLevel?: string | null;

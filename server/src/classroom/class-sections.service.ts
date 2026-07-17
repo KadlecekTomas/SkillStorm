@@ -993,7 +993,24 @@ export class ClassSectionsService {
               select: { id: true },
             })
           : null;
-        if (!teacher || classSection.teacherId !== teacher.id) {
+        // Homeroom NEBO platný úvazek — stejné pravidlo jako getClassSections;
+        // dřív prošel jen třídní učitel a učitel s úvazkem dostával 403.
+        const hasScopedAccess = teacher
+          ? await this.prisma.teacherClassSection.findFirst({
+              where: {
+                classSectionId: classSection.id,
+                ...this.activeTeacherAccessCondition(
+                  teacher.id,
+                  classSection.yearId,
+                ),
+              },
+              select: { id: true },
+            })
+          : null;
+        if (
+          !teacher ||
+          (classSection.teacherId !== teacher.id && !hasScopedAccess)
+        ) {
           throw new ForbiddenException('Učitel nemá přístup k této třídě.');
         }
       } else if (role && !hasAtLeastRole(role, OrganizationRole.DIRECTOR)) {
@@ -1138,7 +1155,24 @@ export class ClassSectionsService {
               select: { id: true },
             })
           : null;
-        if (!teacher || classSection.teacherId !== teacher.id) {
+        // Homeroom NEBO platný úvazek — stejné pravidlo jako getClassSections;
+        // dřív prošel jen třídní učitel a učitel s úvazkem dostával 403.
+        const hasScopedAccess = teacher
+          ? await this.prisma.teacherClassSection.findFirst({
+              where: {
+                classSectionId: classSection.id,
+                ...this.activeTeacherAccessCondition(
+                  teacher.id,
+                  classSection.yearId,
+                ),
+              },
+              select: { id: true },
+            })
+          : null;
+        if (
+          !teacher ||
+          (classSection.teacherId !== teacher.id && !hasScopedAccess)
+        ) {
           throw new ForbiddenException('Učitel nemá přístup k této třídě.');
         }
       } else if (role && !hasAtLeastRole(role, OrganizationRole.DIRECTOR)) {
