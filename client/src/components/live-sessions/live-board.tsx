@@ -17,6 +17,13 @@ import {
   type LiveSessionProjection,
   type RoundOptionKey,
 } from "@/lib/api/live-sessions";
+import {
+  getCampaignProgress,
+  type CampaignProgressDetail,
+} from "@/lib/api/campaigns";
+import { ExpeditionIntroOverlay } from "@/components/campaigns/expedition-intro-overlay";
+import { ExpeditionSegmentStrip } from "@/components/campaigns/expedition-segment-strip";
+import { ExpeditionFinishScene } from "@/components/campaigns/expedition-finish-scene";
 import { cn } from "@/utils/cn";
 
 /*
@@ -90,6 +97,9 @@ export function LiveBoard({ sessionId }: LiveBoardProps): JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Kampaňová vrstva — čistě prezentační meziherní stav nad enginem session.
+  const [campaign, setCampaign] = useState<CampaignProgressDetail | null>(null);
+  const [introDismissed, setIntroDismissed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -115,6 +125,23 @@ export function LiveBoard({ sessionId }: LiveBoardProps): JSX.Element {
       cancelled = true;
     };
   }, [sessionId]);
+
+  // Detail kampaně pro mapu/úsek; refetch po finish (post-advance stav).
+  const campaignProgressId = projection?.campaignProgressId ?? null;
+  useEffect(() => {
+    if (!campaignProgressId) return;
+    let cancelled = false;
+    getCampaignProgress(campaignProgressId)
+      .then((detail) => {
+        if (!cancelled) setCampaign(detail);
+      })
+      .catch(() => {
+        /* kampaň je bonusová vrstva — bleskovka běží dál i bez ní */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [campaignProgressId, finish]);
 
   const ageMode: LiveAgeMode = projection
     ? fromServerLiveAgeMode(projection.ageMode)
@@ -257,6 +284,7 @@ export function LiveBoard({ sessionId }: LiveBoardProps): JSX.Element {
         finish={finish}
         ageMode={ageMode}
         testTitle={projection.testTitle}
+        campaign={campaign}
         onExit={() => router.push("/app")}
       />
     );
@@ -264,6 +292,25 @@ export function LiveBoard({ sessionId }: LiveBoardProps): JSX.Element {
 
   const roundsDone = rounds.filter((r) => r.completedAt).length;
   const allDone = roundsDone === rounds.length && rounds.length > 0;
+
+  const expedition =
+    campaign?.campaignType === "EXPEDITION" ? campaign : null;
+  // Před bleskovkou: mapa ukáže, kde parťák stojí a kam dnes jde.
+  if (
+    expedition &&
+    !introDismissed &&
+    roundsDone === 0 &&
+    projection.status === "RUNNING"
+  ) {
+    return (
+      <ShellFrame senior={senior}>
+        <ExpeditionIntroOverlay
+          detail={expedition}
+          onStart={() => setIntroDismissed(true)}
+        />
+      </ShellFrame>
+    );
+  }
 
   return (
     <ShellFrame senior={senior}>
@@ -320,6 +367,18 @@ export function LiveBoard({ sessionId }: LiveBoardProps): JSX.Element {
             </span>
           </div>
         </header>
+
+        {/* Výprava: parťák poposkočí o krok za každé ODEHRANÉ kolo */}
+        {expedition && rounds.length > 0 ? (
+          <ExpeditionSegmentStrip
+            fromTitle={
+              expedition.unlockedSteps.at(-1)?.content?.title ?? "Start"
+            }
+            toTitle={expedition.nextStep?.title ?? "Cíl výpravy"}
+            fraction={roundsDone / rounds.length}
+            className="mt-3"
+          />
+        ) : null}
 
         {round ? (
           <main className="flex flex-1 flex-col justify-center gap-[3vh]">
@@ -491,11 +550,13 @@ function FinishScreen({
   finish,
   ageMode,
   testTitle,
+  campaign,
   onExit,
 }: {
   finish: LiveSessionFinishResult;
   ageMode: LiveAgeMode;
   testTitle: string;
+  campaign: CampaignProgressDetail | null;
   onExit: () => void;
 }): JSX.Element {
   const senior = ageMode === "senior";
@@ -537,6 +598,16 @@ function FinishScreen({
         <p className="text-2xl font-bold">
           Odehráno kol: {finish.playedRounds}
         </p>
+
+        {/* Výprava: scéna nálezu — zastávka, samolepka, háček na příště */}
+        {finish.campaignAdvance &&
+        campaign &&
+        campaign.campaignType === "EXPEDITION" ? (
+          <ExpeditionFinishScene
+            detail={campaign}
+            advance={finish.campaignAdvance}
+          />
+        ) : null}
 
         {partak ? (
           <div className="flex w-full max-w-2xl flex-col items-center gap-4">

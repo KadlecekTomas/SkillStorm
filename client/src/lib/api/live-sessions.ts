@@ -1,6 +1,7 @@
 "use client";
 
 import { httpClient } from "@/lib/http/client";
+import type { CampaignAdvance } from "@/lib/api/campaigns";
 
 /** Serverové enumy (Prisma) — viz docs/live-sessions.md */
 export type LiveSessionStatus = "DRAFT" | "RUNNING" | "FINISHED";
@@ -37,6 +38,7 @@ export interface LiveSessionProjection {
   ageMode: ServerLiveAgeMode;
   countdownSec: number | null;
   classSectionId: string | null;
+  campaignProgressId: string | null;
   testTitle: string;
   startedAt: string | null;
   finishedAt: string | null;
@@ -48,6 +50,8 @@ export interface CreateLiveSessionInput {
   classSectionId?: string;
   ageMode?: ServerLiveAgeMode;
   countdownSec?: number;
+  /** Volitelná vazba na kampaň — vyžaduje classSectionId třídy kampaně. */
+  campaignProgressId?: string;
 }
 
 export interface LiveSessionFinishResult {
@@ -59,6 +63,8 @@ export interface LiveSessionFinishResult {
   previousXp: number | null;
   partak: { xp: number; stage: number } | null;
   stageUp: boolean;
+  /** Kampaňový postup — null, když session nebyla kampaňová nebo 0 kol. */
+  campaignAdvance: CampaignAdvance | null;
 }
 
 export interface ClassPartakState {
