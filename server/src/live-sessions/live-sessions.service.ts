@@ -14,6 +14,10 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
 import type { OrgContext } from '@/common/org-context/org-context.types';
+import {
+  CampaignsService,
+  CampaignAdvanceResult,
+} from '@/campaigns/campaigns.service';
 import { CreateLiveSessionDto } from './dto/create-live-session.dto';
 import {
   OPTION_KEYS,
@@ -115,7 +119,10 @@ function buildRoundSnapshot(
 
 @Injectable()
 export class LiveSessionsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly campaigns: CampaignsService,
+  ) {}
 
   async create(dto: CreateLiveSessionDto, ctx: OrgContext) {
     const test = await this.prisma.test.findFirst({
@@ -163,6 +170,14 @@ export class LiveSessionsService {
       classSectionGrade = classSection.grade;
     }
 
+    if (dto.campaignProgressId) {
+      await this.campaigns.assertSessionLink(
+        dto.campaignProgressId,
+        dto.classSectionId,
+        ctx,
+      );
+    }
+
     return this.prisma.liveSession.create({
       data: {
         organizationId: ctx.organizationId,
@@ -171,6 +186,7 @@ export class LiveSessionsService {
         testId: dto.testId,
         ageMode: dto.ageMode ?? resolveDefaultLiveAgeMode(classSectionGrade),
         countdownSec: dto.countdownSec ?? null,
+        campaignProgressId: dto.campaignProgressId ?? null,
       },
       select: this.sessionSelect(),
     });
@@ -250,6 +266,7 @@ export class LiveSessionsService {
       ageMode: session.ageMode,
       countdownSec: session.countdownSec,
       classSectionId: session.classSectionId,
+      campaignProgressId: session.campaignProgressId,
       testTitle: session.test.title,
       startedAt: session.startedAt,
       finishedAt: session.finishedAt,
@@ -338,8 +355,20 @@ export class LiveSessionsService {
         });
       }
 
+      // Kampaňový postup — atomicky se session XP, idempotentně (unique
+      // sessionId na unlocku). Správnost/outcome do postupu NEVSTUPUJE,
+      // počítá se jen ≥ 1 odehrané kolo (decisions R3).
+      let campaignAdvance: CampaignAdvanceResult | null = null;
+      if (session.campaignProgressId) {
+        campaignAdvance = await this.campaigns.advanceWithinTransaction(tx, {
+          sessionId: id,
+          campaignProgressId: session.campaignProgressId,
+          roundsPlayed: playedRounds,
+        });
+      }
+
       if (!session.classSectionId) {
-        return { partak: null, xpDelta: 0, stageUp: false };
+        return { partak: null, xpDelta: 0, stageUp: false, campaignAdvance };
       }
 
       const xpDelta =
@@ -379,6 +408,7 @@ export class LiveSessionsService {
         partak: { xp: partak.xp, stage: partak.stage },
         xpDelta,
         stageUp: partak.stage > existing.stage,
+        campaignAdvance,
       };
     });
 
@@ -400,6 +430,7 @@ export class LiveSessionsService {
       previousXp: result.partak ? result.partak.xp - result.xpDelta : null,
       partak: result.partak,
       stageUp: result.stageUp,
+      campaignAdvance: result.campaignAdvance,
     };
   }
 
@@ -433,6 +464,7 @@ export class LiveSessionsService {
       ageMode: true,
       countdownSec: true,
       classSectionId: true,
+      campaignProgressId: true,
       testId: true,
       hostId: true,
       startedAt: true,

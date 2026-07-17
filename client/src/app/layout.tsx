@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { IBM_Plex_Mono, Inter } from "next/font/google";
 import "./globals.css";
 import { Suspense } from "react";
 import { AppErrorBoundary } from "@/components/layout/app-error-boundary";
@@ -11,6 +11,14 @@ import "react-toastify/dist/ReactToastify.css";
 const inter = Inter({
   subsets: ["latin", "latin-ext"],
   variable: "--font-inter",
+  display: "swap",
+});
+
+/** Mono akcent pro terminál/archiv motiv Misí (senior projekce). */
+const plexMono = IBM_Plex_Mono({
+  subsets: ["latin", "latin-ext"],
+  weight: ["400", "600", "700"],
+  variable: "--font-plex-mono",
   display: "swap",
 });
 
@@ -41,7 +49,7 @@ export default async function RootLayout({
   const MswLoader = await getMswLoader();
 
   return (
-    <html lang="en" className={inter.variable}>
+    <html lang="en" className={`${inter.variable} ${plexMono.variable}`}>
       <body className="bg-canvas text-ink">
         <AppErrorBoundary>
           <TooltipProvider>

@@ -20,4 +20,12 @@ export class CreateLiveSessionDto {
   @Min(5)
   @Max(300)
   countdownSec?: number;
+
+  /**
+   * Volitelná vazba na kampaň (Výprava/Mise). Vyžaduje classSectionId
+   * shodný s třídou kampaně; bleskovka bez kampaně funguje beze změny.
+   */
+  @IsOptional()
+  @IsUUID()
+  campaignProgressId?: string;
 }

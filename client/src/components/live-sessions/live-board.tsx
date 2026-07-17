@@ -17,6 +17,15 @@ import {
   type LiveSessionProjection,
   type RoundOptionKey,
 } from "@/lib/api/live-sessions";
+import {
+  getCampaignProgress,
+  type CampaignProgressDetail,
+} from "@/lib/api/campaigns";
+import { ExpeditionIntroOverlay } from "@/components/campaigns/expedition-intro-overlay";
+import { ExpeditionSegmentStrip } from "@/components/campaigns/expedition-segment-strip";
+import { ExpeditionFinishScene } from "@/components/campaigns/expedition-finish-scene";
+import { MissionSignalMeter } from "@/components/campaigns/mission-signal-meter";
+import { MissionFinishScene } from "@/components/campaigns/mission-finish-scene";
 import { cn } from "@/utils/cn";
 
 /*
@@ -90,6 +99,9 @@ export function LiveBoard({ sessionId }: LiveBoardProps): JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Kampaňová vrstva — čistě prezentační meziherní stav nad enginem session.
+  const [campaign, setCampaign] = useState<CampaignProgressDetail | null>(null);
+  const [introDismissed, setIntroDismissed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -115,6 +127,23 @@ export function LiveBoard({ sessionId }: LiveBoardProps): JSX.Element {
       cancelled = true;
     };
   }, [sessionId]);
+
+  // Detail kampaně pro mapu/úsek; refetch po finish (post-advance stav).
+  const campaignProgressId = projection?.campaignProgressId ?? null;
+  useEffect(() => {
+    if (!campaignProgressId) return;
+    let cancelled = false;
+    getCampaignProgress(campaignProgressId)
+      .then((detail) => {
+        if (!cancelled) setCampaign(detail);
+      })
+      .catch(() => {
+        /* kampaň je bonusová vrstva — bleskovka běží dál i bez ní */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [campaignProgressId, finish]);
 
   const ageMode: LiveAgeMode = projection
     ? fromServerLiveAgeMode(projection.ageMode)
@@ -217,6 +246,10 @@ export function LiveBoard({ sessionId }: LiveBoardProps): JSX.Element {
 
   const senior = ageMode === "senior";
   const young = ageMode === "young";
+  const expedition = campaign?.campaignType === "EXPEDITION" ? campaign : null;
+  const mission = campaign?.campaignType === "MISSION" ? campaign : null;
+  // Mise má vlastní tmavou scénu (senior tón) bez ohledu na věkový režim.
+  const darkShell = senior || mission !== null;
 
   if (error && !projection) {
     return (
@@ -235,7 +268,7 @@ export function LiveBoard({ sessionId }: LiveBoardProps): JSX.Element {
 
   if (projection.status === "FINISHED" && !finish) {
     return (
-      <ShellFrame senior={senior}>
+      <ShellFrame senior={darkShell}>
         <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-8 text-center">
           <PartakEmblem size={72} />
           <h1 className="text-3xl font-extrabold">Bleskovka je ukončená</h1>
@@ -257,6 +290,7 @@ export function LiveBoard({ sessionId }: LiveBoardProps): JSX.Element {
         finish={finish}
         ageMode={ageMode}
         testTitle={projection.testTitle}
+        campaign={campaign}
         onExit={() => router.push("/app")}
       />
     );
@@ -265,8 +299,25 @@ export function LiveBoard({ sessionId }: LiveBoardProps): JSX.Element {
   const roundsDone = rounds.filter((r) => r.completedAt).length;
   const allDone = roundsDone === rounds.length && rounds.length > 0;
 
+  // Před bleskovkou: mapa ukáže, kde parťák stojí a kam dnes jde.
+  if (
+    expedition &&
+    !introDismissed &&
+    roundsDone === 0 &&
+    projection.status === "RUNNING"
+  ) {
+    return (
+      <ShellFrame senior={senior}>
+        <ExpeditionIntroOverlay
+          detail={expedition}
+          onStart={() => setIntroDismissed(true)}
+        />
+      </ShellFrame>
+    );
+  }
+
   return (
-    <ShellFrame senior={senior}>
+    <ShellFrame senior={darkShell}>
       <div
         data-testid="live-board"
         data-age-mode={ageMode}
@@ -275,11 +326,11 @@ export function LiveBoard({ sessionId }: LiveBoardProps): JSX.Element {
         {/* Hlavička: sada + kolo + odpočet/streak */}
         <header className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            {senior ? <PartakEmblem size={40} /> : null}
+            {darkShell ? <PartakEmblem size={40} /> : null}
             <span
               className={cn(
                 "text-lg font-bold",
-                senior ? "text-[rgb(var(--canvas))]/80" : "text-ink-muted",
+                darkShell ? "text-[rgb(var(--canvas))]/80" : "text-ink-muted",
               )}
             >
               {projection.testTitle}
@@ -301,7 +352,7 @@ export function LiveBoard({ sessionId }: LiveBoardProps): JSX.Element {
                   "tabular-nums rounded-2xl border-2 px-4 py-1 text-3xl font-extrabold",
                   secondsLeft <= 5
                     ? "border-danger text-danger"
-                    : senior
+                    : darkShell
                       ? "border-[rgb(var(--canvas))]/30"
                       : "border-line-strong text-ink",
                 )}
@@ -313,13 +364,35 @@ export function LiveBoard({ sessionId }: LiveBoardProps): JSX.Element {
               data-testid="live-round-counter"
               className={cn(
                 "text-xl font-bold",
-                senior ? "text-[rgb(var(--canvas))]/60" : "text-ink-dim",
+                darkShell ? "text-[rgb(var(--canvas))]/60" : "text-ink-dim",
               )}
             >
               Kolo {Math.min(roundIndex + 1, rounds.length)}/{rounds.length}
             </span>
           </div>
         </header>
+
+        {/* Výprava: parťák poposkočí o krok za každé ODEHRANÉ kolo */}
+        {expedition && rounds.length > 0 ? (
+          <ExpeditionSegmentStrip
+            fromTitle={
+              expedition.unlockedSteps.at(-1)?.content?.title ?? "Start"
+            }
+            toTitle={expedition.nextStep?.title ?? "Cíl výpravy"}
+            fraction={roundsDone / rounds.length}
+            className="mt-3"
+          />
+        ) : null}
+
+        {/* Mise: signál roste s ODEHRANÝMI koly; správnost jen kosmetika */}
+        {mission && rounds.length > 0 ? (
+          <MissionSignalMeter
+            fraction={roundsDone / rounds.length}
+            lastOutcome={lastOutcome}
+            chapterTitle={mission.nextStep?.title ?? "Kapitola"}
+            className="mt-3"
+          />
+        ) : null}
 
         {round ? (
           <main className="flex flex-1 flex-col justify-center gap-[3vh]">
@@ -355,7 +428,7 @@ export function LiveBoard({ sessionId }: LiveBoardProps): JSX.Element {
                     className={cn(
                       "flex items-center gap-[1.5vw] rounded-3xl border-4 px-[2vw] transition-all duration-300",
                       young ? "py-[4vh]" : "py-[3vh]",
-                      senior
+                      darkShell
                         ? "bg-[rgb(var(--canvas))]/5"
                         : "bg-canvas shadow-tactile [--tactile-shadow:rgb(var(--line-strong))]",
                       style.border,
@@ -491,14 +564,18 @@ function FinishScreen({
   finish,
   ageMode,
   testTitle,
+  campaign,
   onExit,
 }: {
   finish: LiveSessionFinishResult;
   ageMode: LiveAgeMode;
   testTitle: string;
+  campaign: CampaignProgressDetail | null;
   onExit: () => void;
 }): JSX.Element {
   const senior = ageMode === "senior";
+  // Mise končí ve své tmavé scéně i mimo senior režim.
+  const dark = senior || campaign?.campaignType === "MISSION";
   const [animated, setAnimated] = useState(false);
   useEffect(() => {
     const t = setTimeout(() => setAnimated(true), 300);
@@ -517,7 +594,7 @@ function FinishScreen({
     : 0;
 
   return (
-    <ShellFrame senior={senior}>
+    <ShellFrame senior={dark}>
       <div
         data-testid="live-finish-screen"
         className="flex min-h-screen flex-col items-center justify-center gap-[3vh] px-8 text-center"
@@ -525,18 +602,38 @@ function FinishScreen({
         <p
           className={cn(
             "text-xl font-bold",
-            senior ? "text-[rgb(var(--canvas))]/60" : "text-ink-muted",
+            dark ? "text-[rgb(var(--canvas))]/60" : "text-ink-muted",
           )}
         >
           {testTitle}
         </p>
         {/* Senior: žádné konfety, věcný quiz-night tón */}
         <h1 className="text-[clamp(2.5rem,6vw,5rem)] font-extrabold">
-          {senior ? "Konec hry" : "Hotovo! 🎉"}
+          {dark ? "Konec hry" : "Hotovo! 🎉"}
         </h1>
         <p className="text-2xl font-bold">
           Odehráno kol: {finish.playedRounds}
         </p>
+
+        {/* Výprava: scéna nálezu — zastávka, samolepka, háček na příště */}
+        {finish.campaignAdvance &&
+        campaign &&
+        campaign.campaignType === "EXPEDITION" ? (
+          <ExpeditionFinishScene
+            detail={campaign}
+            advance={finish.campaignAdvance}
+          />
+        ) : null}
+
+        {/* Mise: fragment + cliffhanger + POKRAČOVÁNÍ PŘÍŠTĚ */}
+        {finish.campaignAdvance &&
+        campaign &&
+        campaign.campaignType === "MISSION" ? (
+          <MissionFinishScene
+            detail={campaign}
+            advance={finish.campaignAdvance}
+          />
+        ) : null}
 
         {partak ? (
           <div className="flex w-full max-w-2xl flex-col items-center gap-4">
@@ -561,7 +658,7 @@ function FinishScreen({
               data-testid="live-partak-stage"
               className={cn(
                 "text-xl font-bold",
-                senior ? "text-[rgb(var(--canvas))]/80" : "text-ink-muted",
+                dark ? "text-[rgb(var(--canvas))]/80" : "text-ink-muted",
               )}
             >
               Třídní parťák · úroveň {partak.stage}

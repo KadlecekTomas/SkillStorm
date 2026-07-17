@@ -1,0 +1,52 @@
+{
+  "id": "mise-archiv",
+  "version": 1,
+  "type": "MISSION",
+  "title": "Archiv",
+  "subtitle": "Záznam, který odpovídá dřív, než se zeptáte",
+  "reviewStatus": "draft",
+  "targetGrades": {
+    "min": "GRADE_6",
+    "max": "HIGH_SCHOOL_YEAR_4"
+  },
+  "intro": "Při inventuře školního skladu se našla krabice se štítkem ARCHIV — NEOTVÍRAT. Uvnitř je stará páska a čtečka, která po zapnutí začala vypisovat text. Jenže ten text odpovídá na otázky, které ještě nikdo nepoložil.",
+  "epilogue": {
+    "enabled": true,
+    "prompt": "Archiv čeká na záznam. Napište vzkaz, který uchová pro třídu, jež ho jednou najde po vás."
+  },
+  "steps": [
+    {
+      "key": "signal",
+      "title": "Kapitola 1 — Signál",
+      "scene": "Čtečka ožívá jen tehdy, když třída pracuje. Každé odehrané kolo zesiluje signál a z pásky se vynořují další řádky. Dnes se poprvé podařilo přečíst souvislý záznam.",
+      "fragment": {
+        "kind": "text",
+        "title": "Útržek deníku",
+        "body": "…zápis z pondělí — příští týden. Vím, jak divně to zní: až budete číst tenhle řádek, bude to pondělí teprve před vámi. Nepiš to nikomu, deníku — stejně by mi nevěřili. Zkusím to říct aspoň jim. Snad mě uslyší, protože tohle se týká…"
+      },
+      "cliffhanger": "Poslední řádek záznamu není rozmazaný. Je tam jméno. Jméno téhle třídy."
+    },
+    {
+      "key": "sum",
+      "title": "Kapitola 2 — Šum",
+      "scene": "Signál slábne, do záznamu se vkrádá šum. Ale když se fragmenty poskládají vedle sebe, přestávají být textem — jsou to čáry. Půdorys. Plán téhle školy, kreslený rukou.",
+      "fragment": {
+        "kind": "text",
+        "title": "Ruční plán školy",
+        "body": "Chodby sedí, schodiště sedí, učebny sedí. Jen v přízemí, mezi sborovnou a šatnami, je tužkou dokreslená místnost. Malá, bez oken. U ní šipka a slova: TADY TO NECHÁME."
+      },
+      "cliffhanger": "Ta místnost má na plánu dveře. Na chodbě ale žádné dveře nejsou. Jen hladká zeď."
+    },
+    {
+      "key": "klic",
+      "title": "Kapitola 3 — Klíč",
+      "scene": "Poslední část pásky se rozběhla sama. Archiv není vysílání z budoucnosti — je to časová schránka. Třída, která tu seděla před lety, nechala šifru budoucím žákům: deník psaný tak, aby dával smysl až tomu, kdo ho najde. „Neexistující dveře“ jsou zazděný kabinet — a v něm krabice s jediným vzkazem: DOŠLI JSTE AŽ SEM. TEĎ JE ARCHIV VÁŠ.",
+      "fragment": {
+        "kind": "text",
+        "title": "Vzkaz ze schránky",
+        "body": "Jestli tohle čtete, funguje to. Nechali jsme vám archiv, protože nám přišlo škoda, aby všechno, co jsme tu zažili, zmizelo. Teď je řada na vás: nahrajte svůj záznam. Jednou ho najde třída, která o vás ještě neví — a bude si myslet, že mluvíte z budoucnosti."
+      },
+      "cliffhanger": "Archiv se přepnul do režimu zápisu. Kurzor bliká. Čeká na váš záznam."
+    }
+  ]
+}

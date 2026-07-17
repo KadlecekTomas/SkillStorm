@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { JSX } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -21,6 +21,11 @@ import {
   type LiveAgeMode,
 } from "@/config/live-age-mode";
 import { createLiveSession, startLiveSession } from "@/lib/api/live-sessions";
+import {
+  listCampaignsForClass,
+  startCampaign,
+  type CampaignListItem,
+} from "@/lib/api/campaigns";
 import { cn } from "@/utils/cn";
 
 const AGE_MODE_LABELS: Record<LiveAgeMode, { label: string; hint: string }> = {
@@ -59,6 +64,29 @@ export function BleskovkaSetupDialog({
   const [countdownOn, setCountdownOn] = useState<boolean | null>(null);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Kampaně dostupné pro vybranou třídu; "" = bez kampaně,
+  // "new:<campaignId>" = založit novou, jinak id existujícího progressu.
+  const [campaigns, setCampaigns] = useState<CampaignListItem[]>([]);
+  const [campaignChoice, setCampaignChoice] = useState<string>("");
+
+  useEffect(() => {
+    setCampaignChoice("");
+    if (!classSectionId) {
+      setCampaigns([]);
+      return;
+    }
+    let cancelled = false;
+    listCampaignsForClass(classSectionId)
+      .then((items) => {
+        if (!cancelled) setCampaigns(items);
+      })
+      .catch(() => {
+        /* kampaně jsou bonus — dialog funguje i bez nich */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [classSectionId]);
 
   const classes = useMemo(() => {
     if (!structure) return [];
@@ -83,11 +111,24 @@ export function BleskovkaSetupDialog({
     setStarting(true);
     setError(null);
     try {
+      // Volba "new:<campaignId>" nejdřív kampaň pro třídu rozehraje.
+      let campaignProgressId: string | undefined;
+      if (campaignChoice.startsWith("new:")) {
+        const created = await startCampaign(
+          campaignChoice.slice(4),
+          classSectionId,
+        );
+        campaignProgressId = created.id;
+      } else if (campaignChoice) {
+        campaignProgressId = campaignChoice;
+      }
+
       const session = await createLiveSession({
         testId,
         ...(classSectionId ? { classSectionId } : {}),
         ageMode: toServerLiveAgeMode(ageMode),
         ...(countdownEnabled ? { countdownSec: DEFAULT_COUNTDOWN_SEC } : {}),
+        ...(campaignProgressId ? { campaignProgressId } : {}),
       });
       await startLiveSession(session.id);
       router.push(`/app/live/${session.id}/board`);
@@ -151,6 +192,49 @@ export function BleskovkaSetupDialog({
               ))}
             </select>
           </label>
+
+          {classSectionId && campaigns.length > 0 ? (
+            <label className="block">
+              <span className="text-sm font-semibold text-ink">
+                Kampaň (nepovinné)
+              </span>
+              <select
+                data-testid="bleskovka-campaign-select"
+                className="mt-1 h-11 w-full rounded-xl border border-line-strong bg-canvas px-3 text-[15px] text-ink"
+                value={campaignChoice}
+                onChange={(e) => setCampaignChoice(e.target.value)}
+              >
+                <option value="">Bez kampaně</option>
+                {campaigns.map((c) => {
+                  if (c.progress?.status === "ACTIVE") {
+                    return (
+                      <option key={c.id} value={c.progress.id}>
+                        {c.type === "EXPEDITION" ? "🗺️" : "🗄️"} {c.title} —
+                        pokračovat ({c.progress.position}/{c.progress.totalSteps})
+                      </option>
+                    );
+                  }
+                  if (c.progress?.status === "COMPLETED") {
+                    return (
+                      <option key={c.id} value="" disabled>
+                        {c.title} — dokončeno 🎉
+                      </option>
+                    );
+                  }
+                  return (
+                    <option key={c.id} value={`new:${c.id}`}>
+                      {c.type === "EXPEDITION" ? "🗺️" : "🗄️"} {c.title} — začít
+                      novou
+                    </option>
+                  );
+                })}
+              </select>
+              <p className="mt-1 text-xs text-ink-dim">
+                Postup roste za odehraná kola a dokončené bleskovky — nikdy za
+                správnost.
+              </p>
+            </label>
+          ) : null}
 
           <fieldset>
             <legend className="text-sm font-semibold text-ink">

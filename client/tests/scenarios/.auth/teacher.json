@@ -1,0 +1,35 @@
+{
+  "cookies": [
+    {
+      "name": "ss_at",
+      "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyZTY4YmE3YS02MmY1LTQwYjMtYTEyYS1iY2E5ZmRmYTY2ZWMiLCJlbWFpbCI6InRlYWNoZXJAc2NlbmFyLnRlc3QiLCJ1c2VybmFtZSI6InRlYWNoZXJfbXJvb2JsMnkxMTkwIiwic3lzdGVtUm9sZSI6bnVsbCwib3JnYW5pemF0aW9uUm9sZSI6IlRFQUNIRVIiLCJvcmdhbml6YXRpb25JZCI6IjQzY2M1NDdjLTViNzQtNGJiNS1iYTA1LTNiN2Q5NzNiNWI1MSIsIm1lbWJlcnNoaXBJZCI6IjlmMjJjNGMwLTljNzEtNGJlZS05MjY2LWQ5MjE0MTM0Yzk0MiIsInRva2VuVmVyc2lvbiI6MCwiaWF0IjoxNzg0Mjc2NzczLCJleHAiOjE3ODQyNzc2NzMsImp0aSI6Ijc2YmU3MzkyLTQzYWItNDVjMC05ZGJjLWJhZTM0YzBjNDQ2YiJ9.Hv0dnuT6ZnyREeB6EPpBr_-2Y28-DDg0Q6Zb37XNM2Y",
+      "domain": "127.0.0.1",
+      "path": "/",
+      "expires": 1784277673,
+      "httpOnly": true,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "ss_rt",
+      "value": "4c5f7d546df6c0a1c8e28767c5c006934a5fece4f182f7145bb6cb981a07618b552265bbd0626c6487d47146e26421589e96cd9635729b58ee138fa03fa6071d",
+      "domain": "127.0.0.1",
+      "path": "/",
+      "expires": 1784881573,
+      "httpOnly": true,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "ss_csrf",
+      "value": "01d010cba69509736809c9d2d9dc34aace55af83c4da746a",
+      "domain": "127.0.0.1",
+      "path": "/",
+      "expires": 1784881573,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    }
+  ],
+  "origins": []
+}
