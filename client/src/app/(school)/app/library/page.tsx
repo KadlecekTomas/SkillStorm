@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ContentLibraryList } from "@/components/content/content-library-list";
+import {
+  ContentLibraryList,
+  subjectLabel,
+} from "@/components/content/content-library-list";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { gradeFilters, subjectFilters } from "@/utils/constants";
@@ -41,7 +44,8 @@ function LibraryPage(): React.JSX.Element {
   const filtered = useMemo(() => {
     return items.filter((item) => {
       const matchGrade = grade === "All" || item.schoolGrade === grade;
-      const matchSubject = subject === "All" || item.subject === subject;
+      const matchSubject =
+        subject === "All" || subjectLabel(item.subject) === subject;
       const matchSearch = item.title.toLowerCase().includes(search.toLowerCase());
       return matchGrade && matchSubject && matchSearch;
     });

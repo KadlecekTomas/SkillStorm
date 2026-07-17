@@ -10,6 +10,10 @@ type ContentLibraryListProps = {
   items: ContentItem[];
 };
 
+/** Subject přichází z API jako objekt relace; string drží starší mock data. */
+export const subjectLabel = (subject: ContentItem["subject"]): string =>
+  typeof subject === "string" ? subject : (subject?.name ?? "Obecné");
+
 export const ContentLibraryList = ({ items }: ContentLibraryListProps): React.JSX.Element => (
   <div className="grid gap-4 md:grid-cols-2">
     {items.map((item) => (
@@ -29,7 +33,7 @@ export const ContentLibraryList = ({ items }: ContentLibraryListProps): React.JS
             </Badge>
           </div>
           <div>
-            <p className="text-sm text-slate-500">{item.subject ?? "General"}</p>
+            <p className="text-sm text-slate-500">{subjectLabel(item.subject)}</p>
             <p className="text-lg font-semibold text-slate-900 line-clamp-2">
               {item.title}
             </p>

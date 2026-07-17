@@ -19,7 +19,8 @@
     "test:fe-e2e": "playwright test tests/e2e/fe-policy",
     "test:fe-policy": "node ./tests/fe-policy/reset-policy-score.mjs && npm run test:fe-components && npm run test:fe-e2e && vitest run tests/fe-policy/policy.summary.spec.ts",
     "test:scenarios": "playwright test --config playwright.scenarios.config.ts",
-    "test:scenarios:ui": "playwright test --config playwright.scenarios.config.ts --ui"
+    "test:scenarios:ui": "playwright test --config playwright.scenarios.config.ts --ui",
+    "portfolio:shots": "playwright test --config playwright.portfolio.config.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
