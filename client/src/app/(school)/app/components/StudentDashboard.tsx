@@ -136,6 +136,7 @@ export function StudentDashboard(): React.JSX.Element {
     (data?.member.name ?? user?.fullName ?? user?.name ?? "").trim().split(" ")[0] || null;
 
   const xp = gamification?.xp ?? data?.member.xp ?? 0;
+  const streakDays = gamification?.streakDays ?? 0;
   const level = gamification?.level ?? data?.member.level ?? 1;
   const nextLevelXp = gamification?.nextLevelXp ?? null;
   const toNext = nextLevelXp != null ? Math.max(nextLevelXp - xp, 0) : null;
@@ -158,9 +159,15 @@ export function StudentDashboard(): React.JSX.Element {
         <Card className="flex flex-wrap items-center gap-7 p-8">
           <PartakBlob size={110} />
           <div className="min-w-[220px] flex-1">
-            <div className="mb-3.5 flex flex-wrap gap-2">
+            <div className="mb-3.5 flex flex-wrap gap-2" data-testid="student-hero-badges">
               <Badge variant="info">⚡ {xp} XP</Badge>
               <Badge variant="success">Úroveň {level ?? 1}</Badge>
+              {streakDays > 0 && (
+                <Badge variant="warning">
+                  🔥 {streakDays}{" "}
+                  {streakDays === 1 ? "den" : streakDays <= 4 ? "dny" : "dní"} v řadě
+                </Badge>
+              )}
             </div>
             {toNext != null ? (
               <p className="mb-2 text-sm text-ink-muted">

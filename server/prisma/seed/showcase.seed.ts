@@ -520,6 +520,25 @@ async function main() {
           labels: { start: 'nejmenší', end: 'největší' },
         },
       },
+      { text: 'Kolik je 3/4 + 1/8?', type: MC, correctAnswer: '7/8', options: ['7/8', '4/12', '5/8'] },
+    ],
+  });
+
+  // Druhý čekající test pro 8.A — dashboard žáka má ukazovat 2 zadání s hezkými názvy
+  const testProcenta = await mkTest({
+    title: 'Procenta kolem nás',
+    description: 'Slevy, úroky a DPH — počítání procent v běžných situacích.',
+    subjectId: catalog.math.subject.id,
+    topicLevelId: catalog.math.topicLevels[`${SchoolGrade.GRADE_8}:Rovnice`]!,
+    grades: [SchoolGrade.GRADE_8],
+    status: PublishStatus.PUBLISHED,
+    creatorId: teacher1.membershipId,
+    createdDaysAgo: 5,
+    questions: [
+      { text: 'Kolik je 15 % z 200 Kč?', type: MC, correctAnswer: '30 Kč', options: ['30 Kč', '15 Kč', '45 Kč'] },
+      { text: 'Sleva 20 % z 500 Kč znamená novou cenu 400 Kč.', type: TF, correctAnswer: 'true' },
+      { text: 'Kolik procent je 12 z 48?', type: MC, correctAnswer: '25 %', options: ['25 %', '20 %', '30 %'] },
+      { text: 'Zvýšení o 50 % a následné snížení o 50 % vrátí původní cenu.', type: TF, correctAnswer: 'false' },
     ],
   });
 
@@ -628,22 +647,36 @@ async function main() {
     orderBy: { order: 'asc' },
   });
 
-  // Rozptyl: 2 žáci bez odevzdání, zbytek 50–100 % (deterministicky)
-  for (const [i, s] of students8A.entries()) {
-    if (i >= students8A.length - 2) continue; // poslední dva neodevzdali
-    const correctCount = 3 + Math.floor(rand() * 4); // 3..6 správně
-    const submittedAt = daysAgo(2 + Math.floor(rand() * 16), 8 + Math.floor(rand() * 9), Math.floor(rand() * 60));
+  /**
+   * Skriptované odevzdání: `correct` správných odpovědí, odevzdáno před
+   * `day` dny. Žádný náhod — průměry, trend mezi týdny i rizikoví žáci
+   * jsou zkomponované, ať screenshoty vyprávějí stejný příběh v každém běhu.
+   */
+  type QuestionRow = (typeof questionsZlomky)[number];
+  const submitScripted = async (params: {
+    assignmentId: string;
+    testId: string;
+    questions: QuestionRow[];
+    membershipId: string;
+    correct: number;
+    day: number;
+  }) => {
+    const submittedAt = daysAgo(
+      params.day,
+      8 + Math.floor(rand() * 8),
+      Math.floor(rand() * 60),
+    );
     const submission = await prisma.submission.create({
       data: {
         organizationId: org.id,
-        studentId: s.membershipId,
-        assignmentId: assignment8A.id,
-        testId: testZlomky.id,
+        studentId: params.membershipId,
+        assignmentId: params.assignmentId,
+        testId: params.testId,
         attemptNo: 1,
         status: SubmissionStatus.PENDING,
         responses: {
-          create: questionsZlomky.map((q, qi) => {
-            const isCorrect = qi < correctCount;
+          create: params.questions.map((q, qi) => {
+            const isCorrect = qi < params.correct;
             const wrong =
               q.type === TF
                 ? q.correctAnswer === 'true'
@@ -669,10 +702,40 @@ async function main() {
       data: {
         submittedAt,
         status: SubmissionStatus.APPROVED,
-        score: correctCount / questionsZlomky.length,
-        earnedPoints: correctCount,
-        maxPoints: questionsZlomky.length,
+        score: params.correct / params.questions.length,
+        earnedPoints: params.correct,
+        maxPoints: params.questions.length,
       },
+    });
+  };
+
+  // 8.A — průměr 73 %, starší týden 64 % → poslední 79 % (viditelný růst),
+  // Jakub Starý 43 % (LOW_AVERAGE → riziko), Petr Zeman 57 % (druhý rizikový),
+  // poslední dva žáci bez odevzdání (NO_DATA). Hrdina (zak8a) 6/7 ≈ 86 %.
+  // Pozor: >14 dní bez aktivity = INACTIVE flag — všechna odevzdání proto
+  // drží v posledních 13 dnech, riziko nesou jen skóre pod 60 %.
+  const plan8A: { correct: number; day: number }[] = [
+    { correct: 6, day: 3 }, // Ondřej Sýkora — hrdina, „hotový test s 86 %"
+    { correct: 5, day: 13 },
+    { correct: 5, day: 12 },
+    { correct: 7, day: 2 },
+    { correct: 3, day: 5 }, // Jakub Starý — rizikový žák č. 1 (43 %)
+    { correct: 5, day: 11 },
+    { correct: 4, day: 6 }, // Petr Zeman — rizikový žák č. 2 (57 %)
+    { correct: 6, day: 4 },
+    { correct: 5, day: 9 },
+    { correct: 6, day: 7 },
+  ];
+  for (const [i, s] of students8A.entries()) {
+    const step = plan8A[i];
+    if (!step) continue; // poslední dva neodevzdali
+    await submitScripted({
+      assignmentId: assignment8A.id,
+      testId: testZlomky.id,
+      questions: questionsZlomky,
+      membershipId: s.membershipId,
+      correct: step.correct,
+      day: step.day,
     });
   }
 
@@ -696,59 +759,57 @@ async function main() {
     where: { testId: testVyjmenovana.id },
     orderBy: { order: 'asc' },
   });
+  // 5.A (homeroom učitele — default pohled) — průměr 83 %, bez rizikových,
+  // jeden žák zatím bez odevzdání.
+  const plan5A: { correct: number; day: number }[] = [
+    { correct: 3, day: 12 },
+    { correct: 3, day: 10 },
+    { correct: 3, day: 9 },
+    { correct: 4, day: 7 },
+    { correct: 3, day: 6 },
+    { correct: 4, day: 4 },
+    { correct: 3, day: 3 },
+    { correct: 4, day: 2 },
+    { correct: 3, day: 1 },
+  ];
   for (const [i, s5] of students5A.entries()) {
-    if (i >= students5A.length - 1) continue; // jeden neodevzdal
-    const correctCount = 2 + Math.floor(rand() * 3); // 2..4 správně ze 4
-    const submittedAt = daysAgo(1 + Math.floor(rand() * 12), 8 + Math.floor(rand() * 8), Math.floor(rand() * 60));
-    const submission = await prisma.submission.create({
-      data: {
-        organizationId: org.id,
-        studentId: s5.membershipId,
-        assignmentId: assignment5A.id,
-        testId: testVyjmenovana.id,
-        attemptNo: 1,
-        status: SubmissionStatus.PENDING,
-        responses: {
-          create: questionsVyjm.map((q, qi) => {
-            const isCorrect = qi < correctCount;
-            const wrong =
-              q.type === TF
-                ? q.correctAnswer === 'true'
-                  ? 'false'
-                  : 'true'
-                : 'špatná odpověď';
-            return {
-              questionId: q.id,
-              givenText: isCorrect ? (q.correctAnswer ?? '') : wrong,
-              isCorrect,
-              awardedPoints: isCorrect ? 1 : 0,
-              maxPoints: 1,
-              correctAnswerSnapshot: q.correctAnswer,
-              questionTextSnapshot: q.text,
-              corrected: true,
-            };
-          }),
-        },
-      },
-    });
-    await prisma.submission.update({
-      where: { id: submission.id },
-      data: {
-        submittedAt,
-        status: SubmissionStatus.APPROVED,
-        score: correctCount / questionsVyjm.length,
-        earnedPoints: correctCount,
-        maxPoints: questionsVyjm.length,
-      },
+    const step = plan5A[i];
+    if (!step) continue; // jeden neodevzdal
+    await submitScripted({
+      assignmentId: assignment5A.id,
+      testId: testVyjmenovana.id,
+      questions: questionsVyjm,
+      membershipId: s5.membershipId,
+      correct: step.correct,
+      day: step.day,
     });
   }
 
-  // Otevřené zadání pro old-test screenshot (časovač): zak8a má co vyplňovat
+  // Otevřené zadání pro old-test screenshot (časovač): zak8a má co vyplňovat.
+  // Vlastní test — Zlomky už má hrdina „hotové", stejný název v Čeká i Hotovo
+  // by na dashboardu vypadal jako chyba.
+  const testRovnice = await mkTest({
+    title: 'Rovnice o jedné neznámé',
+    description: 'Procvičení jednoduchých rovnic před písemkou.',
+    subjectId: catalog.math.subject.id,
+    topicLevelId: catalog.math.topicLevels[`${SchoolGrade.GRADE_8}:Rovnice`]!,
+    grades: [SchoolGrade.GRADE_8],
+    status: PublishStatus.PUBLISHED,
+    creatorId: teacher1.membershipId,
+    createdDaysAgo: 4,
+    questions: [
+      { text: 'Kolik je x, když x + 7 = 15?', type: MC, correctAnswer: '8', options: ['8', '7', '9'] },
+      { text: 'Rovnice 2x = 10 má řešení x = 5.', type: TF, correctAnswer: 'true' },
+      { text: 'Kolik je x, když 3x − 4 = 11?', type: MC, correctAnswer: '5', options: ['5', '4', '6'] },
+      { text: 'Rovnice x/2 = 6 má řešení x = 3.', type: TF, correctAnswer: 'false' },
+      { text: 'Kolik je x, když 4x = 2x + 12?', type: MC, correctAnswer: '6', options: ['6', '12', '3'] },
+    ],
+  });
   await prisma.assignment.create({
     data: {
       organizationId: org.id,
       yearId: year.id,
-      testId: testZlomky.id,
+      testId: testRovnice.id,
       targetType: 'STUDENTS',
       openAt: daysAgo(1, 7),
       closeAt: daysAgo(-14, 18), // +14 dní
@@ -793,18 +854,62 @@ async function main() {
       createdById: teacher1.membershipId,
     },
   });
-  // G2 zadání (ať G2 dashboard není prázdný)
-  await prisma.assignment.create({
+  // G2 zadání (ať G2 dashboard není prázdný) — otevřené už 10 dní, většina
+  // třídy odevzdala (průměr 83 %), zakg2 má test teprve před sebou.
+  const assignmentG2 = await prisma.assignment.create({
     data: {
       organizationId: org.id,
       yearId: year.id,
       testId: testModerna.id,
       targetType: 'CLASS',
       classSectionId: classG2.id,
-      openAt: daysAgo(1, 7),
+      openAt: daysAgo(10, 7),
       closeAt: daysAgo(-14, 18),
       maxAttempts: 2,
       timeLimitSec: 10 * 60,
+      shuffle: false,
+      showExplain: 'after_submit',
+      createdById: teacher1.membershipId,
+    },
+  });
+  const questionsModerna = await prisma.question.findMany({
+    where: { testId: testModerna.id },
+    orderBy: { order: 'asc' },
+  });
+  const planG2: ({ correct: number; day: number } | null)[] = [
+    null, // Alžběta Konečná (zakg2) — test ji teprve čeká
+    { correct: 3, day: 8 },
+    { correct: 3, day: 6 },
+    { correct: 4, day: 5 },
+    { correct: 3, day: 4 },
+    { correct: 3, day: 2 },
+    { correct: 4, day: 1 },
+    null, // jeden student zatím bez odevzdání
+  ];
+  for (const [i, sg] of studentsG2.entries()) {
+    const step = planG2[i];
+    if (!step) continue;
+    await submitScripted({
+      assignmentId: assignmentG2.id,
+      testId: testModerna.id,
+      questions: questionsModerna,
+      membershipId: sg.membershipId,
+      correct: step.correct,
+      day: step.day,
+    });
+  }
+  // Druhé čekající zadání pro 8.A — „Procenta kolem nás" bez časového limitu
+  // (na kartě se ukáže „Konec za 18 dní" místo odpočtu).
+  await prisma.assignment.create({
+    data: {
+      organizationId: org.id,
+      yearId: year.id,
+      testId: testProcenta.id,
+      targetType: 'CLASS',
+      classSectionId: class8A.id,
+      openAt: daysAgo(0, 7),
+      closeAt: daysAgo(-18, 18),
+      maxAttempts: 2,
       shuffle: false,
       showExplain: 'after_submit',
       createdById: teacher1.membershipId,
@@ -830,9 +935,9 @@ async function main() {
     skipDuplicates: true,
   });
   const hero = students8A[0]!;
-  for (let day = 20; day >= 0; day -= 1) {
-    // streak s jednou vynechávkou, ať vypadá věrohodně
-    if (day === 9) continue;
+  // Streak přesně 6: přihlášení dny 0–5, mezera v den 6, další blok 7–11.
+  const loginDays = [0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 11];
+  for (const day of loginDays) {
     await prisma.xpEvent.create({
       data: {
         membershipId: hero.membershipId,
@@ -843,7 +948,8 @@ async function main() {
       },
     });
   }
-  for (const day of [16, 11, 4]) {
+  const testXpDays = [16, 8, 3]; // den 3 = odevzdání Zlomků (viz plan8A)
+  for (const day of testXpDays) {
     await prisma.xpEvent.create({
       data: {
         membershipId: hero.membershipId,
@@ -855,11 +961,12 @@ async function main() {
     });
   }
 
-  // Denormalizovaný součet na membership — profil čte membership.xp/level
-  const heroXp = 20 * 5 + 3 * 40; // LOGINy + dokončené testy
+  // Denormalizovaný součet na membership — profil čte membership.xp/level.
+  // 175 XP → level 3 a progress bar přesně v půlce (175/350).
+  const heroXp = loginDays.length * 5 + testXpDays.length * 40;
   await prisma.membership.update({
     where: { id: hero.membershipId },
-    data: { xp: heroXp, level: 3 }, // 220 XP → level 3 (150–349)
+    data: { xp: heroXp, level: 3 },
   });
 
   // -------------------------------------------------------------------------
@@ -1015,6 +1122,11 @@ async function main() {
   console.log(`Studentka G2: zakg2@${DOMAIN} (Alžběta Konečná)`);
   console.log(`Heslo všude: ${PASSWORD}`);
   console.log(`Výprava 2.B: 4/8 zastávek · Archiv 8.A: 1/3 + zapečetěný vzkaz 9.A`);
+  console.log(
+    `Scénografie: 8.A ø73 % (rizikoví: Jakub Starý 43 %, Petr Zeman 57 %), ` +
+      `5.A ø83 %, G2 ø83 %; zak8a: streak 6, 175 XP (level 3 v půlce), ` +
+      `2 čekající testy + Zlomky hotové na 86 %.`,
+  );
   console.log(`Používám ${students2B.length + NAMES_5A.length + students8A.length + studentsG2.length} žáků.`);
 }
 
