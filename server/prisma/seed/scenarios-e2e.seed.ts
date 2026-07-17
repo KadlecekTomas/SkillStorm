@@ -82,6 +82,17 @@ async function wipe() {
   await prisma.submission.deleteMany({ where: { organizationId: { in: orgIds } } });
   await prisma.assignment.deleteMany({ where: { organizationId: { in: orgIds } } });
   await prisma.question.deleteMany({ where: { test: { organizationId: { in: orgIds } } } });
+  // Bleskovky + kampaně: LiveSession→Test je RESTRICT, bez tohohle bloku
+  // spadne test.deleteMany při každém druhém běhu (session z minulého runu).
+  await prisma.campaignStepUnlock.deleteMany({
+    where: { progress: { organizationId: { in: orgIds } } },
+  });
+  await prisma.campaignProgress.deleteMany({ where: { organizationId: { in: orgIds } } });
+  await prisma.classPartakXpEvent.deleteMany({
+    where: { classPartak: { organizationId: { in: orgIds } } },
+  });
+  await prisma.classPartak.deleteMany({ where: { organizationId: { in: orgIds } } });
+  await prisma.liveSession.deleteMany({ where: { organizationId: { in: orgIds } } });
   await prisma.test.deleteMany({ where: { organizationId: { in: orgIds } } });
   await prisma.enrollment.deleteMany({ where: { orgId: { in: orgIds } } });
   await prisma.student.deleteMany({ where: { orgId: { in: orgIds } } });
@@ -247,6 +258,16 @@ async function main() {
     select: { id: true },
   });
   const class8AId = class8A.id;
+  // 8.A do učitelovy classroom structure (teachingClasses): homeroom bucket
+  // bere jen první třídu (2.A), bez úvazku by dialog Bleskovky 8.A nenabídl —
+  // kampaňový scénář Mise ji potřebuje vybrat.
+  await prisma.teacherClassSection.create({
+    data: {
+      teacherId: teacher.id,
+      classSectionId: class8AId,
+      yearId: year.id,
+    },
+  });
 
   const enrollStudent = async (
     email: string,
