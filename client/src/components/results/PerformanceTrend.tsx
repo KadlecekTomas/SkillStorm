@@ -12,6 +12,7 @@ import {
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/utils/cn";
+import { chartColor } from "@/lib/chart-colors";
 
 export type TrendDataPoint = {
   date: string;
@@ -63,16 +64,16 @@ export function PerformanceTrend({
           {data.length ? (
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                <XAxis dataKey="date" stroke="#94a3b8" fontSize={12} />
+                <CartesianGrid strokeDasharray="3 3" stroke={chartColor("line")} />
+                <XAxis dataKey="date" stroke={chartColor("ink-dim")} fontSize={12} />
                 <YAxis
-                  stroke="#94a3b8"
+                  stroke={chartColor("ink-dim")}
                   fontSize={12}
                   domain={[0, 100]}
                   tickFormatter={(v) => `${v}%`}
                 />
                 <RechartsTooltip
-                  contentStyle={{ borderRadius: 12, borderColor: "#E5E7EB" }}
+                  contentStyle={{ borderRadius: 12, borderColor: chartColor("line") }}
                   formatter={(value: number) => [`${Math.round(value)} %`, "Průměr"]}
                   labelFormatter={(label) => `Datum: ${label}`}
                 />
@@ -80,9 +81,9 @@ export function PerformanceTrend({
                   type="monotone"
                   dataKey="averagePercent"
                   name="Průměr"
-                  stroke="#16A34A"
+                  stroke={chartColor("accent-deep")}
                   strokeWidth={2}
-                  dot={{ fill: "#16A34A", r: 3 }}
+                  dot={{ fill: chartColor("accent-deep"), r: 3 }}
                   activeDot={{ r: 5 }}
                 />
               </LineChart>

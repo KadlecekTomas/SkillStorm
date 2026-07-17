@@ -31,23 +31,46 @@ function trendLabel(trend: RiskOverviewStudent["trend"]): string {
 function riskDotColor(level: RiskLevel): string {
   if (level === "HIGH") return "bg-red-500";
   if (level === "MEDIUM") return "bg-amber-500";
+  if (level === "NO_DATA") return "bg-slate-300";
   return "bg-emerald-500";
 }
 
 function riskLabel(level: RiskLevel): string {
   if (level === "HIGH") return "Vysoké";
   if (level === "MEDIUM") return "Střední";
+  if (level === "NO_DATA") return "Bez dat";
   return "Nízké";
 }
 
 export function StudentRiskRadar({ students }: StudentRiskRadarProps): React.JSX.Element {
-  const severity = { HIGH: 0, MEDIUM: 1, LOW: 2 } as const;
+  const severity = { HIGH: 0, MEDIUM: 1, LOW: 2, NO_DATA: 3 } as const;
   const sorted = [...students].sort((a, b) => {
     if (severity[a.riskLevel] !== severity[b.riskLevel]) {
       return severity[a.riskLevel] - severity[b.riskLevel];
     }
     return a.averageScorePercent - b.averageScorePercent;
   });
+
+  // Třída úplně bez odevzdání: místo tabulky plné nul přívětivý prázdný stav.
+  const nobodyHasData =
+    students.length > 0 && students.every((s) => s.riskLevel === "NO_DATA");
+  if (nobodyHasData) {
+    return (
+      <section aria-label="Žáci v riziku">
+        <Card className="rounded-2xl border border-slate-100 shadow-sm">
+          <div className="border-b border-slate-100 bg-slate-50/80 px-4 py-3">
+            <h3 className="text-sm font-semibold text-slate-700">Přehled žáků</h3>
+          </div>
+          <div className="px-6 py-10 text-center">
+            <p className="text-sm font-medium text-slate-700">Zatím bez výsledků</p>
+            <p className="mt-1 text-sm text-slate-500">
+              Jakmile žáci odevzdají první test, uvidíte tu průměry, trendy a včasná upozornění.
+            </p>
+          </div>
+        </Card>
+      </section>
+    );
+  }
 
   const formatDate = (iso: string | null): string => {
     if (!iso) return "—";
@@ -101,16 +124,20 @@ export function StudentRiskRadar({ students }: StudentRiskRadarProps): React.JSX
                     </td>
                     <td className="px-4 py-3 font-medium">{s.name}</td>
                     <td className="px-4 py-3 text-right">
-                      <span
-                        className={cn(
-                          "font-medium",
-                          s.averageScorePercent >= 80 && "text-emerald-600",
-                          s.averageScorePercent >= 60 && s.averageScorePercent < 80 && "text-amber-600",
-                          s.averageScorePercent < 60 && "text-red-600",
-                        )}
-                      >
-                        {Math.round(s.averageScorePercent)} %
-                      </span>
+                      {s.riskLevel === "NO_DATA" ? (
+                        <span className="text-slate-400">—</span>
+                      ) : (
+                        <span
+                          className={cn(
+                            "font-medium",
+                            s.averageScorePercent >= 80 && "text-emerald-600",
+                            s.averageScorePercent >= 60 && s.averageScorePercent < 80 && "text-amber-600",
+                            s.averageScorePercent < 60 && "text-red-600",
+                          )}
+                        >
+                          {Math.round(s.averageScorePercent)} %
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-right text-slate-600">
                       {trendLabel(s.trend)}

@@ -3,12 +3,7 @@
 import { useRouter } from "next/navigation";
 import { Star, ChevronRight, BookOpen } from "lucide-react";
 import type { ClassroomStructure } from "@/hooks/use-classroom-structure";
-
-const gradeLabel = (grade: string) => {
-  if (grade.startsWith("GRADE_")) return grade.replace("GRADE_", "");
-  if (grade.startsWith("HIGH_SCHOOL_YEAR_")) return `S${grade.replace("HIGH_SCHOOL_YEAR_", "")}`;
-  return grade;
-};
+import { formatClassName } from "@/lib/class-label";
 
 type Props = {
   structure: ClassroomStructure | null;
@@ -46,7 +41,7 @@ export function MyClasses({ structure }: Props): React.JSX.Element {
         ) : (
           <ul>
             {myClasses.map((cls) => {
-              const label = cls.label ?? `${gradeLabel(cls.grade)}.${cls.section}`;
+              const label = formatClassName(cls);
               const count = cls.studentCount ?? 0;
               const roleLabel = cls.isHomeroom ? "třídní" : "výuka";
               return (

@@ -18,6 +18,7 @@ import { showToastOnce } from "@/utils/toast";
 import type { TeacherListItem } from "@/hooks/use-teachers";
 import { useTeacherAccess, type TeacherAccessItem, type TeacherAccessLevel } from "@/hooks/use-teacher-access";
 import { refreshListAfterMutation } from "@/lib/list-query";
+import { formatClassName } from "@/lib/class-label";
 
 type ClassroomOption = {
   id: string;
@@ -52,7 +53,7 @@ const toIsoDate = (value: string): string | undefined => {
 };
 
 const formatClassLabel = (classroom: ClassroomOption | TeacherAccessItem["classSection"]): string =>
-  classroom.label?.trim() || `${classroom.grade.replace("GRADE_", "")}.${classroom.section}`;
+  formatClassName(classroom);
 
 export function TeacherAccessManager({ teacher, classrooms }: Props): React.JSX.Element {
   const [open, setOpen] = useState(false);

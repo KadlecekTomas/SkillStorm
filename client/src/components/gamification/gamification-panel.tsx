@@ -25,8 +25,8 @@ export const GamificationPanel = ({
     <Card className="space-y-4 rounded-3xl border border-slate-100 bg-gradient-to-br from-indigo-50 to-white p-6 shadow-soft">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm text-slate-500">Gamification</p>
-          <h3 className="text-lg font-semibold text-slate-900">Level {level ?? 1}</h3>
+          <p className="text-sm text-slate-500">Gamifikace</p>
+          <h3 className="text-lg font-semibold text-slate-900">Úroveň {level ?? 1}</h3>
         </div>
         <Badge className="rounded-full bg-indigo-600 text-white">XP {xp}</Badge>
       </div>
@@ -34,13 +34,13 @@ export const GamificationPanel = ({
         <Progress value={progress} className="h-3 rounded-full bg-indigo-100" />
         <p className="mt-2 text-xs text-slate-500">
           {nextLevelXp
-            ? `${Math.max(nextLevelXp - xp, 0)} XP to next level (${nextLevelXp})`
-            : "Reached the highest tracked level"}
+            ? `Do další úrovně zbývá ${Math.max(nextLevelXp - xp, 0)} XP (${nextLevelXp})`
+            : "Jsi na nejvyšší sledované úrovni"}
         </p>
       </div>
       {achievements.length > 0 && (
         <div>
-          <p className="text-xs uppercase tracking-wide text-slate-500">Recent achievements</p>
+          <p className="text-xs uppercase tracking-wide text-slate-500">Poslední úspěchy</p>
           <div className="mt-2 flex flex-wrap gap-2">
             {achievements.slice(0, 3).map((achievement) => (
               <motion.span

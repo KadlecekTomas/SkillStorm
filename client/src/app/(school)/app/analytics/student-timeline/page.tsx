@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { httpClient } from "@/lib/http/client";
 import { withGuard } from "@/lib/guard/withGuard";
 import { useAcademicYears } from "@/hooks/use-academic-years";
+import { chartColor } from "@/lib/chart-colors";
 import {
   ResponsiveContainer,
   Tooltip as RechartsTooltip,
@@ -67,9 +68,8 @@ function StudentTimelinePage() {
   return (
     <div className="space-y-6">
       <div>
-        <p className="text-sm text-slate-500">Sprint 3</p>
         <h1 className="text-2xl font-semibold text-slate-900">
-          Student timeline
+          Časová osa výsledků
         </h1>
         <p className="mt-1 text-sm text-slate-600">
           Časová osa odevzdání a skóre v daném školním roce.
@@ -99,16 +99,16 @@ function StudentTimelinePage() {
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                  <XAxis dataKey="label" stroke="#94a3b8" fontSize={12} />
-                  <YAxis stroke="#94a3b8" domain={[0, 100]} />
+                  <CartesianGrid strokeDasharray="3 3" stroke={chartColor("line")} />
+                  <XAxis dataKey="label" stroke={chartColor("ink-dim")} fontSize={12} />
+                  <YAxis stroke={chartColor("ink-dim")} domain={[0, 100]} />
                   <RechartsTooltip
                     contentStyle={{
                       borderRadius: 12,
-                      borderColor: "#E5E7EB",
+                      borderColor: chartColor("line"),
                     }}
                   />
-                  <Bar dataKey="score" fill="#16a34a" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="score" fill={chartColor("accent")} radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -157,7 +157,15 @@ function StudentTimelinePage() {
                             : `${Math.round(i.percentage ?? 0)} %`
                           : "—"}
                       </td>
-                      <td className="px-4 py-2 text-slate-600">{i.status}</td>
+                      <td className="px-4 py-2 text-slate-600">
+                        {i.status === "APPROVED"
+                          ? "Schváleno"
+                          : i.status === "PENDING"
+                            ? "Čeká na kontrolu"
+                            : i.status === "REJECTED"
+                              ? "Vráceno"
+                              : i.status}
+                      </td>
                       <td className="px-4 py-2 text-center">{i.attemptNo}</td>
                     </tr>
                   ))}

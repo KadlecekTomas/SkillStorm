@@ -15,6 +15,7 @@ import { LevelUpModal } from "@/components/gamification/level-up-modal";
 import { getDashboardStudent, type StudentDashboardResponse } from "@/lib/api/dashboard";
 import { fetchWithAuth } from "@/lib/http/client";
 import { formatDate } from "@/lib/format-date";
+import { vocative } from "@/lib/czech-vocative";
 import { ErrorAlert } from "@/components/ui/alert";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -146,7 +147,7 @@ export function StudentDashboard(): React.JSX.Element {
       <div className="mx-auto max-w-3xl space-y-8">
         <div>
           <h1 className="text-3xl font-extrabold text-ink sm:text-4xl">
-            {firstName ? `Ahoj, ${firstName}! 👋` : "Ahoj! 👋"}
+            {firstName ? `Ahoj, ${vocative(firstName)}! 👋` : "Ahoj! 👋"}
           </h1>
           <p className="mt-1 text-base leading-relaxed text-ink-muted">
             Tvůj parťák už se těší na dnešní procvičování.

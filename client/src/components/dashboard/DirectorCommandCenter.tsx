@@ -40,7 +40,15 @@ function formatDate(iso: string | null): string {
   });
 }
 
-function riskBadge(level: "LOW" | "MEDIUM" | "HIGH"): React.JSX.Element {
+function riskBadge(
+  level: "LOW" | "MEDIUM" | "HIGH" | "NO_DATA",
+): React.JSX.Element {
+  if (level === "NO_DATA")
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-surface px-2 py-0.5 text-xs font-bold text-ink-dim">
+        Zatím bez výsledků
+      </span>
+    );
   if (level === "HIGH")
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-danger-soft px-2 py-0.5 text-xs font-bold text-danger-deep">
@@ -70,7 +78,7 @@ function ClassRiskTable({
   classes: DirectorDashboardResponse["classes"];
 }): React.JSX.Element {
   const sorted = [...classes].sort((a, b) => {
-    const order = { HIGH: 0, MEDIUM: 1, LOW: 2 };
+    const order = { HIGH: 0, MEDIUM: 1, LOW: 2, NO_DATA: 3 };
     return order[a.riskLevel] - order[b.riskLevel];
   });
   return (
@@ -341,7 +349,7 @@ export function DirectorCommandCenter(): React.JSX.Element {
               size="sm"
               onClick={() => void handleActivateNextYear()}
               disabled={activating}
-              className="bg-xp text-white [--tactile-shadow:#0e7ab8] shadow-tactile hover:brightness-105 active:translate-y-[2px] active:shadow-tactile-pressed"
+              className="bg-xp text-white [--tactile-shadow:rgb(var(--xp-deep))] shadow-tactile hover:brightness-105 active:translate-y-[2px] active:shadow-tactile-pressed"
             >
               {activating ? "Aktivace…" : `Aktivovat ${preparedNextYear.label}`}
             </Button>

@@ -38,6 +38,30 @@ import { teacherClassScope } from '@/shared/access.utils';
 
 const ALLOWED_TARGET_TYPES = new Set(['CLASS', 'STUDENTS']);
 
+/** Test fields surfaced on the student "Moje zadání" card. */
+const MY_ASSIGNMENT_TEST_SELECT = {
+  title: true,
+  subject: {
+    select: { name: true, catalogSubject: { select: { name: true } } },
+  },
+} as const;
+
+type MyAssignmentTest = {
+  title: string;
+  subject: { name: string; catalogSubject: { name: string } | null } | null;
+} | null;
+
+function myAssignmentTestFields(test: MyAssignmentTest): {
+  testTitle: string;
+  subjectName: string | null;
+} {
+  return {
+    testTitle: test?.title ?? 'Zadání',
+    subjectName:
+      test?.subject?.catalogSubject?.name ?? test?.subject?.name ?? null,
+  };
+}
+
 // --- Overview helpers -------------------------------------------------------
 const assignmentWithTestSelect = {
   id: true,
@@ -870,6 +894,7 @@ export class AssignmentsService {
               test: { status: PublishStatus.PUBLISHED, deletedAt: null },
             },
             include: {
+              test: { select: MY_ASSIGNMENT_TEST_SELECT },
               submissions: {
                 where: { studentId: membershipId, deletedAt: null },
                 orderBy: { attemptNo: 'desc' },
@@ -889,6 +914,7 @@ export class AssignmentsService {
           test: { status: PublishStatus.PUBLISHED, deletedAt: null },
         },
         include: {
+          test: { select: MY_ASSIGNMENT_TEST_SELECT },
           submissions: {
             where: { studentId: membershipId, deletedAt: null },
             orderBy: { attemptNo: 'desc' },
@@ -910,6 +936,7 @@ export class AssignmentsService {
       return {
         id: a.id,
         testId: a.testId,
+        ...myAssignmentTestFields(a.test),
         classSectionId: a.classSectionId,
         organizationId: a.organizationId,
         openAt: a.openAt,
@@ -993,6 +1020,7 @@ export class AssignmentsService {
     const assignments = await this.prisma.assignment.findMany({
       where: withOrg({ id: { in: ids } }, orgId),
       include: {
+        test: { select: MY_ASSIGNMENT_TEST_SELECT },
         submissions: {
           where: { studentId: membership.id, deletedAt: null },
           orderBy: { attemptNo: 'desc' },
@@ -1007,6 +1035,7 @@ export class AssignmentsService {
       return {
         id: a.id,
         testId: a.testId,
+        ...myAssignmentTestFields(a.test),
         classSectionId: a.classSectionId,
         organizationId: a.organizationId,
         openAt: a.openAt,

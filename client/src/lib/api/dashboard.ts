@@ -123,7 +123,8 @@ export interface DirectorDashboardResponse {
     avgScore: number | null;
     submissionsThisWeek: number;
     lastActivityAt: string | null;
-    riskLevel: "LOW" | "MEDIUM" | "HIGH";
+    /** NO_DATA = třída zatím bez ohodnocených odevzdání (není to riziko). */
+    riskLevel: "LOW" | "MEDIUM" | "HIGH" | "NO_DATA";
   }>;
   teachers: Array<{
     membershipId: string;

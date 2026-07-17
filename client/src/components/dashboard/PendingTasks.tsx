@@ -39,7 +39,7 @@ export function PendingTasks({ pendingSubmissions }: Props): React.JSX.Element |
       <button
         type="button"
         onClick={() => router.push("/app/results")}
-        className="shrink-0 rounded-2xl bg-streak px-5 py-2.5 text-sm font-bold text-white shadow-tactile transition-all duration-100 [--tactile-shadow:#c25e00] hover:brightness-105 focus:outline-none focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-xp active:translate-y-[2px] active:shadow-tactile-pressed"
+        className="shrink-0 rounded-2xl bg-streak px-5 py-2.5 text-sm font-bold text-white shadow-tactile transition-all duration-100 [--tactile-shadow:rgb(var(--streak-deep))] hover:brightness-105 focus:outline-none focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-xp active:translate-y-[2px] active:shadow-tactile-pressed"
       >
         Přejít na vyhodnocení →
       </button>

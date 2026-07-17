@@ -179,12 +179,12 @@ export default function OrgAuditPage(): React.JSX.Element {
       <Card className="border-slate-200 p-4">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Input
-            placeholder="Entity type (USER, TEST…)"
+            placeholder="Typ entity (USER, TEST…)"
             value={filters.entityType}
             onChange={(e) => setFilters((f) => ({ ...f, entityType: e.target.value }))}
           />
           <Input
-            placeholder="Akce (contains)"
+            placeholder="Akce (obsahuje)"
             value={filters.action}
             onChange={(e) => setFilters((f) => ({ ...f, action: e.target.value }))}
           />

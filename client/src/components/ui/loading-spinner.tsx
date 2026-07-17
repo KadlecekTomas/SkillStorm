@@ -10,7 +10,7 @@ type LoadingSpinnerProps = {
 };
 
 export const LoadingSpinner = ({
-  label = "Loading data",
+  label = "Načítám data",
   fullScreen,
   className,
 }: LoadingSpinnerProps): React.JSX.Element => (

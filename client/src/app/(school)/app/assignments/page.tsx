@@ -16,6 +16,8 @@ import { buildListQueryKey } from "@/lib/list-query";
 type AssignmentRow = {
   id: string;
   testId: string;
+  testTitle: string;
+  subjectName: string | null;
   classSectionId: string | null;
   organizationId: string;
   openAt: string;
@@ -51,16 +53,23 @@ function AssignmentsPage() {
       {error && <ErrorAlert title="Chyba" description={error} />}
       <div className="grid gap-3">
         {items.map((a) => (
-          <Card key={a.id} className="flex items-center justify-between p-4">
-            <div>
-              <p className="font-semibold">Assignment</p>
-              <p className="text-sm text-slate-600">Open: {formatDate(a.openAt)}</p>
-              <p className="text-sm text-slate-600">Close: {formatDate(a.closeAt)}</p>
+          <Card key={a.id} className="flex items-center justify-between gap-4 p-4">
+            <div className="min-w-0">
+              <p className="truncate font-semibold text-ink">
+                {a.testTitle || "Zadání"}
+              </p>
+              <p className="text-sm text-ink-muted">
+                {a.subjectName ? `${a.subjectName} · ` : ""}
+                Otevřeno od {formatDate(a.openAt)}
+              </p>
+              <p className="text-sm text-ink-muted">
+                Uzavírá se {formatDate(a.closeAt)}
+              </p>
             </div>
             <Button
               onClick={() => router.push(assignmentTargetHref(a))}
               disabled={!isStudent}
-              title={isStudent ? "" : "Pouze student může odevzdat assignment"}
+              title={isStudent ? "" : "Zadání může odevzdat pouze žák"}
             >
               {a.submissionId || a.attemptsUsed > 0 ? "Zobrazit výsledek" : "Otevřít test"}
             </Button>

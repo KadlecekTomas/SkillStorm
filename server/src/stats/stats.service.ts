@@ -600,11 +600,16 @@ export class StatsService {
             ? Math.round((stats.points / stats.maxPoints) * 10000) / 100
             : null;
         const weekSubs = classWeekCount.get(c.id) ?? 0;
-        const riskLevel = this.riskService.computeStudentRisk({
-          averageScorePercent: avgScore ?? 0,
-          daysSinceLastActivity: this.daysSince(stats?.lastAt ?? null, now),
-          trendPercent: 0,
-        });
+        // Třída bez jediného ohodnoceného odevzdání = NO_DATA, ne HIGH —
+        // prázdná/nová třída nesmí na ředitelském dashboardu svítit jako požár.
+        const riskLevel: import('@/shared/risk-model').RiskAssessment =
+          avgScore === null
+            ? 'NO_DATA'
+            : this.riskService.computeStudentRisk({
+                averageScorePercent: avgScore,
+                daysSinceLastActivity: this.daysSince(stats?.lastAt ?? null, now),
+                trendPercent: 0,
+              });
         return {
           id: c.id,
           label: c.label ?? `${c.grade}.${c.section}`,

@@ -9,7 +9,8 @@ export type RiskOverviewStudent = {
   averageScorePercent: number;
   lastActivityAt: string | null;
   trend: "UP" | "DOWN" | "STABLE";
-  riskLevel: "LOW" | "MEDIUM" | "HIGH";
+  /** NO_DATA = žák zatím nemá žádné ohodnocené odevzdání (není to riziko). */
+  riskLevel: "LOW" | "MEDIUM" | "HIGH" | "NO_DATA";
   riskFlags: ("LOW_AVERAGE" | "INACTIVE" | "DECLINING")[];
 };
 
