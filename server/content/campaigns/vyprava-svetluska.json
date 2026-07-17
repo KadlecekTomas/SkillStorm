@@ -5,7 +5,10 @@
   "title": "Cesta za světluškou",
   "subtitle": "Pomozte parťákovi posbírat jiskřičky pro světlušku Bliku",
   "reviewStatus": "draft",
-  "targetGrades": { "min": "GRADE_1", "max": "GRADE_5" },
+  "targetGrades": {
+    "min": "GRADE_1",
+    "max": "GRADE_5"
+  },
   "intro": "Světlušce Blice rozfoukal vítr všechny jiskřičky, bez kterých neumí svítit. Parťák se je vydává posbírat — a potřebuje k tomu celou třídu!",
   "steps": [
     {
@@ -13,56 +16,88 @@
       "title": "Rozkvetlá louka",
       "scene": "První jiskřička se schovala v kalíšku modrého zvonku. Parťák ji opatrně vyndal a zvonek mu zacinkal na rozloučenou.",
       "hook": "Za loukou bublá potok — a něco se v něm blýská…",
-      "sticker": { "key": "zvonek", "name": "Cinkavý zvonek", "emoji": "🔔" }
+      "sticker": {
+        "key": "zvonek",
+        "name": "Cinkavý zvonek",
+        "emoji": "🔔"
+      }
     },
     {
       "key": "bublavy-potok",
       "title": "Bublavý potok",
       "scene": "Druhou jiskřičku hlídal na oblázku rak Klepítko. „Ta je ale třpytivá! Dobře se o ni starejte,“ zamával klepetem.",
       "hook": "Přes potok vede lávka a za ní to voní jahodami…",
-      "sticker": { "key": "rak-klepitko", "name": "Rak Klepítko", "emoji": "🦞" }
+      "sticker": {
+        "key": "rak-klepitko",
+        "name": "Rak Klepítko",
+        "emoji": "🦞"
+      }
     },
     {
       "key": "jahodova-stran",
       "title": "Jahodová stráň",
-      "scene": "Mezi jahodami dřímal ježek a jiskřička mu svítila na bodlince jako lucernička. Za pomoc s hledáním největší jahody ji parťákovi půjčil.",
+      "scene": "Mezi jahodami spal ježek a jiskřička mu svítila na bodlince jako lucernička. Když mu parťák pomohl najít tu největší jahodu, ježek mu jiskřičku svěřil.",
       "hook": "Nahoře na kopci se točí křídla větrného mlýna…",
-      "sticker": { "key": "jezek", "name": "Ježek Bodlinka", "emoji": "🦔" }
+      "sticker": {
+        "key": "jezek",
+        "name": "Ježek Bodlinka",
+        "emoji": "🦔"
+      }
     },
     {
       "key": "vetrny-mlyn",
       "title": "Větrný mlýn",
       "scene": "Ve mlýně bydlí krtek mlynář. Čtvrtá jiskřička mu spadla do mouky — parťák kýchl, až se zvedl bílý obláček, a jiskřička byla na světě.",
       "hook": "Od mlýna je slyšet les plný ptačího zpěvu…",
-      "sticker": { "key": "mlynek", "name": "Moučný mlýnek", "emoji": "🌾" }
+      "sticker": {
+        "key": "mlynek",
+        "name": "Moučný mlýnek",
+        "emoji": "🌾"
+      }
     },
     {
       "key": "zpivajici-les",
       "title": "Zpívající les",
-      "scene": "V prosluněném lese bubnoval datel do kmene. „Tuhle jiskřičku jsem našel v dutině — patří světlušce? Tak ať letí domů!“",
+      "scene": "V prosluněném lese bubnoval datel do kmene: „Tuhle jiskřičku jsem našel v dutině. Patří světlušce? Tak ať letí domů!“",
       "hook": "Mezi stromy prosvítá starý kamenný most…",
-      "sticker": { "key": "datel", "name": "Datel Bubeník", "emoji": "🪶" }
+      "sticker": {
+        "key": "datel",
+        "name": "Datel Bubeník",
+        "emoji": "🪶"
+      }
     },
     {
       "key": "kamenny-most",
       "title": "Kamenný most",
-      "scene": "Pod mostem plavala vydra a šestou jiskřičku si nosila na nose jako brýle. Vyměnila ji s parťákem za tři hladké oblázky.",
+      "scene": "Pod mostem plavala vydra a šestou jiskřičku balancovala na čumáčku jako míček. Vyměnila ji s parťákem za tři hladké oblázky.",
       "hook": "Za mostem se zvedá kopec a na něm hrad se zlatou věží…",
-      "sticker": { "key": "vydra", "name": "Vydra Šikula", "emoji": "🦦" }
+      "sticker": {
+        "key": "vydra",
+        "name": "Vydra Šikula",
+        "emoji": "🦦"
+      }
     },
     {
       "key": "hrad-svetlov",
       "title": "Hrad Světlov",
       "scene": "Na hradní věži hlídal sedmou jiskřičku kocour Šafrán. „Čekal jsem na někoho, kdo ji donese světlušce. Šťastnou cestu — už je to kousek!“",
       "hook": "Z věže je vidět mýtina — a na ní někdo mává!",
-      "sticker": { "key": "kocour-safran", "name": "Kocour Šafrán", "emoji": "🐈" }
+      "sticker": {
+        "key": "kocour-safran",
+        "name": "Kocour Šafrán",
+        "emoji": "🐈"
+      }
     },
     {
       "key": "svetlusci-mytina",
       "title": "Světluščí mýtina",
       "scene": "Blika dostala všechny jiskřičky zpátky a rozsvítila se jako lampionek. Celá mýtina zablikala na oslavu — to světlušky děkují třídě!",
       "hook": "Blika teď svítí nejjasněji z celé mýtiny. A šeptá, že zná další cestu…",
-      "sticker": { "key": "svetluska-blika", "name": "Světluška Blika", "emoji": "✨" }
+      "sticker": {
+        "key": "svetluska-blika",
+        "name": "Světluška Blika",
+        "emoji": "✨"
+      }
     }
   ]
 }

@@ -5,7 +5,10 @@
   "title": "Archiv",
   "subtitle": "Záznam, který odpovídá dřív, než se zeptáte",
   "reviewStatus": "draft",
-  "targetGrades": { "min": "GRADE_6", "max": "HIGH_SCHOOL_YEAR_4" },
+  "targetGrades": {
+    "min": "GRADE_6",
+    "max": "HIGH_SCHOOL_YEAR_4"
+  },
   "intro": "Při inventuře školního skladu se našla krabice se štítkem ARCHIV — NEOTVÍRAT. Uvnitř je stará páska a čtečka, která po zapnutí začala vypisovat text. Jenže ten text odpovídá na otázky, které ještě nikdo nepoložil.",
   "epilogue": {
     "enabled": true,
@@ -19,7 +22,7 @@
       "fragment": {
         "kind": "text",
         "title": "Útržek deníku",
-        "body": "…pondělí příštího týdne. Vím, že to zní divně, ale až budete číst tenhle řádek, bude to teprve před vámi. Nepiš to nikomu, deníku — stejně by mi nevěřili. Zkusím to říct aspoň jim. Snad mě uslyší, protože tohle se týká…"
+        "body": "…zápis z pondělí — příští týden. Vím, jak divně to zní: až budete číst tenhle řádek, bude to pondělí teprve před vámi. Nepiš to nikomu, deníku — stejně by mi nevěřili. Zkusím to říct aspoň jim. Snad mě uslyší, protože tohle se týká…"
       },
       "cliffhanger": "Poslední řádek záznamu není rozmazaný. Je tam jméno. Jméno téhle třídy."
     },
