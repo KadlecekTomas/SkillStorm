@@ -139,6 +139,73 @@ describe('ClassSectionsService', () => {
     expect(result.otherClasses).toEqual([]);
   });
 
+  it('puts additional homeroom classes into teachingClasses for a teacher with multiple homerooms', async () => {
+    jest
+      .spyOn(service as any, 'assertValidAcademicYear')
+      .mockResolvedValue({ id: 'year-1', orgId: 'org-1', isCurrent: true });
+
+    prisma.membership.findFirst.mockResolvedValue({ id: 'membership-1' });
+    prisma.teacher.findFirst.mockResolvedValue({ id: 'teacher-1' });
+    prisma.classSection.findMany.mockResolvedValue([
+      {
+        id: 'class-home-2b',
+        orgId: 'org-1',
+        yearId: 'year-1',
+        grade: 'GRADE_2',
+        section: 'B',
+        label: '2.B',
+        teacherId: 'teacher-1',
+        teacher: { id: 'teacher-1', membership: { user: { name: 'Teacher One' } } },
+        teachers: [],
+        _count: { enrollments: 20 },
+        academicYear: { id: 'year-1', label: '2025/26', isCurrent: true },
+      },
+      {
+        id: 'class-home-6a',
+        orgId: 'org-1',
+        yearId: 'year-1',
+        grade: 'GRADE_6',
+        section: 'A',
+        label: '6.A',
+        teacherId: 'teacher-1',
+        teacher: { id: 'teacher-1', membership: { user: { name: 'Teacher One' } } },
+        teachers: [],
+        _count: { enrollments: 24 },
+        academicYear: { id: 'year-1', label: '2025/26', isCurrent: true },
+      },
+      {
+        id: 'class-scope',
+        orgId: 'org-1',
+        yearId: 'year-1',
+        grade: 'GRADE_7',
+        section: 'C',
+        label: '7.C',
+        teacherId: null,
+        teacher: null,
+        teachers: [{ teacherId: 'teacher-1', classSectionId: 'class-scope', accessLevel: 'EDIT' }],
+        _count: { enrollments: 18 },
+        academicYear: { id: 'year-1', label: '2025/26', isCurrent: true },
+      },
+    ]);
+
+    const result = await service.getMyStructure(
+      {
+        userId: 'user-1',
+        organizationId: 'org-1',
+        organizationRole: OrganizationRole.TEACHER,
+        systemRole: null,
+      } as any,
+      'year-1',
+    );
+
+    expect(result.homeroom?.id).toBe('class-home-2b');
+    expect(result.teachingClasses.map((item) => item.id)).toEqual([
+      'class-home-6a',
+      'class-scope',
+    ]);
+    expect(result.otherClasses).toEqual([]);
+  });
+
   it('uses enrollment as canonical source of truth for list counts and detail students', async () => {
     jest
       .spyOn(service as any, 'assertValidAcademicYear')
