@@ -399,7 +399,7 @@ async function main() {
   const students2B = await enrollClass(NAMES_2B, class2B.id, {
     0: `zak2b@${DOMAIN}`,
   });
-  await enrollClass(NAMES_5A, class5A.id);
+  const students5A = await enrollClass(NAMES_5A, class5A.id);
   const students8A = await enrollClass(NAMES_8A, class8A.id, {
     0: `zak8a@${DOMAIN}`,
   });
@@ -626,6 +626,73 @@ async function main() {
     });
   }
 
+  // Výsledky i pro 5.A (homeroom učitele — default pohled ve Výsledcích)
+  const assignment5A = await prisma.assignment.create({
+    data: {
+      organizationId: org.id,
+      yearId: year.id,
+      testId: testVyjmenovana.id,
+      targetType: 'CLASS',
+      classSectionId: class5A.id,
+      openAt: daysAgo(14, 8),
+      closeAt: daysAgo(1, 18),
+      maxAttempts: 2,
+      shuffle: false,
+      showExplain: 'after_submit',
+      createdById: teacher1.membershipId,
+    },
+  });
+  const questionsVyjm = await prisma.question.findMany({
+    where: { testId: testVyjmenovana.id },
+    orderBy: { order: 'asc' },
+  });
+  for (const [i, s5] of students5A.entries()) {
+    if (i >= students5A.length - 1) continue; // jeden neodevzdal
+    const correctCount = 2 + Math.floor(rand() * 3); // 2..4 správně ze 4
+    const submittedAt = daysAgo(1 + Math.floor(rand() * 12), 8 + Math.floor(rand() * 8), Math.floor(rand() * 60));
+    const submission = await prisma.submission.create({
+      data: {
+        organizationId: org.id,
+        studentId: s5.membershipId,
+        assignmentId: assignment5A.id,
+        testId: testVyjmenovana.id,
+        attemptNo: 1,
+        status: SubmissionStatus.PENDING,
+        responses: {
+          create: questionsVyjm.map((q, qi) => {
+            const isCorrect = qi < correctCount;
+            const wrong =
+              q.type === TF
+                ? q.correctAnswer === 'true'
+                  ? 'false'
+                  : 'true'
+                : 'špatná odpověď';
+            return {
+              questionId: q.id,
+              givenText: isCorrect ? (q.correctAnswer ?? '') : wrong,
+              isCorrect,
+              awardedPoints: isCorrect ? 1 : 0,
+              maxPoints: 1,
+              correctAnswerSnapshot: q.correctAnswer,
+              questionTextSnapshot: q.text,
+              corrected: true,
+            };
+          }),
+        },
+      },
+    });
+    await prisma.submission.update({
+      where: { id: submission.id },
+      data: {
+        submittedAt,
+        status: SubmissionStatus.APPROVED,
+        score: correctCount / questionsVyjm.length,
+        earnedPoints: correctCount,
+        maxPoints: questionsVyjm.length,
+      },
+    });
+  }
+
   // Otevřené zadání pro old-test screenshot (časovač): zak8a má co vyplňovat
   await prisma.assignment.create({
     data: {
@@ -659,6 +726,23 @@ async function main() {
       createdById: teacher1.membershipId,
     },
   });
+  // Druhé young zadání — portfolio skript potřebuje startovatelný test
+  // pro 2.B dvakrát (desktop dlaždice + mobilní flow) v jednom běhu.
+  await prisma.assignment.create({
+    data: {
+      organizationId: org.id,
+      yearId: year.id,
+      testId: testVyjmenovana.id,
+      targetType: 'CLASS',
+      classSectionId: class2B.id,
+      openAt: daysAgo(0, 7),
+      closeAt: daysAgo(-21, 18),
+      maxAttempts: 3,
+      shuffle: false,
+      showExplain: 'after_submit',
+      createdById: teacher1.membershipId,
+    },
+  });
   // G2 zadání (ať G2 dashboard není prázdný)
   await prisma.assignment.create({
     data: {
@@ -679,6 +763,22 @@ async function main() {
 
   // -------------------------------------------------------------------------
   logStep('XP historie žáka (zak8a) — poslední 3 týdny…');
+  // Levels jsou globální tabulka — bez ní dashboard hlásí „nejvyšší úroveň"
+  await prisma.level.createMany({
+    data: [
+      { levelNo: 1, minXp: 0 },
+      { levelNo: 2, minXp: 50 },
+      { levelNo: 3, minXp: 150 },
+      { levelNo: 4, minXp: 350 },
+      { levelNo: 5, minXp: 750 },
+      { levelNo: 6, minXp: 1500 },
+      { levelNo: 7, minXp: 3000 },
+      { levelNo: 8, minXp: 5000 },
+      { levelNo: 9, minXp: 8000 },
+      { levelNo: 10, minXp: 12000 },
+    ],
+    skipDuplicates: true,
+  });
   const hero = students8A[0]!;
   for (let day = 20; day >= 0; day -= 1) {
     // streak s jednou vynechávkou, ať vypadá věrohodně
@@ -704,6 +804,13 @@ async function main() {
       },
     });
   }
+
+  // Denormalizovaný součet na membership — profil čte membership.xp/level
+  const heroXp = 20 * 5 + 3 * 40; // LOGINy + dokončené testy
+  await prisma.membership.update({
+    where: { id: hero.membershipId },
+    data: { xp: heroXp, level: 3 }, // 220 XP → level 3 (150–349)
+  });
 
   // -------------------------------------------------------------------------
   logStep('Kampaně: Výprava 4/8 (2.B) + Archiv 1/3 (8.A)…');
