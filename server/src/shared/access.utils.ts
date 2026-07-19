@@ -123,3 +123,41 @@ export function makeSubjectSearch(
     ],
   };
 }
+
+/**
+ * Aktivní úvazek učitele (TeacherClassSection) — platnostní okno + soft delete.
+ * Volitelný yearId zúží na konkrétní školní rok (úvazek je na rok vázaný
+ * i přes classSection, takže vynechání yearId je bezpečné pro obecné scope).
+ */
+export function activeTeacherClassSectionCondition(
+  teacherId: string,
+  yearId?: string,
+): Prisma.TeacherClassSectionWhereInput {
+  const now = new Date();
+  return {
+    teacherId,
+    ...(yearId ? { yearId } : {}),
+    deletedAt: null,
+    AND: [
+      { OR: [{ validFrom: null }, { validFrom: { lte: now } }] },
+      { OR: [{ validTo: null }, { validTo: { gte: now } }] },
+    ],
+  };
+}
+
+/**
+ * Třídy, které učitel UČÍ: homeroom (třídnictví) NEBO aktivní úvazek.
+ * Jednotný vzor pro RBAC i datové scope — nikdy nepoužívat samotné
+ * `{ teacherId }` (homeroom-only), viz docs/visual-qa-findings.md.
+ */
+export function teacherClassScope(
+  teacherId: string,
+  yearId?: string,
+): Prisma.ClassSectionWhereInput {
+  return {
+    OR: [
+      { teacherId },
+      { teachers: { some: activeTeacherClassSectionCondition(teacherId, yearId) } },
+    ],
+  };
+}

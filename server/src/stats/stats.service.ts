@@ -26,6 +26,7 @@ import {
 } from '@/shared/cache/org-cache.utils';
 import type { StatsOverviewResponse } from './dto/overview.dto';
 import { RiskService } from '@/risk/risk.service';
+import { teacherClassScope } from '@/shared/access.utils';
 
 const DASHBOARD_SUBMISSION_LIMIT = 2_000;
 export function invalidateDirectorDashboardCache(
@@ -173,8 +174,9 @@ export class StatsService {
                   organizationId: membership.organizationId,
                   OR: [
                     { createdById: membership.id },
+                    // homeroom NEBO aktivní úvazek (audit homeroom-only)
                     ...(teacher
-                      ? [{ classSection: { teacherId: teacher.id } }]
+                      ? [{ classSection: teacherClassScope(teacher.id) }]
                       : []),
                   ],
                 },
@@ -848,7 +850,8 @@ export class StatsService {
       ] = await Promise.all([
         this.prisma.classSection.count({
           where: {
-            teacherId: teacher?.id ?? '___none___',
+            // homeroom NEBO aktivní úvazek (audit homeroom-only)
+            ...teacherClassScope(teacher?.id ?? '___none___'),
             ...(organizationId ? { orgId: organizationId } : {}),
             ...(currentYear ? { yearId: currentYear.id } : {}),
           },

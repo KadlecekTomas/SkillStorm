@@ -13,7 +13,8 @@ import { AuditEntityType } from '@prisma/client';
 import type { RequestWithUser } from '@/types/request-with-user';
 
 /**
- * GDPR student detail: only CLASS_TEACHER (homeroom), SUBJECT_TEACHER (future),
+ * GDPR student detail: only CLASS_TEACHER (homeroom), SUBJECT_TEACHER (aktivní
+ * úvazek TeacherClassSection na třídu žáka v aktuálním roce),
  * SCHOOL_DIRECTOR (DIRECTOR/OWNER), SUPERADMIN. Students cannot view detail (including self).
  * On deny: 403 + audit STUDENT_DETAIL_ACCESS_DENIED.
  */
@@ -106,14 +107,40 @@ export class StudentAccessGuard implements CanActivate {
     }
 
     if (user.organizationRole === OrganizationRole.TEACHER) {
-      const teachesStudent = student.enrollments.some(
+      const isHomeroom = student.enrollments.some(
         (e) =>
           e.academicYear?.isCurrent === true &&
           e.classSection?.teacher?.membership?.userId &&
           String(e.classSection.teacher.membership.userId) ===
             String(user.userId),
       );
-      if (teachesStudent) return true;
+      if (isHomeroom) return true;
+
+      // Aktivní úvazek na třídu žáka v aktuálním roce (audit homeroom-only):
+      // stejné pravidlo jako teacherClassScope, tady přes enrollmenty žáka.
+      const currentClassIds = student.enrollments
+        .filter((e) => e.academicYear?.isCurrent === true)
+        .map((e) => e.classSectionId);
+      if (currentClassIds.length > 0) {
+        const now = new Date();
+        const scoped = await this.prisma.teacherClassSection.findFirst({
+          where: {
+            classSectionId: { in: currentClassIds },
+            deletedAt: null,
+            teacher: {
+              deletedAt: null,
+              organizationId: student.orgId,
+              membership: { userId: user.userId, deletedAt: null },
+            },
+            AND: [
+              { OR: [{ validFrom: null }, { validFrom: { lte: now } }] },
+              { OR: [{ validTo: null }, { validTo: { gte: now } }] },
+            ],
+          },
+          select: { id: true },
+        });
+        if (scoped) return true;
+      }
 
       await this.audit.log({
         action: 'STUDENT_DETAIL_ACCESS_DENIED',
@@ -121,7 +148,7 @@ export class StudentAccessGuard implements CanActivate {
         entityId: studentId,
         userId: user.userId,
         organizationId: user.organizationId ?? null,
-        metadata: { reason: 'teacher_not_homeroom_of_student' },
+        metadata: { reason: 'teacher_not_teaching_student_class' },
       });
       throw new ForbiddenException(
         'Nemáš oprávnění zobrazit detail tohoto žáka.',
