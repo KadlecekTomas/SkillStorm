@@ -23,9 +23,11 @@ import {
   OPTION_KEYS,
   OptionKey,
   RoundOptionSnapshot,
+  RoundVoteCounts,
   XP_PER_FINISHED_SESSION,
   XP_PER_PLAYED_ROUND,
   computeStage,
+  computeVoteOutcome,
   resolveDefaultLiveAgeMode,
 } from './live-sessions.constants';
 
@@ -51,9 +53,16 @@ export interface ProjectionRound {
   questionText: string;
   options: RoundOptionSnapshot[];
   outcome: LiveRoundOutcome | null;
+  /** Anonymní agregáty hlasů z tabule; null = kolo bez hlasování. */
+  voteCounts: RoundVoteCounts | null;
+  votingStartedAt: Date | null;
   revealedAt: Date | null;
   completedAt: Date | null;
   correctKey?: string;
+}
+
+function sumVotes(counts: RoundVoteCounts): number {
+  return Object.values(counts).reduce((sum, n) => sum + (n ?? 0), 0);
 }
 
 function normalizeAnswer(v: string | null | undefined): string {
@@ -277,6 +286,8 @@ export class LiveSessionsService {
           questionText: r.questionText,
           options: r.optionsSnapshot as unknown as RoundOptionSnapshot[],
           outcome: r.outcome,
+          voteCounts: (r.voteCounts as RoundVoteCounts | null) ?? null,
+          votingStartedAt: r.votingStartedAt,
           revealedAt: r.revealedAt,
           completedAt: r.completedAt,
         };
@@ -286,19 +297,135 @@ export class LiveSessionsService {
     };
   }
 
-  /** Odhalí správnou odpověď — až teď correctKey opouští server. Idempotentní. */
+  /**
+   * Otevře fázi VOTING (volitelná, mezi otázkou a revealem). Idempotentní.
+   * Hlasování je anonymní agregát z tabule — žádná vazba na osoby.
+   */
+  async openVoting(id: string, roundId: string, ctx: OrgContext) {
+    const session = await this.getOwnedSession(id, ctx);
+    this.assertRunning(session.status);
+    const round = await this.getRound(id, roundId);
+    if (round.revealedAt) {
+      throw new ConflictException({
+        code: 'ROUND_ALREADY_REVEALED',
+        message: 'Po odhalení odpovědi už hlasovat nelze.',
+      });
+    }
+
+    if (!round.votingStartedAt) {
+      const updated = await this.prisma.liveSessionRound.update({
+        where: { id: roundId },
+        data: { votingStartedAt: new Date(), voteCounts: {} },
+        select: { id: true, votingStartedAt: true, voteCounts: true },
+      });
+      return {
+        roundId,
+        votingStartedAt: updated.votingStartedAt,
+        voteCounts: updated.voteCounts as RoundVoteCounts,
+      };
+    }
+    return {
+      roundId,
+      votingStartedAt: round.votingStartedAt,
+      voteCounts: (round.voteCounts as RoundVoteCounts | null) ?? {},
+    };
+  }
+
+  /**
+   * Jeden dotyk na tabuli (tap +1 / long-press −1). Přijímá se POUZE ve fázi
+   * VOTING (votingStartedAt nastaveno, revealedAt ne) — jinak 409. Inkrement
+   * je atomický v SQL a klampovaný na 0; correctKey se nevrací (reveal gating).
+   */
+  async castVote(
+    id: string,
+    roundId: string,
+    key: OptionKey,
+    delta: 1 | -1,
+    ctx: OrgContext,
+  ) {
+    const session = await this.getOwnedSession(id, ctx);
+    this.assertRunning(session.status);
+    const round = await this.getRound(id, roundId);
+    if (!round.votingStartedAt || round.revealedAt) {
+      throw new ConflictException({
+        code: 'ROUND_NOT_VOTING',
+        message: 'Kolo teď není ve fázi hlasování.',
+      });
+    }
+    const options = round.optionsSnapshot as unknown as RoundOptionSnapshot[];
+    if (!options.some((o) => o.key === key)) {
+      throw new BadRequestException({
+        code: 'INVALID_VOTE_OPTION',
+        message: 'Toto kolo takovou možnost nemá.',
+      });
+    }
+
+    // WHERE fáze guard i v SQL — souběžný reveal mezi checkem a updatem
+    // hlas zahodí místo zápisu do už odhaleného kola.
+    const affected = await this.prisma.$executeRaw`
+      UPDATE live_session_rounds
+      SET vote_counts = jsonb_set(
+        COALESCE(vote_counts, '{}'::jsonb),
+        ARRAY[${key}]::text[],
+        to_jsonb(GREATEST(0, COALESCE((vote_counts ->> ${key})::int, 0) + ${delta}))
+      )
+      WHERE live_session_round_id = ${roundId}
+        AND voting_started_at IS NOT NULL
+        AND revealed_at IS NULL
+    `;
+    if (affected === 0) {
+      throw new ConflictException({
+        code: 'ROUND_NOT_VOTING',
+        message: 'Kolo teď není ve fázi hlasování.',
+      });
+    }
+
+    const fresh = await this.prisma.liveSessionRound.findUnique({
+      where: { id: roundId },
+      select: { voteCounts: true },
+    });
+    const voteCounts = (fresh?.voteCounts as RoundVoteCounts | null) ?? {};
+    return { roundId, voteCounts, totalVotes: sumVotes(voteCounts) };
+  }
+
+  /**
+   * Odhalí správnou odpověď — až teď correctKey opouští server. Idempotentní.
+   * Pokud se v kole hlasovalo, spočítá a předvyplní auto-outcome (prahy viz
+   * computeVoteOutcome); učitel ho může přepsat přes setOutcome — jeho slovo
+   * je finální. Hlasy do XP/kampaní nevstupují (finish počítá jen completedAt).
+   */
   async reveal(id: string, roundId: string, ctx: OrgContext) {
     const session = await this.getOwnedSession(id, ctx);
     this.assertRunning(session.status);
     const round = await this.getRound(id, roundId);
 
+    const voteCounts = (round.voteCounts as RoundVoteCounts | null) ?? null;
+    const autoOutcome = computeVoteOutcome(voteCounts, round.correctKeySnapshot);
+
+    let outcome = round.outcome;
     if (!round.revealedAt) {
+      const now = new Date();
+      // auto-outcome se persistuje hned při revealu — kolo je tím odehrané;
+      // ruční přepsání učitelem jde přes stávající setOutcome
+      outcome = round.outcome ?? autoOutcome;
       await this.prisma.liveSessionRound.update({
         where: { id: roundId },
-        data: { revealedAt: new Date() },
+        data: {
+          revealedAt: now,
+          ...(outcome && !round.outcome
+            ? { outcome, completedAt: round.completedAt ?? now }
+            : {}),
+        },
       });
     }
-    return { roundId, correctKey: round.correctKeySnapshot };
+    return {
+      roundId,
+      correctKey: round.correctKeySnapshot,
+      voteCounts,
+      totalVotes: voteCounts ? sumVotes(voteCounts) : 0,
+      autoOutcome,
+      outcome,
+    };
   }
 
   /** Učitelův soud kola (3 tlačítka). Vyžaduje předchozí reveal; lze opravit dokud session běží. */

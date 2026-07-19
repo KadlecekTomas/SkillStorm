@@ -1058,6 +1058,9 @@ model LiveSession {
 /// Jedno kolo bleskovky. Otázka je nasnapshotovaná při startu session —
 /// pozdější editace zdrojového testu běžící/ukončenou bleskovku neovlivní.
 /// correctKeySnapshot NIKDY neopouští server před revealem (viz service).
+/// voteCounts jsou ANONYMNÍ agregáty {"A": 14, "B": 6} z dotykové tabule —
+/// žádná vazba na osoby (GDPR záměr režimu B trvá, viz docs/live-sessions.md).
+/// Hlasy NIKDY nevstupují do XP ani postupu kampaní (kryto e2e).
 model LiveSessionRound {
   id                 String            @id @default(uuid()) @map("live_session_round_id")
   sessionId          String            @map("live_session_id")
@@ -1067,6 +1070,8 @@ model LiveSessionRound {
   optionsSnapshot    Json              @map("options_snapshot")
   correctKeySnapshot String            @map("correct_key_snapshot")
   outcome            LiveRoundOutcome?
+  voteCounts         Json?             @map("vote_counts")
+  votingStartedAt    DateTime?         @map("voting_started_at")
   revealedAt         DateTime?         @map("revealed_at")
   completedAt        DateTime?         @map("completed_at")
   session            LiveSession       @relation(fields: [sessionId], references: [id], onDelete: Cascade)
