@@ -14,6 +14,7 @@ import {
   openRoundVoting,
   revealRound,
   setRoundOutcome,
+  type InteractiveSolution,
   type LiveRound,
   type LiveRoundOption,
   type LiveRoundOutcome,
@@ -22,6 +23,10 @@ import {
   type RoundOptionKey,
   type RoundVoteCounts,
 } from "@/lib/api/live-sessions";
+import {
+  InteractiveRoundBoard,
+  useInteractiveRound,
+} from "./interactive-rounds";
 import {
   getCampaignProgress,
   type CampaignProgressDetail,
@@ -182,6 +187,7 @@ export function LiveBoard({ sessionId }: LiveBoardProps): JSX.Element {
     : "middle";
   const rounds = projection?.rounds ?? [];
   const round = rounds[roundIndex] ?? null;
+  const isInteractive = round !== null && round.interactionType !== "QUIZ";
   const revealed = round ? (revealedKeys[round.id] ?? null) : null;
   const isLastRound = roundIndex >= rounds.length - 1;
   const isVotingOpen = round ? !revealed && (votingOpen[round.id] ?? false) : false;
@@ -201,10 +207,11 @@ export function LiveBoard({ sessionId }: LiveBoardProps): JSX.Element {
   }, [rounds, roundIndex]);
 
   // Odpočet: běží od zobrazení kola do revealu; young ho defaultně nemá.
+  // Interaktivní kola odpočet nemají — děti iterují vlastním tempem.
   const countdownSec = projection?.countdownSec ?? null;
   useEffect(() => {
     if (timerRef.current) clearInterval(timerRef.current);
-    if (!round || revealed || !countdownSec || finish) {
+    if (!round || revealed || !countdownSec || finish || isInteractive) {
       setSecondsLeft(null);
       return;
     }
@@ -215,7 +222,7 @@ export function LiveBoard({ sessionId }: LiveBoardProps): JSX.Element {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [round?.id, revealed, countdownSec, finish]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [round?.id, revealed, countdownSec, finish, isInteractive]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleOpenVoting = useCallback(async () => {
     if (!round || busy) return;
@@ -280,7 +287,11 @@ export function LiveBoard({ sessionId }: LiveBoardProps): JSX.Element {
     setError(null);
     try {
       const res = await revealRound(sessionId, round.id);
-      setRevealedKeys((prev) => ({ ...prev, [round.id]: res.correctKey }));
+      // Kvízová cesta — interaktivní kola odhaluje interactive.handleRevealSolution
+      const correctKey = res.correctKey;
+      if (correctKey) {
+        setRevealedKeys((prev) => ({ ...prev, [round.id]: correctKey }));
+      }
       setVotingOpen((prev) => ({ ...prev, [round.id]: false }));
       if (res.voteCounts) {
         setVotes((prev) => ({ ...prev, [round.id]: res.voteCounts! }));
@@ -378,6 +389,60 @@ export function LiveBoard({ sessionId }: LiveBoardProps): JSX.Element {
     setLastOutcome(round.outcome);
     setRoundIndex((i) => Math.min(i + 1, rounds.length - 1));
   }, [round, rounds.length]);
+
+  /** Dokončené interaktivní kolo (vyřešeno dětmi / Ukázat řešení). */
+  const handleInteractiveCompleted = useCallback(
+    (
+      roundId: string,
+      outcome: LiveRoundOutcome | null,
+      solution: InteractiveSolution | null,
+    ) => {
+      setAutoOutcomes((prev) => ({ ...prev, [roundId]: outcome }));
+      const now = new Date().toISOString();
+      setProjection((prev) =>
+        prev
+          ? {
+              ...prev,
+              rounds: prev.rounds.map((r) =>
+                r.id === roundId
+                  ? {
+                      ...r,
+                      outcome: outcome ?? r.outcome,
+                      completedAt: r.completedAt ?? now,
+                      revealedAt: r.revealedAt ?? now,
+                      ...(solution ? { solution } : {}),
+                    }
+                  : r,
+              ),
+            }
+          : prev,
+      );
+    },
+    [],
+  );
+
+  const interactive = useInteractiveRound(
+    sessionId,
+    round,
+    handleInteractiveCompleted,
+  );
+
+  // Fullscreen — tabule běží v prohlížeči; toggle přímo z plochy.
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  useEffect(() => {
+    const sync = () => setIsFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener("fullscreenchange", sync);
+    return () => document.removeEventListener("fullscreenchange", sync);
+  }, []);
+  const toggleFullscreen = useCallback(() => {
+    if (document.fullscreenElement) {
+      void document.exitFullscreen().catch(() => undefined);
+    } else {
+      void document.documentElement
+        .requestFullscreen()
+        .catch(() => undefined);
+    }
+  }, []);
 
   const handleFinish = useCallback(async () => {
     if (busy) return;
@@ -559,7 +624,14 @@ export function LiveBoard({ sessionId }: LiveBoardProps): JSX.Element {
               {round.questionText}
             </h1>
 
-            {isVotingOpen && roundVotes ? (
+            {isInteractive && round.content ? (
+              <InteractiveRoundBoard
+                round={round}
+                api={interactive}
+                ageMode={ageMode}
+                dark={darkShell}
+              />
+            ) : isVotingOpen && roundVotes ? (
               <>
                 {hintVisible ? (
                   <div
@@ -683,12 +755,68 @@ export function LiveBoard({ sessionId }: LiveBoardProps): JSX.Element {
           </div>
         ) : null}
 
-        {/* Ovládání učitele — menší, ovládá se zblízka */}
-        <footer className="flex items-center justify-center gap-3 pb-2 pt-6">
-          {error ? (
-            <span className="text-sm font-semibold text-danger">{error}</span>
+        {/* Ovládací pruh — vše dosažitelné dotykem z plochy, targety 80px+ */}
+        <footer
+          data-testid="live-control-bar"
+          className="flex min-h-[96px] items-center justify-center gap-3 pb-2 pt-6"
+        >
+          {error || interactive.error ? (
+            <span className="text-sm font-semibold text-danger">
+              {error ?? interactive.error}
+            </span>
           ) : null}
-          {round && !revealed && !isVotingOpen ? (
+          {isInteractive && round && !round.completedAt ? (
+            <>
+              {round.content?.kind === "ORDER" ? (
+                <button
+                  type="button"
+                  data-testid="live-check-order"
+                  disabled={interactive.checking}
+                  onClick={() => void interactive.handleCheck()}
+                  className="min-h-[80px] rounded-2xl bg-accent px-12 py-4 text-2xl font-extrabold text-white shadow-tactile [--tactile-shadow:rgb(var(--accent-deep))] transition-all active:translate-y-[2px] active:shadow-tactile-pressed disabled:opacity-60"
+                >
+                  {interactive.checking ? "Kontroluji…" : "Zkontrolovat ✓"}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                data-testid="live-show-solution"
+                onClick={() => void interactive.handleRevealSolution()}
+                className={cn(
+                  "min-h-[80px] rounded-2xl border-2 px-8 py-4 text-lg font-bold transition-all",
+                  darkShell
+                    ? "border-[rgb(var(--canvas))]/30 text-[rgb(var(--canvas))]/80"
+                    : "border-line-strong bg-canvas text-ink-muted",
+                )}
+              >
+                Ukázat řešení
+              </button>
+            </>
+          ) : null}
+          {isInteractive && round?.completedAt ? (
+            <>
+              <OutcomeBadges
+                current={round.outcome}
+                auto={autoOutcomes[round.id] ?? null}
+                autoLabel="Podle průběhu:"
+                busy={busy}
+                dark={darkShell}
+                onOverride={handleOverrideOutcome}
+              />
+              {!isLastRound ? (
+                <button
+                  type="button"
+                  data-testid="live-next-round"
+                  disabled={busy}
+                  onClick={handleNextRound}
+                  className="min-h-[80px] rounded-2xl bg-xp px-10 py-4 text-xl font-extrabold text-white shadow-tactile [--tactile-shadow:rgb(var(--xp)/0.5)] transition-all active:translate-y-[2px] active:shadow-tactile-pressed disabled:opacity-60"
+                >
+                  Další kolo →
+                </button>
+              ) : null}
+            </>
+          ) : null}
+          {!isInteractive && round && !revealed && !isVotingOpen ? (
             <>
               <button
                 type="button"
@@ -715,7 +843,7 @@ export function LiveBoard({ sessionId }: LiveBoardProps): JSX.Element {
               </button>
             </>
           ) : null}
-          {round && isVotingOpen ? (
+          {!isInteractive && round && isVotingOpen ? (
             <button
               type="button"
               data-testid="live-reveal"
@@ -776,6 +904,23 @@ export function LiveBoard({ sessionId }: LiveBoardProps): JSX.Element {
               {senior ? "Vyhodnotit" : "Ukončit bleskovku 🎉"}
             </button>
           ) : null}
+          {/* Fullscreen — tabule běží v prohlížeči, toggle přímo z plochy */}
+          <button
+            type="button"
+            data-testid="live-fullscreen-toggle"
+            onClick={toggleFullscreen}
+            aria-label={
+              isFullscreen ? "Ukončit celou obrazovku" : "Na celou obrazovku"
+            }
+            className={cn(
+              "ml-2 flex min-h-[80px] min-w-[80px] items-center justify-center rounded-2xl border-2 text-3xl transition-all",
+              darkShell
+                ? "border-[rgb(var(--canvas))]/30 text-[rgb(var(--canvas))]/80"
+                : "border-line-strong bg-canvas text-ink-muted",
+            )}
+          >
+            {isFullscreen ? "⤢" : "⛶"}
+          </button>
         </footer>
       </div>
     </ShellFrame>
@@ -1053,12 +1198,15 @@ function VoteChart({
 function OutcomeBadges({
   current,
   auto,
+  autoLabel = "Podle hlasů:",
   busy,
   dark,
   onOverride,
 }: {
   current: LiveRoundOutcome | null;
   auto: LiveRoundOutcome | null;
+  /** Popisek auto-outcome — hlasy (kvíz) vs. průběh (interaktivní kola). */
+  autoLabel?: string;
   busy: boolean;
   dark: boolean;
   onOverride: (outcome: LiveRoundOutcome) => void;
@@ -1071,7 +1219,7 @@ function OutcomeBadges({
           dark ? "text-[rgb(var(--canvas))]/60" : "text-ink-dim",
         )}
       >
-        {auto && current === auto ? "Podle hlasů:" : "Výsledek:"}
+        {auto && current === auto ? autoLabel : "Výsledek:"}
       </span>
       {OUTCOME_BUTTONS.map((btn) => {
         const active = current === btn.outcome;

@@ -103,11 +103,44 @@ const config: Config = {
           "25%": { transform: "rotate(-5deg)" },
           "75%": { transform: "rotate(5deg)" },
         },
+        /* Špatné položení: zatřese a vrátí — iterace, ne verdikt */
+        shake: {
+          "0%, 100%": { transform: "translateX(0)" },
+          "20%": { transform: "translateX(-8px) rotate(-2deg)" },
+          "40%": { transform: "translateX(8px) rotate(2deg)" },
+          "60%": { transform: "translateX(-6px)" },
+          "80%": { transform: "translateX(6px)" },
+        },
+        /* Kartička usazená v zóně, čeká na soud serveru (200–500 ms wifi) */
+        "pending-pulse": {
+          "0%, 100%": { opacity: "1" },
+          "50%": { opacity: "0.65" },
+        },
+        /* Clean flash — senior oslava dokončeného kola */
+        "board-flash": {
+          "0%": { opacity: "0" },
+          "30%": { opacity: "0.35" },
+          "100%": { opacity: "0" },
+        },
+        "confetti-fall": {
+          "0%": {
+            transform: "translateY(-10vh) rotate(0)",
+            opacity: "1",
+          },
+          "100%": {
+            transform: "translateY(105vh) rotate(720deg)",
+            opacity: "0.3",
+          },
+        },
       },
       animation: {
         bob: "bob 2.6s ease-in-out infinite",
         pop: "pop .35s ease-out both",
         wiggle: "wiggle .5s ease-in-out",
+        shake: "shake .45s ease-in-out",
+        "pending-pulse": "pending-pulse 1.1s ease-in-out infinite",
+        "board-flash": "board-flash .9s ease-out both",
+        "confetti-fall": "confetti-fall 2.6s ease-in both",
       },
     },
   },

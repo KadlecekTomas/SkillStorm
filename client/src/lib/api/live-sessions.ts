@@ -10,9 +10,50 @@ export type LiveRoundOutcome = "MOSTLY_CORRECT" | "SPLIT" | "MOSTLY_WRONG";
 
 export type RoundOptionKey = "A" | "B" | "C" | "D";
 
+export type RoundInteractionType =
+  | "QUIZ"
+  | "MATCH_PAIRS"
+  | "ORDER"
+  | "SORT_BINS";
+
 export interface LiveRoundOption {
   key: RoundOptionKey;
   text: string;
+}
+
+export interface BoardCard {
+  id: string;
+  text: string;
+}
+
+/** Board-safe obsah interaktivního kola — zamíchané, BEZ řešení. */
+export type InteractiveBoardContent =
+  | { kind: "MATCH_PAIRS"; left: BoardCard[]; right: BoardCard[] }
+  | {
+      kind: "ORDER";
+      items: BoardCard[];
+      labels?: { start?: string; end?: string };
+    }
+  | {
+      kind: "SORT_BINS";
+      bins: Array<{ id: string; label: string }>;
+      cards: BoardCard[];
+    };
+
+/** Řešení — server ho posílá až po dokončení/revealu kola. */
+export type InteractiveSolution =
+  | { pairs: Record<string, string> }
+  | { order: string[] }
+  | { assignment: Record<string, string> };
+
+/**
+ * Anonymní agregát průběhu interaktivního kola: počty pokusů + správně
+ * usazené položky (obnova plochy po refreshi). Bez vazby na osoby.
+ */
+export interface RoundAttemptStats {
+  wrong: number;
+  placed: Record<string, string>;
+  checks: number;
 }
 
 /** Anonymní agregáty hlasů z tabule — {"A": 14, "B": 6}, bez vazby na osoby. */
@@ -27,7 +68,13 @@ export interface LiveRound {
   id: string;
   order: number;
   questionText: string;
+  interactionType: RoundInteractionType;
+  /** QUIZ only — u interaktivních kol prázdné pole. */
   options: LiveRoundOption[];
+  /** Interaktivní kola — board-safe obsah; u QUIZ null. */
+  content: InteractiveBoardContent | null;
+  /** Interaktivní kola — agregát průběhu (obnova plochy po refreshi). */
+  attemptStats: RoundAttemptStats | null;
   outcome: LiveRoundOutcome | null;
   /** null = kolo bez hlasování (skip cesta). */
   voteCounts: RoundVoteCounts | null;
@@ -35,6 +82,8 @@ export interface LiveRound {
   revealedAt: string | null;
   completedAt: string | null;
   correctKey?: RoundOptionKey;
+  /** Jen po dokončení/revealu interaktivního kola. */
+  solution?: InteractiveSolution;
 }
 
 export interface LiveSessionProjection {
@@ -114,15 +163,59 @@ export const castRoundVote = (
     delta,
   });
 
+export interface AttemptResult {
+  roundId: string;
+  interactionType: RoundInteractionType;
+  wrong: number;
+  checks: number;
+  placed: Record<string, string>;
+  placedCount: number;
+  itemCount: number;
+  solved: boolean;
+  outcome: LiveRoundOutcome | null;
+  /** PLACE: soud serveru pro tenhle tah. */
+  correct?: boolean;
+  /** CHECK (ORDER): správnost po pozicích. */
+  mask?: boolean[];
+  justCompleted?: boolean;
+  alreadyCompleted?: boolean;
+  /** Jen když je kolo dokončené. */
+  solution?: InteractiveSolution;
+}
+
+/**
+ * Jeden tah na tabuli — server soudí každé položení (řešení nikdy není na
+ * klientu před dokončením). Volá se bez čekání na předchozí tah: každá
+ * kartička má vlastní pending stav, děti u tabule nečekají.
+ */
+export const submitRoundAttempt = (
+  sessionId: string,
+  roundId: string,
+  attempt:
+    | { kind: "PLACE"; itemId: string; targetId: string }
+    | { kind: "CHECK"; arrangement: string[] },
+): Promise<AttemptResult> =>
+  httpClient.post(
+    `/live-sessions/${sessionId}/rounds/${roundId}/attempts`,
+    attempt,
+  );
+
+/**
+ * QUIZ: vrací correctKey (+ hlasy). Interaktivní kola: „Ukázat řešení" —
+ * vrací solution + attemptStats (učitelská pojistka, když se třída zasekne).
+ */
 export const revealRound = (
   sessionId: string,
   roundId: string,
 ): Promise<{
   roundId: string;
-  correctKey: RoundOptionKey;
-  voteCounts: RoundVoteCounts | null;
-  totalVotes: number;
-  /** Předvyplněný soud z hlasů (≥2/3, ≤1/3, jinak SPLIT) — null bez hlasů. */
+  correctKey?: RoundOptionKey;
+  voteCounts?: RoundVoteCounts | null;
+  totalVotes?: number;
+  interactionType?: RoundInteractionType;
+  solution?: InteractiveSolution;
+  attemptStats?: RoundAttemptStats;
+  /** Předvyplněný soud z hlasů/pokusů — null bez aktivity. */
   autoOutcome: LiveRoundOutcome | null;
   outcome: LiveRoundOutcome | null;
 }> => httpClient.post(`/live-sessions/${sessionId}/rounds/${roundId}/reveal`);

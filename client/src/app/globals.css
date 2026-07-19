@@ -77,7 +77,11 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .animate-bob,
   .animate-pop,
-  .animate-wiggle {
+  .animate-wiggle,
+  .animate-shake,
+  .animate-pending-pulse,
+  .animate-board-flash,
+  .animate-confetti-fall {
     animation: none;
   }
 }
