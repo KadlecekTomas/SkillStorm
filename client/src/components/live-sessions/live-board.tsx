@@ -8,14 +8,19 @@ import { ErrorAlert } from "@/components/ui/alert";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { fromServerLiveAgeMode, type LiveAgeMode } from "@/config/live-age-mode";
 import {
+  castRoundVote,
   finishLiveSession,
   getLiveSession,
+  openRoundVoting,
   revealRound,
   setRoundOutcome,
+  type LiveRound,
+  type LiveRoundOption,
   type LiveRoundOutcome,
   type LiveSessionFinishResult,
   type LiveSessionProjection,
   type RoundOptionKey,
+  type RoundVoteCounts,
 } from "@/lib/api/live-sessions";
 import {
   getCampaignProgress,
@@ -80,6 +85,18 @@ const OUTCOME_BUTTONS: Array<{
   },
 ];
 
+/** Mikro-hint prvního použití hlasování — localStorage, per zařízení. */
+const VOTING_HINT_KEY = "skillstorm.live-voting-hint-seen";
+/** Debounce proti dvojkliku dítěte — druhý tap téže dlaždice do 300 ms se zahodí. */
+const VOTE_TAP_DEBOUNCE_MS = 300;
+/** Long-press na dlaždici = −1 (oprava omylem přičteného hlasu). */
+const VOTE_LONG_PRESS_MS = 550;
+
+function sumVotes(counts: RoundVoteCounts | null | undefined): number {
+  if (!counts) return 0;
+  return Object.values(counts).reduce((sum, n) => sum + (n ?? 0), 0);
+}
+
 interface LiveBoardProps {
   sessionId: string;
 }
@@ -97,6 +114,14 @@ export function LiveBoard({ sessionId }: LiveBoardProps): JSX.Element {
   const [finish, setFinish] = useState<LiveSessionFinishResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Hlasování — anonymní agregáty, čistě per kolo (id → počty)
+  const [votingOpen, setVotingOpen] = useState<Record<string, boolean>>({});
+  const [votes, setVotes] = useState<Record<string, RoundVoteCounts>>({});
+  const [autoOutcomes, setAutoOutcomes] = useState<
+    Record<string, LiveRoundOutcome | null>
+  >({});
+  const [hintVisible, setHintVisible] = useState(false);
+  const lastTapAtRef = useRef<Record<string, number>>({});
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // Kampaňová vrstva — čistě prezentační meziherní stav nad enginem session.
@@ -113,10 +138,17 @@ export function LiveBoard({ sessionId }: LiveBoardProps): JSX.Element {
         const firstOpen = data.rounds.findIndex((r) => !r.completedAt);
         setRoundIndex(firstOpen === -1 ? data.rounds.length - 1 : firstOpen);
         const known: Record<string, RoundOptionKey> = {};
+        const openVoting: Record<string, boolean> = {};
+        const knownVotes: Record<string, RoundVoteCounts> = {};
         for (const r of data.rounds) {
           if (r.correctKey) known[r.id] = r.correctKey;
+          // refresh uprostřed hlasování: obnov fázi VOTING i počty
+          if (r.votingStartedAt && !r.revealedAt) openVoting[r.id] = true;
+          if (r.voteCounts) knownVotes[r.id] = r.voteCounts;
         }
         setRevealedKeys(known);
+        setVotingOpen(openVoting);
+        setVotes(knownVotes);
       })
       .catch((err) =>
         setError(
@@ -152,6 +184,11 @@ export function LiveBoard({ sessionId }: LiveBoardProps): JSX.Element {
   const round = rounds[roundIndex] ?? null;
   const revealed = round ? (revealedKeys[round.id] ?? null) : null;
   const isLastRound = roundIndex >= rounds.length - 1;
+  const isVotingOpen = round ? !revealed && (votingOpen[round.id] ?? false) : false;
+  const roundVotes = round ? (votes[round.id] ?? null) : null;
+  const totalVotes = sumVotes(roundVotes);
+  /** Kolo prošlo hlasováním → reveal ukazuje graf místo dlaždic. */
+  const hadVotes = revealed !== null && totalVotes > 0;
 
   const streak = useMemo(() => {
     let count = 0;
@@ -180,6 +217,63 @@ export function LiveBoard({ sessionId }: LiveBoardProps): JSX.Element {
     };
   }, [round?.id, revealed, countdownSec, finish]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const handleOpenVoting = useCallback(async () => {
+    if (!round || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await openRoundVoting(sessionId, round.id);
+      setVotingOpen((prev) => ({ ...prev, [round.id]: true }));
+      setVotes((prev) => ({ ...prev, [round.id]: res.voteCounts }));
+      if (!window.localStorage.getItem(VOTING_HINT_KEY)) {
+        setHintVisible(true);
+      }
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Hlasování se nepodařilo otevřít.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }, [round, busy, sessionId]);
+
+  const dismissHint = useCallback(() => {
+    window.localStorage.setItem(VOTING_HINT_KEY, "1");
+    setHintVisible(false);
+  }, []);
+
+  const handleVote = useCallback(
+    async (key: RoundOptionKey, delta: 1 | -1) => {
+      if (!round) return;
+      // debounce dvojkliku dítěte — jen pro +1, long-press oprava je záměrná
+      const now = Date.now();
+      if (delta === 1) {
+        const last = lastTapAtRef.current[key] ?? 0;
+        if (now - last < VOTE_TAP_DEBOUNCE_MS) return;
+        lastTapAtRef.current[key] = now;
+      }
+      const roundId = round.id;
+      // optimistický zápis (pop animace nesmí čekat na síť)…
+      setVotes((prev) => {
+        const current = prev[roundId] ?? {};
+        const next = Math.max(0, (current[key] ?? 0) + delta);
+        return { ...prev, [roundId]: { ...current, [key]: next } };
+      });
+      try {
+        // …server je ale autorita — odpověď přepíše lokální počty
+        const res = await castRoundVote(sessionId, roundId, key, delta);
+        setVotes((prev) => ({ ...prev, [roundId]: res.voteCounts }));
+      } catch {
+        setVotes((prev) => {
+          const current = prev[roundId] ?? {};
+          const next = Math.max(0, (current[key] ?? 0) - delta);
+          return { ...prev, [roundId]: { ...current, [key]: next } };
+        });
+      }
+    },
+    [round, sessionId],
+  );
+
   const handleReveal = useCallback(async () => {
     if (!round || busy) return;
     setBusy(true);
@@ -187,6 +281,28 @@ export function LiveBoard({ sessionId }: LiveBoardProps): JSX.Element {
     try {
       const res = await revealRound(sessionId, round.id);
       setRevealedKeys((prev) => ({ ...prev, [round.id]: res.correctKey }));
+      setVotingOpen((prev) => ({ ...prev, [round.id]: false }));
+      if (res.voteCounts) {
+        setVotes((prev) => ({ ...prev, [round.id]: res.voteCounts! }));
+      }
+      setAutoOutcomes((prev) => ({ ...prev, [round.id]: res.autoOutcome }));
+      setHintVisible(false);
+      // auto-outcome server rovnou persistoval → kolo je odehrané
+      if (res.outcome) {
+        const outcome = res.outcome;
+        setProjection((prev) =>
+          prev
+            ? {
+                ...prev,
+                rounds: prev.rounds.map((r) =>
+                  r.id === round.id
+                    ? { ...r, outcome, completedAt: new Date().toISOString() }
+                    : r,
+                ),
+              }
+            : prev,
+        );
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Odhalení se nepovedlo.");
     } finally {
@@ -227,6 +343,41 @@ export function LiveBoard({ sessionId }: LiveBoardProps): JSX.Element {
     },
     [round, busy, sessionId, isLastRound],
   );
+
+  /** Přepis auto-outcome jedním klepnutím — učitelovo slovo je finální. Bez posunu kola. */
+  const handleOverrideOutcome = useCallback(
+    async (outcome: LiveRoundOutcome) => {
+      if (!round || busy || round.outcome === outcome) return;
+      setBusy(true);
+      setError(null);
+      try {
+        await setRoundOutcome(sessionId, round.id, outcome);
+        setProjection((prev) =>
+          prev
+            ? {
+                ...prev,
+                rounds: prev.rounds.map((r) =>
+                  r.id === round.id ? { ...r, outcome } : r,
+                ),
+              }
+            : prev,
+        );
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "Výsledek se nepodařilo uložit.",
+        );
+      } finally {
+        setBusy(false);
+      }
+    },
+    [round, busy, sessionId],
+  );
+
+  const handleNextRound = useCallback(() => {
+    if (!round) return;
+    setLastOutcome(round.outcome);
+    setRoundIndex((i) => Math.min(i + 1, rounds.length - 1));
+  }, [round, rounds.length]);
 
   const handleFinish = useCallback(async () => {
     if (busy) return;
@@ -408,6 +559,51 @@ export function LiveBoard({ sessionId }: LiveBoardProps): JSX.Element {
               {round.questionText}
             </h1>
 
+            {isVotingOpen && roundVotes ? (
+              <>
+                {hintVisible ? (
+                  <div
+                    data-testid="live-voting-hint"
+                    className={cn(
+                      "mx-auto flex items-center gap-4 rounded-2xl border-2 border-line px-6 py-3 text-lg font-semibold",
+                      darkShell
+                        ? "border-[rgb(var(--canvas))]/25 text-[rgb(var(--canvas))]/80"
+                        : "bg-canvas text-ink-muted",
+                    )}
+                  >
+                    <span>
+                      Hlasy jsou anonymní a nemají vliv na odměny — jen pro
+                      váš přehled.
+                    </span>
+                    <button
+                      type="button"
+                      data-testid="live-voting-hint-dismiss"
+                      onClick={dismissHint}
+                      className="rounded-xl bg-accent px-4 py-1 font-bold text-white"
+                    >
+                      Rozumím
+                    </button>
+                  </div>
+                ) : null}
+                <VotingTiles
+                  round={round}
+                  counts={roundVotes}
+                  totalVotes={totalVotes}
+                  ageMode={ageMode}
+                  dark={darkShell}
+                  onVote={handleVote}
+                />
+              </>
+            ) : revealed && hadVotes ? (
+              <VoteChart
+                round={round}
+                counts={roundVotes ?? {}}
+                totalVotes={totalVotes}
+                correctKey={revealed}
+                ageMode={ageMode}
+                dark={darkShell}
+              />
+            ) : (
             <div
               className={cn(
                 "grid gap-[1.5vw]",
@@ -471,6 +667,7 @@ export function LiveBoard({ sessionId }: LiveBoardProps): JSX.Element {
                 );
               })}
             </div>
+            )}
           </main>
         ) : null}
 
@@ -491,7 +688,34 @@ export function LiveBoard({ sessionId }: LiveBoardProps): JSX.Element {
           {error ? (
             <span className="text-sm font-semibold text-danger">{error}</span>
           ) : null}
-          {round && !revealed ? (
+          {round && !revealed && !isVotingOpen ? (
+            <>
+              <button
+                type="button"
+                data-testid="live-vote-open"
+                disabled={busy}
+                onClick={() => void handleOpenVoting()}
+                className="rounded-2xl bg-accent px-10 py-4 text-xl font-extrabold text-white shadow-tactile [--tactile-shadow:rgb(var(--accent-deep))] transition-all active:translate-y-[2px] active:shadow-tactile-pressed disabled:opacity-60"
+              >
+                🗳️ Hlasujeme!
+              </button>
+              <button
+                type="button"
+                data-testid="live-vote-skip"
+                disabled={busy}
+                onClick={() => void handleReveal()}
+                className={cn(
+                  "rounded-2xl border-2 px-8 py-4 text-lg font-bold transition-all disabled:opacity-60",
+                  darkShell
+                    ? "border-[rgb(var(--canvas))]/30 text-[rgb(var(--canvas))]/80"
+                    : "border-line-strong bg-canvas text-ink-muted",
+                )}
+              >
+                Přeskočit hlasování
+              </button>
+            </>
+          ) : null}
+          {round && isVotingOpen ? (
             <button
               type="button"
               data-testid="live-reveal"
@@ -500,6 +724,26 @@ export function LiveBoard({ sessionId }: LiveBoardProps): JSX.Element {
               className="rounded-2xl bg-xp px-10 py-4 text-xl font-extrabold text-white shadow-tactile [--tactile-shadow:rgb(var(--xp)/0.5)] transition-all active:translate-y-[2px] active:shadow-tactile-pressed disabled:opacity-60"
             >
               Odhalit odpověď
+            </button>
+          ) : null}
+          {round && revealed && round.completedAt && hadVotes ? (
+            <OutcomeBadges
+              current={round.outcome}
+              auto={autoOutcomes[round.id] ?? null}
+              busy={busy}
+              dark={darkShell}
+              onOverride={handleOverrideOutcome}
+            />
+          ) : null}
+          {round && round.completedAt && hadVotes && !isLastRound ? (
+            <button
+              type="button"
+              data-testid="live-next-round"
+              disabled={busy}
+              onClick={handleNextRound}
+              className="rounded-2xl bg-xp px-10 py-4 text-xl font-extrabold text-white shadow-tactile [--tactile-shadow:rgb(var(--xp)/0.5)] transition-all active:translate-y-[2px] active:shadow-tactile-pressed disabled:opacity-60"
+            >
+              Další kolo →
             </button>
           ) : null}
           {round && revealed && !round.completedAt ? (
@@ -556,6 +800,305 @@ function ShellFrame({
       )}
     >
       {children}
+    </div>
+  );
+}
+
+/**
+ * Fáze VOTING — dotyková tabule. Dlaždice přes celou plochu (touch target
+ * mnohem víc než 120px), tap = +1 s pop animací čísla, long-press = −1
+ * (oprava omylu). Žádný hover pattern — děti hladí sklo, ne myš.
+ */
+function VotingTiles({
+  round,
+  counts,
+  totalVotes,
+  ageMode,
+  dark,
+  onVote,
+}: {
+  round: LiveRound;
+  counts: RoundVoteCounts;
+  totalVotes: number;
+  ageMode: LiveAgeMode;
+  dark: boolean;
+  onVote: (key: RoundOptionKey, delta: 1 | -1) => void;
+}): JSX.Element {
+  return (
+    <div data-testid="live-voting" className="flex flex-1 flex-col gap-[2vh]">
+      <div className="grid flex-1 grid-cols-2 gap-[1.5vw]">
+        {round.options.map((option) => (
+          <VoteTile
+            key={`${round.id}-${option.key}`}
+            option={option}
+            count={counts[option.key] ?? 0}
+            ageMode={ageMode}
+            dark={dark}
+            onVote={onVote}
+          />
+        ))}
+      </div>
+      <p
+        data-testid="live-vote-total"
+        className={cn(
+          "text-center text-xl font-bold",
+          dark ? "text-[rgb(var(--canvas))]/60" : "text-ink-muted",
+        )}
+      >
+        Hlasů: <span className="tabular-nums">{totalVotes}</span>
+      </p>
+    </div>
+  );
+}
+
+function VoteTile({
+  option,
+  count,
+  ageMode,
+  dark,
+  onVote,
+}: {
+  option: LiveRoundOption;
+  count: number;
+  ageMode: LiveAgeMode;
+  dark: boolean;
+  onVote: (key: RoundOptionKey, delta: 1 | -1) => void;
+}): JSX.Element {
+  const young = ageMode === "young";
+  const senior = ageMode === "senior";
+  const style = OPTION_STYLE[option.key];
+  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressFired = useRef(false);
+
+  const clearTimer = () => {
+    if (pressTimer.current) {
+      clearTimeout(pressTimer.current);
+      pressTimer.current = null;
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      data-testid={`live-vote-tile-${option.key}`}
+      onContextMenu={(e) => e.preventDefault()}
+      onPointerDown={() => {
+        longPressFired.current = false;
+        clearTimer();
+        pressTimer.current = setTimeout(() => {
+          longPressFired.current = true;
+          onVote(option.key, -1);
+        }, VOTE_LONG_PRESS_MS);
+      }}
+      onPointerUp={() => {
+        clearTimer();
+        if (!longPressFired.current) onVote(option.key, 1);
+      }}
+      onPointerLeave={clearTimer}
+      onPointerCancel={clearTimer}
+      className={cn(
+        "flex min-h-[120px] touch-manipulation select-none flex-col items-center justify-center gap-[1vh] rounded-3xl border-4 px-[2vw] py-[3vh] transition-transform active:scale-[0.98]",
+        senior
+          ? dark
+            ? "border-[rgb(var(--canvas))]/25 bg-[rgb(var(--canvas))]/5"
+            : "border-line-strong bg-canvas"
+          : young
+            ? cn(style.bar, "border-transparent text-white")
+            : cn(
+                style.border,
+                dark ? "bg-[rgb(var(--canvas))]/5" : "bg-canvas shadow-tactile [--tactile-shadow:rgb(var(--line-strong))]",
+              ),
+      )}
+    >
+      <span className="flex items-center gap-[1vw]">
+        {senior ? (
+          <span className="text-[clamp(1.25rem,2vw,1.75rem)] font-bold opacity-60">
+            {option.key}
+          </span>
+        ) : (
+          <span
+            className={cn(
+              "flex items-center justify-center rounded-2xl font-extrabold",
+              young
+                ? "h-[8vh] w-[8vh] bg-white/25 text-[clamp(2rem,4vw,3.5rem)]"
+                : cn(style.bar, "h-[6vh] w-[6vh] text-white text-[clamp(1.25rem,2.5vw,2rem)]"),
+            )}
+            aria-hidden
+          >
+            {young ? style.icon : option.key}
+          </span>
+        )}
+        <span
+          className={cn(
+            "font-extrabold",
+            young
+              ? "text-[clamp(1.75rem,3.2vw,2.8rem)]"
+              : "text-[clamp(1.3rem,2.4vw,2rem)]",
+          )}
+        >
+          {option.text}
+        </span>
+      </span>
+      {/* key={count}: remount čísla → pop animace při každém hlasu */}
+      <span
+        key={count}
+        data-testid={`live-vote-count-${option.key}`}
+        className={cn(
+          "animate-pop tabular-nums font-extrabold",
+          senior
+            ? "font-mono text-[clamp(2.5rem,5vw,4.5rem)]"
+            : "text-[clamp(3rem,7vw,6rem)]",
+        )}
+      >
+        {count}
+      </span>
+    </button>
+  );
+}
+
+/**
+ * Reveal kola s hlasováním — sloupcový graf. Správná možnost se obarví
+ * AŽ TADY (před revealem graf správnost nezná — klíč nebyl na klientu).
+ */
+function VoteChart({
+  round,
+  counts,
+  totalVotes,
+  correctKey,
+  ageMode,
+  dark,
+}: {
+  round: LiveRound;
+  counts: RoundVoteCounts;
+  totalVotes: number;
+  correctKey: RoundOptionKey;
+  ageMode: LiveAgeMode;
+  dark: boolean;
+}): JSX.Element {
+  const senior = ageMode === "senior";
+  const [grown, setGrown] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setGrown(true), 60);
+    return () => clearTimeout(t);
+  }, []);
+  const max = Math.max(1, ...round.options.map((o) => counts[o.key] ?? 0));
+
+  return (
+    <div data-testid="live-vote-chart" className="flex flex-col gap-[2vh]">
+      <div className="flex h-[36vh] items-end justify-center gap-[3vw]">
+        {round.options.map((option) => {
+          const value = counts[option.key] ?? 0;
+          const isCorrect = option.key === correctKey;
+          const style = OPTION_STYLE[option.key];
+          return (
+            <div
+              key={`${round.id}-${option.key}`}
+              data-testid={`live-vote-bar-${option.key}`}
+              data-correct={isCorrect || undefined}
+              className={cn(
+                "flex h-full w-[14vw] flex-col items-center justify-end gap-2 transition-opacity duration-500",
+                !isCorrect && "opacity-40 grayscale",
+              )}
+            >
+              <span
+                className={cn(
+                  "tabular-nums font-extrabold",
+                  senior
+                    ? "font-mono text-[clamp(1.75rem,3vw,2.75rem)]"
+                    : "text-[clamp(2rem,3.5vw,3rem)]",
+                )}
+              >
+                {value}
+              </span>
+              <div
+                className={cn(
+                  "w-full rounded-t-2xl transition-[height] duration-700 ease-out",
+                  style.bar,
+                  isCorrect && "ring-4 ring-accent",
+                )}
+                style={{
+                  height: grown ? `${Math.max(4, (value / max) * 100)}%` : "4%",
+                }}
+              />
+              <span
+                className={cn(
+                  "flex items-center gap-2 text-[clamp(1rem,1.6vw,1.4rem)] font-bold",
+                  dark ? "text-[rgb(var(--canvas))]/80" : "text-ink",
+                )}
+              >
+                {option.key} · {option.text}
+                {isCorrect ? <span aria-label="správná odpověď">✅</span> : null}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      <p
+        data-testid="live-vote-total"
+        className={cn(
+          "text-center text-xl font-bold",
+          dark ? "text-[rgb(var(--canvas))]/60" : "text-ink-muted",
+        )}
+      >
+        Celkem hlasů: <span className="tabular-nums">{totalVotes}</span>
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Outcome badge po revealu s hlasy — předvyplněný z auto-výpočtu, učitel
+ * může jedním klepnutím přepsat (jeho slovo je finální).
+ */
+function OutcomeBadges({
+  current,
+  auto,
+  busy,
+  dark,
+  onOverride,
+}: {
+  current: LiveRoundOutcome | null;
+  auto: LiveRoundOutcome | null;
+  busy: boolean;
+  dark: boolean;
+  onOverride: (outcome: LiveRoundOutcome) => void;
+}): JSX.Element {
+  return (
+    <div className="flex flex-wrap items-center justify-center gap-2">
+      <span
+        className={cn(
+          "mr-1 text-sm font-semibold",
+          dark ? "text-[rgb(var(--canvas))]/60" : "text-ink-dim",
+        )}
+      >
+        {auto && current === auto ? "Podle hlasů:" : "Výsledek:"}
+      </span>
+      {OUTCOME_BUTTONS.map((btn) => {
+        const active = current === btn.outcome;
+        return (
+          <button
+            key={btn.outcome}
+            type="button"
+            data-testid={`live-outcome-badge-${btn.outcome}`}
+            data-active={active || undefined}
+            disabled={busy}
+            onClick={() => onOverride(btn.outcome)}
+            className={cn(
+              "rounded-2xl px-4 py-2 text-base font-extrabold transition-all disabled:opacity-60",
+              active
+                ? cn(btn.className, "shadow-tactile")
+                : cn(
+                    "border-2 opacity-70",
+                    dark
+                      ? "border-[rgb(var(--canvas))]/30 text-[rgb(var(--canvas))]/80"
+                      : "border-line-strong bg-canvas text-ink-muted",
+                  ),
+            )}
+          >
+            {btn.emoji} {btn.label}
+          </button>
+        );
+      })}
     </div>
   );
 }

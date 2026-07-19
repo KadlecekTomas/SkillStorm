@@ -19,6 +19,7 @@ import { OrgContextService } from '@/common/org-context/org-context.service';
 import { LiveSessionsService } from './live-sessions.service';
 import { CreateLiveSessionDto } from './dto/create-live-session.dto';
 import { RoundOutcomeDto } from './dto/round-outcome.dto';
+import { CastVoteDto } from './dto/cast-vote.dto';
 
 /**
  * Bleskovky (režim B / BOARD_ONLY). Všechny endpointy jsou TEACHER+
@@ -80,6 +81,33 @@ export class LiveSessionsController {
   ) {
     const ctx = await this.orgContext.get(req);
     return ok(this.service.getProjection(id, ctx));
+  }
+
+  @Post(':id/rounds/:roundId/voting')
+  @Permission(PermissionKey.CREATE_TEST)
+  @ApiOperation({ summary: 'Otevřít hlasování kola (volitelná fáze VOTING)' })
+  async openVoting(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Param('roundId', new ParseUUIDPipe()) roundId: string,
+    @Req() req: RequestWithUser,
+  ) {
+    const ctx = await this.orgContext.get(req);
+    return ok(this.service.openVoting(id, roundId, ctx));
+  }
+
+  @Post(':id/rounds/:roundId/votes')
+  @Permission(PermissionKey.CREATE_TEST)
+  @ApiOperation({
+    summary: 'Hlas z tabule (anonymní agregát; jen ve fázi VOTING)',
+  })
+  async castVote(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Param('roundId', new ParseUUIDPipe()) roundId: string,
+    @Body() dto: CastVoteDto,
+    @Req() req: RequestWithUser,
+  ) {
+    const ctx = await this.orgContext.get(req);
+    return ok(this.service.castVote(id, roundId, dto.key, dto.delta ?? 1, ctx));
   }
 
   @Post(':id/rounds/:roundId/reveal')

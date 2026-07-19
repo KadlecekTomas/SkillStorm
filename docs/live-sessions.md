@@ -15,7 +15,10 @@ neimplementovaný**; tento dokument popisuje, kde jsou pro něj švy.
   `countdownSec`.
 - `LiveSessionRound` — jedno kolo se **snapshotem otázky** (text, možnosti
   A–D, správný klíč). Pozdější editace zdrojového testu běžící ani ukončenou
-  bleskovku neovlivní. `outcome` je učitelův soud kola (3 tlačítka).
+  bleskovku neovlivní. `outcome` je soud kola — buď ruční (3 tlačítka), nebo
+  předvyplněný z hlasování (viz níže); učitelovo slovo je vždy finální.
+  `voteCounts` (`Json?`) jsou **anonymní agregáty hlasů z dotykové tabule**
+  (`{"A": 14, "B": 6}`), `votingStartedAt` označuje otevřenou fázi VOTING.
 - `LiveSessionParticipant` — **navrženo pro režim A, v režimu B se nikdy
   nezapisuje** (viz GDPR níže).
 - `ClassPartak` + `ClassPartakXpEvent` — kolektivní parťák třídy.
@@ -39,6 +42,28 @@ DRAFT ──POST :id/start──▶ RUNNING ──POST :id/finish──▶ FINIS
   publish testu) drží idempotenci při souběhu.
 - `finish` atomicky přepne stav a připíše XP; druhé volání → 409.
 
+### Fáze kola (hlasování je volitelné)
+
+```
+otázka ──[Hlasujeme!]──▶ VOTING ──[Odhalit]──▶ REVEAL (graf + auto-outcome)
+   └──[Přeskočit hlasování]──▶ REVEAL (ruční outcome, 3 tlačítka)
+```
+
+- `POST :id/rounds/:roundId/voting` otevře fázi VOTING (idempotentní; po
+  revealu → 409 `ROUND_ALREADY_REVEALED`).
+- `POST :id/rounds/:roundId/votes` (`{key, delta: 1 | -1}`) inkrementuje
+  agregát — atomicky v SQL, klampované na 0. Přijímá se **pouze** ve fázi
+  VOTING, jinak 409 `ROUND_NOT_VOTING`. Odpověď nikdy neobsahuje správný klíč.
+- `reveal` u kola s hlasy spočítá **auto-outcome**: podíl hlasů pro správnou
+  odpověď ≥ 2/3 → `MOSTLY_CORRECT`, ≤ 1/3 → `MOSTLY_WRONG`, jinak `SPLIT`
+  (prahy = konstanty `VOTE_CORRECT_MIN_SHARE` / `VOTE_WRONG_MAX_SHARE`,
+  celočíselné srovnání — žádné floaty). Auto-outcome se rovnou persistuje
+  (kolo je odehrané); učitel ho může jedním klepnutím přepsat přes stávající
+  `outcome` endpoint — jeho slovo je finální.
+- **Hlasy nikdy nevstupují do XP, kampaní ani advance** — `finish` počítá jen
+  `completedAt`-kola, stejně jako dřív (kryto e2e testem: opačné poměry hlasů
+  → identická XP delta).
+
 ## Bezpečnostní kontrakt projekce (platí i pro režim A)
 
 **`correctKeySnapshot` nikdy neopouští server před revealem.** Projekce běží
@@ -57,8 +82,12 @@ obsluhuje přihlášený učitel; žádná veřejná URL v režimu B neexistuje.
 ## GDPR: proč režim B nezapisuje nic o dětech
 
 Režim B je **anonymní na úrovni třídy** — záměr, ne nedodělek. Ukládá se jen
-agregovaný soud učitele za kolo (`MOSTLY_CORRECT | SPLIT | MOSTLY_WRONG`),
-žádné per-žák odpovědi, žádná identifikace dětí. Tabulka
+agregovaný soud za kolo (`MOSTLY_CORRECT | SPLIT | MOSTLY_WRONG`) a volitelné
+**anonymní agregáty hlasů** (`voteCounts`, `{"A": 14, "B": 6}`) — děti chodí
+hlasovat k jedné sdílené tabuli, takže neexistuje žádná cesta, jak hlas
+spojit s osobou, a nic takového se ani neukládá. Hlasy slouží výhradně
+učitelovu přehledu; do XP ani odměn nevstupují. Žádné per-žák odpovědi,
+žádná identifikace dětí. Tabulka
 `LiveSessionParticipant` existuje jen jako schéma pro režim A; v režimu B do
 ní nevede žádná cesta kódu. Až režim A vznikne, `nickname` je přezdívka (ne
 jméno) a `membershipId` se vyplní jen u autentizovaného joinu.

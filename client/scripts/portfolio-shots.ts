@@ -91,6 +91,46 @@ async function campaignProgressIdFor(page: Page, classLabel: string) {
   return id;
 }
 
+/** Otevře hlasování a zavře mikro-hint (čistý hero záběr bez banneru). */
+async function openVotingClean(page: Page) {
+  await page.getByTestId('live-vote-open').click();
+  await expect(page.getByTestId('live-voting')).toBeVisible();
+  await page
+    .getByTestId('live-voting-hint-dismiss')
+    .click({ timeout: 2000 })
+    .catch(() => {});
+  await settle(page, 400);
+}
+
+/**
+ * Nakliká hlasy na dlaždice. Tapy na tutéž dlaždici oddělí pauzou delší než
+ * klientský debounce (300 ms); mezi různými dlaždicemi stačí krátká.
+ */
+async function castVotesUi(
+  page: Page,
+  plan: Partial<Record<'A' | 'B' | 'C' | 'D', number>>,
+) {
+  const remaining = { ...plan };
+  // kolo nemusí mít všechny klíče (TRUE_FALSE = A/B, MC klidně 3 možnosti)
+  for (const key of ['A', 'B', 'C', 'D'] as const) {
+    if ((remaining[key] ?? 0) > 0) {
+      const exists = await page.getByTestId(`live-vote-tile-${key}`).count();
+      if (!exists) delete remaining[key];
+    }
+  }
+  while (Object.values(remaining).some((n) => (n ?? 0) > 0)) {
+    for (const key of ['A', 'B', 'C', 'D'] as const) {
+      if ((remaining[key] ?? 0) <= 0) continue;
+      // 340 ms mezi VŠEMI tapy — při 2 zbývajících dlaždicích by kratší
+      // round-robin rozestup spadl pod 300ms debounce téže dlaždice
+      await page.waitForTimeout(340);
+      await page.getByTestId(`live-vote-tile-${key}`).click();
+      remaining[key] = (remaining[key] ?? 0) - 1;
+    }
+  }
+  await settle(page, 500);
+}
+
 /** Zadání → detail prvního NEodevzdaného → „Spustit test" → focus stránka. */
 async function openFirstAssignmentTest(page: Page): Promise<boolean> {
   await page.goto('/app/assignments', { waitUntil: 'domcontentloaded' });
@@ -204,26 +244,50 @@ test('portfolio — učitel', async ({ browser }) => {
       await shot(page, '10-archiv-nastenka-fragment', { fullPage: true });
     }
 
-    // Bleskovka boardy — young / middle / senior (session zůstává RUNNING)
+    // Bleskovka boardy — young / middle / senior (session zůstává RUNNING).
+    // Reveal jde přes „Přeskočit hlasování" — klasická cesta bez hlasů.
     await startBleskovka(page, 'Vyjmenovaná slova po B a L', '2.B', 'young');
     await page
       .getByTestId('expedition-intro-start')
       .click({ timeout: 3000 })
       .catch(() => {});
     await settle(page, 800);
-    await page.getByTestId('live-reveal').click();
+    await page.getByTestId('live-vote-skip').click();
     await settle(page, 900);
     await shot(page, '06-bleskovka-young');
 
     await startBleskovka(page, 'Vyjmenovaná slova po B a L', '5.A', 'middle');
-    await page.getByTestId('live-reveal').click();
+    await page.getByTestId('live-vote-skip').click();
     await settle(page, 900);
     await shot(page, '07-bleskovka-middle');
 
     await startBleskovka(page, 'Literární moderna', 'G2', 'senior');
-    await page.getByTestId('live-reveal').click();
+    await page.getByTestId('live-vote-skip').click();
     await settle(page, 900);
     await shot(page, '08-bleskovka-senior');
+
+    // HLASOVÁNÍ NA TABULI — hero záběry „děti hlasují na tabuli".
+    // Young: barevné dlaždice s ikonami a velkými čísly, plná třída hlasů.
+    await startBleskovka(page, 'Vyjmenovaná slova po B a L', '2.B', 'young');
+    await page
+      .getByTestId('expedition-intro-start')
+      .click({ timeout: 3000 })
+      .catch(() => {});
+    await settle(page, 800);
+    await openVotingClean(page);
+    await castVotesUi(page, { A: 9, B: 5, C: 4 });
+    await shot(page, '15-bleskovka-hlasovani-young');
+
+    // …a reveal s grafem hlasů (správná odpověď zvýrazněná až teď)
+    await page.getByTestId('live-reveal').click();
+    await settle(page, 1400); // animovaný nárůst sloupců
+    await shot(page, '16-bleskovka-hlasovani-graf');
+
+    // Senior: čistý tally vzhled, monospace čísla
+    await startBleskovka(page, 'Literární moderna', 'G2', 'senior');
+    await openVotingClean(page);
+    await castVotesUi(page, { A: 7, B: 11, C: 5 });
+    await shot(page, '17-bleskovka-hlasovani-senior');
 
     await context.close();
   }
@@ -276,6 +340,7 @@ const FRAMED: Array<{ file: string; url: string }> = [
   { file: '01-student-dashboard-partak', url: 'skillstorm.app/app' },
   { file: '04-teacher-dashboard', url: 'skillstorm.app/app' },
   { file: '08-bleskovka-senior', url: 'skillstorm.app/app/live' },
+  { file: '15-bleskovka-hlasovani-young', url: 'skillstorm.app/app/live' },
   { file: '09-vyprava-mapa-samolepky', url: 'skillstorm.app/app/campaigns' },
   { file: '11-director-analytika', url: 'skillstorm.app/app' },
 ];

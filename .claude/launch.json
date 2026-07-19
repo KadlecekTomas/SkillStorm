@@ -6,6 +6,12 @@
       "runtimeExecutable": "env",
       "runtimeArgs": ["API_PROXY_TARGET=http://localhost:4201", "npm", "run", "dev", "--prefix", "client"],
       "port": 3000
+    },
+    {
+      "name": "server",
+      "runtimeExecutable": "env",
+      "runtimeArgs": ["PORT=4201", "npm", "run", "start:dev", "--prefix", "server"],
+      "port": 4201
     }
   ]
 }
