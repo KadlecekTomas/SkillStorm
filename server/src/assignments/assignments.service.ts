@@ -107,6 +107,7 @@ export class AssignmentsService {
             correctAnswer: true,
             correctAnswers: true,
             score: true,
+            content: true,
             options: {
               select: { text: true },
             },

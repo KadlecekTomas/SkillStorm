@@ -3,6 +3,7 @@ import {
   IsArray,
   IsEnum,
   IsInt,
+  IsObject,
   IsOptional,
   IsString,
   Min,
@@ -49,6 +50,14 @@ export class UpdateQuestionDto {
   @IsArray()
   @IsString({ each: true })
   correctAnswers?: string[];
+
+  @ApiPropertyOptional({
+    description:
+      'Autorská data interaktivních typů (MATCH_PAIRS/ORDER/SORT_BINS) — tvary viz shared/interactive-content.util.ts. Hloubková validace probíhá v service.',
+  })
+  @IsOptional()
+  @IsObject()
+  content?: Record<string, unknown>;
 
   @Validate(QuestionAnswersValidator)
   private readonly _answersValidation?: never;

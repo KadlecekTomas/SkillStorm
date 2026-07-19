@@ -45,13 +45,64 @@ export function computeVoteOutcome(
   const total = Object.values(counts).reduce((sum, n) => sum + (n ?? 0), 0);
   if (total <= 0) return null;
   const correct = counts[correctKey as OptionKey] ?? 0;
-  if (correct * VOTE_CORRECT_MIN_SHARE.den >= total * VOTE_CORRECT_MIN_SHARE.num) {
+  if (
+    correct * VOTE_CORRECT_MIN_SHARE.den >=
+    total * VOTE_CORRECT_MIN_SHARE.num
+  ) {
     return LiveRoundOutcome.MOSTLY_CORRECT;
   }
   if (correct * VOTE_WRONG_MAX_SHARE.den <= total * VOTE_WRONG_MAX_SHARE.num) {
     return LiveRoundOutcome.MOSTLY_WRONG;
   }
   return LiveRoundOutcome.SPLIT;
+}
+
+/**
+ * Anonymní agregát průběhu interaktivního kola na tabuli.
+ * - wrong: počet špatných pokusů (MATCH/SORT: špatná položení; ORDER: neúspěšná
+ *   Zkontrolovat), žádná vazba na osoby
+ * - placed: správně usazené položky (round-local itemId → targetId) — zdroj
+ *   pravdy pro obnovu plochy po refreshi i pro detekci dokončení
+ * - checks: počet stisků Zkontrolovat (jen ORDER)
+ * Do XP nikdy nevstupuje — stejné pravidlo jako voteCounts.
+ */
+export interface RoundAttemptStats {
+  wrong: number;
+  placed: Record<string, string>;
+  checks: number;
+}
+
+export const EMPTY_ATTEMPT_STATS: RoundAttemptStats = {
+  wrong: 0,
+  placed: {},
+  checks: 0,
+};
+
+/**
+ * Prahy auto-outcome interaktivních kol — poměr špatných pokusů k počtu
+ * položek (zlomek se zaokrouhlením nahoru, ne float):
+ * wrong ≤ ⌈items/3⌉ → MOSTLY_CORRECT; wrong ≤ items → SPLIT; jinak
+ * MOSTLY_WRONG. Odvozená hodnota pro učitelův přehled — může ji přepsat
+ * přes setOutcome; do XP ani kampaní nevstupuje.
+ */
+export const ATTEMPT_CORRECT_MAX_WRONG_SHARE = { num: 1, den: 3 } as const;
+export const ATTEMPT_SPLIT_MAX_WRONG_SHARE = { num: 1, den: 1 } as const;
+
+export function computeAttemptOutcome(
+  wrong: number,
+  itemCount: number,
+): LiveRoundOutcome {
+  const correctMax = Math.ceil(
+    (itemCount * ATTEMPT_CORRECT_MAX_WRONG_SHARE.num) /
+      ATTEMPT_CORRECT_MAX_WRONG_SHARE.den,
+  );
+  const splitMax = Math.ceil(
+    (itemCount * ATTEMPT_SPLIT_MAX_WRONG_SHARE.num) /
+      ATTEMPT_SPLIT_MAX_WRONG_SHARE.den,
+  );
+  if (wrong <= correctMax) return LiveRoundOutcome.MOSTLY_CORRECT;
+  if (wrong <= splitMax) return LiveRoundOutcome.SPLIT;
+  return LiveRoundOutcome.MOSTLY_WRONG;
 }
 
 const YOUNG_MAX_GRADE = 3;

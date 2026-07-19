@@ -1,5 +1,8 @@
 import { IsIn, IsOptional } from 'class-validator';
-import { OPTION_KEYS, OptionKey } from '../live-sessions.constants';
+import {
+  OPTION_KEYS,
+  OptionKey,
+} from '@//live-sessions/live-sessions.constants';
 
 /** Jeden dotyk na tabuli: tap = +1, long-press = −1. Anonymní, bez osoby. */
 export class CastVoteDto {

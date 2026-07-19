@@ -14,6 +14,7 @@ import { Cache } from 'cache-manager';
 import {
   Prisma,
   AuditEntityType,
+  QuestionType,
   SchoolGrade,
   SystemRole,
   OrganizationRole,
@@ -33,6 +34,10 @@ import type { UpdateAnswerDto } from './dto/update-answer.dto';
 import type { JwtPayload } from '@/auth/types/jwt-payload';
 import type { AssignTestDto } from './dto/assign-test.dto';
 import { hasAtLeastRole } from '@/shared/access.utils';
+import {
+  isInteractiveQuestionType,
+  validateInteractiveContent,
+} from '@/shared/interactive-content.util';
 
 import {
   buildVersionedListKey,
@@ -709,6 +714,34 @@ export class TestsService {
     };
   }
 
+  /**
+   * Validace `Question.content` vůči typu otázky: interaktivní typ obsah
+   * vyžaduje (validní), kvízový typ ho zakazuje (vrací null → DB NULL).
+   */
+  private resolveInteractiveContent(
+    type: QuestionType,
+    content: unknown,
+  ): unknown | null {
+    if (!isInteractiveQuestionType(type)) {
+      if (content !== undefined && content !== null) {
+        throw new BadRequestException({
+          code: 'CONTENT_NOT_ALLOWED',
+          message: 'Pole content patří jen interaktivním typům otázek.',
+        });
+      }
+      return null;
+    }
+    const errors = validateInteractiveContent(type, content ?? null);
+    if (errors.length > 0) {
+      throw new BadRequestException({
+        code: 'INVALID_INTERACTIVE_CONTENT',
+        message: 'Obsah interaktivní otázky není validní.',
+        errors,
+      });
+    }
+    return content;
+  }
+
   private async computeTestAssignability(
     testId: string,
   ): Promise<AssignabilityReport> {
@@ -724,6 +757,7 @@ export class TestsService {
               correctAnswer: true,
               correctAnswers: true,
               score: true,
+              content: true,
               options: {
                 select: { text: true },
               },
@@ -741,12 +775,29 @@ export class TestsService {
       report.issues.push({ reason: 'NO_TOPIC_ASSIGNMENT' });
       report.reasons.noTopicAssignments = 1;
       report.isAssignable = false;
+      report.isPublishable = false;
     }
     return report;
   }
 
   private throwIfNotAssignable(report: AssignabilityReport): void {
     if (!report.isAssignable) {
+      throw new ConflictException({
+        errorCode: 'TEST_NOT_ASSIGNABLE',
+        code: 'TEST_NOT_ASSIGNABLE',
+        message: 'Test nemá přiřazené téma nebo není připraven k publikaci',
+        reasons: report.reasons,
+        details: report,
+      });
+    }
+  }
+
+  /**
+   * Publish gate — mírnější než assignTest: sada s validními interaktivními
+   * otázkami (bleskovky) publikovat jde, žákům ji ale zadat nelze.
+   */
+  private throwIfNotPublishable(report: AssignabilityReport): void {
+    if (!report.isPublishable) {
       throw new ConflictException({
         errorCode: 'TEST_NOT_ASSIGNABLE',
         code: 'TEST_NOT_ASSIGNABLE',
@@ -1215,7 +1266,7 @@ export class TestsService {
       }
 
       const report = await this.computeTestAssignability(id);
-      this.throwIfNotAssignable(report);
+      this.throwIfNotPublishable(report);
     }
 
     const updateData: Prisma.TestUncheckedUpdateInput = {};
@@ -1878,6 +1929,7 @@ export class TestsService {
       correctAnswer: dto.correctAnswer,
       correctAnswers: dto.correctAnswers,
     });
+    const content = this.resolveInteractiveContent(dto.type, dto.content);
     const q = await this.prisma.question.create({
       data: {
         testId: t.id,
@@ -1887,6 +1939,9 @@ export class TestsService {
         score: dto.score ?? 1,
         correctAnswer: answers.correctAnswer ?? null,
         correctAnswers: answers.correctAnswers ?? [],
+        ...(content !== null
+          ? { content: content as Prisma.InputJsonValue }
+          : {}),
       },
     });
     await this.audit({
@@ -1917,6 +1972,7 @@ export class TestsService {
         type: true,
         correctAnswer: true,
         correctAnswers: true,
+        content: true,
       },
     });
     if (!exists) throw new NotFoundException('Otázka nenalezena');
@@ -1948,6 +2004,18 @@ export class TestsService {
     }
     if (answers.correctAnswers !== undefined) {
       questionUpdate.correctAnswers = answers.correctAnswers;
+    }
+    if (dto.content !== undefined || dto.type !== undefined) {
+      // Změna typu i obsahu prochází stejnou validací; interaktivní → kvíz
+      // obsah nuluje, kvíz → interaktivní ho vyžaduje.
+      const nextContent = this.resolveInteractiveContent(
+        nextType,
+        dto.content !== undefined ? dto.content : exists.content,
+      );
+      questionUpdate.content =
+        nextContent === null
+          ? Prisma.DbNull
+          : (nextContent as Prisma.InputJsonValue);
     }
     const q = await this.prisma.question.update({
       where: { id: questionId },
