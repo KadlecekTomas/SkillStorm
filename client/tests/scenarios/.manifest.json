@@ -48,16 +48,16 @@
     "student-2a-04@scenar.test",
     "student-2a-05@scenar.test"
   ],
-  "orgId": "43cc547c-5b74-4bb5-ba05-3b7d973b5b51",
-  "class8AId": "04f381c7-9839-4639-8a79-4480e4d95657",
-  "class2AId": "740012dc-5622-46f8-9227-0e53bf66a6b6",
-  "subjectId": "e529da0c-63da-4850-b128-8f75f64dfe9e",
-  "catalogTopicId": "e4e10dc1-4a1a-44a0-8457-f1e8a0429441",
-  "assignment8AId": "81b704d7-126c-45a6-a8e0-cec821efaf4b",
-  "assignment2AId": "c4464796-8ef9-4eaa-9cca-ab578f871979",
-  "assignmentHSId": "2c9ecc22-33aa-4b3e-8a0b-bca5854883dc",
-  "assignmentFast8AId": "287ca02e-b4e1-474b-9311-13a912aee494",
-  "foreignOrgId": "bf857874-dc72-4df5-adc7-4d9216ef184c",
-  "foreignTestId": "36dee974-7656-47b7-991c-03b01b8a2b90",
-  "foreignAssignmentId": "96942c50-4acc-4c3b-bba5-c824e2764625"
+  "orgId": "903d4323-8b4b-42ab-9673-e51f9cbe474a",
+  "class8AId": "05a1b2bd-514c-4196-95ec-0da9dfb3e8d9",
+  "class2AId": "6472d004-1870-48bb-93e3-348d16ce25f8",
+  "subjectId": "00f674b4-f24d-4b83-be32-78c975614d0b",
+  "catalogTopicId": "430d682d-7a38-41c7-a5e4-63a7e23f072b",
+  "assignment8AId": "75406785-c89c-4c59-b5c3-c13f6fa8adea",
+  "assignment2AId": "3131b71b-433d-4c95-b01c-0cf3ecf30105",
+  "assignmentHSId": "30b40585-56ef-4300-bef8-e88b62be4dad",
+  "assignmentFast8AId": "478c4ced-61f7-4c27-912f-60da2b0c0a32",
+  "foreignOrgId": "970b9bbd-d998-4519-b842-2be5b50d343c",
+  "foreignTestId": "42302251-e182-401d-b8e4-0f7b79b3c531",
+  "foreignAssignmentId": "c13ef47d-4e79-411d-8822-f33ccbd63a33"
 }

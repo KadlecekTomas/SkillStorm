@@ -100,7 +100,8 @@ describe('Live sessions — Bleskovky režim B (e2e)', () => {
       where: { id: roundId },
       select: { correctKeySnapshot: true },
     });
-    return round.correctKeySnapshot;
+    // kvízová kola mají klíč vždy (nullability patří interaktivním kolům)
+    return round.correctKeySnapshot as string;
   }
 
   /** Jiný než správný klíč v rámci možností kola (A/B stačí — TF má 2). */
