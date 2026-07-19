@@ -15,7 +15,10 @@ import { Cache } from 'cache-manager';
 import { AuditEntityType, SubmissionStatus, XpEventType } from '@prisma/client';
 import { computeScore } from './submission-scoring';
 import { PrismaService } from '@/prisma/prisma.service';
-import { assertSameOrganizationIds } from '@/shared/access.utils';
+import {
+  assertSameOrganizationIds,
+  teacherClassScope,
+} from '@/shared/access.utils';
 import {
   deriveOrgReadiness,
   OrgReadinessState,
@@ -109,7 +112,8 @@ export class SubmissionsService {
     return {
       OR: [
         { createdById: membershipId },
-        ...(teacher ? [{ classSection: { teacherId: teacher.id } }] : []),
+        // homeroom NEBO aktivní úvazek — viz teacherClassScope (audit homeroom-only)
+        ...(teacher ? [{ classSection: teacherClassScope(teacher.id) }] : []),
       ],
     };
   }
@@ -952,18 +956,18 @@ export class SubmissionsService {
       });
       const createdByTeacher =
         submission.assignment?.createdById === membership.id;
-      let homeroomMatch = false;
+      let teachesClass = false;
       if (teacher && submission.assignment?.classSectionId) {
         const cls = await this.prisma.classSection.findFirst({
           where: {
             id: submission.assignment.classSectionId,
-            teacherId: teacher.id,
+            ...teacherClassScope(teacher.id),
           },
           select: { id: true },
         });
-        homeroomMatch = !!cls;
+        teachesClass = !!cls;
       }
-      if (!createdByTeacher && !homeroomMatch) {
+      if (!createdByTeacher && !teachesClass) {
         throw new ForbiddenException('Access denied');
       }
     }

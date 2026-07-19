@@ -34,6 +34,7 @@ import { OrgOperationType } from '@/common/decorators/org-operation.decorator';
 import type { OrgContext } from '@/common/org-context/org-context.types';
 import { assertTenantWhere, withOrg } from '@/common/prisma/tenant-scope';
 import { invalidateResourcesFailSafe } from '@/shared/cache/org-cache.utils';
+import { teacherClassScope } from '@/shared/access.utils';
 
 const ALLOWED_TARGET_TYPES = new Set(['CLASS', 'STUDENTS']);
 
@@ -975,7 +976,8 @@ export class AssignmentsService {
         const classAssignments = await this.prisma.assignment.findMany({
           where: {
             organizationId: orgId,
-            classSection: { teacherId: teacher.id },
+            // homeroom NEBO aktivní úvazek (audit homeroom-only)
+            classSection: teacherClassScope(teacher.id),
           },
           select: { id: true },
         });
