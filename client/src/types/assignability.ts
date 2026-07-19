@@ -9,7 +9,9 @@ export type AssignabilityIssueReason =
   | "NO_SCORE"
   | "NO_CORRECT_ANSWER"
   | "INVALID_OPTIONS"
-  | "NO_TOPIC_ASSIGNMENT";
+  | "NO_TOPIC_ASSIGNMENT"
+  | "INTERACTIVE_ONLY_QUESTION"
+  | "INVALID_INTERACTIVE_CONTENT";
 
 export type AssignabilityIssue = {
   questionId?: string;
@@ -17,7 +19,10 @@ export type AssignabilityIssue = {
 };
 
 export type AssignabilityReport = {
+  /** Lze zadat žákům — interaktivní otázky (jen bleskovky) blokují. */
   isAssignable: boolean;
+  /** Lze publikovat — validní interaktivní otázky neblokují. */
+  isPublishable?: boolean;
   totalPoints: number;
   issues: AssignabilityIssue[];
 };

@@ -27,6 +27,8 @@ type TestQuestion = {
   score?: number;
   order?: number | null;
   options?: QuestionOption[];
+  /** Interaktivní typy (tabule) — autorská data dvojic/pořadí/košů. */
+  content?: unknown;
 };
 
 type TestEditMode = "FULL" | "LIMITED" | "NONE";
@@ -308,6 +310,11 @@ function EditTestPage(): React.JSX.Element {
                   <div className="space-y-1">
                     <p className="text-xs uppercase tracking-wide text-slate-400">
                       {index + 1} · {question.type}
+                      {["MATCH_PAIRS", "ORDER", "SORT_BINS"].includes(question.type) ? (
+                        <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 normal-case text-slate-600">
+                          interaktivní kolo — jen bleskovky
+                        </span>
+                      ) : null}
                     </p>
                     <p className="text-sm font-medium text-slate-800">{question.text ?? "(bez textu)"}</p>
                     <div className="flex flex-wrap gap-3 text-xs text-slate-500">
