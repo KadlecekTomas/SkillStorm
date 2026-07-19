@@ -15,6 +15,9 @@ export interface LiveRoundOption {
   text: string;
 }
 
+/** Anonymní agregáty hlasů z tabule — {"A": 14, "B": 6}, bez vazby na osoby. */
+export type RoundVoteCounts = Partial<Record<RoundOptionKey, number>>;
+
 /**
  * Kolo z projekčního API. `correctKey` je přítomen POUZE u odhalených kol —
  * server správný klíč před revealem nikdy neposílá (sdílené zařízení,
@@ -26,6 +29,9 @@ export interface LiveRound {
   questionText: string;
   options: LiveRoundOption[];
   outcome: LiveRoundOutcome | null;
+  /** null = kolo bez hlasování (skip cesta). */
+  voteCounts: RoundVoteCounts | null;
+  votingStartedAt: string | null;
   revealedAt: string | null;
   completedAt: string | null;
   correctKey?: RoundOptionKey;
@@ -83,11 +89,43 @@ export const startLiveSession = (id: string): Promise<LiveSessionProjection> =>
 export const getLiveSession = (id: string): Promise<LiveSessionProjection> =>
   httpClient.get(`/live-sessions/${id}`);
 
+export const openRoundVoting = (
+  sessionId: string,
+  roundId: string,
+): Promise<{
+  roundId: string;
+  votingStartedAt: string;
+  voteCounts: RoundVoteCounts;
+}> => httpClient.post(`/live-sessions/${sessionId}/rounds/${roundId}/voting`);
+
+/** Jeden dotyk na tabuli: tap = +1, long-press = −1. Server klampuje na 0. */
+export const castRoundVote = (
+  sessionId: string,
+  roundId: string,
+  key: RoundOptionKey,
+  delta: 1 | -1 = 1,
+): Promise<{
+  roundId: string;
+  voteCounts: RoundVoteCounts;
+  totalVotes: number;
+}> =>
+  httpClient.post(`/live-sessions/${sessionId}/rounds/${roundId}/votes`, {
+    key,
+    delta,
+  });
+
 export const revealRound = (
   sessionId: string,
   roundId: string,
-): Promise<{ roundId: string; correctKey: RoundOptionKey }> =>
-  httpClient.post(`/live-sessions/${sessionId}/rounds/${roundId}/reveal`);
+): Promise<{
+  roundId: string;
+  correctKey: RoundOptionKey;
+  voteCounts: RoundVoteCounts | null;
+  totalVotes: number;
+  /** Předvyplněný soud z hlasů (≥2/3, ≤1/3, jinak SPLIT) — null bez hlasů. */
+  autoOutcome: LiveRoundOutcome | null;
+  outcome: LiveRoundOutcome | null;
+}> => httpClient.post(`/live-sessions/${sessionId}/rounds/${roundId}/reveal`);
 
 export const setRoundOutcome = (
   sessionId: string,
