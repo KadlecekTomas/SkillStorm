@@ -890,12 +890,17 @@ export class StatsService {
             deletedAt: null,
             test: { creatorId: membership.id, deletedAt: null },
             status: SubmissionStatus.PENDING,
+            // Rozpracovaný pokus není „čeká na vyhodnocení" — až po odevzdání
+            submittedAt: { not: null },
             ...(currentYear ? { assignment: { yearId: currentYear.id } } : {}),
           },
         }),
         this.prisma.submission.findMany({
           where: {
             deletedAt: null,
+            // „Poslední odevzdání" = jen skutečně odevzdané pokusy; jinak se
+            // null submittedAt formátoval jako epocha („před 20653 dny")
+            submittedAt: { not: null },
             test: { creatorId: membership.id, deletedAt: null },
             ...(currentYear ? { assignment: { yearId: currentYear.id } } : {}),
           },
@@ -934,7 +939,8 @@ export class StatsService {
           testId: s.testId,
           testTitle: s.test.title,
           studentName: s.student.user?.name ?? null,
-          score: s.score,
+          // score je normalizovaný zlomek 0–1 → klient zobrazuje procenta
+          score: s.score != null ? Math.round(s.score * 100) : null,
           status: s.status,
           submittedAt: s.submittedAt,
         })),

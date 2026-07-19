@@ -156,7 +156,7 @@ export function StudentDashboard(): React.JSX.Element {
         </div>
 
         {/* Hero s Parťákem — viditelný jen žákovi (viz design reference) */}
-        <Card className="flex flex-wrap items-center gap-7 p-8">
+        <Card className="flex flex-wrap items-center gap-7 p-8" data-testid="student-hero-card">
           <PartakBlob size={110} />
           <div className="min-w-[220px] flex-1">
             <div className="mb-3.5 flex flex-wrap gap-2" data-testid="student-hero-badges">

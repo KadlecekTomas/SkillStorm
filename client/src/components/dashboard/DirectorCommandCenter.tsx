@@ -161,8 +161,13 @@ function TeacherActivityList({
                   {t.name}
                 </p>
                 <p className="text-xs text-ink-dim">
-                  {t.testsCreated} testů · poslední aktivita{" "}
-                  {formatDate(t.lastActivityAt)}
+                  {t.testsCreated}{" "}
+                  {t.testsCreated === 1
+                    ? "test"
+                    : t.testsCreated >= 2 && t.testsCreated <= 4
+                      ? "testy"
+                      : "testů"}{" "}
+                  · poslední aktivita {formatDate(t.lastActivityAt)}
                 </p>
               </div>
               <div className="flex-shrink-0 text-right">
@@ -217,7 +222,7 @@ function StudentRiskList({
             </div>
             <div className="flex-shrink-0 text-right">
               <p className="text-sm font-bold text-danger tabular-nums">
-                {s.averageScorePercent} %
+                {Math.round(s.averageScorePercent)} %
               </p>
               <p className="text-xs text-ink-dim">průměr</p>
             </div>

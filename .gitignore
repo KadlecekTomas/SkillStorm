@@ -27,3 +27,4 @@ client/tests/snapshots/
 
 # Database backups (scripts/ops/backup-db.sh) — never commit dumps
 backups/
+docs/screenshots/portfolio/.frame-*.html

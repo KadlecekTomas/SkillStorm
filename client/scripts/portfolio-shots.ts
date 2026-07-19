@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page, type Locator } from '@playwright/test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
@@ -9,9 +9,16 @@ import { join, resolve } from 'node:path';
  *
  * Viz playwright.portfolio.config.ts (předpoklady: běžící dev stack + seed).
  *
- * Vedlejší efekty v showcase datech: skript zakládá bleskovky (zůstávají
- * RUNNING — záměrně se nedokončují, aby neposouvaly kampaně ani XP).
- * seed:showcase je při dalším běhu smaže.
+ * Vedlejší efekty v showcase datech (seed:showcase je při dalším běhu vrátí):
+ *   - bleskovky zůstávají RUNNING (záměrně se nedokončují),
+ *   - VÝJIMKA: jedna expediční session 2.B se dokončí kvůli záběru XP scény
+ *     na konci Výpravy → posune Výpravu 4/8 → 5/8. Mapa (09) se fotí PŘED
+ *     tímto krokem, v rámci jednoho běhu tedy vždy ukazuje 4/8.
+ *   → před každým během skriptu proto VŽDY znovu spustit seed:showcase.
+ *
+ * Kategorie záběrů (viz docs/screenshots/portfolio/index.md):
+ *   01–14  celé obrazovky (hero + sekce), 15–16 párové záběry,
+ *   17–20  detailní výřezy 1200×800 pro landing page.
  */
 
 const OUT = resolve(__dirname, '..', '..', 'docs', 'screenshots', 'portfolio');
@@ -46,12 +53,90 @@ async function shot(page: Page, name: string, opts?: { fullPage?: boolean }) {
   console.log(`📸 ${name}`);
 }
 
-/** Otevře dialog Bleskovky a spustí session; vrátí až po naběhnutí boardu. */
+/**
+ * Pixel-perfect kontrola pro hero záběry: doběhlé fonty, žádné toasty,
+ * žádný scrollbar ani horizontální přetečení, kurzor mimo záběr.
+ * Horizontální přetečení běh SHODÍ — hero záběr s posuvníkem je zmetek.
+ */
+async function heroPreflight(page: Page) {
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+  });
+  await page.addStyleTag({
+    content: '::-webkit-scrollbar{display:none!important}',
+  });
+  await page.evaluate(() => {
+    document
+      .querySelectorAll('.Toastify__toast, [data-sonner-toast]')
+      .forEach((el) => el.remove());
+  });
+  const overflowX = await page.evaluate(
+    () =>
+      document.documentElement.scrollWidth -
+      document.documentElement.clientWidth,
+  );
+  if (overflowX > 0) {
+    throw new Error(`HERO kontrola: horizontální přetečení ${overflowX}px`);
+  }
+  const truncated = await page.evaluate(() =>
+    Array.from(document.querySelectorAll('h1, h2, h3'))
+      .filter((el) => el.scrollWidth > el.clientWidth + 1)
+      .map((el) => (el.textContent ?? '').trim().slice(0, 60)),
+  );
+  if (truncated.length) {
+    console.warn(`⚠️  HERO kontrola — oříznuté nadpisy: ${truncated.join(' | ')}`);
+  }
+  await page.mouse.move(0, 0);
+}
+
+/**
+ * Detailní výřez 1200×800 vycentrovaný na element (pro landing page).
+ * `hideChrome` schová sidebar a horní lištu — detail nemá zachytávat shell.
+ */
+async function clipShot(
+  page: Page,
+  locator: Locator,
+  name: string,
+  opts?: { hideChrome?: boolean },
+  size = { width: 1200, height: 800 },
+) {
+  if (opts?.hideChrome) {
+    await page.addStyleTag({
+      content:
+        'aside{display:none!important} main > header{display:none!important} [data-app-chrome]{display:none!important}',
+    });
+    await settle(page, 400);
+  }
+  await locator.scrollIntoViewIfNeeded();
+  await settle(page, 400);
+  const box = await locator.boundingBox();
+  const vp = page.viewportSize();
+  if (!box || !vp) {
+    console.warn(`⚠️  výřez ${name}: element nenalezen — přeskočeno`);
+    return;
+  }
+  const cx = box.x + box.width / 2;
+  const cy = box.y + box.height / 2;
+  const x = Math.max(0, Math.min(cx - size.width / 2, vp.width - size.width));
+  const y = Math.max(0, Math.min(cy - size.height / 2, vp.height - size.height));
+  await page.screenshot({
+    path: join(OUT, `${name}.png`),
+    clip: { x, y, width: size.width, height: size.height },
+    animations: 'disabled',
+  });
+  console.log(`🔍 ${name} (1200×800)`);
+}
+
+/**
+ * Otevře dialog Bleskovky a spustí session; vrátí až po naběhnutí boardu.
+ * `campaign: true` vybere aktivní kampaň třídy (option s UUID hodnotou).
+ */
 async function startBleskovka(
   page: Page,
   setLabel: string,
   classLabel: string,
   ageTestId?: 'young' | 'middle' | 'senior',
+  campaign = false,
 ) {
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
   await page.getByTestId('bleskovka-open').click();
@@ -63,6 +148,16 @@ async function startBleskovka(
   await dialog
     .getByTestId('bleskovka-class-select')
     .selectOption({ label: classLabel });
+  if (campaign) {
+    const select = dialog.getByTestId('bleskovka-campaign-select');
+    const id = await select.locator('option').evaluateAll((opts) => {
+      const uuid =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+      const hit = opts.find((o) => uuid.test((o as HTMLOptionElement).value));
+      return (hit as HTMLOptionElement | undefined)?.value ?? '';
+    });
+    if (id) await select.selectOption(id);
+  }
   if (ageTestId) {
     await dialog.getByTestId(`bleskovka-age-${ageTestId}`).click();
   }
@@ -92,150 +187,28 @@ async function campaignProgressIdFor(page: Page, classLabel: string) {
 }
 
 /**
- * Dotykový drag pro interaktivní kola — syntetické PointerEventy s
- * pointerType 'touch' (stejná cesta jako prst na tabuli).
+ * Zadání → detail NEodevzdaného → „Spustit test" → focus stránka.
+ * `titlePattern` vybere kartu konkrétního testu (jinak první dostupná).
  */
-async function touchDrag(page: Page, sourceSelector: string, targetSelector: string) {
-  await page.waitForSelector(sourceSelector);
-  await page.waitForSelector(targetSelector);
-  await page.evaluate(
-    ([srcSel, tgtSel]) => {
-      const src = document.querySelector(srcSel as string);
-      const tgt = document.querySelector(tgtSel as string);
-      if (!src || !tgt) throw new Error(`touchDrag: missing ${srcSel}/${tgtSel}`);
-      const sr = src.getBoundingClientRect();
-      const tr = tgt.getBoundingClientRect();
-      const from = { x: sr.x + sr.width / 2, y: sr.y + sr.height / 2 };
-      const to = { x: tr.x + tr.width / 2, y: tr.y + tr.height / 2 };
-      const base = {
-        bubbles: true,
-        cancelable: true,
-        pointerId: 7,
-        pointerType: 'touch',
-        isPrimary: true,
-      } as PointerEventInit;
-      src.dispatchEvent(
-        new PointerEvent('pointerdown', { ...base, clientX: from.x, clientY: from.y }),
-      );
-      for (let i = 1; i <= 6; i += 1) {
-        window.dispatchEvent(
-          new PointerEvent('pointermove', {
-            ...base,
-            clientX: from.x + ((to.x - from.x) * i) / 6,
-            clientY: from.y + ((to.y - from.y) * i) / 6,
-          }),
-        );
-      }
-      window.dispatchEvent(
-        new PointerEvent('pointerup', { ...base, clientX: to.x, clientY: to.y }),
-      );
-    },
-    [sourceSelector, targetSelector],
-  );
-}
-
-/** Přeskáče kvízová kola (skip → outcome), dokud nenaběhne daný board. */
-async function playQuizRoundsUntil(page: Page, boardTestId: string) {
-  for (let i = 0; i < 8; i += 1) {
-    const visible = await page
-      .getByTestId(boardTestId)
-      .isVisible()
-      .catch(() => false);
-    if (visible) return;
-    await page.getByTestId('live-vote-skip').click();
-    await settle(page, 600);
-    await page.getByTestId('live-outcome-MOSTLY_CORRECT').click();
-    await settle(page, 600);
-  }
-  await expect(page.getByTestId(boardTestId)).toBeVisible();
-}
-
-/** Mapa „text kartičky → text koše" pro showcase SORT kolo (vyjmenovaná). */
-const SORT_SHOWCASE: Array<[string, string]> = [
-  ['b_dlit', 'Y/Ý'],
-  ['ml_n', 'Y/Ý'],
-  ['b_cykl', 'I/Í'],
-  ['l_stek', 'I/Í'],
-];
-
-/** Usadí N kartiček do správných košů (živý záběr místo prázdné plochy). */
-async function placeSortCards(page: Page, count: number) {
-  const placed = SORT_SHOWCASE.slice(0, count);
-  for (const [cardText, binText] of placed) {
-    const card = page
-      .locator('[data-testid^="live-sort-card-"]')
-      .filter({ hasText: cardText });
-    const bin = page
-      .locator('[data-testid^="live-sort-bin-"]')
-      .filter({ hasText: binText });
-    const cardId = await card.first().getAttribute('data-testid');
-    const binId = await bin.first().getAttribute('data-testid');
-    if (!cardId || !binId) continue;
-    await touchDrag(page, `[data-testid="${cardId}"]`, `[data-testid="${binId}"]`);
-    await settle(page, 700); // server verdikt + pop animace
-  }
-}
-
-/** Spojí první dvojici MATCH kola (Baudelaire → prokletí básníci). */
-async function connectFirstMatchPair(page: Page) {
-  const zone = page
-    .locator('[data-testid^="live-match-zone-"]')
-    .filter({ hasText: 'Baudelaire' });
-  const card = page
-    .locator('[data-testid^="live-match-card-"]')
-    .filter({ hasText: 'prokletí básníci' });
-  const zoneId = await zone.first().getAttribute('data-testid');
-  const cardId = await card.first().getAttribute('data-testid');
-  if (!zoneId || !cardId) return;
-  await touchDrag(page, `[data-testid="${cardId}"]`, `[data-testid="${zoneId}"]`);
-}
-
-/** Otevře hlasování a zavře mikro-hint (čistý hero záběr bez banneru). */
-async function openVotingClean(page: Page) {
-  await page.getByTestId('live-vote-open').click();
-  await expect(page.getByTestId('live-voting')).toBeVisible();
-  await page
-    .getByTestId('live-voting-hint-dismiss')
-    .click({ timeout: 2000 })
-    .catch(() => {});
-  await settle(page, 400);
-}
-
-/**
- * Nakliká hlasy na dlaždice. Tapy na tutéž dlaždici oddělí pauzou delší než
- * klientský debounce (300 ms); mezi různými dlaždicemi stačí krátká.
- */
-async function castVotesUi(
+async function openFirstAssignmentTest(
   page: Page,
-  plan: Partial<Record<'A' | 'B' | 'C' | 'D', number>>,
-) {
-  const remaining = { ...plan };
-  // kolo nemusí mít všechny klíče (TRUE_FALSE = A/B, MC klidně 3 možnosti)
-  for (const key of ['A', 'B', 'C', 'D'] as const) {
-    if ((remaining[key] ?? 0) > 0) {
-      const exists = await page.getByTestId(`live-vote-tile-${key}`).count();
-      if (!exists) delete remaining[key];
-    }
-  }
-  while (Object.values(remaining).some((n) => (n ?? 0) > 0)) {
-    for (const key of ['A', 'B', 'C', 'D'] as const) {
-      if ((remaining[key] ?? 0) <= 0) continue;
-      // 340 ms mezi VŠEMI tapy — při 2 zbývajících dlaždicích by kratší
-      // round-robin rozestup spadl pod 300ms debounce téže dlaždice
-      await page.waitForTimeout(340);
-      await page.getByTestId(`live-vote-tile-${key}`).click();
-      remaining[key] = (remaining[key] ?? 0) - 1;
-    }
-  }
-  await settle(page, 500);
-}
-
-/** Zadání → detail prvního NEodevzdaného → „Spustit test" → focus stránka. */
-async function openFirstAssignmentTest(page: Page): Promise<boolean> {
+  titlePattern?: RegExp,
+): Promise<boolean> {
   await page.goto('/app/assignments', { waitUntil: 'domcontentloaded' });
   await settle(page);
   // Řádky nejsou <a> — tlačítko „Otevřít test" pushuje na detail zadání.
-  const openBtn = page.getByRole('button', { name: /otevřít test/i }).first();
+  // Kartu vybíráme jako NEJVNITŘNĚJŠÍ div s názvem testu i tlačítkem (.last()).
+  const openBtn = (
+    titlePattern
+      ? page
+          .locator('div')
+          .filter({ hasText: titlePattern })
+          .filter({ has: page.getByRole('button', { name: /otevřít test/i }) })
+          .last()
+      : page
+  )
+    .getByRole('button', { name: /otevřít test/i })
+    .first();
   try {
     await openBtn.waitFor({ state: 'visible', timeout: 8000 });
   } catch {
@@ -258,188 +231,212 @@ test.beforeAll(() => {
   mkdirSync(OUT, { recursive: true });
 });
 
-test('portfolio — student old', async ({ browser }) => {
-  {
-    const context = await browser.newContext({
-      viewport: { width: 1920, height: 1080 },
-    });
-    const page = await context.newPage();
-    await login(page, ACCOUNTS.studentOld);
-    await settle(page);
-    await shot(page, '01-student-dashboard-partak');
+test('portfolio — student old (dashboard + výřezy + časovač)', async ({
+  browser,
+}) => {
+  const context = await browser.newContext({
+    viewport: { width: 1920, height: 1080 },
+  });
+  const page = await context.newPage();
+  await login(page, ACCOUNTS.studentOld);
+  await settle(page);
+  await shot(page, '01-student-dashboard-partak');
 
-    // Old test s časovačem: zadání → detail → Spustit test
-    const opened = await openFirstAssignmentTest(page);
-    if (opened) {
-      await settle(page, 2500);
-      await shot(page, '03-student-test-old-casovac');
-    }
-    await context.close();
+  // Detailní výřezy z hero karty: parťák + streak pilulky (bez app shellu)
+  await clipShot(
+    page,
+    page.getByTestId('student-hero-card'),
+    '17-detail-partak-hero-karta',
+    { hideChrome: true },
+  );
+  await clipShot(
+    page,
+    page.getByTestId('student-hero-badges'),
+    '18-detail-streak-pilulky',
+    { hideChrome: true },
+  );
+
+  // Old test s časovačem (⏱ 15 min): cíleně „Rovnice o jedné neznámé" —
+  // „Procenta kolem nás" nemají limit a ukázala by jen „Konec za 18 dní".
+  const opened = await openFirstAssignmentTest(page, /Rovnice o jedné neznámé/);
+  if (opened) {
+    await settle(page, 2500);
+    await shot(page, '03-student-test-old-casovac');
   }
-
+  await context.close();
 });
 
-test('portfolio — student young', async ({ browser }) => {
-  {
-    const context = await browser.newContext({
-      viewport: { width: 1920, height: 1080 },
-    });
-    const page = await context.newPage();
-    await login(page, ACCOUNTS.studentYoung);
-    const opened = await openFirstAssignmentTest(page);
-    if (opened) {
-      await settle(page, 2500);
-      await shot(page, '02-student-test-young-dlazdice');
-    }
-    await context.close();
-  }
+test('portfolio — student young (dlaždice + párový desktop dashboard)', async ({
+  browser,
+}) => {
+  const context = await browser.newContext({
+    viewport: { width: 1920, height: 1080 },
+  });
+  const page = await context.newPage();
+  await login(page, ACCOUNTS.studentYoung);
+  await settle(page);
+  // Párový záběr k 12-mobil-student-dashboard (stejná žákyně, desktop)
+  await shot(page, '16-par-student-dashboard-desktop');
 
+  const opened = await openFirstAssignmentTest(page);
+  if (opened) {
+    await settle(page, 2500);
+    await shot(page, '02-student-test-young-dlazdice');
+  }
+  await context.close();
 });
 
 test('portfolio — učitel', async ({ browser }) => {
-  {
-    const context = await browser.newContext({
-      viewport: { width: 1920, height: 1080 },
-    });
-    const page = await context.newPage();
-    await login(page, ACCOUNTS.teacher);
+  const context = await browser.newContext({
+    viewport: { width: 1920, height: 1080 },
+  });
+  const page = await context.newPage();
+  await login(page, ACCOUNTS.teacher);
+  await settle(page);
+  await shot(page, '04-teacher-dashboard');
+
+  // Builder krok 2 (best effort — wizard se může vyvíjet)
+  try {
+    await page.goto('/app/tests/create', { waitUntil: 'domcontentloaded' });
     await settle(page);
-    await shot(page, '04-teacher-dashboard');
-
-    // Builder krok 2 (best effort — wizard se může vyvíjet)
-    try {
-      await page.goto('/app/tests/create', { waitUntil: 'domcontentloaded' });
-      await settle(page);
-      const title = page.locator('input[type="text"]').first();
-      await title.fill('Přírodopis — ptáci našich lesů');
-      const next = page.getByRole('button', {
-        name: /pokračovat|další|next/i,
-      });
-      if (await next.count()) {
-        await next.first().click();
-        await settle(page, 1500);
-      }
-      await shot(page, '05-teacher-test-builder-krok2');
-    } catch {
-      console.warn('builder krok 2 se nepovedl — screenshot kroku 1');
-      await shot(page, '05-teacher-test-builder-krok2');
+    const title = page.locator('input[type="text"]').first();
+    await title.fill('Přírodopis — ptáci našich lesů');
+    const next = page.getByRole('button', {
+      name: /pokračovat|další|next/i,
+    });
+    if (await next.count()) {
+      await next.first().click();
+      await settle(page, 1500);
     }
-
-    // Kampaňové projekce (id z dialogu Bleskovky)
-    const expeditionId = await campaignProgressIdFor(page, '2.B');
-    if (expeditionId) {
-      await page.goto(`/app/campaigns/${expeditionId}/board`, {
-        waitUntil: 'domcontentloaded',
-      });
-      await settle(page, 2500);
-      await shot(page, '09-vyprava-mapa-samolepky', { fullPage: true });
-    }
-    const missionId = await campaignProgressIdFor(page, '8.A');
-    if (missionId) {
-      await page.goto(`/app/campaigns/${missionId}/board`, {
-        waitUntil: 'domcontentloaded',
-      });
-      await settle(page, 2500);
-      await shot(page, '10-archiv-nastenka-fragment', { fullPage: true });
-    }
-
-    // Bleskovka boardy — young / middle / senior (session zůstává RUNNING).
-    // Reveal jde přes „Přeskočit hlasování" — klasická cesta bez hlasů.
-    await startBleskovka(page, 'Vyjmenovaná slova po B a L', '2.B', 'young');
-    await page
-      .getByTestId('expedition-intro-start')
-      .click({ timeout: 3000 })
-      .catch(() => {});
-    await settle(page, 800);
-    await page.getByTestId('live-vote-skip').click();
-    await settle(page, 900);
-    await shot(page, '06-bleskovka-young');
-
-    await startBleskovka(page, 'Vyjmenovaná slova po B a L', '5.A', 'middle');
-    await page.getByTestId('live-vote-skip').click();
-    await settle(page, 900);
-    await shot(page, '07-bleskovka-middle');
-
-    await startBleskovka(page, 'Literární moderna', 'G2', 'senior');
-    await page.getByTestId('live-vote-skip').click();
-    await settle(page, 900);
-    await shot(page, '08-bleskovka-senior');
-
-    // HLASOVÁNÍ NA TABULI — hero záběry „děti hlasují na tabuli".
-    // Young: barevné dlaždice s ikonami a velkými čísly, plná třída hlasů.
-    await startBleskovka(page, 'Vyjmenovaná slova po B a L', '2.B', 'young');
-    await page
-      .getByTestId('expedition-intro-start')
-      .click({ timeout: 3000 })
-      .catch(() => {});
-    await settle(page, 800);
-    await openVotingClean(page);
-    await castVotesUi(page, { A: 9, B: 5, C: 4 });
-    await shot(page, '15-bleskovka-hlasovani-young');
-
-    // …a reveal s grafem hlasů (správná odpověď zvýrazněná až teď)
-    await page.getByTestId('live-reveal').click();
-    await settle(page, 1400); // animovaný nárůst sloupců
-    await shot(page, '16-bleskovka-hlasovani-graf');
-
-    // Senior: čistý tally vzhled, monospace čísla
-    await startBleskovka(page, 'Literární moderna', 'G2', 'senior');
-    await openVotingClean(page);
-    await castVotesUi(page, { A: 7, B: 11, C: 5 });
-    await shot(page, '17-bleskovka-hlasovani-senior');
-
-    // INTERAKTIVNÍ TABULE — drag & drop kola (feature/board-interactions).
-    // Typy jsou v sadách obsahově: třídění=vyjmenovaná (young), řazení=zlomky
-    // (middle), přiřazování=moderna (senior) → záběry kryjí všechny typy
-    // i všechny věkové režimy.
-
-    // SORT_BINS young: koše Y/I, dvě kartičky už usazené (živý záběr)
-    await startBleskovka(page, 'Vyjmenovaná slova po B a L', '2.B', 'young');
-    await page
-      .getByTestId('expedition-intro-start')
-      .click({ timeout: 3000 })
-      .catch(() => {});
-    await playQuizRoundsUntil(page, 'live-sort-board');
-    await placeSortCards(page, 2);
-    await settle(page, 900);
-    await shot(page, '18-bleskovka-trideni-young');
-
-    // ORDER middle: řada zlomků s popisky osy nejmenší → největší
-    await startBleskovka(page, 'Zlomky a desetinná čísla', '8.A', 'middle');
-    await playQuizRoundsUntil(page, 'live-order-board');
-    await settle(page, 600);
-    await shot(page, '19-bleskovka-razeni-middle');
-
-    // Detailní záběr dotykového ovládacího pruhu (80px+ targety, Zkontrolovat,
-    // Ukázat řešení, fullscreen) — ORDER kolo má pruh nejplnější
-    await page
-      .getByTestId('live-control-bar')
-      .screenshot({ path: join(OUT, '21-bleskovka-ovladaci-pruh.png') });
-    console.log('📸 21-bleskovka-ovladaci-pruh');
-
-    // MATCH_PAIRS senior: tmavé plátno, monospace, jedna dvojice spojená
-    await startBleskovka(page, 'Literární moderna', 'G2', 'senior');
-    await playQuizRoundsUntil(page, 'live-match-board');
-    await connectFirstMatchPair(page);
-    await settle(page, 900);
-    await shot(page, '20-bleskovka-prirazovani-senior');
-
-    await context.close();
+    await shot(page, '05-teacher-test-builder-krok2');
+  } catch {
+    console.warn('builder krok 2 se nepovedl — screenshot kroku 1');
+    await shot(page, '05-teacher-test-builder-krok2');
   }
 
+  // Kampaňové projekce — mapa Výpravy je HERO záběr a fotí se PŘED
+  // dokončením expediční session (jinak by ukazovala 5/8).
+  const expeditionId = await campaignProgressIdFor(page, '2.B');
+  if (expeditionId) {
+    await page.goto(`/app/campaigns/${expeditionId}/board`, {
+      waitUntil: 'domcontentloaded',
+    });
+    await settle(page, 2500);
+    await heroPreflight(page);
+    await shot(page, '09-vyprava-mapa-samolepky', { fullPage: true });
+  }
+  const missionId = await campaignProgressIdFor(page, '8.A');
+  if (missionId) {
+    await page.goto(`/app/campaigns/${missionId}/board`, {
+      waitUntil: 'domcontentloaded',
+    });
+    await settle(page, 2500);
+    await shot(page, '10-archiv-nastenka-fragment', { fullPage: true });
+    // Zapečetěný vzkaz od loňské 9.A — detail, který vypráví (best effort)
+    try {
+      await page
+        .getByRole('button', { name: /přečíst si vzkaz/i })
+        .click({ timeout: 4000 });
+      await settle(page, 1200);
+      await shot(page, '10b-archiv-vzkaz-lonske-9a');
+      await page.keyboard.press('Escape');
+    } catch {
+      console.warn('vzkaz 9.A se nepodařilo otevřít — záběr vynechán');
+    }
+  }
+
+  // Bleskovka boardy — young / middle / senior (sessions zůstávají RUNNING)
+  await startBleskovka(page, 'Vyjmenovaná slova po B a L', '2.B', 'young');
+  await page
+    .getByTestId('expedition-intro-start')
+    .click({ timeout: 3000 })
+    .catch(() => {});
+  await settle(page, 800);
+  await page.getByTestId('live-reveal').click();
+  await settle(page, 900);
+  await shot(page, '06-bleskovka-young');
+  // Detailní výřez: taktilní dlaždice s outcome po reveal (rodič = grid)
+  await clipShot(
+    page,
+    page.locator('[data-testid^="live-outcome-"]').first().locator('..'),
+    '19-detail-tactile-outcome',
+  );
+
+  await startBleskovka(page, 'Vyjmenovaná slova po B a L', '5.A', 'middle');
+  await page.getByTestId('live-reveal').click();
+  await settle(page, 900);
+  await shot(page, '07-bleskovka-middle');
+
+  await startBleskovka(page, 'Literární moderna', 'G2', 'senior');
+  await page.getByTestId('live-reveal').click();
+  await settle(page, 900);
+  await heroPreflight(page);
+  await shot(page, '08-bleskovka-senior');
+
+  // Párový záběr: STEJNÁ sada (a otázka — shuffle je vypnutý) jako young
+  // board 06, jen v senior quiz-night režimu → příběh „roste s dětmi".
+  await startBleskovka(page, 'Vyjmenovaná slova po B a L', '5.A', 'senior');
+  await page.getByTestId('live-reveal').click();
+  await settle(page, 900);
+  await shot(page, '15-par-bleskovka-senior');
+
+  // XP scéna na konci Výpravy: expediční session 2.B → odehrát VŠECHNA kola
+  // (live-finish se ukáže až po posledním outcome) → dokončit.
+  // POZOR: posouvá Výpravu 4/8 → 5/8 (proto se mapa fotila výše).
+  await startBleskovka(
+    page,
+    'Vyjmenovaná slova po B a L',
+    '2.B',
+    'young',
+    true,
+  );
+  await page
+    .getByTestId('expedition-intro-start')
+    .click({ timeout: 3000 })
+    .catch(() => {});
+  await settle(page, 800);
+  for (let i = 0; i < 10; i += 1) {
+    if (await page.getByTestId('live-finish').isVisible().catch(() => false)) {
+      break;
+    }
+    await page.getByTestId('live-reveal').click();
+    await settle(page, 700);
+    // realistický mix výsledků: druhé kolo „smíšeně", jinak „většina správně"
+    const preferred = page.getByTestId(
+      i === 1 ? 'live-outcome-MIXED' : 'live-outcome-MOSTLY_CORRECT',
+    );
+    if (await preferred.isVisible().catch(() => false)) {
+      await preferred.click();
+    } else {
+      await page.locator('[data-testid^="live-outcome-"]').first().click();
+    }
+    await settle(page, 700);
+  }
+  await page.getByTestId('live-finish').click();
+  await expect(page.getByTestId('live-finish-screen')).toBeVisible({
+    timeout: 15_000,
+  });
+  // nechat doběhnout XP bar (300 ms delay + 1500 ms animace)
+  await settle(page, 2500);
+  await clipShot(
+    page,
+    page.getByTestId('live-xp-delta').locator('..'),
+    '20-detail-xp-konec-vypravy',
+  );
+
+  await context.close();
 });
 
 test('portfolio — ředitelka', async ({ browser }) => {
-  {
-    const context = await browser.newContext({
-      viewport: { width: 1920, height: 1080 },
-    });
-    const page = await context.newPage();
-    await login(page, ACCOUNTS.director);
-    await settle(page, 2500);
-    await shot(page, '11-director-analytika');
-    await context.close();
-  }
+  const context = await browser.newContext({
+    viewport: { width: 1920, height: 1080 },
+  });
+  const page = await context.newPage();
+  await login(page, ACCOUNTS.director);
+  await settle(page, 2500);
+  await heroPreflight(page);
+  await shot(page, '11-director-analytika');
+  await context.close();
 });
 
 test('portfolio — mobilní student flow (390px, 3 obrazovky)', async ({
@@ -468,14 +465,15 @@ test('portfolio — mobilní student flow (390px, 3 obrazovky)', async ({
 });
 
 /**
- * BONUS: device frame (browser chrome mockup) pro 5 nejlepších záběrů.
+ * BONUS: device frame (browser chrome mockup) pro nejlepší záběry.
  * Rámeček je čisté HTML/CSS — žádná závislost, žádná cizí grafika.
+ * Podklad: světlý neutrální token --canvas-alt (#fbfaf8), jemný stín
+ * z barvy inkoustu (#37352f) dle design systému — žádné gradienty.
  */
 const FRAMED: Array<{ file: string; url: string }> = [
   { file: '01-student-dashboard-partak', url: 'skillstorm.app/app' },
   { file: '04-teacher-dashboard', url: 'skillstorm.app/app' },
   { file: '08-bleskovka-senior', url: 'skillstorm.app/app/live' },
-  { file: '15-bleskovka-hlasovani-young', url: 'skillstorm.app/app/live' },
   { file: '09-vyprava-mapa-samolepky', url: 'skillstorm.app/app/campaigns' },
   { file: '11-director-analytika', url: 'skillstorm.app/app' },
 ];
@@ -483,15 +481,16 @@ const FRAMED: Array<{ file: string; url: string }> = [
 test('portfolio — device frame varianty', async ({ browser }) => {
   const framePage = (imgPath: string, url: string) => `<!doctype html>
 <html><head><meta charset="utf-8"><style>
-  body { margin: 0; padding: 64px; background: linear-gradient(135deg, #eef4e9 0%, #f7f4ec 60%, #eef0f4 100%);
+  body { margin: 0; padding: 64px; background: #fbfaf8; /* --canvas-alt */
          display: grid; place-items: center; min-height: 100vh; box-sizing: border-box; }
-  .frame { width: 1560px; border-radius: 14px; overflow: hidden;
-           box-shadow: 0 30px 80px rgba(15, 23, 42, .22), 0 4px 16px rgba(15, 23, 42, .10); background: #fff; }
+  .frame { width: 1560px; border-radius: 14px; overflow: hidden; background: #fff;
+           border: 1px solid #e9e7e2; /* --line */
+           box-shadow: 0 18px 40px rgba(55, 53, 47, .10), 0 2px 8px rgba(55, 53, 47, .06); }
   .bar { display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 16px;
-         background: #f1f3f5; border-bottom: 1px solid #e4e7ea; }
+         background: #fbfaf8; border-bottom: 1px solid #e9e7e2; }
   .dot { width: 12px; height: 12px; border-radius: 50%; }
   .addr { flex: 1; margin: 0 40px; height: 26px; border-radius: 13px; background: #fff;
-          border: 1px solid #e4e7ea; color: #6b7280; font: 500 12px/26px -apple-system, sans-serif;
+          border: 1px solid #e9e7e2; color: #6f6b62; font: 500 12px/26px -apple-system, sans-serif;
           text-align: center; }
   img { display: block; width: 100%; }
 </style></head><body>

@@ -608,6 +608,22 @@ async function main() {
     ],
   });
 
+  // Test druhé učitelky — ať v „Aktivitě učitelů" nevypadá jako mrtvý účet
+  const testSouhlasky = await mkTest({
+    title: 'Tvrdé a měkké souhlásky',
+    description: 'Krátké opakování pro 2. třídu.',
+    subjectId: catalog.czech.subject.id,
+    topicLevelId: catalog.czech.topicLevels[`${SchoolGrade.GRADE_2}:Vyjmenovaná slova`]!,
+    grades: [SchoolGrade.GRADE_2],
+    status: PublishStatus.PUBLISHED,
+    creatorId: teacher2.membershipId,
+    createdDaysAgo: 12,
+    questions: [
+      { text: 'Ve slově „hory“ píšeme tvrdé Y.', type: TF, correctAnswer: 'true' },
+      { text: 'Které slovo je napsané správně?', type: MC, correctAnswer: 'židle', options: ['židle', 'žydle', 'šidle'] },
+    ],
+  });
+
   await mkTest({
     title: 'Lineární rovnice — koncept',
     description: 'Rozpracovaná sada na příští týden.',
@@ -660,6 +676,8 @@ async function main() {
     membershipId: string;
     correct: number;
     day: number;
+    /** Odevzdáno, ale zatím nevyhodnoceno — plní učitelův panel „Čeká na vyhodnocení". */
+    pending?: boolean;
   }) => {
     const submittedAt = daysAgo(
       params.day,
@@ -701,7 +719,9 @@ async function main() {
       where: { id: submission.id },
       data: {
         submittedAt,
-        status: SubmissionStatus.APPROVED,
+        status: params.pending
+          ? SubmissionStatus.PENDING
+          : SubmissionStatus.APPROVED,
         score: params.correct / params.questions.length,
         earnedPoints: params.correct,
         maxPoints: params.questions.length,
@@ -839,11 +859,12 @@ async function main() {
   });
   // Druhé young zadání — portfolio skript potřebuje startovatelný test
   // pro 2.B dvakrát (desktop dlaždice + mobilní flow) v jednom běhu.
+  // Jiný test než první zadání, ať dashboard nevypadá jako duplicitní data.
   await prisma.assignment.create({
     data: {
       organizationId: org.id,
       yearId: year.id,
-      testId: testVyjmenovana.id,
+      testId: testSouhlasky.id,
       targetType: 'CLASS',
       classSectionId: class2B.id,
       openAt: daysAgo(0, 7),
@@ -876,14 +897,14 @@ async function main() {
     where: { testId: testModerna.id },
     orderBy: { order: 'asc' },
   });
-  const planG2: ({ correct: number; day: number } | null)[] = [
+  const planG2: ({ correct: number; day: number; pending?: boolean } | null)[] = [
     null, // Alžběta Konečná (zakg2) — test ji teprve čeká
     { correct: 3, day: 8 },
     { correct: 3, day: 6 },
     { correct: 4, day: 5 },
     { correct: 3, day: 4 },
-    { correct: 3, day: 2 },
-    { correct: 4, day: 1 },
+    { correct: 3, day: 2, pending: true }, // 2 čerstvá odevzdání čekají
+    { correct: 4, day: 1, pending: true }, // na vyhodnocení (panel učitele)
     null, // jeden student zatím bez odevzdání
   ];
   for (const [i, sg] of studentsG2.entries()) {
@@ -896,6 +917,7 @@ async function main() {
       membershipId: sg.membershipId,
       correct: step.correct,
       day: step.day,
+      ...(step.pending ? { pending: true } : {}),
     });
   }
   // Druhé čekající zadání pro 8.A — „Procenta kolem nás" bez časového limitu
@@ -1019,14 +1041,25 @@ async function main() {
     });
   }
 
-  // Archiv: loňská G2 třída ho dokončila a nechala vzkaz → 8.A ho má zapečetěný
+  // Archiv: loňská 9.A ho dokončila a nechala vzkaz → 8.A ho má zapečetěný.
+  // Třída patří do MINULÉHO školního roku — nesmí strašit v ředitelském
+  // přehledu aktuálních tříd.
+  const pastYear = await prisma.academicYear.create({
+    data: {
+      orgId: org.id,
+      label: '2024/2025',
+      startsAt: new Date('2024-09-01T00:00:00.000Z'),
+      endsAt: new Date('2025-08-31T23:59:59.000Z'),
+      isCurrent: false,
+    },
+  });
   const predecessorClass = await prisma.classSection.create({
     data: {
       orgId: org.id,
-      yearId: year.id,
+      yearId: pastYear.id,
       grade: SchoolGrade.GRADE_9,
       section: 'A',
-      label: '9.A (loňská)',
+      label: '9.A',
     },
   });
   const predecessor = await prisma.campaignProgress.create({

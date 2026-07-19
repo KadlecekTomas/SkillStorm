@@ -67,7 +67,10 @@ export function DashboardHeader(): React.JSX.Element {
     (role === "TEACHER" || role === "DIRECTOR" || role === "OWNER");
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-4 border-b border-line pb-4">
+    <div
+      data-app-chrome
+      className="flex flex-wrap items-center justify-between gap-4 border-b border-line pb-4"
+    >
       <div className="flex flex-wrap items-center gap-4">
         <Link href="/app" className="flex items-center gap-2 text-ink md:hidden" aria-label="SkillStorm — přehled">
           <PartakEmblem size={26} />

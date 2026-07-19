@@ -30,15 +30,8 @@ export const AppHeader = (): React.JSX.Element => {
         <Button variant="outline" size="icon" className="rounded-lg h-8 w-8">
           <Bell className="h-4 w-4" />
         </Button>
-        <PermissionGate
-          permission={PermissionKey.CREATE_TEST}
-          fallback={
-            <Button className="rounded-lg h-8" variant="outline" disabled>
-              <Plus className="h-4 w-4" />
-              <span className="hidden sm:inline">Omezeno</span>
-            </Button>
-          }
-        >
+        {/* Bez oprávnění tlačítko schováme — zašedlé „Omezeno" jen mate žáky */}
+        <PermissionGate permission={PermissionKey.CREATE_TEST} fallback={null}>
           <Button className="rounded-lg h-8" asChild>
             <Link href="/app/tests">
               <Plus className="h-4 w-4" />
