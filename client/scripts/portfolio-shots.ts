@@ -1,4 +1,4 @@
-import { test, expect, type Page, type Browser } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
@@ -89,6 +89,105 @@ async function campaignProgressIdFor(page: Page, classLabel: string) {
   });
   await page.keyboard.press('Escape');
   return id;
+}
+
+/**
+ * Dotykový drag pro interaktivní kola — syntetické PointerEventy s
+ * pointerType 'touch' (stejná cesta jako prst na tabuli).
+ */
+async function touchDrag(page: Page, sourceSelector: string, targetSelector: string) {
+  await page.waitForSelector(sourceSelector);
+  await page.waitForSelector(targetSelector);
+  await page.evaluate(
+    ([srcSel, tgtSel]) => {
+      const src = document.querySelector(srcSel as string);
+      const tgt = document.querySelector(tgtSel as string);
+      if (!src || !tgt) throw new Error(`touchDrag: missing ${srcSel}/${tgtSel}`);
+      const sr = src.getBoundingClientRect();
+      const tr = tgt.getBoundingClientRect();
+      const from = { x: sr.x + sr.width / 2, y: sr.y + sr.height / 2 };
+      const to = { x: tr.x + tr.width / 2, y: tr.y + tr.height / 2 };
+      const base = {
+        bubbles: true,
+        cancelable: true,
+        pointerId: 7,
+        pointerType: 'touch',
+        isPrimary: true,
+      } as PointerEventInit;
+      src.dispatchEvent(
+        new PointerEvent('pointerdown', { ...base, clientX: from.x, clientY: from.y }),
+      );
+      for (let i = 1; i <= 6; i += 1) {
+        window.dispatchEvent(
+          new PointerEvent('pointermove', {
+            ...base,
+            clientX: from.x + ((to.x - from.x) * i) / 6,
+            clientY: from.y + ((to.y - from.y) * i) / 6,
+          }),
+        );
+      }
+      window.dispatchEvent(
+        new PointerEvent('pointerup', { ...base, clientX: to.x, clientY: to.y }),
+      );
+    },
+    [sourceSelector, targetSelector],
+  );
+}
+
+/** Přeskáče kvízová kola (skip → outcome), dokud nenaběhne daný board. */
+async function playQuizRoundsUntil(page: Page, boardTestId: string) {
+  for (let i = 0; i < 8; i += 1) {
+    const visible = await page
+      .getByTestId(boardTestId)
+      .isVisible()
+      .catch(() => false);
+    if (visible) return;
+    await page.getByTestId('live-vote-skip').click();
+    await settle(page, 600);
+    await page.getByTestId('live-outcome-MOSTLY_CORRECT').click();
+    await settle(page, 600);
+  }
+  await expect(page.getByTestId(boardTestId)).toBeVisible();
+}
+
+/** Mapa „text kartičky → text koše" pro showcase SORT kolo (vyjmenovaná). */
+const SORT_SHOWCASE: Array<[string, string]> = [
+  ['b_dlit', 'Y/Ý'],
+  ['ml_n', 'Y/Ý'],
+  ['b_cykl', 'I/Í'],
+  ['l_stek', 'I/Í'],
+];
+
+/** Usadí N kartiček do správných košů (živý záběr místo prázdné plochy). */
+async function placeSortCards(page: Page, count: number) {
+  const placed = SORT_SHOWCASE.slice(0, count);
+  for (const [cardText, binText] of placed) {
+    const card = page
+      .locator('[data-testid^="live-sort-card-"]')
+      .filter({ hasText: cardText });
+    const bin = page
+      .locator('[data-testid^="live-sort-bin-"]')
+      .filter({ hasText: binText });
+    const cardId = await card.first().getAttribute('data-testid');
+    const binId = await bin.first().getAttribute('data-testid');
+    if (!cardId || !binId) continue;
+    await touchDrag(page, `[data-testid="${cardId}"]`, `[data-testid="${binId}"]`);
+    await settle(page, 700); // server verdikt + pop animace
+  }
+}
+
+/** Spojí první dvojici MATCH kola (Baudelaire → prokletí básníci). */
+async function connectFirstMatchPair(page: Page) {
+  const zone = page
+    .locator('[data-testid^="live-match-zone-"]')
+    .filter({ hasText: 'Baudelaire' });
+  const card = page
+    .locator('[data-testid^="live-match-card-"]')
+    .filter({ hasText: 'prokletí básníci' });
+  const zoneId = await zone.first().getAttribute('data-testid');
+  const cardId = await card.first().getAttribute('data-testid');
+  if (!zoneId || !cardId) return;
+  await touchDrag(page, `[data-testid="${cardId}"]`, `[data-testid="${zoneId}"]`);
 }
 
 /** Otevře hlasování a zavře mikro-hint (čistý hero záběr bez banneru). */
@@ -288,6 +387,42 @@ test('portfolio — učitel', async ({ browser }) => {
     await openVotingClean(page);
     await castVotesUi(page, { A: 7, B: 11, C: 5 });
     await shot(page, '17-bleskovka-hlasovani-senior');
+
+    // INTERAKTIVNÍ TABULE — drag & drop kola (feature/board-interactions).
+    // Typy jsou v sadách obsahově: třídění=vyjmenovaná (young), řazení=zlomky
+    // (middle), přiřazování=moderna (senior) → záběry kryjí všechny typy
+    // i všechny věkové režimy.
+
+    // SORT_BINS young: koše Y/I, dvě kartičky už usazené (živý záběr)
+    await startBleskovka(page, 'Vyjmenovaná slova po B a L', '2.B', 'young');
+    await page
+      .getByTestId('expedition-intro-start')
+      .click({ timeout: 3000 })
+      .catch(() => {});
+    await playQuizRoundsUntil(page, 'live-sort-board');
+    await placeSortCards(page, 2);
+    await settle(page, 900);
+    await shot(page, '18-bleskovka-trideni-young');
+
+    // ORDER middle: řada zlomků s popisky osy nejmenší → největší
+    await startBleskovka(page, 'Zlomky a desetinná čísla', '8.A', 'middle');
+    await playQuizRoundsUntil(page, 'live-order-board');
+    await settle(page, 600);
+    await shot(page, '19-bleskovka-razeni-middle');
+
+    // Detailní záběr dotykového ovládacího pruhu (80px+ targety, Zkontrolovat,
+    // Ukázat řešení, fullscreen) — ORDER kolo má pruh nejplnější
+    await page
+      .getByTestId('live-control-bar')
+      .screenshot({ path: join(OUT, '21-bleskovka-ovladaci-pruh.png') });
+    console.log('📸 21-bleskovka-ovladaci-pruh');
+
+    // MATCH_PAIRS senior: tmavé plátno, monospace, jedna dvojice spojená
+    await startBleskovka(page, 'Literární moderna', 'G2', 'senior');
+    await playQuizRoundsUntil(page, 'live-match-board');
+    await connectFirstMatchPair(page);
+    await settle(page, 900);
+    await shot(page, '20-bleskovka-prirazovani-senior');
 
     await context.close();
   }

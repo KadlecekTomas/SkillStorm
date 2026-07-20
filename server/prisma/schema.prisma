@@ -934,6 +934,9 @@ model Question {
   correctAnswer  String?
   correctAnswers String[]
   score          Int                @default(1)
+  /// Autorská data interaktivních typů (MATCH_PAIRS/ORDER/SORT_BINS) — tvary
+  /// viz shared/interactive-content.util.ts. U kvízových typů vždy null.
+  content        Json?
   answers        Answer[]
   options        Option[]
   test           Test               @relation(fields: [testId], references: [id], onDelete: Cascade)
@@ -1062,20 +1065,32 @@ model LiveSession {
 /// žádná vazba na osoby (GDPR záměr režimu B trvá, viz docs/live-sessions.md).
 /// Hlasy NIKDY nevstupují do XP ani postupu kampaní (kryto e2e).
 model LiveSessionRound {
-  id                 String            @id @default(uuid()) @map("live_session_round_id")
-  sessionId          String            @map("live_session_id")
+  id                 String               @id @default(uuid()) @map("live_session_round_id")
+  sessionId          String               @map("live_session_id")
   order              Int
-  questionId         String?           @map("question_id")
-  questionText       String            @map("question_text")
-  optionsSnapshot    Json              @map("options_snapshot")
-  correctKeySnapshot String            @map("correct_key_snapshot")
+  questionId         String?              @map("question_id")
+  questionText       String               @map("question_text")
+  interactionType    RoundInteractionType @default(QUIZ) @map("interaction_type")
+  /// QUIZ only — u interaktivních kol null.
+  optionsSnapshot    Json?                @map("options_snapshot")
+  /// QUIZ only — u interaktivních kol null.
+  correctKeySnapshot String?              @map("correct_key_snapshot")
+  /// Interaktivní kola — board-safe obsah (zamíchané kartičky, překlíčovaná
+  /// round-local ID, BEZ řešení). Smí na projekci kdykoli.
+  contentSnapshot    Json?                @map("content_snapshot")
+  /// Interaktivní kola — mapování řešení. NIKDY neopouští server před
+  /// dokončením/revealem kola (stejný kontrakt jako correctKeySnapshot).
+  solutionSnapshot   Json?                @map("solution_snapshot")
+  /// Anonymní agregát průběhu řešení na tabuli: { wrong, placed: {itemId:
+  /// targetId}, checks }. Žádná vazba na osoby; do XP nikdy nevstupuje.
+  attemptStats       Json?                @map("attempt_stats")
   outcome            LiveRoundOutcome?
-  voteCounts         Json?             @map("vote_counts")
-  votingStartedAt    DateTime?         @map("voting_started_at")
-  revealedAt         DateTime?         @map("revealed_at")
-  completedAt        DateTime?         @map("completed_at")
-  session            LiveSession       @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  question           Question?         @relation(fields: [questionId], references: [id], onDelete: SetNull)
+  voteCounts         Json?                @map("vote_counts")
+  votingStartedAt    DateTime?            @map("voting_started_at")
+  revealedAt         DateTime?            @map("revealed_at")
+  completedAt        DateTime?            @map("completed_at")
+  session            LiveSession          @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  question           Question?            @relation(fields: [questionId], references: [id], onDelete: SetNull)
 
   @@unique([sessionId, order])
   @@map("live_session_rounds")
@@ -1473,6 +1488,9 @@ enum QuestionType {
   FILL_IN_THE_BLANK
   MULTIPLE_CHOICE
   TRUE_FALSE
+  MATCH_PAIRS // interaktivní — pouze bleskovky (blokuje assignTest, ne publish)
+  ORDER // interaktivní — pouze bleskovky
+  SORT_BINS // interaktivní — pouze bleskovky
 }
 
 enum SubmissionStatus {
@@ -1608,6 +1626,16 @@ enum AnalyticsDataQuality {
 enum AnalyticsSnapshotSource {
   LIVE_SUBMIT
   BACKFILL
+}
+
+/// Typ interakce kola bleskovky. QUIZ = A/B/C/D + pravda/nepravda (vč.
+/// hlasování); ostatní se řeší drag & dropem přímo na tabuli. Jak přidat
+/// další typ viz docs/live-sessions-interactions.md.
+enum RoundInteractionType {
+  QUIZ
+  MATCH_PAIRS
+  ORDER
+  SORT_BINS
 }
 
 enum LiveSessionMode {

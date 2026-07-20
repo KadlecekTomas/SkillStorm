@@ -11,6 +11,7 @@ import {
   Prisma,
   PublishStatus,
   QuestionType,
+  RoundInteractionType,
 } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
 import type { OrgContext } from '@/common/org-context/org-context.types';
@@ -20,16 +21,31 @@ import {
 } from '@/campaigns/campaigns.service';
 import { CreateLiveSessionDto } from './dto/create-live-session.dto';
 import {
+  EMPTY_ATTEMPT_STATS,
   OPTION_KEYS,
   OptionKey,
+  RoundAttemptStats,
   RoundOptionSnapshot,
   RoundVoteCounts,
   XP_PER_FINISHED_SESSION,
   XP_PER_PLAYED_ROUND,
+  computeAttemptOutcome,
   computeStage,
   computeVoteOutcome,
   resolveDefaultLiveAgeMode,
 } from './live-sessions.constants';
+import {
+  isInteractiveQuestionType,
+  INTERACTIVE_QUESTION_TYPES,
+} from '@/shared/interactive-content.util';
+import {
+  InteractiveBoardContent,
+  InteractiveSolution,
+  buildInteractiveSnapshot,
+  validItemIds,
+  validTargetIds,
+} from './interactive-rounds.util';
+import { SubmitAttemptDto } from './dto/submit-attempt.dto';
 
 const TRUE_FALSE_OPTIONS = [
   { text: 'Pravda', value: 'true' },
@@ -43,15 +59,32 @@ type QuestionWithOptions = {
   order: number | null;
   correctAnswer: string | null;
   correctAnswers: string[];
+  content: unknown;
   options: { id: string; text: string }[];
 };
 
-/** Kolo pro projekci — correctKey jen u už odhalených kol (refresh mid-session). */
+/** Snapshot kola při startu — kvíz, nebo interaktivní obsah + řešení. */
+type RoundSnapshot =
+  | { kind: 'QUIZ'; options: RoundOptionSnapshot[]; correctKey: string }
+  | {
+      kind: 'INTERACTIVE';
+      interactionType: RoundInteractionType;
+      content: InteractiveBoardContent;
+      solution: InteractiveSolution;
+    };
+
+/** Kolo pro projekci — correctKey/solution jen u už odhalených kol (refresh mid-session). */
 export interface ProjectionRound {
   id: string;
   order: number;
   questionText: string;
+  interactionType: RoundInteractionType;
+  /** QUIZ only — u interaktivních kol prázdné pole. */
   options: RoundOptionSnapshot[];
+  /** Interaktivní kola — board-safe obsah (bez řešení). */
+  content: InteractiveBoardContent | null;
+  /** Interaktivní kola — anonymní agregát průběhu (obnova plochy po refreshi). */
+  attemptStats: RoundAttemptStats | null;
   outcome: LiveRoundOutcome | null;
   /** Anonymní agregáty hlasů z tabule; null = kolo bez hlasování. */
   voteCounts: RoundVoteCounts | null;
@@ -59,6 +92,7 @@ export interface ProjectionRound {
   revealedAt: Date | null;
   completedAt: Date | null;
   correctKey?: string;
+  solution?: InteractiveSolution;
 }
 
 function sumVotes(counts: RoundVoteCounts): number {
@@ -81,11 +115,27 @@ function shuffle<T>(items: T[]): T[] {
 }
 
 /**
- * Otázka je použitelná v bleskovce, pokud ji lze zobrazit jako single-choice
+ * Otázka je použitelná v bleskovce, pokud je interaktivní (MATCH_PAIRS/ORDER/
+ * SORT_BINS s validním obsahem), nebo ji lze zobrazit jako single-choice
  * A/B/C/D: TRUE_FALSE vždy, MULTIPLE_CHOICE jen single-mode (correctAnswer,
  * ne correctAnswers[]) s 2–4 možnostmi, z nichž právě jedna je správná.
  */
-function buildRoundSnapshot(
+function buildRoundSnapshot(q: QuestionWithOptions): RoundSnapshot | null {
+  if (isInteractiveQuestionType(q.type)) {
+    const snap = buildInteractiveSnapshot(q.type, q.content);
+    if (!snap) return null;
+    return {
+      kind: 'INTERACTIVE',
+      interactionType: q.type as unknown as RoundInteractionType,
+      content: snap.content,
+      solution: snap.solution,
+    };
+  }
+  const quiz = buildQuizSnapshot(q);
+  return quiz ? { kind: 'QUIZ', ...quiz } : null;
+}
+
+function buildQuizSnapshot(
   q: QuestionWithOptions,
 ): { options: RoundOptionSnapshot[]; correctKey: string } | null {
   if (q.type === QuestionType.TRUE_FALSE) {
@@ -219,7 +269,7 @@ export class LiveSessionsService {
           x,
         ): x is {
           q: QuestionWithOptions;
-          snap: NonNullable<ReturnType<typeof buildRoundSnapshot>>;
+          snap: RoundSnapshot;
         } => x.snap !== null,
       );
     if (snapshots.length === 0) {
@@ -242,14 +292,32 @@ export class LiveSessionsService {
         });
       }
       await tx.liveSessionRound.createMany({
-        data: snapshots.map(({ q, snap }, i) => ({
-          sessionId: id,
-          order: i + 1,
-          questionId: q.id,
-          questionText: q.text,
-          optionsSnapshot: snap.options as unknown as Prisma.InputJsonValue,
-          correctKeySnapshot: snap.correctKey,
-        })),
+        data: snapshots.map(({ q, snap }, i) => {
+          const base = {
+            sessionId: id,
+            order: i + 1,
+            questionId: q.id,
+            questionText: q.text,
+          };
+          if (snap.kind === 'QUIZ') {
+            return {
+              ...base,
+              interactionType: RoundInteractionType.QUIZ,
+              optionsSnapshot: snap.options as unknown as Prisma.InputJsonValue,
+              correctKeySnapshot: snap.correctKey,
+            };
+          }
+          return {
+            ...base,
+            interactionType: snap.interactionType,
+            contentSnapshot: snap.content as unknown as Prisma.InputJsonValue,
+            solutionSnapshot: snap.solution as unknown as Prisma.InputJsonValue,
+            // Nenulové stats od začátku — atomické jsonb_set v submitAttempt
+            // nemusí řešit NULL sloupec.
+            attemptStats:
+              EMPTY_ATTEMPT_STATS as unknown as Prisma.InputJsonValue,
+          };
+        }),
       });
     });
 
@@ -284,14 +352,27 @@ export class LiveSessionsService {
           id: r.id,
           order: r.order,
           questionText: r.questionText,
-          options: r.optionsSnapshot as unknown as RoundOptionSnapshot[],
+          interactionType: r.interactionType,
+          options:
+            (r.optionsSnapshot as unknown as RoundOptionSnapshot[] | null) ??
+            [],
+          content:
+            (r.contentSnapshot as unknown as InteractiveBoardContent | null) ??
+            null,
+          attemptStats: (r.attemptStats as RoundAttemptStats | null) ?? null,
           outcome: r.outcome,
           voteCounts: (r.voteCounts as RoundVoteCounts | null) ?? null,
           votingStartedAt: r.votingStartedAt,
           revealedAt: r.revealedAt,
           completedAt: r.completedAt,
         };
-        if (r.revealedAt) base.correctKey = r.correctKeySnapshot;
+        if (r.revealedAt) {
+          if (r.correctKeySnapshot) base.correctKey = r.correctKeySnapshot;
+          if (r.solutionSnapshot) {
+            base.solution =
+              r.solutionSnapshot as unknown as InteractiveSolution;
+          }
+        }
         return base;
       }),
     };
@@ -305,6 +386,7 @@ export class LiveSessionsService {
     const session = await this.getOwnedSession(id, ctx);
     this.assertRunning(session.status);
     const round = await this.getRound(id, roundId);
+    this.assertQuizRound(round.interactionType);
     if (round.revealedAt) {
       throw new ConflictException({
         code: 'ROUND_ALREADY_REVEALED',
@@ -346,6 +428,7 @@ export class LiveSessionsService {
     const session = await this.getOwnedSession(id, ctx);
     this.assertRunning(session.status);
     const round = await this.getRound(id, roundId);
+    this.assertQuizRound(round.interactionType);
     if (!round.votingStartedAt || round.revealedAt) {
       throw new ConflictException({
         code: 'ROUND_NOT_VOTING',
@@ -389,6 +472,143 @@ export class LiveSessionsService {
   }
 
   /**
+   * Jeden tah na tabuli v interaktivním kole (MATCH_PAIRS/ORDER/SORT_BINS).
+   * Server soudí každé položení — řešení neopouští server před dokončením.
+   * Neblokující pro souběžné tahy (děti u tabule nečekají): stats se
+   * inkrementují atomicky v SQL s fázovým guardem ve WHERE, dokončení jde
+   * přes updateMany (completed_at IS NULL) — poslední souběžné položení
+   * vyhrává závod přesně jednou.
+   */
+  async submitAttempt(
+    id: string,
+    roundId: string,
+    dto: SubmitAttemptDto,
+    ctx: OrgContext,
+  ) {
+    const session = await this.getOwnedSession(id, ctx);
+    this.assertRunning(session.status);
+    const round = await this.getRound(id, roundId);
+    if (round.interactionType === RoundInteractionType.QUIZ) {
+      throw new ConflictException({
+        code: 'ROUND_NOT_INTERACTIVE',
+        message: 'Kvízové kolo se neřeší tahy na tabuli.',
+      });
+    }
+    const content = round.contentSnapshot as unknown as InteractiveBoardContent;
+    const solution = round.solutionSnapshot as unknown as InteractiveSolution;
+    const itemCount = this.roundItemCount(round);
+
+    // Idempotentní doběh: tah, který dorazí po dokončení kola (souběžné
+    // taháky, pomalá wifi), vrátí hotový stav místo chyby.
+    if (round.completedAt) {
+      return this.attemptResponse(round.id, round, itemCount, {
+        alreadyCompleted: true,
+      });
+    }
+
+    if (dto.kind === 'PLACE') {
+      if (content.kind === 'ORDER') {
+        throw new BadRequestException({
+          code: 'ATTEMPT_KIND_MISMATCH',
+          message: 'Kolo ORDER se kontroluje tlačítkem Zkontrolovat (CHECK).',
+        });
+      }
+      const itemId = dto.itemId as string;
+      const targetId = dto.targetId as string;
+      if (!validItemIds(content).has(itemId)) {
+        throw new BadRequestException({
+          code: 'INVALID_ATTEMPT_ITEM',
+          message: 'Toto kolo takovou kartičku nemá.',
+        });
+      }
+      if (!validTargetIds(content).has(targetId)) {
+        throw new BadRequestException({
+          code: 'INVALID_ATTEMPT_TARGET',
+          message: 'Toto kolo takový cíl nemá.',
+        });
+      }
+      const expected =
+        content.kind === 'MATCH_PAIRS'
+          ? (solution as { pairs: Record<string, string> }).pairs[itemId]
+          : (solution as { assignment: Record<string, string> }).assignment[
+              itemId
+            ];
+      const correct = expected === targetId;
+
+      if (correct) {
+        // Správné položení: placed.itemId = targetId (idempotentní na duplicitní
+        // tap). WHERE guard zahodí zápis do mezitím dokončeného kola.
+        await this.prisma.$executeRaw`
+          UPDATE live_session_rounds
+          SET attempt_stats = jsonb_set(
+            attempt_stats,
+            ARRAY['placed', ${itemId}]::text[],
+            to_jsonb(${targetId}::text)
+          )
+          WHERE live_session_round_id = ${roundId}
+            AND completed_at IS NULL
+        `;
+      } else {
+        await this.incrementWrong(roundId);
+      }
+      const finished = await this.maybeCompleteInteractive(roundId, itemCount);
+      const fresh = await this.getRound(id, roundId);
+      return this.attemptResponse(roundId, fresh, itemCount, {
+        correct,
+        justCompleted: finished,
+      });
+    }
+
+    // CHECK — pouze ORDER
+    if (content.kind !== 'ORDER') {
+      throw new BadRequestException({
+        code: 'ATTEMPT_KIND_MISMATCH',
+        message: 'Zkontrolovat patří jen kolu ORDER.',
+      });
+    }
+    const arrangement = dto.arrangement ?? [];
+    const expectedOrder = (solution as { order: string[] }).order;
+    const validIds = validItemIds(content);
+    if (
+      arrangement.length !== expectedOrder.length ||
+      new Set(arrangement).size !== arrangement.length ||
+      arrangement.some((itemId) => !validIds.has(itemId))
+    ) {
+      throw new BadRequestException({
+        code: 'INVALID_ARRANGEMENT',
+        message: 'Rozložení neodpovídá kartičkám kola.',
+      });
+    }
+    const mask = arrangement.map((itemId, i) => itemId === expectedOrder[i]);
+    const solved = mask.every(Boolean);
+    // checks vždy +1, neúspěšná kontrola navíc wrong +1 (prahy počítají
+    // neúspěšné kontroly, ne jednotlivé pozice — viz konstanty).
+    await this.prisma.$executeRaw`
+      UPDATE live_session_rounds
+      SET attempt_stats = jsonb_set(
+        jsonb_set(
+          attempt_stats,
+          '{checks}',
+          to_jsonb(COALESCE((attempt_stats ->> 'checks')::int, 0) + 1)
+        ),
+        '{wrong}',
+        to_jsonb(COALESCE((attempt_stats ->> 'wrong')::int, 0) + ${solved ? 0 : 1})
+      )
+      WHERE live_session_round_id = ${roundId}
+        AND completed_at IS NULL
+    `;
+    let justCompleted = false;
+    if (solved) {
+      justCompleted = await this.completeInteractive(roundId, itemCount);
+    }
+    const fresh = await this.getRound(id, roundId);
+    return this.attemptResponse(roundId, fresh, itemCount, {
+      mask,
+      justCompleted,
+    });
+  }
+
+  /**
    * Odhalí správnou odpověď — až teď correctKey opouští server. Idempotentní.
    * Pokud se v kole hlasovalo, spočítá a předvyplní auto-outcome (prahy viz
    * computeVoteOutcome); učitel ho může přepsat přes setOutcome — jeho slovo
@@ -398,9 +618,14 @@ export class LiveSessionsService {
     const session = await this.getOwnedSession(id, ctx);
     this.assertRunning(session.status);
     const round = await this.getRound(id, roundId);
+    if (round.interactionType !== RoundInteractionType.QUIZ) {
+      return this.revealInteractive(round);
+    }
 
+    // QUIZ kolo má correctKeySnapshot vždy (nullability patří interaktivním).
+    const correctKey = round.correctKeySnapshot as string;
     const voteCounts = (round.voteCounts as RoundVoteCounts | null) ?? null;
-    const autoOutcome = computeVoteOutcome(voteCounts, round.correctKeySnapshot);
+    const autoOutcome = computeVoteOutcome(voteCounts, correctKey);
 
     let outcome = round.outcome;
     if (!round.revealedAt) {
@@ -423,6 +648,49 @@ export class LiveSessionsService {
       correctKey: round.correctKeySnapshot,
       voteCounts,
       totalVotes: voteCounts ? sumVotes(voteCounts) : 0,
+      autoOutcome,
+      outcome,
+    };
+  }
+
+  /**
+   * Reveal interaktivního kola — „Ukázat řešení". Učitelská pojistka, když se
+   * třída zasekne; normálně kolo dokončí děti samy (submitAttempt). Idempotentní.
+   * Auto-outcome z dosavadních pokusů; bez jediného tahu zůstává null (soudí
+   * učitel ručně přes setOutcome).
+   */
+  private async revealInteractive(
+    round: Awaited<ReturnType<LiveSessionsService['getRound']>>,
+  ) {
+    const stats =
+      (round.attemptStats as RoundAttemptStats | null) ?? EMPTY_ATTEMPT_STATS;
+    const itemCount = this.roundItemCount(round);
+    const hasActivity =
+      stats.wrong > 0 ||
+      stats.checks > 0 ||
+      Object.keys(stats.placed).length > 0;
+    const autoOutcome = hasActivity
+      ? computeAttemptOutcome(stats.wrong, itemCount)
+      : null;
+
+    let outcome = round.outcome;
+    if (!round.revealedAt) {
+      const now = new Date();
+      outcome = round.outcome ?? autoOutcome;
+      await this.prisma.liveSessionRound.update({
+        where: { id: round.id },
+        data: {
+          revealedAt: now,
+          completedAt: round.completedAt ?? now,
+          ...(outcome && !round.outcome ? { outcome } : {}),
+        },
+      });
+    }
+    return {
+      roundId: round.id,
+      interactionType: round.interactionType,
+      solution: round.solutionSnapshot as unknown as InteractiveSolution,
+      attemptStats: stats,
       autoOutcome,
       outcome,
     };
@@ -634,6 +902,129 @@ export class LiveSessionsService {
     return round;
   }
 
+  private assertQuizRound(interactionType: RoundInteractionType) {
+    if (interactionType !== RoundInteractionType.QUIZ) {
+      throw new ConflictException({
+        code: 'ROUND_NOT_QUIZ',
+        message: 'Hlasování patří jen kvízovým kolům.',
+      });
+    }
+  }
+
+  /** Počet položek k umístění — jmenovatel prahů auto-outcome. */
+  private roundItemCount(round: {
+    contentSnapshot: Prisma.JsonValue | null;
+  }): number {
+    const content =
+      round.contentSnapshot as unknown as InteractiveBoardContent | null;
+    if (!content) return 0;
+    if (content.kind === 'MATCH_PAIRS') return content.left.length;
+    if (content.kind === 'SORT_BINS') return content.cards.length;
+    return content.items.length;
+  }
+
+  private async incrementWrong(roundId: string): Promise<void> {
+    await this.prisma.$executeRaw`
+      UPDATE live_session_rounds
+      SET attempt_stats = jsonb_set(
+        attempt_stats,
+        '{wrong}',
+        to_jsonb(COALESCE((attempt_stats ->> 'wrong')::int, 0) + 1)
+      )
+      WHERE live_session_round_id = ${roundId}
+        AND completed_at IS NULL
+    `;
+  }
+
+  /** PLACE typy: dokončí kolo, jakmile jsou usazené všechny položky. */
+  private async maybeCompleteInteractive(
+    roundId: string,
+    itemCount: number,
+  ): Promise<boolean> {
+    const fresh = await this.prisma.liveSessionRound.findUnique({
+      where: { id: roundId },
+      select: { attemptStats: true, completedAt: true },
+    });
+    if (!fresh || fresh.completedAt) return false;
+    const stats =
+      (fresh.attemptStats as RoundAttemptStats | null) ?? EMPTY_ATTEMPT_STATS;
+    if (Object.keys(stats.placed).length < itemCount) return false;
+    return this.completeInteractive(roundId, itemCount);
+  }
+
+  /**
+   * Dokončení interaktivního kola: completedAt (→ XP za odehrání), revealedAt
+   * (řešení je od teď veřejné) a auto-outcome z pokusů. updateMany s WHERE
+   * completed_at IS NULL — souběžný poslední tah dokončí kolo právě jednou.
+   */
+  private async completeInteractive(
+    roundId: string,
+    itemCount: number,
+  ): Promise<boolean> {
+    const fresh = await this.prisma.liveSessionRound.findUnique({
+      where: { id: roundId },
+      select: { attemptStats: true },
+    });
+    const stats =
+      (fresh?.attemptStats as RoundAttemptStats | null) ?? EMPTY_ATTEMPT_STATS;
+    const now = new Date();
+    const res = await this.prisma.liveSessionRound.updateMany({
+      where: { id: roundId, completedAt: null },
+      data: {
+        completedAt: now,
+        revealedAt: now,
+        outcome: computeAttemptOutcome(stats.wrong, itemCount),
+      },
+    });
+    return res.count > 0;
+  }
+
+  private attemptResponse(
+    roundId: string,
+    round: {
+      interactionType: RoundInteractionType;
+      attemptStats: Prisma.JsonValue | null;
+      completedAt: Date | null;
+      outcome: LiveRoundOutcome | null;
+      solutionSnapshot: Prisma.JsonValue | null;
+    },
+    itemCount: number,
+    extra: {
+      correct?: boolean;
+      mask?: boolean[];
+      justCompleted?: boolean;
+      alreadyCompleted?: boolean;
+    },
+  ) {
+    const stats =
+      (round.attemptStats as RoundAttemptStats | null) ?? EMPTY_ATTEMPT_STATS;
+    const solved = round.completedAt !== null;
+    return {
+      roundId,
+      interactionType: round.interactionType,
+      wrong: stats.wrong,
+      checks: stats.checks,
+      placed: stats.placed,
+      placedCount: Object.keys(stats.placed).length,
+      itemCount,
+      solved,
+      outcome: round.outcome,
+      ...(extra.correct !== undefined ? { correct: extra.correct } : {}),
+      ...(extra.mask ? { mask: extra.mask } : {}),
+      ...(extra.justCompleted !== undefined
+        ? { justCompleted: extra.justCompleted }
+        : {}),
+      ...(extra.alreadyCompleted ? { alreadyCompleted: true } : {}),
+      // Řešení je veřejné až od dokončení kola (revealedAt) — board podle
+      // něj dokreslí finální stav.
+      ...(solved
+        ? {
+            solution: round.solutionSnapshot as unknown as InteractiveSolution,
+          }
+        : {}),
+    };
+  }
+
   private assertRunning(status: LiveSessionStatus) {
     if (status !== LiveSessionStatus.RUNNING) {
       throw new ConflictException({
@@ -649,7 +1040,13 @@ export class LiveSessionsService {
     const questions = await this.prisma.question.findMany({
       where: {
         testId,
-        type: { in: [QuestionType.MULTIPLE_CHOICE, QuestionType.TRUE_FALSE] },
+        type: {
+          in: [
+            QuestionType.MULTIPLE_CHOICE,
+            QuestionType.TRUE_FALSE,
+            ...INTERACTIVE_QUESTION_TYPES,
+          ],
+        },
       },
       orderBy: { order: 'asc' },
       select: {
@@ -659,6 +1056,7 @@ export class LiveSessionsService {
         order: true,
         correctAnswer: true,
         correctAnswers: true,
+        content: true,
         options: { select: { id: true, text: true } },
       },
     });

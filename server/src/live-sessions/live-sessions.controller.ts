@@ -20,6 +20,7 @@ import { LiveSessionsService } from './live-sessions.service';
 import { CreateLiveSessionDto } from './dto/create-live-session.dto';
 import { RoundOutcomeDto } from './dto/round-outcome.dto';
 import { CastVoteDto } from './dto/cast-vote.dto';
+import { SubmitAttemptDto } from './dto/submit-attempt.dto';
 
 /**
  * Bleskovky (režim B / BOARD_ONLY). Všechny endpointy jsou TEACHER+
@@ -108,6 +109,22 @@ export class LiveSessionsController {
   ) {
     const ctx = await this.orgContext.get(req);
     return ok(this.service.castVote(id, roundId, dto.key, dto.delta ?? 1, ctx));
+  }
+
+  @Post(':id/rounds/:roundId/attempts')
+  @Permission(PermissionKey.CREATE_TEST)
+  @ApiOperation({
+    summary:
+      'Tah na tabuli v interaktivním kole (PLACE/CHECK) — server soudí, řešení nevrací před dokončením',
+  })
+  async submitAttempt(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Param('roundId', new ParseUUIDPipe()) roundId: string,
+    @Body() dto: SubmitAttemptDto,
+    @Req() req: RequestWithUser,
+  ) {
+    const ctx = await this.orgContext.get(req);
+    return ok(this.service.submitAttempt(id, roundId, dto, ctx));
   }
 
   @Post(':id/rounds/:roundId/reveal')

@@ -2,6 +2,10 @@
  * Single source of truth for test assignability.
  * Used by tests.service (findOne, assignTest, update publish) and assignments.service (create).
  */
+import {
+  isInteractiveQuestionType,
+  validateInteractiveContent,
+} from './interactive-content.util';
 
 export type AssignabilityIssueReason =
   | 'NO_ALLOWED_GRADES'
@@ -9,7 +13,9 @@ export type AssignabilityIssueReason =
   | 'NO_SCORE'
   | 'NO_CORRECT_ANSWER'
   | 'INVALID_OPTIONS'
-  | 'NO_TOPIC_ASSIGNMENT';
+  | 'NO_TOPIC_ASSIGNMENT'
+  | 'INTERACTIVE_ONLY_QUESTION'
+  | 'INVALID_INTERACTIVE_CONTENT';
 
 export type AssignabilityIssue = {
   questionId?: string;
@@ -17,7 +23,13 @@ export type AssignabilityIssue = {
 };
 
 export type AssignabilityReport = {
+  /** Test lze zadat žákům — interaktivní otázky (jen pro bleskovky) blokují. */
   isAssignable: boolean;
+  /**
+   * Test lze publikovat — validní interaktivní otázky NEBLOKUJÍ (publikovaná
+   * sada s nimi slouží bleskovkám), nevalidní obsah ano.
+   */
+  isPublishable: boolean;
   totalPoints: number;
   issues: AssignabilityIssue[];
   reasons: {
@@ -27,6 +39,8 @@ export type AssignabilityReport = {
     invalidOptions: number;
     zeroPoints: number;
     noTopicAssignments: number;
+    interactiveOnly: number;
+    invalidInteractiveContent: number;
   };
 };
 
@@ -37,6 +51,7 @@ type QuestionInput = {
   correctAnswers: string[] | null;
   score: number;
   options?: Array<{ text: string }> | null;
+  content?: unknown;
 };
 
 function normalizeText(value?: string | null): string | null {
@@ -73,6 +88,8 @@ export function computeAssignability(
     invalidOptions: 0,
     zeroPoints: 0,
     noTopicAssignments: 0,
+    interactiveOnly: 0,
+    invalidInteractiveContent: 0,
   };
 
   if (allowedGrades.length === 0) {
@@ -94,6 +111,21 @@ export function computeAssignability(
     if (score <= 0) {
       reasons.zeroPoints += 1;
       issues.push({ questionId: q.id, reason: 'NO_SCORE' });
+    }
+
+    if (isInteractiveQuestionType(q.type)) {
+      // Interaktivní otázka: patří jen do bleskovek — zadání žákům blokuje
+      // vždy, publish jen při nevalidním obsahu.
+      reasons.interactiveOnly += 1;
+      issues.push({ questionId: q.id, reason: 'INTERACTIVE_ONLY_QUESTION' });
+      if (validateInteractiveContent(q.type, q.content).length > 0) {
+        reasons.invalidInteractiveContent += 1;
+        issues.push({
+          questionId: q.id,
+          reason: 'INVALID_INTERACTIVE_CONTENT',
+        });
+      }
+      continue;
     }
 
     const answer = normalizeText(q.correctAnswer);
@@ -128,16 +160,20 @@ export function computeAssignability(
     }
   }
 
-  const isAssignable =
+  const isPublishable =
     reasons.missingAllowedGrades === 0 &&
     reasons.missingQuestions === 0 &&
     reasons.zeroPoints === 0 &&
     reasons.missingCorrectAnswers === 0 &&
     reasons.invalidOptions === 0 &&
+    reasons.invalidInteractiveContent === 0 &&
     totalPoints > 0;
+
+  const isAssignable = isPublishable && reasons.interactiveOnly === 0;
 
   return {
     isAssignable,
+    isPublishable,
     totalPoints,
     issues,
     reasons,

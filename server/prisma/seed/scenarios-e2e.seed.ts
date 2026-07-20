@@ -409,6 +409,76 @@ async function main() {
     },
   });
 
+  // ── Interaktivní tabule set: 1× MATCH_PAIRS + 1× ORDER + 1× SORT_BINS ────
+  // Deterministický fixture pro board-interactions scénář (touch drag&drop).
+  const testBoard = await prisma.test.create({
+    data: {
+      organizationId: org.id,
+      title: 'Interaktivní tabule scénář',
+      creatorId: teacherMember.membershipId,
+      status: 'PUBLISHED',
+      academicYearId: year.id,
+      subjectId: catalog.subjectId,
+      allowedGrades: [$Enums.SchoolGrade.GRADE_8],
+    },
+    select: { id: true },
+  });
+  await prisma.question.create({
+    data: {
+      testId: testBoard.id,
+      text: 'Přiřaďte zvíře ke zvuku',
+      type: 'MATCH_PAIRS',
+      order: 1,
+      content: {
+        pairs: [
+          { id: 'p1', left: 'pes', right: 'haf' },
+          { id: 'p2', left: 'kočka', right: 'mňau' },
+          { id: 'p3', left: 'kráva', right: 'bú' },
+          { id: 'p4', left: 'ovce', right: 'bé' },
+        ],
+      },
+    },
+  });
+  await prisma.question.create({
+    data: {
+      testId: testBoard.id,
+      text: 'Seřaďte čísla od nejmenšího',
+      type: 'ORDER',
+      order: 2,
+      content: {
+        items: [
+          { id: 'i1', text: '2' },
+          { id: 'i2', text: '5' },
+          { id: 'i3', text: '8' },
+          { id: 'i4', text: '11' },
+        ],
+        labels: { start: 'nejmenší', end: 'největší' },
+      },
+    },
+  });
+  await prisma.question.create({
+    data: {
+      testId: testBoard.id,
+      text: 'Roztřiďte čísla',
+      type: 'SORT_BINS',
+      order: 3,
+      content: {
+        bins: [
+          { id: 'b-sudá', label: 'Sudá' },
+          { id: 'b-lichá', label: 'Lichá' },
+        ],
+        cards: [
+          { id: 'k1', text: '2', binId: 'b-sudá' },
+          { id: 'k2', text: '4', binId: 'b-sudá' },
+          { id: 'k3', text: '6', binId: 'b-sudá' },
+          { id: 'k4', text: '1', binId: 'b-lichá' },
+          { id: 'k5', text: '3', binId: 'b-lichá' },
+          { id: 'k6', text: '5', binId: 'b-lichá' },
+        ],
+      },
+    },
+  });
+
   // ── Ready-made assignment for 2.A (young mode): 2 MC (tiles) ─────────────
   const test2 = await prisma.test.create({
     data: {

@@ -12,8 +12,23 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { fetchWithAuth } from "@/lib/http/client";
+import {
+  INTERACTIVE_TYPE_LABELS,
+  INTERACTIVE_TYPES,
+  InteractiveContentEditor,
+  draftFromContent,
+  draftToContent,
+  emptyDraft,
+  isInteractiveType,
+  type InteractiveDraft,
+  type InteractiveType,
+} from "./interactive-content-editor";
 
-type QuestionType = "TRUE_FALSE" | "FILL_IN_THE_BLANK" | "MULTIPLE_CHOICE";
+type QuestionType =
+  | "TRUE_FALSE"
+  | "FILL_IN_THE_BLANK"
+  | "MULTIPLE_CHOICE"
+  | InteractiveType;
 
 type QuestionOption = {
   id: string;
@@ -28,6 +43,8 @@ type TestQuestion = {
   correctAnswers?: string[];
   score?: number;
   options?: QuestionOption[];
+  /** Interaktivní typy — autorská data (dvojice/pořadí/koše). */
+  content?: unknown;
 };
 
 type EditableOption = {
@@ -54,6 +71,7 @@ const makeTempOptionKey = () => {
 function toQuestionType(value: string | undefined): QuestionType {
   if (value === "MULTIPLE_CHOICE") return "MULTIPLE_CHOICE";
   if (value === "TRUE_FALSE") return "TRUE_FALSE";
+  if (value && isInteractiveType(value)) return value;
   return "FILL_IN_THE_BLANK";
 }
 
@@ -99,6 +117,9 @@ export function EditQuestionDialog({
   const [correctAnswer, setCorrectAnswer] = useState("");
   const [options, setOptions] = useState<EditableOption[]>([]);
   const [selectedCorrectOptionKey, setSelectedCorrectOptionKey] = useState<string>("");
+  const [interactiveDraft, setInteractiveDraft] = useState<InteractiveDraft>(
+    () => emptyDraft("MATCH_PAIRS"),
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -106,6 +127,11 @@ export function EditQuestionDialog({
     if (!open || !question) return;
     const nextType = toQuestionType(question.type);
     const nextOptions = buildInitialOptions(question);
+    setInteractiveDraft(
+      isInteractiveType(nextType)
+        ? draftFromContent(nextType, question.content)
+        : emptyDraft("MATCH_PAIRS"),
+    );
     const answerFromQuestion =
       question.correctAnswer ??
       (question.correctAnswers && question.correctAnswers.length > 0
@@ -214,7 +240,14 @@ export function EditQuestionDialog({
         score: normalizedScore,
       };
 
-      if (type === "MULTIPLE_CHOICE") {
+      if (isInteractiveType(type)) {
+        // Interaktivní otázka: řešení žije v content, žádné correctAnswer.
+        const built = draftToContent(type, interactiveDraft);
+        if (built.error || !built.content) {
+          throw new Error(built.error ?? "Obsah otázky není kompletní.");
+        }
+        payload = { ...payload, content: built.content };
+      } else if (type === "MULTIPLE_CHOICE") {
         if (normalizedOptions.length === 0) {
           throw new Error("Přidej alespoň jednu možnost.");
         }
@@ -283,11 +316,25 @@ export function EditQuestionDialog({
                   onChange={(event) => {
                     const nextType = toQuestionType(event.target.value);
                     setType(nextType);
+                    if (isInteractiveType(nextType)) {
+                      // Čerstvý draft při přepnutí typu — obsah typů se nemíchá
+                      setInteractiveDraft(
+                        isInteractiveType(toQuestionType(question?.type)) &&
+                          toQuestionType(question?.type) === nextType
+                          ? draftFromContent(nextType, question?.content)
+                          : emptyDraft(nextType),
+                      );
+                    }
                   }}
                 >
                   <option value="TRUE_FALSE">TRUE_FALSE</option>
                   <option value="FILL_IN_THE_BLANK">FILL_IN_THE_BLANK</option>
                   <option value="MULTIPLE_CHOICE">MULTIPLE_CHOICE</option>
+                  {INTERACTIVE_TYPES.map((it) => (
+                    <option key={it} value={it}>
+                      {INTERACTIVE_TYPE_LABELS[it]}
+                    </option>
+                  ))}
                 </select>
               </label>
               <label className="space-y-1 text-sm text-slate-600">
@@ -301,7 +348,13 @@ export function EditQuestionDialog({
               </label>
             </div>
 
-            {type === "MULTIPLE_CHOICE" ? (
+            {isInteractiveType(type) ? (
+              <InteractiveContentEditor
+                type={type}
+                draft={interactiveDraft}
+                onChange={setInteractiveDraft}
+              />
+            ) : type === "MULTIPLE_CHOICE" ? (
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-medium text-slate-700">Možnosti</p>

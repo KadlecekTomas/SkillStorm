@@ -7,6 +7,11 @@ prvního dne připravené na **režim A (`DEVICES`)** — žáci se připojí vl
 zařízeními přes kód (realtime, WebSockets). Režim A je **záměrně
 neimplementovaný**; tento dokument popisuje, kde jsou pro něj švy.
 
+Kromě kvízových kol existují **interaktivní kola řešená drag & dropem přímo
+na tabuli** (`MATCH_PAIRS` / `ORDER` / `SORT_BINS`) — kompletní popis vč.
+návodu na přidání dalšího typu viz
+[live-sessions-interactions.md](./live-sessions-interactions.md).
+
 ## Datový model
 
 - `LiveSession` — běh bleskovky: `hostId` (Membership učitele),

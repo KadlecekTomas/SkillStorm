@@ -32,6 +32,12 @@ export function TestHealthPanel({ report }: TestHealthPanelProps): React.JSX.Ele
   const hasNoCorrectAnswer = report.issues.some(
     (i) => i.reason === "NO_CORRECT_ANSWER"
   );
+  const hasInteractive = report.issues.some(
+    (i) => i.reason === "INTERACTIVE_ONLY_QUESTION"
+  );
+  const hasInvalidInteractive = report.issues.some(
+    (i) => i.reason === "INVALID_INTERACTIVE_CONTENT"
+  );
 
   return (
     <Card className="p-6">
@@ -77,6 +83,23 @@ export function TestHealthPanel({ report }: TestHealthPanelProps): React.JSX.Ele
             }
           />
         </li>
+        {hasInvalidInteractive ? (
+          <li>
+            <CheckItem
+              ok={false}
+              label="Interaktivní kolo nemá kompletní obsah (dvojice/pořadí/koše)"
+            />
+          </li>
+        ) : null}
+        {hasInteractive && !hasInvalidInteractive ? (
+          <li className="flex items-center gap-2 text-sm text-slate-500">
+            <span aria-hidden>ℹ</span>
+            <span>
+              Sada obsahuje interaktivní kola — lze ji publikovat a hrát jako
+              bleskovku, nelze ji zadat žákům jako test.
+            </span>
+          </li>
+        ) : null}
       </ul>
     </Card>
   );

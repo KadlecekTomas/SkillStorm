@@ -432,8 +432,10 @@ async function main() {
   type QuestionSpec = {
     text: string;
     type: QuestionType;
-    correctAnswer: string;
+    correctAnswer?: string;
     options?: string[];
+    /** Interaktivní typy (MATCH_PAIRS/ORDER/SORT_BINS) — obsah pro tabuli. */
+    content?: object;
   };
   const mkTest = async (params: {
     title: string;
@@ -474,8 +476,9 @@ async function main() {
           type: q.type,
           order: index + 1,
           score: 1,
-          correctAnswer: q.correctAnswer,
+          correctAnswer: q.correctAnswer ?? null,
           correctAnswers: [],
+          ...(q.content ? { content: q.content } : {}),
           options: { create: (q.options ?? []).map((text) => ({ text })) },
         },
       });
@@ -502,6 +505,21 @@ async function main() {
       { text: 'Kolik je 2/3 z 18?', type: MC, correctAnswer: '12', options: ['12', '9', '6'] },
       { text: 'Desetinné číslo 0,5 je větší než 3/4.', type: TF, correctAnswer: 'false' },
       { text: 'Kolik je 1/5 jako desetinné číslo?', type: MC, correctAnswer: '0,2', options: ['0,2', '0,5', '0,15'] },
+      {
+        // Interaktivní kolo (tabule) — obsah: draft, čeká na redakční pas
+        text: 'Seřaďte zlomky od nejmenšího po největší.',
+        type: QuestionType.ORDER,
+        content: {
+          items: [
+            { id: 'i1', text: '1/4' },
+            { id: 'i2', text: '1/3' },
+            { id: 'i3', text: '1/2' },
+            { id: 'i4', text: '2/3' },
+            { id: 'i5', text: '3/4' },
+          ],
+          labels: { start: 'nejmenší', end: 'největší' },
+        },
+      },
     ],
   });
 
@@ -519,6 +537,25 @@ async function main() {
       { text: 'Slovo „mlýn“ píšeme s tvrdým Y.', type: TF, correctAnswer: 'true' },
       { text: 'Které slovo je vyjmenované po L?', type: MC, correctAnswer: 'slyšet', options: ['slyšet', 'lísteček', 'lížou'] },
       { text: 'Ve slově „ob_vatel“ píšeme měkké i.', type: TF, correctAnswer: 'false' },
+      {
+        // Interaktivní kolo (tabule) — obsah: draft, čeká na redakční pas
+        text: 'Roztřiďte slova do správných košů!',
+        type: QuestionType.SORT_BINS,
+        content: {
+          bins: [
+            { id: 'y', label: 'Píšeme Y/Ý' },
+            { id: 'i', label: 'Píšeme I/Í' },
+          ],
+          cards: [
+            { id: 'k1', text: 'b_dlit', binId: 'y' },
+            { id: 'k2', text: 'ml_n', binId: 'y' },
+            { id: 'k3', text: 'l_že', binId: 'y' },
+            { id: 'k4', text: 'ob_vatel', binId: 'y' },
+            { id: 'k5', text: 'b_cykl', binId: 'i' },
+            { id: 'k6', text: 'l_stek', binId: 'i' },
+          ],
+        },
+      },
     ],
   });
 
@@ -536,6 +573,19 @@ async function main() {
       { text: 'Prokletí básníci působili především ve Francii.', type: TF, correctAnswer: 'true' },
       { text: 'Symbolismus sděluje význam především…', type: MC, correctAnswer: 'náznakem a obrazem', options: ['náznakem a obrazem', 'přesným popisem', 'statistikou'] },
       { text: 'Dekadence oslavuje běžný všední optimismus.', type: TF, correctAnswer: 'false' },
+      {
+        // Interaktivní kolo (tabule) — obsah: draft, čeká na redakční pas
+        text: 'Přiřaďte autora ke směru.',
+        type: QuestionType.MATCH_PAIRS,
+        content: {
+          pairs: [
+            { id: 'p1', left: 'Charles Baudelaire', right: 'prokletí básníci' },
+            { id: 'p2', left: 'Paul Verlaine', right: 'symbolismus' },
+            { id: 'p3', left: 'Oscar Wilde', right: 'dekadence' },
+            { id: 'p4', left: 'Antonín Sova', right: 'impresionismus' },
+          ],
+        },
+      },
     ],
   });
 

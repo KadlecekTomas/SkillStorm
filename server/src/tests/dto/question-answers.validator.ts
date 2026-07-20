@@ -4,6 +4,7 @@ import {
   ValidationArguments,
 } from 'class-validator';
 import { QuestionType } from '@prisma/client';
+import { isInteractiveQuestionType } from '@/shared/interactive-content.util';
 
 function hasText(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
@@ -31,6 +32,11 @@ export class QuestionAnswersValidator implements ValidatorConstraintInterface {
       Array.isArray(normalizedAnswers) && normalizedAnswers.length > 0;
 
     if (hasAnswer && hasAnswers) return false;
+
+    // Interaktivní typy (bleskovky) mají řešení v `content`, ne v odpovědích.
+    if (obj.type && isInteractiveQuestionType(obj.type)) {
+      return !hasAnswer && !hasAnswers;
+    }
 
     if (
       obj.type === QuestionType.TRUE_FALSE ||
