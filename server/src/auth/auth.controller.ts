@@ -245,6 +245,7 @@ export class AuthController {
     const ctx = await this.authService.getMeContext(req.user.userId, {
       membershipId: req.user.membershipId ?? null,
       organizationId: req.user.organizationId ?? null,
+      activeRole: req.user.organizationRole ?? null,
     });
 
     return ok(ctx);

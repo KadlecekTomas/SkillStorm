@@ -66,6 +66,7 @@ describe('RbacGuard', () => {
       'user-1',
       'org-1',
       PermissionKey.CREATE_TEST,
+      null,
     );
   });
 

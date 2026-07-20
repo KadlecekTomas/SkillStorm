@@ -27,12 +27,22 @@ export class RbacService implements OnModuleDestroy {
     rbacEvents.off(RBAC_INVALIDATE_EVENT, this.invalidationHandler);
   }
 
+  /**
+   * @param activeRole efektivní role requestu (ověřená jwt.strategy).
+   * Bez ní se padá na primární roli nejstaršího membershipu — deterministicky.
+   */
   async canUser(
     userId: string,
     organizationId: string | null,
     permissionKey: PermissionKey,
+    activeRole?: OrganizationRole | null,
   ): Promise<boolean> {
-    const cacheKey = this.buildCacheKey(userId, organizationId, permissionKey);
+    const cacheKey = this.buildCacheKey(
+      userId,
+      organizationId,
+      permissionKey,
+      activeRole ?? null,
+    );
     const cached = this.getFromCache(cacheKey);
     if (cached !== undefined) {
       return cached;
@@ -79,6 +89,9 @@ export class RbacService implements OnModuleDestroy {
         ...(organizationId ? { organizationId } : {}),
         deletedAt: null,
       },
+      // Deterministický výběr (dřív findFirst bez orderBy — latentní bug):
+      // bez explicitní role rozhoduje nejstarší membership.
+      orderBy: { createdAt: 'asc' },
       select: { role: true, organizationId: true },
     });
 
@@ -87,8 +100,11 @@ export class RbacService implements OnModuleDestroy {
       return false;
     }
 
+    // Multi-role: rozhoduje efektivní (aktivní) role requestu, ne primární.
+    const effectiveRole = activeRole ?? membership.role;
+
     // Invariant: OWNER has full access; bypass all permission checks.
-    if (membership.role === OrganizationRole.OWNER) {
+    if (effectiveRole === OrganizationRole.OWNER) {
       this.setCache(cacheKey, userId, organizationId, true);
       return true;
     }
@@ -96,7 +112,7 @@ export class RbacService implements OnModuleDestroy {
     const rolePermission =
       (await this.prisma.rolePermission.findFirst({
         where: {
-          role: membership.role,
+          role: effectiveRole,
           permission: { key: permissionKey },
           organizationId: membership.organizationId,
         },
@@ -104,7 +120,7 @@ export class RbacService implements OnModuleDestroy {
       })) ??
       (await this.prisma.rolePermission.findFirst({
         where: {
-          role: membership.role,
+          role: effectiveRole,
           permission: { key: permissionKey },
           organizationId: null,
         },
@@ -113,7 +129,7 @@ export class RbacService implements OnModuleDestroy {
 
     const allowed = rolePermission
       ? rolePermission.allowed
-      : this.isAllowedByDefault(membership.role, permissionKey);
+      : this.isAllowedByDefault(effectiveRole, permissionKey);
     this.setCache(cacheKey, userId, organizationId, allowed);
     return allowed;
   }
@@ -122,11 +138,12 @@ export class RbacService implements OnModuleDestroy {
     userId: string,
     organizationId: string | null,
     keys: PermissionKey[],
+    activeRole?: OrganizationRole | null,
   ): Promise<Record<string, boolean>> {
     const entries = await Promise.all(
       keys.map(async (key) => ({
         key,
-        allowed: await this.canUser(userId, organizationId, key),
+        allowed: await this.canUser(userId, organizationId, key, activeRole),
       })),
     );
 
@@ -173,8 +190,11 @@ export class RbacService implements OnModuleDestroy {
     userId: string,
     orgId: string | null,
     key: PermissionKey,
+    activeRole: OrganizationRole | null,
   ) {
-    return `${userId}:${orgId ?? 'global'}:${key}`;
+    // Role v klíči: výsledek pro učitelský a rodičovský kontext téhož
+    // uživatele se nesmí míchat.
+    return `${userId}:${orgId ?? 'global'}:${key}:${activeRole ?? 'primary'}`;
   }
 
   private getFromCache(cacheKey: string) {
