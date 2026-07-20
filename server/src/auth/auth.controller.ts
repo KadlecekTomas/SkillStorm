@@ -37,6 +37,7 @@ import {
 import { ok } from '@/common/http/envelope';
 import { UseOrgDto } from './dto/use-org.dto';
 import { SwitchOrganizationDto } from './dto/switch-organization.dto';
+import { SwitchRoleDto } from './dto/switch-role.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
@@ -320,7 +321,40 @@ export class AuthController {
       organization: result.organization,
       membership: result.membership,
       roles: result.roles ?? [],
+      activeRole: result.activeRole ?? null,
       permissions: result.permissions ?? [],
+    });
+  }
+
+  @Post('switch-role')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @AllowAnyOrgStatus()
+  @ApiOperation({
+    summary:
+      'Switch active role context within the active membership (multi-role; persists lastActiveRole)',
+  })
+  @Throttle({ default: { limit: 10, ttl: seconds(60) } })
+  async switchRole(
+    @Req() req: RequestWithUser,
+    @Body() dto: SwitchRoleDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.authService.switchRoleContext(
+      req.user.userId,
+      req.user.membershipId ?? null,
+      dto.role,
+    );
+    setAuthCookies(res, result.tokens);
+    setCsrfCookie(res, generateCsrfToken());
+    return ok({
+      user: result.user,
+      organization: result.organization,
+      membership: result.membership,
+      roles: result.roles ?? [],
+      activeRole: result.activeRole ?? null,
+      permissions: result.permissions ?? [],
+      context: result.context,
     });
   }
 

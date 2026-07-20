@@ -38,6 +38,7 @@ import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { GamificationService } from '@/gamification/gamification.service';
 import { AuditService } from '@/audit/audit.service';
 import { RbacService } from '@/modules/rbac/rbac.service';
+import { emitRbacInvalidation } from '@/modules/rbac/rbac.events';
 import { PermissionKey } from '@prisma/client';
 import type { Request } from 'express';
 import { REFRESH_TOKEN_COOKIE } from './token-cookies';
@@ -504,6 +505,37 @@ export class AuthService {
       throw new ForbiddenException('Invite already used');
     }
 
+    // Multi-role (guardian Etapa A): existující membership v org → invite
+    // přidá roli (assignment), nezakládá druhé členství. Běží v transakci
+    // volajícího, proto přímý zápis assignmentu místo MembershipRolesService
+    // (invariant hlídají DB triggery; STUDENT exkluzivita validovaná níže).
+    const existingMembership = await tx.membership.findFirst({
+      where: {
+        userId,
+        organizationId: invite.organizationId,
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        role: true,
+        organizationId: true,
+        roleAssignments: {
+          where: { deletedAt: null },
+          select: { role: true },
+        },
+      },
+    });
+    if (existingMembership) {
+      return this.addRoleFromInvite(
+        tx,
+        userId,
+        existingMembership,
+        invite,
+        now,
+        context,
+      );
+    }
+
     const membership = await tx.membership.create({
       data: {
         userId,
@@ -646,6 +678,118 @@ export class AuthService {
     );
 
     return membership;
+  }
+
+  /**
+   * Invite accept pro uživatele, který už má v organizaci membership
+   * (multi-role, guardian Etapa A): přidá roli jako assignment, druhé
+   * členství nevzniká. STUDENT je exkluzivní (STOP #1). STUDENT_CLASS
+   * invite existující členství nepodporuje (enrollment řeší škola).
+   */
+  private async addRoleFromInvite(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    membership: {
+      id: string;
+      role: OrganizationRole;
+      organizationId: string;
+      roleAssignments: { role: OrganizationRole }[];
+    },
+    invite: {
+      id: string;
+      organizationId: string;
+      role: OrganizationRole;
+      type: InvitationType;
+      maxUses: number;
+    },
+    now: Date,
+    context?: { token?: string; ip?: string },
+  ) {
+    if (invite.type === InvitationType.STUDENT_CLASS) {
+      throw new ConflictException(
+        'Už jsi členem této organizace — zápis do třídy zařídí škola.',
+      );
+    }
+
+    const activeRoles = membership.roleAssignments.length
+      ? membership.roleAssignments.map((assignment) => assignment.role)
+      : [membership.role];
+
+    if (activeRoles.includes(invite.role)) {
+      throw new ConflictException(
+        'Už jsi členem této organizace s touto rolí.',
+      );
+    }
+    if (
+      invite.role === OrganizationRole.STUDENT ||
+      activeRoles.includes(OrganizationRole.STUDENT)
+    ) {
+      throw new ConflictException(
+        'Žákovský účet nelze kombinovat s dalšími rolemi.',
+      );
+    }
+
+    await tx.membershipRoleAssignment.upsert({
+      where: {
+        membershipId_role: { membershipId: membership.id, role: invite.role },
+      },
+      create: { membershipId: membership.id, role: invite.role },
+      update: { deletedAt: null },
+    });
+
+    if (invite.role === OrganizationRole.TEACHER) {
+      const teacher = await tx.teacher.findUnique({
+        where: { membershipId: membership.id },
+        select: { id: true, deletedAt: true },
+      });
+      if (!teacher) {
+        await tx.teacher.create({
+          data: {
+            membershipId: membership.id,
+            organizationId: membership.organizationId,
+          },
+          select: { id: true },
+        });
+      } else if (teacher.deletedAt !== null) {
+        await tx.teacher.update({
+          where: { id: teacher.id },
+          data: { deletedAt: null },
+        });
+      }
+    }
+
+    await tx.user.update({
+      where: { id: userId },
+      data: { lastActiveMembershipId: membership.id },
+    });
+
+    await tx.auditLog.create({
+      data: {
+        action: 'MEMBERSHIP_ROLE_ASSIGN',
+        entityType: AuditEntityType.PERMISSION,
+        entityId: membership.id,
+        userId,
+        organizationId: membership.organizationId,
+        metadata: { role: invite.role, source: 'INVITE', inviteId: invite.id },
+      },
+    });
+
+    await this.consumeInviteOrThrow(
+      tx,
+      invite.id,
+      now,
+      invite.maxUses,
+      context?.token,
+      context?.ip,
+    );
+
+    emitRbacInvalidation({
+      userId,
+      organizationId: membership.organizationId,
+      reason: 'MEMBERSHIP_ROLE_ASSIGN',
+    });
+
+    return { ...membership, userId } as unknown as Membership;
   }
 
   async register(dto: RegisterDto, context?: { ip?: string }) {

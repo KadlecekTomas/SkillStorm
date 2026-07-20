@@ -110,13 +110,25 @@ export class TeachersService {
     // membership existence
     const membership = await this.prisma.membership.findUnique({
       where: { id: dto.membershipId },
-      select: { id: true, role: true, organizationId: true },
+      select: {
+        id: true,
+        role: true,
+        organizationId: true,
+        roleAssignments: {
+          where: { deletedAt: null, role: OrganizationRole.TEACHER },
+          select: { id: true },
+        },
+      },
     });
     if (!membership)
       throw new NotFoundException('Zadané membershipId neexistuje.');
 
-    // role TEACHER
-    if (membership.role !== OrganizationRole.TEACHER) {
+    // role TEACHER — multi-role: stačí aktivní assignment (primární role
+    // může být např. DIRECTOR)
+    const hasTeacherRole =
+      membership.role === OrganizationRole.TEACHER ||
+      membership.roleAssignments.length > 0;
+    if (!hasTeacherRole) {
       throw new ConflictException('Membership nemá roli TEACHER.');
     }
 

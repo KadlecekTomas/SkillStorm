@@ -1,13 +1,20 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { AuditEntityType, OrganizationRole, Prisma } from '@prisma/client';
+import {
+  AuditEntityType,
+  OrganizationRole,
+  Prisma,
+  SystemRole,
+} from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
 import { AuditService } from '@/audit/audit.service';
 import { emitRbacInvalidation } from '@/modules/rbac/rbac.events';
+import type { JwtPayload } from '@/auth/types/jwt-payload';
 
 /**
  * Jediná aplikační cesta zápisu multi-role assignmentů (guardian Etapa A,
@@ -43,12 +50,63 @@ export class MembershipRolesService {
     return assignments.map((assignment) => assignment.role);
   }
 
+  /** Tenant-scoped čtení pro API (cross-org zásah zakázán mimo SUPERADMIN). */
+  async listActiveRolesFor(membershipId: string, actor: JwtPayload) {
+    const membership = await this.getMembershipOrFail(membershipId);
+    if (
+      actor.systemRole !== SystemRole.SUPERADMIN &&
+      actor.organizationId !== membership.organizationId
+    ) {
+      throw new ForbiddenException('Cross-organization update is forbidden.');
+    }
+    return this.listActiveRoles(membershipId);
+  }
+
+  /**
+   * Eskalační a tenant pravidla správy rolí:
+   * - cross-org zásah zakázán (mimo SUPERADMIN),
+   * - OWNER se přes tento kanál nepřiřazuje ani neodebírá (transfer
+   *   vlastnictví je jiná operace),
+   * - DIRECTOR roli přiřazuje/odebírá jen OWNER nebo SUPERADMIN,
+   * - vlastnímu členství lze přidat jen ne-eskalující roli PARENT.
+   */
+  private assertActorCanManage(
+    actor: JwtPayload,
+    membership: { userId: string; organizationId: string },
+    role: OrganizationRole,
+  ) {
+    if (actor.systemRole === SystemRole.SUPERADMIN) return;
+    if (actor.organizationId !== membership.organizationId) {
+      throw new ForbiddenException('Cross-organization update is forbidden.');
+    }
+    if (role === OrganizationRole.OWNER) {
+      throw new ForbiddenException(
+        'Roli OWNER nelze spravovat přes role assignments.',
+      );
+    }
+    if (
+      role === OrganizationRole.DIRECTOR &&
+      actor.organizationRole !== OrganizationRole.OWNER
+    ) {
+      throw new ForbiddenException(
+        'Roli DIRECTOR může přiřadit jen owner nebo SUPERADMIN.',
+      );
+    }
+    if (
+      membership.userId === actor.userId &&
+      role !== OrganizationRole.PARENT
+    ) {
+      throw new ForbiddenException(
+        'Vlastnímu členství lze přidat jen roli PARENT.',
+      );
+    }
+  }
+
   /** Přidá membershipu další roli (aditivně). */
   async assignRole(input: {
     membershipId: string;
     role: OrganizationRole;
-    actorUserId?: string | null;
-    actorMembershipId?: string | null;
+    actor: JwtPayload;
   }) {
     const { membershipId, role } = input;
     if (role === OrganizationRole.STUDENT) {
@@ -60,6 +118,7 @@ export class MembershipRolesService {
     }
 
     const membership = await this.getMembershipOrFail(membershipId);
+    this.assertActorCanManage(input.actor, membership, role);
     if (membership.role === OrganizationRole.STUDENT) {
       throw new BadRequestException({
         code: 'STUDENT_ROLE_EXCLUSIVE',
@@ -78,13 +137,14 @@ export class MembershipRolesService {
       });
     }
 
+    const actorMembershipId = input.actor.membershipId ?? null;
     await this.prisma.$transaction(async (tx) => {
       if (existing) {
         await tx.membershipRoleAssignment.update({
           where: { id: existing.id },
           data: {
             deletedAt: null,
-            createdById: input.actorMembershipId ?? null,
+            createdById: actorMembershipId,
           },
         });
       } else {
@@ -92,7 +152,7 @@ export class MembershipRolesService {
           data: {
             membershipId,
             role,
-            createdById: input.actorMembershipId ?? null,
+            createdById: actorMembershipId,
           },
         });
       }
@@ -103,12 +163,12 @@ export class MembershipRolesService {
       action: 'MEMBERSHIP_ROLE_ASSIGN',
       entityType: AuditEntityType.PERMISSION,
       entityId: membershipId,
-      userId: input.actorUserId ?? null,
+      userId: input.actor.userId ?? null,
       organizationId: membership.organizationId,
       metadata: {
         role,
         targetUserId: membership.userId,
-        actorMembershipId: input.actorMembershipId ?? null,
+        actorMembershipId,
       },
     });
     emitRbacInvalidation({
@@ -127,11 +187,11 @@ export class MembershipRolesService {
   async revokeRole(input: {
     membershipId: string;
     role: OrganizationRole;
-    actorUserId?: string | null;
-    actorMembershipId?: string | null;
+    actor: JwtPayload;
   }) {
     const { membershipId, role } = input;
     const membership = await this.getMembershipOrFail(membershipId);
+    this.assertActorCanManage(input.actor, membership, role);
 
     if (membership.role === role) {
       throw new BadRequestException({
@@ -170,12 +230,12 @@ export class MembershipRolesService {
       action: 'MEMBERSHIP_ROLE_REVOKE',
       entityType: AuditEntityType.PERMISSION,
       entityId: membershipId,
-      userId: input.actorUserId ?? null,
+      userId: input.actor.userId ?? null,
       organizationId: membership.organizationId,
       metadata: {
         role,
         targetUserId: membership.userId,
-        actorMembershipId: input.actorMembershipId ?? null,
+        actorMembershipId: input.actor.membershipId ?? null,
       },
     });
     emitRbacInvalidation({
