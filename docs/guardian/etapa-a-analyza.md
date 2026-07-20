@@ -285,14 +285,58 @@ existujícího švu `useOrganization`/`switchOrganization` (auth.service:1409-15
 
 ---
 
-## 4. Otevřené otázky pro STOP #1
+## 4. Rozhodnutí STOP #1 (schváleno zadavatelem 2026-07-20)
 
-1. **STUDENT exkluzivita v1** — potvrdit (doporučeno). Zrušení by vyžadovalo přesun XP/parťáka
-   z Membership na Student a revizi `Submission.studentId`.
-2. **`lastActiveRole` na Membership** — doporučeno ano (UX: návrat do posledního kontextu).
-3. **Mrtvý kód `resolveJoinRole`** (auth.service:146) — smazat v Krok 2, nebo nechat Etapě B?
-4. **Per-role statistiky** (platform-health počítá primární roli) — akceptovat jako
-   dokumentovanou limitaci v1? (Učitel-rodič se počítá jako učitel.)
+1. **STUDENT exkluzivita v1 — ANO.** Membership s rolí STUDENT nemá žádnou další roli.
+2. **`lastActiveRole` na Membership — ANO.**
+3. **`resolveJoinRole` (auth.service:146) — smazat v Kroku 2.**
+4. **Per-role statistiky = dokumentovaná limitace v1:** `platform-health.service` groupuje podle
+   `Membership.role` (primární role) — učitel-rodič se v platform statistikách počítá jako
+   učitel. Revize až podle potřeby v pozdější etapě.
+
+### 4.1 Vynucení invariantu „primární role ∈ aktivních assignments“ (doplnění A)
+
+Tři vrstvy, od nejměkčí po nejtvrdší:
+
+1. **Jediná servisní cesta zápisu:** `MembershipRolesService`
+   (`server/src/memberships/membership-roles.service.ts`) je jediné místo, které zapisuje do
+   `membership_role_assignments` A ZÁROVEŇ mění `Membership.role`/`lastActiveRole`. Všechny
+   operace (přiřazení role, odebrání role, změna primární role, vznik membershipu s rolí) běží
+   v jedné transakci, která vždy udrží: primární role má aktivní assignment; STUDENT
+   exkluzivita; satelit (Teacher/Student) existuje pro přiřazenou roli. Přímé
+   `prisma.membershipRoleAssignment.*` mimo tuto službu jsou zakázané (hlídá code review +
+   grep check v testech políčka).
+2. **DB-level vynucení — deferred constraint trigger:** migrace přidává funkci
+   `enforce_membership_primary_role()` a `CONSTRAINT TRIGGER ... DEFERRABLE INITIALLY DEFERRED`
+   na `memberships` (INSERT/UPDATE role, deleted_at) i `membership_role_assignments`
+   (INSERT/UPDATE/DELETE): při COMMITu ověří, že každý nesmazaný membership má nesmazaný
+   assignment své `role` a že STUDENT membership nemá žádný další aktivní assignment.
+   DEFERRED je nutné, protože servisní transakce vytváří membership a assignment ve dvou
+   krocích téže transakce. Vzor: repo už DB triggery používá (SUBMISSION_LOCKED).
+3. **e2e konzistenční test:** (a) po plném seedu raw SQL kontrola, že žádný membership
+   neporušuje invariant; (b) pokus o porušení raw SQL (INSERT membership bez assignmentu,
+   DELETE assignment primární role, druhý assignment k STUDENT membershipu) → očekává se
+   selhání COMMITu na triggeru; (c) servisní pokusy → 4xx.
+
+### 4.2 Revokace assignmentu vs. živé JWT (doplnění B)
+
+Access token má TTL 15 min, ale na TTL se nespoléháme — **revokace je účinná od následujícího
+requestu**:
+
+- `jwt.strategy.validate` už dnes na každém requestu čte membership z DB (dle claimu
+  `membershipId`). Rozšíření: select natáhne i aktivní assignments
+  (`roleAssignments(where: deletedAt: null)`), a efektivní role se určí takto:
+  1. token má `activeRole` → musí být v aktivních assignments, jinak **401
+     `ROLE_CONTEXT_REVOKED`** (klient zareaguje refresh flow/re-login; refresh vydá token
+     s aktuální primární rolí);
+  2. token bez `activeRole` (starý token) → `membership.role` (primární) — beze změny chování.
+- `OrgContext` se staví z takto ověřené efektivní role — do service vrstvy se revokovaná role
+  nikdy nedostane. Guardian dopad: odebrání rodičovské role znamená okamžitou ztrátu
+  rodičovského kontextu (a v Etapě B tím i přístupu k dětem), ne za 15 minut.
+- Revokace primární role neexistuje jako samostatná operace: primární roli lze jen ZMĚNIT
+  (transakčně, viz 4.1), takže membership nikdy nezůstane bez platné primární role.
+- Náklady: žádný nový dotaz — rozšíření selectu existujícího per-request čtení; index
+  `@@unique([membershipId, role])` pokrývá lookup.
 
 ## 5. Definition of done Etapy A (z guardian-project.md)
 
