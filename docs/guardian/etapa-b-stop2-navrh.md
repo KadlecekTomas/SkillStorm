@@ -1,6 +1,6 @@
 # Guardian Etapa B — STOP #2: návrh datového modelu
 
-Stav: **k review** · Branch: `feature/guardian-space` · Pokrývá body 1, 3, 4, 8, 9, 11, 15 specifikace (`docs/guardian-spec.md`); STOP #2 fixuje datový model — UI a API se implementují až po schválení.
+Stav: **SCHVÁLENO s úpravami (20. 7. 2026)** — úpravy zapracovány níže · Branch: `feature/guardian-space` · Pokrývá body 1, 3, 4, 8, 9, 11, 15 specifikace (`docs/guardian-spec.md`); STOP #2 fixuje datový model — UI a API se implementují až po schválení.
 
 Navazuje na Etapu A (v mainu, PR #21): multi-role přes `MembershipRoleAssignment`, STUDENT exkluzivní, PARENT je ne-eskalující role, kterou si uživatel smí přidat k vlastnímu členství (`membership-roles.service.ts`), `switch-role` + `lastActiveRole` fungují.
 
@@ -25,7 +25,7 @@ Navazuje na Etapu A (v mainu, PR #21): multi-role přes `MembershipRoleAssignmen
 | `studentId` | FK → `students` | + composite FK `(student_id, organization_id)` → `students(student_id, organization_id)` |
 | `organizationId` | FK → `organizations` | denormalizace pro tenant guard + composite FKs |
 | `type` | enum `GuardianRelationType` | `PARENT \| LEGAL_GUARDIAN \| OTHER` |
-| `status` | enum `GuardianRelationStatus` | `PENDING \| VERIFIED \| REVOKED` |
+| `status` | enum `GuardianRelationStatus` | `PENDING \| VERIFIED \| DISPUTED \| REVOKED` |
 | `permissions` | `GuardianPermissionKey[]` | default viz 2.2 |
 | `verifiedAt` / `verifiedById` | timestamp / FK → `memberships` | kdo za školu ověřil (nebo vystavil pozvánku) |
 | `revokedAt` / `revokedById` | timestamp / FK → `memberships` | REVOKED je konečný stav; nový přístup = nový řádek |
@@ -41,9 +41,9 @@ Indexy: `(organizationId)`, `(studentId)`, `(guardianMembershipId)`; **partial u
 
 ### 2.2 `GuardianPermissionKey`
 
-`VIEW_RESULTS, VIEW_ASSIGNMENTS, START_PRACTICE, START_HOMEWORK, START_TEST, RECEIVE_NOTIFICATIONS, MANAGE_STUDENT_ACCESS, RESET_STUDENT_PIN, PURCHASE_CONTENT, EXPORT_RESULTS, CONTACT_TEACHER`
+`VIEW_RESULTS, VIEW_ASSIGNMENTS, START_PRACTICE, START_HOMEWORK, START_TEST, RECEIVE_NOTIFICATIONS, MANAGE_STUDENT_ACCESS, RESET_STUDENT_PIN`
 
-Default při ověření: `VIEW_RESULTS, VIEW_ASSIGNMENTS, START_PRACTICE, START_HOMEWORK, RECEIVE_NOTIFICATIONS`. `START_TEST` default NE (princip 4 — konzervativní u klasifikovaných testů; učitel/škola povolí explicitně). Poslední tři klíče jsou rezervy pro budoucí vertikály — v enumu od začátku (žádná migrace enumu později), v UI nikde.
+Default při ověření: `VIEW_RESULTS, VIEW_ASSIGNMENTS, START_PRACTICE, START_HOMEWORK, RECEIVE_NOTIFICATIONS`. `START_TEST` default NE (princip 4 — konzervativní u klasifikovaných testů; učitel/škola povolí explicitně). **Rozhodnutí STOP #2:** žádné rezervní klíče — budoucí oprávnění (nákup obsahu, export, komunikace s učitelem) žijí jen v docs a do enumu se přidají až s implementací své vertikály.
 
 ### 2.3 Žákovský účet bez e-mailu
 
@@ -62,7 +62,9 @@ PIN v Etapě B slouží jen správě (škola/oprávněný rodič ho nastaví/res
 
 Rozšíření `Invite`: `InvitationType` + `GUARDIAN`, nový nullable sloupec `targetStudentId` (FK → students; povinný pro GUARDIAN typ na aplikační úrovni).
 
-Flow: škola u žáka vygeneruje pozvánku (e-mail / kód / QR z tokenu) → vznikne `GuardianStudentRelation` **PENDING** s `verifiedById` = vystavitel → rodič se registruje/přihlásí a zadá kód → accept: založí/rozšíří membership o PARENT roli (existující `membership-roles` cesta) a překlopí vztah na **VERIFIED**. Rodič tedy „jen potvrzuje" (spec bod 15); onboarding: potvrzení dítěte → upozornění → přehled, nic víc.
+**Primární flow (rozhodnutí STOP #2): bulk pro celou třídu.** Třídní/ředitel vygeneruje párovací kódy pro všechny žáky třídy najednou + tisknutelný arch lístečků (jméno žáka + kód + krátká instrukce k registraci); po-jednom vystavená pozvánka je sekundární cesta. Kód: **jednorázový (`maxUses=1`), expirace 30 dní**, krátký formát zadatelný z papírku — existující 6znaková abeceda bez ambiguitních znaků (`ABCDEFGHJKLMNPQRSTUVWXYZ23456789`).
+
+Flow: vygenerování kódu založí `GuardianStudentRelation` **PENDING** s `verifiedById` = vystavitel → rodič se registruje/přihlásí a zadá kód (accept: založí/rozšíří membership o PARENT roli existující `membership-roles` cestou) → **potvrzovací obrazovka při prvním přihlášení** („Je Matěj Novák, 5.A, vaše dítě?"): „Ano" → **VERIFIED**; „Ne, to není moje dítě" → **DISPUTED** — stav viditelný škole (třídní ho vidí u žáka a v přehledu párování; vyřeší revokací a novým kódem). DISPUTED vztah nedává rodiči žádný přístup k dítěti. Onboarding: potvrzení dítěte → upozornění → přehled, nic víc.
 
 Více rodičů = více pozvánek na téhož žáka. Učitel-rodič v téže org: pozvánka přidá PARENT roli k existujícímu membershipu, kontext se přepíná přes `switch-role` z Etapy A — žádné druhé přihlášení.
 
@@ -87,9 +89,11 @@ Náčrt API (implementace po STOPu): `GET /guardian/children` · `POST /guardian
 7. DB invariant: cross-org vztah neprojde ani přímým SQL (composite FK), duplicitní živý vztah neprojde (partial unique).
 8. Basic/detail: změna preference nemění žádnou API autorizaci (403/404 mapa identická).
 
-## 7. Otevřené otázky pro STOP #2
+## 7. Rozhodnutí STOP #2
 
-1. **Defaults oprávnění** — souhlasíš s množinou v 2.2 (zejm. `START_HOMEWORK` ano, `START_TEST` ne)?
-2. **PENDING vs. rovnou VERIFIED** — návrh drží PENDING → potvrzení rodičem → VERIFIED (čistší provenance). Alternativa: kód od školy = rovnou VERIFIED při acceptu. Návrh preferuje první.
-3. **PIN délka/politika** — navrhujeme 4–6 číslic, konfigurovatelné až po pilotu.
-4. **`CONTACT_TEACHER`/`PURCHASE_CONTENT`/`EXPORT_RESULTS`** v enumu od začátku (rezervy) — OK?
+Rozhodnuto 20. 7. 2026:
+1. Defaults oprávnění dle návrhu (`START_HOMEWORK` ano, `START_TEST` ne). ✅
+2. PENDING → potvrzení rodičem → VERIFIED, jako jedna obrazovka při prvním přihlášení; „Ne, to není moje dítě" → **DISPUTED**, viditelné škole. ✅
+3. PIN 4–6 číslic; hash + počítadla pokusů; PIN se nikdy nesmí objevit v lozích. ✅
+4. Rezervní klíče z enumu vyhozeny — budoucí oprávnění jen v docs. ✅
+5. Rozsah Kroku 2 doplněn: bulk generace kódů pro třídu + tisknutelný arch (primární flow); kód jednorázový, expirace 30 dní, bez ambiguitních znaků. ✅
