@@ -20,6 +20,9 @@ model User {
   lastLoginAt            DateTime?            @map("last_login_at")
   passwordChangedAt      DateTime?            @map("password_changed_at")
   tokenVersion           Int                  @default(0) @map("token_version")
+  // Prezentační preference basic/detail (guardian spec bod 4) — nikdy
+  // nemění oprávnění, jen zobrazení už povolených dat.
+  interfaceDetailLevel   InterfaceDetailLevel @default(BASIC) @map("interface_detail_level")
   lastActiveMembershipId String?              @unique @map("last_active_membership_id")
   createdAt              DateTime             @default(now()) @map("created_at")
   updatedAt              DateTime             @updatedAt @map("updated_at")
@@ -88,6 +91,7 @@ model Organization {
   liveSessions       LiveSession[]
   classPartaks       ClassPartak[]
   campaignProgresses CampaignProgress[]
+  guardianRelations  GuardianStudentRelation[]
 
   @@index([name])
   @@index([city])
@@ -198,6 +202,9 @@ model Membership {
   hostedLiveSessions LiveSession[]            @relation("HostedLiveSessions")
   liveParticipations LiveSessionParticipant[]
   roleAssignments    MembershipRoleAssignment[]
+  guardianRelations  GuardianStudentRelation[] @relation("GuardianRelations")
+  verifiedGuardianRelations GuardianStudentRelation[] @relation("VerifiedGuardianRelations")
+  revokedGuardianRelations  GuardianStudentRelation[] @relation("RevokedGuardianRelations")
 
   @@unique([userId, organizationId])
   @@index([organizationId, role])
@@ -516,6 +523,9 @@ model Invite {
   role           OrganizationRole
   classSectionId String?          @map("class_section_id")
   yearId         String?          @map("academic_year_id")
+  // GUARDIAN pozvánka: koho kód propojuje (aplikační vrstva vynucuje
+  // non-null pro type=GUARDIAN).
+  targetStudentId String?         @map("target_student_id")
   expiresAt      DateTime         @map("expires_at")
   maxUses        Int              @default(1) @map("max_uses")
   usedCount      Int              @default(0) @map("used_count")
@@ -524,17 +534,84 @@ model Invite {
   organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   classSection   ClassSection?    @relation(fields: [classSectionId], references: [id], onDelete: Cascade)
   academicYear   AcademicYear?    @relation(fields: [yearId], references: [id], onDelete: Cascade)
+  targetStudent  Student?         @relation("GuardianInvites", fields: [targetStudentId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
   @@index([organizationId, createdAt])
   @@index([classSectionId])
   @@index([yearId])
+  @@index([targetStudentId])
   @@map("invites")
 }
 
 enum InvitationType {
   ORG_ONLY
   STUDENT_CLASS
+  GUARDIAN
+}
+
+enum GuardianRelationType {
+  PARENT
+  LEGAL_GUARDIAN
+  OTHER
+}
+
+enum GuardianRelationStatus {
+  PENDING
+  VERIFIED
+  DISPUTED
+  REVOKED
+}
+
+enum GuardianPermissionKey {
+  VIEW_RESULTS
+  VIEW_ASSIGNMENTS
+  START_PRACTICE
+  START_HOMEWORK
+  START_TEST
+  RECEIVE_NOTIFICATIONS
+  MANAGE_STUDENT_ACCESS
+  RESET_STUDENT_PIN
+}
+
+enum InterfaceDetailLevel {
+  BASIC
+  DETAILED
+}
+
+// Vztah rodič/zákonný zástupce ↔ žák. Guardian strana je Membership (role
+// PARENT z Etapy A), dětská strana org-scoped Student profil. Řádky se
+// nikdy nemažou — REVOKED/DISPUTED je konečný doménový stav; nový přístup
+// = nový řádek. Org konzistenci obou stran vynucují composite FK v SQL
+// migraci (vzor enrollments_student_org_fk); „jeden živý vztah na pár"
+// drží partial unique index guardian_relation_single_live_per_pair.
+model GuardianStudentRelation {
+  id                   String                  @id @default(uuid()) @map("guardian_student_relation_id")
+  guardianMembershipId String                  @map("guardian_membership_id")
+  studentId            String                  @map("student_id")
+  organizationId       String                  @map("organization_id")
+  type                 GuardianRelationType    @default(PARENT)
+  status               GuardianRelationStatus  @default(PENDING)
+  permissions          GuardianPermissionKey[] @default([])
+  verifiedAt           DateTime?               @map("verified_at")
+  verifiedById         String?                 @map("verified_by_membership_id")
+  disputedAt           DateTime?               @map("disputed_at")
+  revokedAt            DateTime?               @map("revoked_at")
+  revokedById          String?                 @map("revoked_by_membership_id")
+  validUntil           DateTime?               @map("valid_until")
+  notificationPrefs    Json?                   @map("notification_prefs")
+  createdAt            DateTime                @default(now()) @map("created_at")
+  updatedAt            DateTime                @updatedAt @map("updated_at")
+  guardianMembership   Membership              @relation("GuardianRelations", fields: [guardianMembershipId], references: [id], onDelete: Cascade)
+  student              Student                 @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  organization         Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  verifiedBy           Membership?             @relation("VerifiedGuardianRelations", fields: [verifiedById], references: [id], onDelete: SetNull)
+  revokedBy            Membership?             @relation("RevokedGuardianRelations", fields: [revokedById], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([studentId])
+  @@index([guardianMembershipId])
+  @@map("guardian_student_relations")
 }
 
 model AcademicYear {
@@ -654,9 +731,18 @@ model Student {
   orgId            String             @map("organization_id")
   studentNumber    String?
   externalId       String?
+  // Žákovský PIN (guardian Etapa B): jen hash, nikdy plaintext — ani v
+  // lozích. Počítadla slouží limitu pokusů; vynucení přijde s login/ověřovací
+  // cestou v Etapě C.
+  pinHash          String?            @map("pin_hash") @db.VarChar(255)
+  pinUpdatedAt     DateTime?          @map("pin_updated_at")
+  pinFailedCount   Int                @default(0) @map("pin_failed_count")
+  pinLockedUntil   DateTime?          @map("pin_locked_until")
   deletedAt        DateTime?          @map("deleted_at")
   enrollments      Enrollment[]
   StudentClassroom StudentClassroom[]
+  guardianRelations GuardianStudentRelation[]
+  guardianInvites   Invite[]           @relation("GuardianInvites")
   membership       Membership         @relation(fields: [membershipId], references: [id], onDelete: Cascade)
   organization     Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
