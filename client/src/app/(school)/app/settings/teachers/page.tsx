@@ -40,8 +40,8 @@ function TeacherManagerPage(): React.JSX.Element {
   return (
     <div className="space-y-6 rounded-3xl border border-slate-100 bg-white p-6 text-sm text-slate-600 shadow-soft">
       <div>
-        <h1 className="text-2xl font-semibold text-slate-900">Teachers</h1>
-        <p className="mt-2">Teachers in your organization</p>
+        <h1 className="text-2xl font-semibold text-slate-900">Učitelé</h1>
+        <p className="mt-2">Učitelé ve vaší organizaci</p>
       </div>
 
       {error && (

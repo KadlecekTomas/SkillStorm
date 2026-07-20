@@ -1,5 +1,7 @@
 "use client";
 
+import { vocative } from "@/lib/czech-vocative";
+
 type Props = {
   firstName: string;
   activeYearName: string | null;
@@ -32,7 +34,7 @@ export function DashboardGreeting({ firstName, activeYearName, loading = false }
     <div className="sticky top-0 z-10 border-b border-line bg-canvas/95 px-1 py-4 backdrop-blur-sm">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h2 className="text-3xl font-extrabold text-ink">
-          {getGreeting()}, {loading ? "…" : firstName} 👋
+          {getGreeting()}, {loading ? "…" : vocative(firstName)} 👋
         </h2>
         <p className="text-sm text-ink-dim">
           {getTodayLabel()}

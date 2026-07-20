@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   computeDeadlineMs,
+  formatDeadlineLabel,
   formatRemaining,
   remainingSeconds,
   type TimerInputs,
@@ -47,10 +48,15 @@ export function useTestTimer(
 
   if (inputs == null || deadlineMs == null) return null;
   const remaining = remainingSeconds(deadlineMs, nowMs);
+  const hasLimit = inputs.timeLimitSec != null;
   return {
-    hasLimit: inputs.timeLimitSec != null,
+    hasLimit,
     remaining,
-    label: formatRemaining(remaining),
+    // S limitem jde vždy o krátký odpočet; bez limitu (jen closeAt) se dlouhá
+    // okna formátují jako "za 14 dní" / "15. 8." místo HH:MM:SS.
+    label: hasLimit
+      ? formatRemaining(remaining)
+      : formatDeadlineLabel(remaining, deadlineMs),
     expired: remaining <= 0,
   };
 }

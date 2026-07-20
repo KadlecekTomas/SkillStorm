@@ -1,11 +1,8 @@
 /**
  * GDPR-minimal risk overview response. No email, username, membership, audit.
  */
-import type {
-  RiskLevel,
-  RiskTrend,
-  RiskFlag,
-} from '@/classroom/risk-overview.util';
+import type { RiskTrend, RiskFlag } from '@/classroom/risk-overview.util';
+import type { RiskAssessment } from '@/shared/risk-model';
 
 export type ClassroomRiskOverviewStudentDto = {
   studentId: string;
@@ -13,7 +10,8 @@ export type ClassroomRiskOverviewStudentDto = {
   averageScorePercent: number;
   lastActivityAt: string | null;
   trend: RiskTrend;
-  riskLevel: RiskLevel;
+  /** NO_DATA = student has no scored submission yet (not a risk signal). */
+  riskLevel: RiskAssessment;
   riskFlags: RiskFlag[];
 };
 

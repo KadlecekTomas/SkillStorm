@@ -34,7 +34,9 @@
 
   /* Signály */
   --streak: 255 150 0; /* #ff9600 */
+  --streak-deep: 194 94 0; /* #c25e00 — tactile stín pod streak tlačítky */
   --xp: 28 176 246; /* #1cb0f6 */
+  --xp-deep: 14 122 184; /* #0e7ab8 — tactile stín pod xp tlačítky */
   --danger: 255 75 75; /* #ff4b4b */
   --danger-deep: 201 47 47; /* #c92f2f */
   --danger-soft: 255 236 236; /* #ffecec */

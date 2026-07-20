@@ -6,6 +6,7 @@ import { getDashboardTeacher, type TeacherDashboardResponse } from "@/lib/api/da
 import { useAuth } from "@/hooks/use-auth";
 import { useAcademicYears } from "@/hooks/use-academic-years";
 import { useClassroomStructure, type ClassroomStructure } from "@/hooks/use-classroom-structure";
+import { formatClassName } from "@/lib/class-label";
 import { BleskovkaSetupDialog } from "@/components/live-sessions/bleskovka-setup-dialog";
 import { DashboardGreeting } from "./DashboardGreeting";
 import { PendingTasks } from "./PendingTasks";
@@ -17,18 +18,12 @@ function getFirstName(fullName: string): string {
   return fullName.split(" ")[0] ?? fullName;
 }
 
-const gradeLabel = (grade: string) => {
-  if (grade.startsWith("GRADE_")) return grade.replace("GRADE_", "");
-  if (grade.startsWith("HIGH_SCHOOL_YEAR_")) return `S${grade.replace("HIGH_SCHOOL_YEAR_", "")}`;
-  return grade;
-};
-
 function getPrimaryClass(structure: ClassroomStructure | null) {
   const cls = structure?.homeroom ?? structure?.teachingClasses[0] ?? null;
   if (!cls) return null;
   return {
     id: cls.id,
-    label: cls.label ?? `${gradeLabel(cls.grade)}.${cls.section}`,
+    label: formatClassName(cls),
     isHomeroom: structure?.homeroom?.id === cls.id,
   };
 }

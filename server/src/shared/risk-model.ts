@@ -9,6 +9,12 @@ export type RiskInput = {
 };
 
 export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH';
+/**
+ * RiskLevel plus the "no scored submissions yet" state. A class or student
+ * without any data must never light up as HIGH (0 % average + infinite
+ * inactivity) — callers detect the no-data case and report it explicitly.
+ */
+export type RiskAssessment = RiskLevel | 'NO_DATA';
 export type RiskFlag = 'LOW_AVERAGE' | 'INACTIVE' | 'DECLINING';
 
 export const LOW_AVERAGE_THRESHOLD_PERCENT = 60;

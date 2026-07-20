@@ -34,3 +34,31 @@ export function formatRemaining(totalSeconds: number): string {
   const pad = (n: number): string => String(n).padStart(2, "0");
   return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
 }
+
+const DAY_SECONDS = 24 * 3600;
+
+function czechDayWord(days: number): string {
+  if (days === 1) return "den";
+  if (days <= 4) return "dny";
+  return "dní";
+}
+
+/**
+ * Popisek termínu bez časového limitu. Odpočet HH:MM:SS dává smysl jen pro
+ * blízké termíny — "342:24:42" vypadá jako rozbitý časovač. Prahy:
+ *   ≤ 24 h   → živý odpočet ("3:24:10")
+ *   ≤ 30 dní → relativně ("za 14 dní")
+ *   dál      → datum ("15. 8.")
+ */
+export function formatDeadlineLabel(
+  totalSeconds: number,
+  deadlineMs: number,
+): string {
+  if (totalSeconds <= DAY_SECONDS) return formatRemaining(totalSeconds);
+  const days = Math.round(totalSeconds / DAY_SECONDS);
+  if (days <= 30) return `za ${days} ${czechDayWord(days)}`;
+  return new Date(deadlineMs).toLocaleDateString("cs-CZ", {
+    day: "numeric",
+    month: "numeric",
+  });
+}

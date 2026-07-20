@@ -9,6 +9,10 @@ export type EffectiveAssignmentStatus =
 export type MyAssignmentDto = {
   id: string;
   testId: string;
+  /** Title of the assigned test — the card headline in the student UI. */
+  testTitle: string;
+  /** Display name of the test's subject (catalog name wins), if any. */
+  subjectName: string | null;
   classSectionId: string | null;
   organizationId: string;
   openAt: Date;

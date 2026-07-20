@@ -15,6 +15,7 @@ import { LevelUpModal } from "@/components/gamification/level-up-modal";
 import { getDashboardStudent, type StudentDashboardResponse } from "@/lib/api/dashboard";
 import { fetchWithAuth } from "@/lib/http/client";
 import { formatDate } from "@/lib/format-date";
+import { vocative } from "@/lib/czech-vocative";
 import { ErrorAlert } from "@/components/ui/alert";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -135,6 +136,7 @@ export function StudentDashboard(): React.JSX.Element {
     (data?.member.name ?? user?.fullName ?? user?.name ?? "").trim().split(" ")[0] || null;
 
   const xp = gamification?.xp ?? data?.member.xp ?? 0;
+  const streakDays = gamification?.streakDays ?? 0;
   const level = gamification?.level ?? data?.member.level ?? 1;
   const nextLevelXp = gamification?.nextLevelXp ?? null;
   const toNext = nextLevelXp != null ? Math.max(nextLevelXp - xp, 0) : null;
@@ -146,7 +148,7 @@ export function StudentDashboard(): React.JSX.Element {
       <div className="mx-auto max-w-3xl space-y-8">
         <div>
           <h1 className="text-3xl font-extrabold text-ink sm:text-4xl">
-            {firstName ? `Ahoj, ${firstName}! 👋` : "Ahoj! 👋"}
+            {firstName ? `Ahoj, ${vocative(firstName)}! 👋` : "Ahoj! 👋"}
           </h1>
           <p className="mt-1 text-base leading-relaxed text-ink-muted">
             Tvůj parťák už se těší na dnešní procvičování.
@@ -154,12 +156,18 @@ export function StudentDashboard(): React.JSX.Element {
         </div>
 
         {/* Hero s Parťákem — viditelný jen žákovi (viz design reference) */}
-        <Card className="flex flex-wrap items-center gap-7 p-8">
+        <Card className="flex flex-wrap items-center gap-7 p-8" data-testid="student-hero-card">
           <PartakBlob size={110} />
           <div className="min-w-[220px] flex-1">
-            <div className="mb-3.5 flex flex-wrap gap-2">
+            <div className="mb-3.5 flex flex-wrap gap-2" data-testid="student-hero-badges">
               <Badge variant="info">⚡ {xp} XP</Badge>
               <Badge variant="success">Úroveň {level ?? 1}</Badge>
+              {streakDays > 0 && (
+                <Badge variant="warning">
+                  🔥 {streakDays}{" "}
+                  {streakDays === 1 ? "den" : streakDays <= 4 ? "dny" : "dní"} v řadě
+                </Badge>
+              )}
             </div>
             {toNext != null ? (
               <p className="mb-2 text-sm text-ink-muted">

@@ -600,11 +600,16 @@ export class StatsService {
             ? Math.round((stats.points / stats.maxPoints) * 10000) / 100
             : null;
         const weekSubs = classWeekCount.get(c.id) ?? 0;
-        const riskLevel = this.riskService.computeStudentRisk({
-          averageScorePercent: avgScore ?? 0,
-          daysSinceLastActivity: this.daysSince(stats?.lastAt ?? null, now),
-          trendPercent: 0,
-        });
+        // Třída bez jediného ohodnoceného odevzdání = NO_DATA, ne HIGH —
+        // prázdná/nová třída nesmí na ředitelském dashboardu svítit jako požár.
+        const riskLevel: import('@/shared/risk-model').RiskAssessment =
+          avgScore === null
+            ? 'NO_DATA'
+            : this.riskService.computeStudentRisk({
+                averageScorePercent: avgScore,
+                daysSinceLastActivity: this.daysSince(stats?.lastAt ?? null, now),
+                trendPercent: 0,
+              });
         return {
           id: c.id,
           label: c.label ?? `${c.grade}.${c.section}`,
@@ -885,12 +890,17 @@ export class StatsService {
             deletedAt: null,
             test: { creatorId: membership.id, deletedAt: null },
             status: SubmissionStatus.PENDING,
+            // Rozpracovaný pokus není „čeká na vyhodnocení" — až po odevzdání
+            submittedAt: { not: null },
             ...(currentYear ? { assignment: { yearId: currentYear.id } } : {}),
           },
         }),
         this.prisma.submission.findMany({
           where: {
             deletedAt: null,
+            // „Poslední odevzdání" = jen skutečně odevzdané pokusy; jinak se
+            // null submittedAt formátoval jako epocha („před 20653 dny")
+            submittedAt: { not: null },
             test: { creatorId: membership.id, deletedAt: null },
             ...(currentYear ? { assignment: { yearId: currentYear.id } } : {}),
           },
@@ -929,7 +939,8 @@ export class StatsService {
           testId: s.testId,
           testTitle: s.test.title,
           studentName: s.student.user?.name ?? null,
-          score: s.score,
+          // score je normalizovaný zlomek 0–1 → klient zobrazuje procenta
+          score: s.score != null ? Math.round(s.score * 100) : null,
           status: s.status,
           submittedAt: s.submittedAt,
         })),

@@ -68,7 +68,7 @@ export const DashboardLayout = ({ children }: DashboardLayoutProps): React.JSX.E
       )}
       <div className="space-y-3">
         {context?.mode === "organization" && (
-          <p className="text-sm font-medium text-ink-dim" aria-label="Aktuální školní rok">
+          <p data-app-chrome className="text-sm font-medium text-ink-dim" aria-label="Aktuální školní rok">
             Školní rok{" "}
             {bootstrapState === "READY" && selectedYear
               ? selectedYear.name

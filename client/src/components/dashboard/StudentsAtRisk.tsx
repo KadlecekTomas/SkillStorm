@@ -52,7 +52,7 @@ export function StudentsAtRisk({ primaryClass, structureLoading }: Props): React
 
   const atRisk = riskData
     ? riskData.students
-        .filter((s) => s.riskLevel !== "LOW")
+        .filter((s) => s.riskLevel === "HIGH" || s.riskLevel === "MEDIUM")
         .sort((a, b) => a.averageScorePercent - b.averageScorePercent)
         .slice(0, 5)
     : [];

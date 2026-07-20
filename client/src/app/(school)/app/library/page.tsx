@@ -7,7 +7,7 @@ import {
 } from "@/components/content/content-library-list";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { gradeFilters, subjectFilters } from "@/utils/constants";
+import { formatGradeLong, gradeNumber, isHighSchoolGrade } from "@/lib/class-label";
 import type { ContentItem } from "@/types";
 import { fetchWithAuth } from "@/lib/http/client";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
@@ -41,6 +41,30 @@ function LibraryPage(): React.JSX.Element {
     };
   }, [org?.id]);
 
+  // Filtry se skládají z reálně dostupných materiálů — žádný pevný seznam.
+  const gradeOptions = useMemo(() => {
+    const grades = Array.from(
+      new Set(items.map((item) => item.schoolGrade).filter((g): g is string => !!g)),
+    );
+    grades.sort((a, b) => {
+      const highDiff = Number(isHighSchoolGrade(a)) - Number(isHighSchoolGrade(b));
+      if (highDiff !== 0) return highDiff;
+      return (gradeNumber(a) ?? 0) - (gradeNumber(b) ?? 0);
+    });
+    return grades;
+  }, [items]);
+  const subjectOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          items
+            .map((item) => subjectLabel(item.subject))
+            .filter((label): label is string => !!label),
+        ),
+      ).sort((a, b) => a.localeCompare(b, "cs")),
+    [items],
+  );
+
   const filtered = useMemo(() => {
     return items.filter((item) => {
       const matchGrade = grade === "All" || item.schoolGrade === grade;
@@ -56,29 +80,31 @@ function LibraryPage(): React.JSX.Element {
       <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">
         <div className="flex flex-wrap items-center gap-4">
           <Input
-            placeholder="Search lesson plans..."
+            placeholder="Hledat materiály…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="max-w-sm"
           />
           <Select value={grade} onValueChange={setGrade}>
             <SelectTrigger className="w-48">
-              <SelectValue placeholder="Grade" />
+              <SelectValue placeholder="Ročník" />
             </SelectTrigger>
             <SelectContent>
-              {gradeFilters.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
+              <SelectItem value="All">Všechny ročníky</SelectItem>
+              {gradeOptions.map((option) => (
+                <SelectItem key={option} value={option}>
+                  {formatGradeLong(option)}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
           <Select value={subject} onValueChange={setSubject}>
             <SelectTrigger className="w-48">
-              <SelectValue placeholder="Subject" />
+              <SelectValue placeholder="Předmět" />
             </SelectTrigger>
             <SelectContent>
-              {["All", ...subjectFilters].map((option) => (
+              <SelectItem value="All">Všechny předměty</SelectItem>
+              {subjectOptions.map((option) => (
                 <SelectItem key={option} value={option}>
                   {option}
                 </SelectItem>

@@ -551,24 +551,24 @@ export default function SettingsPage(): React.JSX.Element {
   return (
     <div className="grid gap-6 md:grid-cols-2">
       <Card>
-        <h2 className="text-lg font-semibold text-slate-900">Profile</h2>
+        <h2 className="text-lg font-semibold text-slate-900">Profil</h2>
         <form onSubmit={profileForm.handleSubmit(onProfileSubmit)} className="mt-4 space-y-4">
-          <Input placeholder="Full name" {...profileForm.register("fullName")} />
-          <Input placeholder="Email" type="email" {...profileForm.register("email")} />
+          <Input placeholder="Celé jméno" {...profileForm.register("fullName")} />
+          <Input placeholder="E-mail" type="email" {...profileForm.register("email")} />
           <Button type="submit" className="w-full">
-            Save profile
+            Uložit profil
           </Button>
         </form>
       </Card>
 
       <Card>
-        <h2 className="text-lg font-semibold text-slate-900">Security</h2>
+        <h2 className="text-lg font-semibold text-slate-900">Zabezpečení</h2>
         <form onSubmit={passwordForm.handleSubmit(onPasswordSubmit)} className="mt-4 space-y-4">
-          <Input placeholder="Current password" type="password" {...passwordForm.register("current")} />
-          <Input placeholder="New password" type="password" {...passwordForm.register("next")} />
-          <Input placeholder="Confirm new password" type="password" {...passwordForm.register("confirm")} />
+          <Input placeholder="Současné heslo" type="password" {...passwordForm.register("current")} />
+          <Input placeholder="Nové heslo" type="password" {...passwordForm.register("next")} />
+          <Input placeholder="Potvrzení nového hesla" type="password" {...passwordForm.register("confirm")} />
           <Button type="submit" className="w-full">
-            Update password
+            Změnit heslo
           </Button>
         </form>
       </Card>
@@ -680,13 +680,13 @@ export default function SettingsPage(): React.JSX.Element {
       {can(PermissionKey.MANAGE_TEACHERS) && (
         <Card className="md:col-span-2 flex flex-col gap-3 rounded-3xl border border-dashed border-blue-200 bg-blue-50/70 p-6">
           <h3 className="text-lg font-semibold text-slate-900">
-            Manage teachers
+            Správa učitelů
           </h3>
           <p className="text-sm text-slate-600">
             Přístup pouze pro ředitele nebo ownera. Umožňuje přidávat a odebírat učitele.
           </p>
           <Button asChild className="w-fit rounded-2xl" variant="outline">
-            <Link href="/app/settings/teachers">Open teacher manager</Link>
+            <Link href="/app/settings/teachers">Otevřít správu učitelů</Link>
           </Button>
         </Card>
       )}

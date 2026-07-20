@@ -11,6 +11,27 @@ import type { Prisma, XpEventType } from '@prisma/client';
 import { OrganizationRole } from '@prisma/client';
 import { emitXpAwarded } from './events/xp.events';
 
+/**
+ * Denní série: počet po sobě jdoucích kalendářních dní (lokální čas serveru)
+ * s alespoň jednou XP událostí, počítáno zpětně. Dnešek bez aktivity sérii
+ * neláme — žák se ještě může přihlásit; počítá se pak od včerejška.
+ */
+export function computeStreakDays(eventDates: Date[]): number {
+  const dayKey = (d: Date) => {
+    const local = new Date(d);
+    return `${local.getFullYear()}-${local.getMonth()}-${local.getDate()}`;
+  };
+  const days = new Set(eventDates.map(dayKey));
+  let streak = 0;
+  const cursor = new Date();
+  if (!days.has(dayKey(cursor))) cursor.setDate(cursor.getDate() - 1);
+  while (days.has(dayKey(cursor))) {
+    streak += 1;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  return streak;
+}
+
 const XP_ALLOWED_ROLES = new Set<OrganizationRole>([
   OrganizationRole.STUDENT,
   OrganizationRole.TEACHER,
@@ -136,11 +157,21 @@ export class GamificationService {
     }
     this.assertMembershipAccess(membership, actor);
 
-    const [xpEvents, nextLevel, achievements] = await Promise.all([
+    const streakWindowStart = new Date();
+    streakWindowStart.setDate(streakWindowStart.getDate() - 60);
+    streakWindowStart.setHours(0, 0, 0, 0);
+    const [xpEvents, streakEvents, nextLevel, achievements] = await Promise.all([
       this.prisma.xpEvent.findMany({
         where: { membershipId: membership.id },
         orderBy: { createdAt: 'desc' },
         take: 20,
+      }),
+      this.prisma.xpEvent.findMany({
+        where: {
+          membershipId: membership.id,
+          createdAt: { gte: streakWindowStart },
+        },
+        select: { createdAt: true },
       }),
       this.prisma.level.findFirst({
         where: { minXp: { gt: membership.xp } },
@@ -157,6 +188,7 @@ export class GamificationService {
       xp: membership.xp,
       level: membership.level,
       nextLevelXp: nextLevel?.minXp ?? null,
+      streakDays: computeStreakDays(streakEvents.map((e) => e.createdAt)),
       achievements: achievements.map((item) => ({
         ...item.achievement,
         achievedAt: item.achievedAt,

@@ -35,8 +35,14 @@ const config: Config = {
           soft: token("--accent-soft"),
         },
         /* Signály */
-        streak: token("--streak"),
-        xp: token("--xp"),
+        streak: {
+          DEFAULT: token("--streak"),
+          deep: token("--streak-deep"),
+        },
+        xp: {
+          DEFAULT: token("--xp"),
+          deep: token("--xp-deep"),
+        },
         danger: {
           DEFAULT: token("--danger"),
           deep: token("--danger-deep"),

@@ -146,7 +146,7 @@ export function TestTopStatusBar({
           className={cn(
             "inline-flex h-10 items-center rounded-2xl px-4 text-sm font-bold text-white shadow-tactile transition-all duration-100 motion-reduce:transition-none focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-xp active:translate-y-[2px] active:shadow-tactile-pressed",
             variant === "practice"
-              ? "bg-xp [--tactile-shadow:#0e7ab8] hover:brightness-105"
+              ? "bg-xp [--tactile-shadow:rgb(var(--xp-deep))] hover:brightness-105"
               : "bg-accent [--tactile-shadow:rgb(var(--accent-deep))] hover:bg-accent-hover",
           )}
         >

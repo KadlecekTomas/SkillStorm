@@ -1772,7 +1772,19 @@ export function ClassroomsPageContent(): React.JSX.Element {
                       <p className="text-sm text-slate-500">Načítám přehled…</p>
                     ) : riskOverview && riskOverview.students.length > 0 ? (
                       (() => {
-                        const atRisk = riskOverview.students.filter((s) => s.riskLevel !== "LOW");
+                        const atRisk = riskOverview.students.filter(
+                          (s) => s.riskLevel === "HIGH" || s.riskLevel === "MEDIUM",
+                        );
+                        const nobodyHasData = riskOverview.students.every(
+                          (s) => s.riskLevel === "NO_DATA",
+                        );
+                        if (nobodyHasData) {
+                          return (
+                            <p className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                              Zatím bez výsledků — přehled se objeví po prvním odevzdaném testu.
+                            </p>
+                          );
+                        }
                         if (atRisk.length === 0) {
                           return (
                             <p className="rounded-2xl border border-slate-100 bg-green-50/80 px-4 py-3 text-sm text-green-800">
@@ -1809,7 +1821,9 @@ export function ClassroomsPageContent(): React.JSX.Element {
                                         toSafeText(s.displayName)
                                       )}
                                     </td>
-                                    <td className="px-4 py-2 text-right text-slate-700">{s.averageScorePercent.toFixed(1)} %</td>
+                                    <td className="px-4 py-2 text-right text-slate-700">
+                                      {s.riskLevel === "NO_DATA" ? "—" : `${s.averageScorePercent.toFixed(1)} %`}
+                                    </td>
                                     <td className="px-4 py-2 text-center">
                                       {s.trend === "UP" && <ArrowUp className="inline-block h-4 w-4 text-green-600" aria-label="Vzestup" />}
                                       {s.trend === "DOWN" && <ArrowDown className="inline-block h-4 w-4 text-red-600" aria-label="Pokles" />}
@@ -1823,11 +1837,13 @@ export function ClassroomsPageContent(): React.JSX.Element {
                                           s.riskLevel === "LOW" && "bg-green-100 text-green-800 border-green-200",
                                           s.riskLevel === "MEDIUM" && "bg-amber-100 text-amber-800 border-amber-200",
                                           s.riskLevel === "HIGH" && "bg-red-100 text-red-800 border-red-200",
+                                          s.riskLevel === "NO_DATA" && "bg-slate-100 text-slate-600 border-slate-200",
                                         )}
                                       >
                                         {s.riskLevel === "LOW" && "Nízké"}
                                         {s.riskLevel === "MEDIUM" && "Střední"}
                                         {s.riskLevel === "HIGH" && "Vysoké"}
+                                        {s.riskLevel === "NO_DATA" && "Bez dat"}
                                       </Badge>
                                     </td>
                                   </tr>

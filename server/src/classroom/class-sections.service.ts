@@ -1081,6 +1081,9 @@ export class ClassSectionsService {
         displayName,
         submissions: rawSubs,
       });
+      // Bez jediného ohodnoceného odevzdání nejde o riziko, ale o chybějící
+      // data — jinak by nová/prázdná třída svítila celá jako HIGH (0 %).
+      const hasScoredData = risk.lastActivityAt != null;
       const riskInput = {
         averageScorePercent: risk.averageScorePercent,
         daysSinceLastActivity: risk.daysSinceLastActivity,
@@ -1092,8 +1095,12 @@ export class ClassSectionsService {
         averageScorePercent: risk.averageScorePercent,
         lastActivityAt: risk.lastActivityAt,
         trend: risk.trend,
-        riskLevel: this.riskService.computeStudentRisk(riskInput),
-        riskFlags: this.riskService.getStudentRiskFlags(riskInput),
+        riskLevel: hasScoredData
+          ? this.riskService.computeStudentRisk(riskInput)
+          : 'NO_DATA',
+        riskFlags: hasScoredData
+          ? this.riskService.getStudentRiskFlags(riskInput)
+          : [],
       });
     }
 

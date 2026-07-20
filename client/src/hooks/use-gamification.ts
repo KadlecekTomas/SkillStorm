@@ -8,6 +8,8 @@ type GamificationSummary = {
   xp: number;
   level: number | null;
   nextLevelXp?: number | null;
+  /** Po sobě jdoucí dny s aktivitou (dnešek bez aktivity sérii neláme). */
+  streakDays?: number;
   achievements: Array<{
     id: string;
     title: string;

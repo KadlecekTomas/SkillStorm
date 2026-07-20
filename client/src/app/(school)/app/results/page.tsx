@@ -9,6 +9,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useAcademicYears } from "@/hooks/use-academic-years";
 import { useClassrooms } from "@/hooks/use-classrooms";
 import type { ClassroomRiskOverview } from "@/hooks/use-classroom-risk-overview";
+import { formatClassName } from "@/lib/class-label";
 import Link from "next/link";
 import type {
   TeacherTopicAnalyticsItem,
@@ -116,7 +117,10 @@ function ResultsPage(): React.JSX.Element {
       const topicItems = topicsRes?.items ?? [];
       const errorItems = errorsRes?.items ?? [];
       const riskStudents = riskRes?.students ?? [];
-      const atRiskStudents = riskStudents.filter((student) => student.riskLevel !== "LOW");
+      // NO_DATA (žádné odevzdání) není riziko — do součtů nepatří
+      const atRiskStudents = riskStudents.filter(
+        (student) => student.riskLevel === "HIGH" || student.riskLevel === "MEDIUM",
+      );
       const decliningStudents = riskStudents.filter((student) => student.riskFlags.includes("DECLINING"));
 
       const assignmentCount = Math.max(1, topicItems.length * 2);
@@ -248,7 +252,9 @@ function ResultsPage(): React.JSX.Element {
   const priorityAlerts = useMemo((): PriorityAlertItem[] => {
     const out: PriorityAlertItem[] = [];
     const highRiskStudents = students.filter((student) => student.riskLevel === "HIGH");
-    const mediumOrWorse = students.filter((student) => student.riskLevel !== "LOW");
+    const mediumOrWorse = students.filter(
+      (student) => student.riskLevel === "HIGH" || student.riskLevel === "MEDIUM",
+    );
 
     if (highRiskStudents.length > 0) {
       const names = highRiskStudents
@@ -373,8 +379,7 @@ function ResultsPage(): React.JSX.Element {
                 <SelectContent>
                   {classrooms.map((c) => (
                     <SelectItem key={c.id} value={c.id}>
-                      {c.grade}. {c.section}
-                      {c.label ? ` (${c.label})` : ""}
+                      {formatClassName(c)}
                     </SelectItem>
                   ))}
                 </SelectContent>
