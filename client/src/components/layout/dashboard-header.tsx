@@ -14,7 +14,15 @@ import { UserMenu } from "@/components/layout/user-menu";
 import { useAuth } from "@/hooks/use-auth";
 import { ReportIssueButton } from "@/components/support/report-issue-button";
 
-/** Role-deterministic dashboard title. No manual switching, derived only from membership.role. */
+const ROLE_LABELS: Record<string, string> = {
+  OWNER: "Vlastník",
+  DIRECTOR: "Ředitel",
+  TEACHER: "Učitel",
+  STUDENT: "Žák",
+  PARENT: "Rodič",
+};
+
+/** Role-deterministic dashboard title. No manual switching, derived only from the active role. */
 function getDashboardTitle(
   context: { mode?: string } | null,
   organizationRole: string | undefined,
@@ -40,12 +48,18 @@ function getDashboardTitle(
  * Mode is derived ONLY from membership.role; no experience toggle.
  */
 export function DashboardHeader(): React.JSX.Element {
-  const { user, org, logout, switchOrganization, isLoading, context } = useAuth();
+  const { user, org, logout, switchOrganization, switchRole, activeRole, isLoading, context } =
+    useAuth();
   const memberships = user?.memberships ?? [];
-  const activeMembershipId =
-    memberships.find((m) => m.organizationId === org?.id)?.id ?? "";
-  const role = user?.organizationRole ?? "";
+  const activeMembership = memberships.find((m) => m.organizationId === org?.id);
+  const activeMembershipId = activeMembership?.id ?? "";
+  const role = activeRole ?? user?.organizationRole ?? "";
   const title = getDashboardTitle(context, role);
+  // Multi-role (guardian Etapa A): přepínač kontextu se ukáže jen členům
+  // s více přiřazenými rolemi v aktivní organizaci.
+  const availableRoles = activeMembership?.roles ?? [];
+  const showRoleSwitcher =
+    context?.mode === "organization" && availableRoles.length > 1;
 
   const showBetaBadge = process.env.NEXT_PUBLIC_BETA_MODE === "1";
   const canReportIssue =
@@ -93,10 +107,33 @@ export function DashboardHeader(): React.JSX.Element {
             </SelectContent>
           </Select>
         )}
-        {role && (
-          <Badge variant="secondary" className="capitalize">
-            {role.toLowerCase()}
-          </Badge>
+        {showRoleSwitcher ? (
+          <Select
+            value={role}
+            onValueChange={(value) => {
+              if (value && value !== role) {
+                void switchRole(value as (typeof availableRoles)[number]);
+              }
+            }}
+            disabled={isLoading}
+          >
+            <SelectTrigger className="w-40 rounded-2xl" aria-label="Aktivní role">
+              <SelectValue placeholder="Role" />
+            </SelectTrigger>
+            <SelectContent>
+              {availableRoles.map((availableRole) => (
+                <SelectItem key={availableRole} value={availableRole}>
+                  {ROLE_LABELS[availableRole] ?? availableRole.toLowerCase()}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : (
+          role && (
+            <Badge variant="secondary" className="capitalize">
+              {role.toLowerCase()}
+            </Badge>
+          )
         )}
         {canReportIssue && <ReportIssueButton compact />}
         <UserMenu

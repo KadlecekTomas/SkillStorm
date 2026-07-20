@@ -42,6 +42,8 @@ export type AuthState = {
   user: User | null;
   org: OrganizationContext | null;
   roles: OrganizationRole[];
+  /** Efektivní role aktuálního kontextu (multi-role; = organizationRole v JWT). */
+  activeRole: OrganizationRole | null;
   permissions: PermissionKey[];
   context: AuthContext | null;
   loading: boolean;
@@ -60,6 +62,7 @@ export type AuthState = {
     /** API /auth/me returns "organization"; mapped to org when org not provided. */
     organization?: OrganizationContext | null;
     roles?: OrganizationRole[];
+    activeRole?: OrganizationRole | null;
     permissions?: PermissionKey[];
     context?: AuthContext | null;
   }) => void;
@@ -92,6 +95,7 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       org: null,
       roles: [],
+      activeRole: null,
       loading: false,
       authStatus: "anonymous",
       offline: false,
@@ -99,10 +103,13 @@ export const useAuthStore = create<AuthState>()(
       hadSession: false,
       hydrated: false,
       context: null,
-      setProfile: ({ user, org, organization, roles, permissions, context }) => {
+      setProfile: ({ user, org, organization, roles, activeRole, permissions, context }) => {
         const resolvedOrg = org ?? organization ?? null;
         return set(() => ({
           user,
+          // Server posílá activeRole v envelope; user.organizationRole je s ní
+          // vždy synchronní (fallback pro starší odpovědi).
+          activeRole: activeRole ?? user?.organizationRole ?? null,
           org:
             resolvedOrg ??
             (user?.organizationId
@@ -151,6 +158,7 @@ export const useAuthStore = create<AuthState>()(
           context: null,
           permissions: [],
           roles: [],
+          activeRole: null,
           loading: false,
           authStatus: "unauthenticated",
           hadSession: false,
@@ -159,10 +167,11 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: "skillstorm_auth",
-      partialize: ({ user, permissions, roles, org, hadSession, context }) => ({
+      partialize: ({ user, permissions, roles, activeRole, org, hadSession, context }) => ({
         user,
         permissions,
         roles,
+        activeRole,
         org,
         hadSession,
         context,
