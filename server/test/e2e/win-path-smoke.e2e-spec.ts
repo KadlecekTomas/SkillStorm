@@ -400,6 +400,8 @@ describe('Win path smoke (e2e)', () => {
       invalidOptions: 0,
       zeroPoints: 0,
       noTopicAssignments: 0,
+      interactiveOnly: 0,
+      invalidInteractiveContent: 0,
     });
 
     await request(app.getHttpServer())

@@ -72,7 +72,8 @@ async function playRounds(page: Page, outcomes: readonly Outcome[]) {
     await expect(
       page.locator('[data-testid^="live-option-"][data-correct]'),
     ).toHaveCount(0);
-    await page.getByTestId('live-reveal').click();
+    // skip cesta: bez hlasování rovnou reveal (hlasování má vlastní scénář)
+    await page.getByTestId('live-vote-skip').click();
     await expect(
       page.locator('[data-testid^="live-option-"][data-correct]'),
     ).toHaveCount(1);
