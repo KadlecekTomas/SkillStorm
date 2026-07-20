@@ -342,7 +342,12 @@ requestu**:
 
 Implementováno dle tohoto návrhu s jednou upřesněnou mechanikou: vedle deferred CHECK
 triggerů přibyl **sync trigger `membership_primary_role_sync`** (INSERT / skutečná změna
-`memberships.role` → replace-sync assignmentů dle single-role sémantiky). Díky němu legacy
+`memberships.role` → replace-sync assignmentů dle single-role sémantiky).
+
+> **Přechodový mechanismus:** sync trigger existuje jen kvůli legacy zápisovým cestám,
+> které znají pouze `memberships.role`. Až bude sloupec `role` v budoucnu odstraněn
+> (single source of truth = `membership_role_assignments`), odchází trigger s ním —
+> žádná další logika na něm nesmí stavět. Díky němu legacy
 zápisové cesty (seedy, test helpery, memberships.update, invite create path) nevyžadují
 žádné úpravy a invariant drží konstrukčně; multi-role přidávání jde výhradně přes
 `membership_role_assignments` (tam sync trigger nefiruje) — `changePrimaryRole` proto po
