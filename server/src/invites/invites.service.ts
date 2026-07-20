@@ -23,6 +23,10 @@ import {
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 import { AuditEntityType } from '@prisma/client';
+import {
+  GUARDIAN_INVITE_MAX_USES,
+  GUARDIAN_INVITE_TTL_DAYS,
+} from '@/guardian/guardian.constants';
 import { AuthService } from '@/auth/auth.service';
 import { AuditService } from '@/audit/audit.service';
 import { EventsService } from '@/events/events.service';
@@ -286,6 +290,59 @@ export class InvitesService {
     };
   }
 
+  /**
+   * Guardian párovací kód (Etapa B, STOP #2): jednorázový, expirace 30 dní,
+   * role PARENT, vždy vázaný na konkrétního žáka + vystavitele (provenance
+   * pro verified_by na vztahu). Scope aktéra validuje GuardianService —
+   * tady jen samotný zápis, ať generování kódů žije pohromadě.
+   */
+  async createGuardianInvite(input: {
+    organizationId: string;
+    studentId: string;
+    createdById: string;
+  }): Promise<{ id: string; token: string; code: string | null; expiresAt: Date }> {
+    const expiresAt = addDays(new Date(), GUARDIAN_INVITE_TTL_DAYS);
+    const token = this.generateToken();
+
+    let code: string | null = null;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const candidate = this.generateShortCode();
+      const existing = await this.prisma.invite.findFirst({
+        where: { code: candidate },
+        select: { id: true },
+      });
+      if (!existing) {
+        code = candidate;
+        break;
+      }
+    }
+    if (!code) {
+      code = this.generateShortCode() + this.generateShortCode().slice(0, 2);
+    }
+
+    const invite = await this.prisma.invite.create({
+      data: {
+        organizationId: input.organizationId,
+        type: InvitationType.GUARDIAN,
+        role: OrganizationRole.PARENT,
+        targetStudentId: input.studentId,
+        createdById: input.createdById,
+        token,
+        code,
+        expiresAt,
+        maxUses: GUARDIAN_INVITE_MAX_USES,
+      },
+      select: { id: true, code: true, token: true, expiresAt: true },
+    });
+
+    return {
+      id: invite.id,
+      token: invite.token,
+      code: invite.code,
+      expiresAt: invite.expiresAt,
+    };
+  }
+
   // -------------------------------------------------------------------------
   // Validation helpers
   // -------------------------------------------------------------------------
@@ -466,6 +523,17 @@ export class InvitesService {
           InvitesService.INVALID_INVITATION_MESSAGE,
         );
       }
+    } else if (invite.type === InvitationType.GUARDIAN) {
+      // Guardian Etapa B: párovací kód je vždy PARENT + konkrétní žák.
+      if (
+        invite.role !== OrganizationRole.PARENT ||
+        !invite.targetStudentId
+      ) {
+        await this.recordFailedAttempt(token, ip, userId);
+        throw new BadRequestException(
+          InvitesService.INVALID_INVITATION_MESSAGE,
+        );
+      }
     } else {
       if (
         invite.role !== OrganizationRole.TEACHER &&
@@ -502,6 +570,26 @@ export class InvitesService {
           ? activeAssignments.map((assignment) => assignment.role)
           : [existing.role];
         if (activeRoles.includes(invite.role)) {
+          // Guardian Etapa B: rodič s PARENT rolí přijímá kód dalšího
+          // dítěte — role se nemění, ale vztah vzniknout musí.
+          if (invite.type === InvitationType.GUARDIAN) {
+            await this.authService.attachGuardianRelationFromInvite(
+              tx,
+              existing.id,
+              {
+                id: invite.id,
+                organizationId: invite.organizationId,
+                role: invite.role,
+                type: invite.type,
+                maxUses: invite.maxUses,
+                targetStudentId: invite.targetStudentId,
+                createdById: invite.createdById,
+              },
+              new Date(),
+              { token, ...(ip ? { ip } : {}) },
+            );
+            return { membership: existing, idempotent: false };
+          }
           return { membership: existing, idempotent: true };
         }
         const membership = await this.authService.addRoleFromInvite(
@@ -514,6 +602,8 @@ export class InvitesService {
             role: invite.role,
             type: invite.type,
             maxUses: invite.maxUses,
+            targetStudentId: invite.targetStudentId,
+            createdById: invite.createdById,
           },
           new Date(),
           { token, ...(ip ? { ip } : {}) },
@@ -535,6 +625,8 @@ export class InvitesService {
           maxUses: invite.maxUses,
           usedCount: invite.usedCount,
           revokedAt: invite.revokedAt,
+          targetStudentId: invite.targetStudentId,
+          createdById: invite.createdById,
         },
         new Date(),
         { token, ...(ip ? { ip } : {}) },

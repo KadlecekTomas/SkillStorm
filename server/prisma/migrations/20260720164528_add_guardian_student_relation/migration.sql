@@ -14,7 +14,8 @@ CREATE TYPE "public"."InterfaceDetailLevel" AS ENUM ('BASIC', 'DETAILED');
 ALTER TYPE "public"."InvitationType" ADD VALUE 'GUARDIAN';
 
 -- AlterTable
-ALTER TABLE "public"."invites" ADD COLUMN     "target_student_id" TEXT;
+ALTER TABLE "public"."invites" ADD COLUMN     "target_student_id" TEXT,
+ADD COLUMN     "created_by_membership_id" TEXT;
 
 -- AlterTable
 ALTER TABLE "public"."students" ADD COLUMN     "pin_failed_count" INTEGER NOT NULL DEFAULT 0,
@@ -61,6 +62,9 @@ CREATE INDEX "invites_target_student_id_idx" ON "public"."invites"("target_stude
 
 -- AddForeignKey
 ALTER TABLE "public"."invites" ADD CONSTRAINT "invites_target_student_id_fkey" FOREIGN KEY ("target_student_id") REFERENCES "public"."students"("student_id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "public"."invites" ADD CONSTRAINT "invites_created_by_membership_id_fkey" FOREIGN KEY ("created_by_membership_id") REFERENCES "public"."memberships"("membership_id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "public"."guardian_student_relations" ADD CONSTRAINT "guardian_student_relations_guardian_membership_id_fkey" FOREIGN KEY ("guardian_membership_id") REFERENCES "public"."memberships"("membership_id") ON DELETE CASCADE ON UPDATE CASCADE;

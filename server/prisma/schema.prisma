@@ -205,6 +205,7 @@ model Membership {
   guardianRelations  GuardianStudentRelation[] @relation("GuardianRelations")
   verifiedGuardianRelations GuardianStudentRelation[] @relation("VerifiedGuardianRelations")
   revokedGuardianRelations  GuardianStudentRelation[] @relation("RevokedGuardianRelations")
+  createdInvites     Invite[]                  @relation("CreatedInvites")
 
   @@unique([userId, organizationId])
   @@index([organizationId, role])
@@ -524,8 +525,10 @@ model Invite {
   classSectionId String?          @map("class_section_id")
   yearId         String?          @map("academic_year_id")
   // GUARDIAN pozvánka: koho kód propojuje (aplikační vrstva vynucuje
-  // non-null pro type=GUARDIAN).
+  // non-null pro type=GUARDIAN) + kdo za školu kód vystavil (provenance
+  // pro verified_by na vztahu).
   targetStudentId String?         @map("target_student_id")
+  createdById     String?         @map("created_by_membership_id")
   expiresAt      DateTime         @map("expires_at")
   maxUses        Int              @default(1) @map("max_uses")
   usedCount      Int              @default(0) @map("used_count")
@@ -535,6 +538,7 @@ model Invite {
   classSection   ClassSection?    @relation(fields: [classSectionId], references: [id], onDelete: Cascade)
   academicYear   AcademicYear?    @relation(fields: [yearId], references: [id], onDelete: Cascade)
   targetStudent  Student?         @relation("GuardianInvites", fields: [targetStudentId], references: [id], onDelete: Cascade)
+  createdBy      Membership?      @relation("CreatedInvites", fields: [createdById], references: [id], onDelete: SetNull)
 
   @@index([organizationId])
   @@index([organizationId, createdAt])
