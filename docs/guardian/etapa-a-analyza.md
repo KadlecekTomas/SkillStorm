@@ -338,7 +338,21 @@ requestu**:
 - Náklady: žádný nový dotaz — rozšíření selectu existujícího per-request čtení; index
   `@@unique([membershipId, role])` pokrývá lookup.
 
-## 5. Definition of done Etapy A (z guardian-project.md)
+## 5. Stav implementace (Krok 2, 2026-07-20)
+
+Implementováno dle tohoto návrhu s jednou upřesněnou mechanikou: vedle deferred CHECK
+triggerů přibyl **sync trigger `membership_primary_role_sync`** (INSERT / skutečná změna
+`memberships.role` → replace-sync assignmentů dle single-role sémantiky). Díky němu legacy
+zápisové cesty (seedy, test helpery, memberships.update, invite create path) nevyžadují
+žádné úpravy a invariant drží konstrukčně; multi-role přidávání jde výhradně přes
+`membership_role_assignments` (tam sync trigger nefiruje) — `changePrimaryRole` proto po
+updatu primární role v téže transakci znovu aktivuje ostatní role. Invite accept se
+stejnou rolí zůstal idempotentní (201, původní kontrakt); `switchRoleContext` +
+`POST /auth/switch-role`; revokace účinná od následujícího requestu (401
+`ROLE_CONTEXT_REVOKED` v jwt.strategy). E2E: `test/e2e/multi-role-membership.e2e-spec.ts`
+(7 scénářů vč. raw-SQL útoků na invariant).
+
+## 6. Definition of done Etapy A (z guardian-project.md)
 
 Main zelený · žádná změna chování pro existující uživatele (plná regrese) · dokumentovaný nový
 model rolí (tento dokument + docs/guardian.md v Etapě D) · branch protection prošla.
