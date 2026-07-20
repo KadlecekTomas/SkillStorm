@@ -5,13 +5,19 @@ import {
   ParseUUIDPipe,
   Post,
   Req,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { GuardianPermissionKey } from '@prisma/client';
 import { ok } from '@/common/http/envelope';
 import { ApiStandardResponses } from '@/common/http/api-standard-responses.decorator';
 import { NoHttpCache } from '@/common/cache/no-http-cache.decorator';
 import { RequestWithUser } from '@/types/request-with-user';
 import { GuardianService } from './guardian.service';
+import {
+  GuardianAccessGuard,
+  RequireGuardianPermission,
+} from './guardian-access.guard';
 
 /**
  * Rodičovská strana guardian API. Žádný @Permission — autorizace stojí na
@@ -34,6 +40,20 @@ export class GuardianController {
   @NoHttpCache()
   async listChildren(@Req() req: RequestWithUser) {
     return ok(this.service.listChildren(req.user));
+  }
+
+  @Get('children/:studentId/overview')
+  @UseGuards(GuardianAccessGuard)
+  @RequireGuardianPermission(GuardianPermissionKey.VIEW_ASSIGNMENTS)
+  @ApiOperation({
+    summary:
+      'Rodinný prostor dítěte — 4 bloky: úkoly, jak se daří, zprávy, další krok',
+  })
+  @NoHttpCache()
+  async childOverview(
+    @Param('studentId', new ParseUUIDPipe()) studentId: string,
+  ) {
+    return ok(this.service.getChildOverview(studentId));
   }
 
   @Post('relations/:relationId/confirm')

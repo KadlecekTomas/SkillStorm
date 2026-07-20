@@ -4,6 +4,7 @@ import { AuditModule } from '@/audit/audit.module';
 import { InvitesModule } from '@/invites/invites.module';
 import { OrgContextModule } from '@/common/org-context/org-context.module';
 import { GuardianService } from './guardian.service';
+import { GuardianAccessGuard } from './guardian-access.guard';
 import { GuardianController } from './guardian.controller';
 import { GuardianAdminController } from './guardian-admin.controller';
 
@@ -14,7 +15,7 @@ import { GuardianAdminController } from './guardian-admin.controller';
 @Module({
   imports: [PrismaModule, AuditModule, InvitesModule, OrgContextModule],
   controllers: [GuardianController, GuardianAdminController],
-  providers: [GuardianService],
+  providers: [GuardianService, GuardianAccessGuard],
   exports: [GuardianService],
 })
 export class GuardianModule {}

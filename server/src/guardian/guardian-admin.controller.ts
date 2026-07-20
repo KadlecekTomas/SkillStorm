@@ -1,4 +1,5 @@
 import {
+  Body,
   Controller,
   Get,
   Param,
@@ -6,6 +7,7 @@ import {
   Post,
   Req,
 } from '@nestjs/common';
+import { SetStudentPinDto } from './dto/set-student-pin.dto';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { PermissionKey } from '@prisma/client';
 import { Permission } from '@/modules/rbac/permission.decorator';
@@ -70,6 +72,20 @@ export class GuardianAdminController {
   ) {
     const ctx = await this.orgContext.get(req);
     return ok(this.service.listStudentGuardians(studentId, ctx));
+  }
+
+  @Post('students/:studentId/pin')
+  @Permission(PermissionKey.INVITE_STUDENTS)
+  @ApiOperation({
+    summary: 'Nastavení/reset žákovského PINu školou (4–6 číslic, jen hash)',
+  })
+  async setPin(
+    @Param('studentId', new ParseUUIDPipe()) studentId: string,
+    @Body() dto: SetStudentPinDto,
+    @Req() req: RequestWithUser,
+  ) {
+    const ctx = await this.orgContext.get(req);
+    return ok(this.service.setStudentPin(studentId, dto.pin, ctx));
   }
 
   @Post('guardian/relations/:relationId/revoke')

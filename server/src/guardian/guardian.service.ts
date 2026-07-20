@@ -11,6 +11,7 @@ import {
   OrganizationRole,
   Prisma,
 } from '@prisma/client';
+import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '@/prisma/prisma.service';
 import { AuditService } from '@/audit/audit.service';
 import { InvitesService } from '@/invites/invites.service';
@@ -141,9 +142,139 @@ export class GuardianService {
     return { relationId: relation.id, confirmed };
   }
 
+  /**
+   * Rodinný prostor — data pro jednu obrazovku dítěte (STOP #2 / spec bod 3):
+   * Co je potřeba udělat · Jak se dítěti daří · Zprávy · Doporučený další
+   * krok. Vztah + oprávnění už ověřil GuardianAccessGuard. Lidský jazyk a
+   * basic/detail je věc klienta — server vrací data; nikdy XP/level/parťáka.
+   */
+  async getChildOverview(studentId: string) {
+    const now = new Date();
+    const student = await this.prisma.student.findFirstOrThrow({
+      where: { id: studentId },
+      select: {
+        id: true,
+        orgId: true,
+        membershipId: true,
+        membership: { select: { user: { select: { name: true } } } },
+        enrollments: {
+          where: { status: EnrollmentStatus.ACTIVE },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: {
+            classSectionId: true,
+            classSection: { select: { label: true } },
+          },
+        },
+      },
+    });
+    const classSectionId = student.enrollments[0]?.classSectionId ?? null;
+
+    const assignments = await this.prisma.assignment.findMany({
+      where: {
+        organizationId: student.orgId,
+        openAt: { lte: now },
+        closeAt: { gte: now },
+        OR: [
+          ...(classSectionId ? [{ classSectionId }] : []),
+          { students: { some: { studentId: student.membershipId } } },
+        ],
+      },
+      orderBy: { closeAt: 'asc' },
+      select: {
+        id: true,
+        closeAt: true,
+        test: { select: { title: true } },
+        submissions: {
+          where: { studentId: student.membershipId },
+          select: { id: true, submittedAt: true },
+        },
+      },
+    });
+
+    const todo = assignments
+      .filter((a) => !a.submissions.some((s) => s.submittedAt))
+      .map((a) => ({
+        assignmentId: a.id,
+        title: a.test.title,
+        dueAt: a.closeAt,
+        started: a.submissions.length > 0,
+      }));
+
+    const recentSubmissions = await this.prisma.submission.findMany({
+      where: {
+        studentId: student.membershipId,
+        submittedAt: { not: null },
+      },
+      orderBy: { submittedAt: 'desc' },
+      take: 5,
+      select: {
+        submittedAt: true,
+        score: true,
+        assignment: { select: { test: { select: { title: true } } } },
+      },
+    });
+
+    const nextStep = todo[0]
+      ? {
+          type: 'ASSIGNMENT_DUE' as const,
+          assignmentId: todo[0].assignmentId,
+          title: todo[0].title,
+          dueAt: todo[0].dueAt,
+        }
+      : null;
+
+    return {
+      student: {
+        id: student.id,
+        name: student.membership.user.name,
+        classLabel: student.enrollments[0]?.classSection.label ?? null,
+      },
+      todo,
+      progress: recentSubmissions.map((s) => ({
+        title: s.assignment.test.title,
+        submittedAt: s.submittedAt,
+        score: s.score,
+      })),
+      // Školní oznámení zatím neexistují (plný messaging je mimo rozsah);
+      // blok Zprávy je v UI, data přijdou s notifikačním projektem.
+      messages: [] as never[],
+      nextStep,
+    };
+  }
+
   // ─────────────────────────────────────────────────────────────────────────
   // Školní strana (párování)
   // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Nastavení/reset žákovského PINu školou (spec bod 11). PIN je 4–6 číslic
+   * (STOP #2), ukládá se výhradně bcrypt hash, hodnota se nesmí objevit v
+   * lozích ani auditu; počítadla pokusů vynucuje až ověřovací cesta Etapy C.
+   */
+  async setStudentPin(studentId: string, pin: string, ctx: OrgContext) {
+    if (!/^\d{4,6}$/.test(pin)) {
+      throw new BadRequestException('PIN_FORMAT_INVALID');
+    }
+    const student = await this.findStudentInOrgOrThrow(studentId, ctx);
+    await this.assertActorScopeForStudent(student.id, ctx);
+
+    const pinHash = await bcrypt.hash(pin, 10);
+    await this.prisma.student.update({
+      where: { id: student.id },
+      data: {
+        pinHash,
+        pinUpdatedAt: new Date(),
+        pinFailedCount: 0,
+        pinLockedUntil: null,
+      },
+    });
+
+    await this.audit('STUDENT_PIN_SET', ctx.organizationId, student.id, null, {
+      studentId: student.id,
+    });
+    return { studentId: student.id, updated: true };
+  }
 
   /** Jednorázový párovací kód pro jednoho žáka (sekundární flow). */
   async createGuardianInvite(studentId: string, ctx: OrgContext) {
