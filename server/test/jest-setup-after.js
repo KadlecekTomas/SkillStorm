@@ -26,8 +26,39 @@ const path = require('path');
 const { PrismaClient } = require('@prisma/client');
 const Test = require('supertest/lib/test');
 
+// ── Flake fix: one listening HTTP server per suite ─────────────────────────
+// Supertest, when handed a non-listening http.Server, calls listen(0) for
+// EVERY request and closes the server right after the response. A full e2e
+// run makes thousands of these one-request listen/close cycles on
+// 127.0.0.1; combined with parallel bursts the kernel occasionally reuses
+// a port pair whose previous conversation still has state, and a request
+// randomly dies mid-run with "socket hang up", "Parse Error: Expected
+// HTTP/", or gets a stale response for a different request (404 with empty
+// body from an endpoint that cannot 404). Reproduced ~1 in 3 full runs;
+// never in isolated suites. Fix: bind the server ONCE on the first request
+// and leave it listening — Nest's app.close() in each suite's afterAll
+// shuts it down. submissions-concurrency-load.e2e-spec.ts already used
+// this pattern (app.listen(0)) for the same reason.
+const { Server: TlsServer } = require('tls');
+Test.prototype.serverAddress = function (app, path) {
+  if (!app.address()) app.listen(0);
+  const port = app.address().port;
+  const protocol = app instanceof TlsServer ? 'https' : 'http';
+  return protocol + '://127.0.0.1:' + port + path;
+};
+
 const originalAssert = Test.prototype.assert;
 Test.prototype.assert = function (err, res, fn) {
+  // Diagnostics: if a request still dies at the socket level, log its
+  // identity — a bare "socket hang up" in jest output is otherwise
+  // unattributable to a request.
+  if (err && /hang up|ECONNRESET|ECONNREFUSED|EPIPE|Parse Error|HPE_/.test(err.message || '')) {
+    // eslint-disable-next-line no-console
+    console.error(
+      `[DIAG-NET-ERR] ${new Date().toISOString()} ${this.method} ${this.url} ` +
+        `code=${err.code} msg=${err.message} hasRes=${!!res}\nstack=${err.stack}`,
+    );
+  }
   // Diagnostics: status-mismatch errors say only "expected 201, got 400" —
   // append the response body so the failure cause is visible in logs. The
   // assertion error is produced inside originalAssert, so wrap the callback.
