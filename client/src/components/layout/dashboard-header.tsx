@@ -32,6 +32,8 @@ function getDashboardTitle(
   switch (organizationRole) {
     case "STUDENT":
       return "Moje zadání";
+    case "PARENT":
+      return "Rodinný prostor";
     case "TEACHER":
       return "Moje testy";
     case "DIRECTOR":
@@ -134,7 +136,7 @@ export function DashboardHeader(): React.JSX.Element {
         ) : (
           role && (
             <Badge variant="secondary" className="capitalize">
-              {role.toLowerCase()}
+              {ROLE_LABELS[role] ?? role.toLowerCase()}
             </Badge>
           )
         )}

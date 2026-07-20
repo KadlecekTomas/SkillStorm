@@ -21,14 +21,18 @@ function DashboardPage() {
   const isStudent = hasRole("STUDENT");
   const isTeacher = hasRole("TEACHER");
   const isDirectorOrOwner = hasRole("DIRECTOR") || hasRole("OWNER");
+  const isParent = hasRole("PARENT");
 
   useEffect(() => {
     if (context?.mode === "personal") {
       router.replace("/app/personal");
+    } else if (isParent) {
+      // Guardian Etapa B: rodičovský kontext žije v rodinném prostoru.
+      router.replace("/app/family");
     }
-  }, [context?.mode, router]);
+  }, [context?.mode, isParent, router]);
 
-  if (context?.mode === "personal") {
+  if (context?.mode === "personal" || isParent) {
     return null;
   }
 

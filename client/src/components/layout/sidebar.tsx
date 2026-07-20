@@ -3,13 +3,24 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { DASHBOARD_NAV_ITEMS } from "@/config/dashboard-navigation";
+import {
+  DASHBOARD_NAV_ITEMS,
+  PARENT_NAV_ITEMS,
+} from "@/config/dashboard-navigation";
 import { cn } from "@/utils/cn";
 import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { PartakEmblem } from "@/components/partak";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/use-auth";
+
+const ROLE_LABELS: Record<string, string> = {
+  OWNER: "Vlastník",
+  DIRECTOR: "Ředitel",
+  TEACHER: "Učitel",
+  STUDENT: "Žák",
+  PARENT: "Rodič",
+};
 
 function isActive(pathname: string, route: string): boolean {
   if (route === "/app") {
@@ -51,7 +62,11 @@ export const Sidebar = (): React.JSX.Element => {
   const [collapsed, setCollapsed] = useState(false);
   const displayName = user?.fullName ?? user?.name ?? "Učitel";
 
-  const activeCount = DASHBOARD_NAV_ITEMS.filter((item) =>
+  // Guardian Etapa B: rodičovský kontext má vlastní (minimální) navigaci.
+  const navItems =
+    user?.organizationRole === "PARENT" ? PARENT_NAV_ITEMS : DASHBOARD_NAV_ITEMS;
+
+  const activeCount = navItems.filter((item) =>
     isActive(pathname ?? "", item.route),
   ).length;
   if (process.env.NODE_ENV === "development" && activeCount > 1) {
@@ -105,7 +120,7 @@ export const Sidebar = (): React.JSX.Element => {
         )}
 
         <nav className="space-y-0.5">
-          {DASHBOARD_NAV_ITEMS.map((item) => (
+          {navItems.map((item) => (
             <SidebarItem
               key={item.route}
               label={item.label}
@@ -139,7 +154,9 @@ export const Sidebar = (): React.JSX.Element => {
               <p className="truncate text-xs font-bold text-ink">{displayName}</p>
               {user?.organizationRole && (
                 <Badge variant="secondary" className="w-fit text-xs capitalize">
-                  {hasOrganization ? user.organizationRole.toLowerCase() : "bez školy"}
+                  {hasOrganization
+                    ? (ROLE_LABELS[user.organizationRole] ?? user.organizationRole.toLowerCase())
+                    : "bez školy"}
                 </Badge>
               )}
             </div>

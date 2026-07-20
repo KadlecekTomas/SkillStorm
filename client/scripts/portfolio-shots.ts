@@ -522,3 +522,81 @@ test('portfolio — device frame varianty', async ({ browser }) => {
   }
   await context.close();
 });
+
+test('portfolio — rodič (rodinný prostor + potvrzení + arch kódů)', async ({
+  browser,
+}) => {
+  // 21 — „rodič vidí, co dítě potřebuje" (budoucí prodejní záběr):
+  // rodinný prostor Aleny Sýkorové, dvě děti, doporučený další krok.
+  const context = await browser.newContext({
+    viewport: { width: 1920, height: 1080 },
+  });
+  const page = await context.newPage();
+  await login(page, 'rodic@jasminova.test');
+  await page.goto('/app/family', { waitUntil: 'domcontentloaded' });
+  await settle(page);
+  await heroPreflight(page);
+  await shot(page, '21-rodic-rodinny-prostor');
+
+  // 21b — mobilní varianta (rodiče = mobil): 390px
+  const mobile = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 2,
+  });
+  const mPage = await mobile.newPage();
+  await login(mPage, 'rodic@jasminova.test');
+  await mPage.goto('/app/family', { waitUntil: 'domcontentloaded' });
+  await settle(mPage);
+  await shot(mPage, '21b-rodic-rodinny-prostor-mobil');
+  await mobile.close();
+
+  // 22 — potvrzovací obrazovka („Je Vojta vaše dítě?"): dvě velká tlačítka.
+  // Fotí se BEZ kliknutí — potvrzení by změnilo stav; seed ho vrací.
+  const context2 = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 2,
+  });
+  const page2 = await context2.newPage();
+  await login(page2, 'rodic-novy@jasminova.test');
+  await page2.goto('/app/family', { waitUntil: 'domcontentloaded' });
+  await settle(page2);
+  await shot(page2, '22-rodic-potvrzeni-ditete-mobil');
+  await context2.close();
+
+  // 23 — tisknutelný arch kódů pro třídu 5.A (učitelský pohled).
+  // POZOR vedlejší efekt: generuje reálné kódy (jednorázové, 30 dní) —
+  // seed:showcase je při dalším běhu smaže spolu s org.
+  await page.goto('/app', { waitUntil: 'domcontentloaded' });
+  const teacherContext = await browser.newContext({
+    viewport: { width: 1920, height: 1080 },
+  });
+  const tPage = await teacherContext.newPage();
+  await login(tPage, ACCOUNTS.teacher);
+  const classId = await tPage.evaluate(async () => {
+    const res = await fetch('/api/classrooms?limit=50', {
+      credentials: 'include',
+    });
+    type ClassRow = { id?: string; label?: string | null };
+    // Envelope může být pole, {data: []} i {data: {data: []}} (paginace).
+    const body = (await res.json()) as unknown;
+    const unwrapList = (v: unknown): ClassRow[] => {
+      if (Array.isArray(v)) return v as ClassRow[];
+      if (v && typeof v === 'object' && 'data' in v) {
+        return unwrapList((v as { data: unknown }).data);
+      }
+      return [];
+    };
+    const list = unwrapList(body);
+    return list.find((c) => c.label === '5.A')?.id ?? list[0]?.id ?? '';
+  });
+  if (!classId) throw new Error('portfolio: nenašel jsem třídu pro arch kódů');
+  await tPage.goto(`/app/classrooms/${classId}/guardian-codes`, {
+    waitUntil: 'domcontentloaded',
+  });
+  await tPage.getByRole('button', { name: /vygenerovat kódy/i }).click();
+  await tPage.getByText(/připravený k tisku/i).waitFor({ timeout: 15_000 });
+  await settle(tPage);
+  await shot(tPage, '23-ucitel-arch-kodu-pro-rodice', { fullPage: true });
+  await teacherContext.close();
+  await context.close();
+});

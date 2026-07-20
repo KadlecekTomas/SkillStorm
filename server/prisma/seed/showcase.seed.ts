@@ -7,6 +7,8 @@ import {
   ContentType,
   EducationLevel,
   EnrollmentStatus,
+  GuardianPermissionKey,
+  GuardianRelationStatus,
   OrganizationRole,
   PrismaClient,
   PublishStatus,
@@ -31,6 +33,8 @@ import { hashPassword, logDone, logStep } from './seed-helpers';
  *   zak2b@jasminova.test     – žákyně 2.B (young režim)
  *   zak8a@jasminova.test     – žák 8.A (old režim, XP historie)
  *   zakg2@jasminova.test     – studentka G2
+ *   rodic@jasminova.test     – rodička dvou dětí (8.A + 2.B, rodinný prostor)
+ *   rodic-novy@jasminova.test – rodič s čekajícím potvrzením dítěte (2.B)
  */
 
 const prisma = new PrismaClient();
@@ -405,6 +409,68 @@ async function main() {
   });
   const studentsG2 = await enrollClass(NAMES_G2, classG2.id, {
     0: `zakg2@${DOMAIN}`,
+  });
+
+  // ── Guardian (Etapa B): rodinný prostor pro portfolio záběry ─────────────
+  // Alena Sýkorová: dvě děti (Ondřej 8.A = hrdina s daty, Klárka 2.B) →
+  // přepínač dětí + „rodič vidí, co dítě potřebuje". Tomáš Hruška: PENDING
+  // vztah k Vojtovi (2.B) → potvrzovací obrazovka.
+  logStep('Rodiče (guardian)…');
+  const guardianDefaults: GuardianPermissionKey[] = [
+    GuardianPermissionKey.VIEW_RESULTS,
+    GuardianPermissionKey.VIEW_ASSIGNMENTS,
+    GuardianPermissionKey.START_PRACTICE,
+    GuardianPermissionKey.START_HOMEWORK,
+    GuardianPermissionKey.RECEIVE_NOTIFICATIONS,
+  ];
+  const parentSykora = await mkUser(
+    `rodic@${DOMAIN}`,
+    'Alena Sýkorová',
+    OrganizationRole.PARENT,
+  );
+  const klarka = await mkUser(
+    emailFor('Klárka Sýkorová'),
+    'Klárka Sýkorová',
+    OrganizationRole.STUDENT,
+  );
+  const klarkaStudent = await prisma.student.create({
+    data: { orgId: org.id, membershipId: klarka.membershipId },
+  });
+  await prisma.enrollment.create({
+    data: {
+      studentId: klarkaStudent.id,
+      orgId: org.id,
+      yearId: year.id,
+      classSectionId: class2B.id,
+      status: EnrollmentStatus.ACTIVE,
+    },
+  });
+  for (const childStudentId of [students8A[0]!.studentId, klarkaStudent.id]) {
+    await prisma.guardianStudentRelation.create({
+      data: {
+        guardianMembershipId: parentSykora.membershipId,
+        studentId: childStudentId,
+        organizationId: org.id,
+        status: GuardianRelationStatus.VERIFIED,
+        verifiedAt: daysAgo(20),
+        verifiedById: teacher1.membershipId,
+        permissions: guardianDefaults,
+      },
+    });
+  }
+  const parentHruska = await mkUser(
+    `rodic-novy@${DOMAIN}`,
+    'Tomáš Hruška',
+    OrganizationRole.PARENT,
+  );
+  await prisma.guardianStudentRelation.create({
+    data: {
+      guardianMembershipId: parentHruska.membershipId,
+      studentId: students2B[1]!.studentId,
+      organizationId: org.id,
+      status: GuardianRelationStatus.PENDING,
+      verifiedById: teacher1.membershipId,
+    },
   });
 
   logStep('Katalog + předměty…');
