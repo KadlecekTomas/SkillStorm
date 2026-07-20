@@ -686,7 +686,7 @@ export class AuthService {
    * členství nevzniká. STUDENT je exkluzivní (STOP #1). STUDENT_CLASS
    * invite existující členství nepodporuje (enrollment řeší škola).
    */
-  private async addRoleFromInvite(
+  public async addRoleFromInvite(
     tx: Prisma.TransactionClient,
     userId: string,
     membership: {
