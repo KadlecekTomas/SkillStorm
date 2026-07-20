@@ -107,15 +107,37 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
           userId: user.id,
           deletedAt: null,
         },
-        select: { id: true, organizationId: true, role: true },
+        select: {
+          id: true,
+          organizationId: true,
+          role: true,
+          roleAssignments: {
+            where: { deletedAt: null },
+            select: { role: true },
+          },
+        },
       });
       if (!membership) {
         throw new UnauthorizedException(
           'Invalid token: membership not found or revoked',
         );
       }
+      // Multi-role (guardian Etapa A): activeRole claim je platný jen dokud má
+      // membership aktivní assignment té role — revokace se projeví příštím
+      // requestem (docs/guardian/etapa-a-analyza.md §4.2). Token bez claimu
+      // (starý) padá na primární roli.
+      if (payload.activeRole) {
+        const assigned = membership.roleAssignments.some(
+          (assignment) => assignment.role === payload.activeRole,
+        );
+        if (!assigned) {
+          throw new UnauthorizedException('ROLE_CONTEXT_REVOKED');
+        }
+        organizationRole = payload.activeRole;
+      } else {
+        organizationRole = membership.role;
+      }
       organizationId = membership.organizationId;
-      organizationRole = membership.role;
       membershipId = membership.id;
     } else {
       organizationRole = null;

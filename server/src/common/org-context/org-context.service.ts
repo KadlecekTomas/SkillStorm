@@ -38,10 +38,18 @@ export class OrgContextService {
       ? Date.now() > endsAt.getTime()
       : false;
 
+    // Multi-role: efektivní roli requestu už ověřila jwt.strategy (activeRole
+    // claim vs. aktivní assignments). Padáme na membership.role (primární) jen
+    // když request jde mimo token membership (fallback resoluce níže).
+    const role =
+      user.membershipId === membership.id && user.organizationRole
+        ? user.organizationRole
+        : membership.role;
+
     return {
       organizationId,
       membershipId: membership.id,
-      role: membership.role,
+      role,
       activeAcademicYearId: yearId,
       isAcademicYearExpired,
     };

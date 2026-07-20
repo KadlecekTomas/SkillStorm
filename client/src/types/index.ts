@@ -187,7 +187,10 @@ export type AuthContext = {
 export type MembershipSummary = {
   id: string;
   organizationId: string;
+  /** Primární role (multi-role: default kontext po loginu). */
   role: OrganizationRole;
+  /** Všechny aktivně přiřazené role membershipu (multi-role, guardian Etapa A). */
+  roles?: OrganizationRole[];
   organization?: {
     name: string;
     type: OrganizationType;

@@ -491,7 +491,34 @@ export class InvitesService {
         select: { id: true, role: true, organizationId: true },
       });
       if (existing) {
-        return { membership: existing, idempotent: true };
+        // Multi-role (guardian Etapa A): stejná role = idempotentní přijetí
+        // (původní chování), jiná role = přidání assignmentu k existujícímu
+        // membershipu (druhé členství nikdy nevzniká).
+        const activeAssignments = await tx.membershipRoleAssignment.findMany({
+          where: { membershipId: existing.id, deletedAt: null },
+          select: { role: true },
+        });
+        const activeRoles = activeAssignments.length
+          ? activeAssignments.map((assignment) => assignment.role)
+          : [existing.role];
+        if (activeRoles.includes(invite.role)) {
+          return { membership: existing, idempotent: true };
+        }
+        const membership = await this.authService.addRoleFromInvite(
+          tx,
+          userId,
+          { ...existing, roleAssignments: activeAssignments },
+          {
+            id: invite.id,
+            organizationId: invite.organizationId,
+            role: invite.role,
+            type: invite.type,
+            maxUses: invite.maxUses,
+          },
+          new Date(),
+          { token, ...(ip ? { ip } : {}) },
+        );
+        return { membership, idempotent: false };
       }
 
       const membership = await this.authService.createMembershipFromInvite(

@@ -38,6 +38,7 @@ import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { GamificationService } from '@/gamification/gamification.service';
 import { AuditService } from '@/audit/audit.service';
 import { RbacService } from '@/modules/rbac/rbac.service';
+import { emitRbacInvalidation } from '@/modules/rbac/rbac.events';
 import { PermissionKey } from '@prisma/client';
 import type { Request } from 'express';
 import { REFRESH_TOKEN_COOKIE } from './token-cookies';
@@ -69,6 +70,8 @@ type JwtClaims = {
   username: string | null;
   systemRole: SystemRole | null;
   organizationRole: OrganizationRole | null;
+  /** Aktivní role membershipu (multi-role); platnost ověřuje jwt.strategy per request. */
+  activeRole: OrganizationRole | null;
   organizationId: string | null;
   membershipId: string | null;
   tokenVersion: number;
@@ -93,7 +96,10 @@ export type MeContext = {
     currentYearId?: string | null;
   } | null;
   membership: { id: string; role: any; organizationId: string } | null;
+  /** Všechny aktivně přiřazené role aktivního membershipu (multi-role Etapa A). */
   roles: string[];
+  /** Efektivní role aktuálního kontextu (= organizationRole v JWT). */
+  activeRole: string | null;
   permissions: string[];
   context: {
     mode: AuthContextMode;
@@ -143,23 +149,6 @@ export class AuthService {
     }
   }
 
-  private resolveJoinRole(role?: OrganizationRole): OrganizationRole {
-    if (!role) {
-      throw new BadRequestException(
-        'Role is required for joining an organization',
-      );
-    }
-    const allowed = new Set<OrganizationRole>([
-      OrganizationRole.STUDENT,
-      OrganizationRole.TEACHER,
-      OrganizationRole.PARENT,
-    ]);
-    if (!allowed.has(role)) {
-      throw new BadRequestException('Selected role is not allowed for joining');
-    }
-    return role;
-  }
-
   private async resolveJoinOrganization(joinCode?: string) {
     if (!joinCode) {
       throw new BadRequestException('Join code is required');
@@ -182,17 +171,43 @@ export class AuthService {
   private buildClaims(
     user: User & { tokenVersion?: number },
     membership: Membership | null,
+    activeRole?: OrganizationRole | null,
   ): JwtClaims {
+    // Bez explicitní aktivní role je aktivní = primární (single-role svět
+    // beze změny chování).
+    const effectiveRole = activeRole ?? membership?.role ?? null;
     return {
       sub: user.id,
       email: user.email ?? null,
       username: user.username ?? null,
       systemRole: user.systemRole ?? null,
-      organizationRole: membership?.role ?? null,
+      organizationRole: effectiveRole,
+      activeRole: membership ? effectiveRole : null,
       organizationId: membership?.organizationId ?? null,
       membershipId: membership?.id ?? null,
       tokenVersion: user.tokenVersion ?? 0,
     };
+  }
+
+  /**
+   * Aktivní role membershipu pro nový token: lastActiveRole, pokud je pořád
+   * přiřazená (aktivní assignment), jinak primární role.
+   */
+  private async resolveActiveRole(
+    membership: {
+      id: string;
+      role: OrganizationRole;
+      lastActiveRole?: OrganizationRole | null;
+    } | null,
+  ): Promise<OrganizationRole | null> {
+    if (!membership) return null;
+    const last = membership.lastActiveRole ?? null;
+    if (!last || last === membership.role) return membership.role;
+    const assignment = await this.prisma.membershipRoleAssignment.findFirst({
+      where: { membershipId: membership.id, role: last, deletedAt: null },
+      select: { id: true },
+    });
+    return assignment ? last : membership.role;
   }
 
   // ---------- Refresh token (opaque + retry na P2002) ----------
@@ -219,8 +234,12 @@ export class AuthService {
     throw new Error('Failed to issue refresh token after retries');
   }
 
-  private async generateTokens(user: User, membership: Membership | null) {
-    const claims = this.buildClaims(user, membership);
+  private async generateTokens(
+    user: User,
+    membership: Membership | null,
+    activeRole?: OrganizationRole | null,
+  ) {
+    const claims = this.buildClaims(user, membership, activeRole);
     const accessSecret = getJwtAccessSecret(this.config);
 
     const accessToken = this.jwtService.sign(
@@ -270,8 +289,12 @@ export class AuthService {
       throw new UnauthorizedException('Token invalid');
     }
 
-    let membership: { id: string; role: any; organizationId: string } | null =
-      null;
+    let membership: {
+      id: string;
+      role: OrganizationRole;
+      organizationId: string;
+      lastActiveRole: OrganizationRole | null;
+    } | null = null;
     if (user.lastActiveMembershipId) {
       const m = await this.prisma.membership.findFirst({
         where: {
@@ -279,7 +302,12 @@ export class AuthService {
           userId: user.id,
           deletedAt: null,
         },
-        select: { id: true, role: true, organizationId: true },
+        select: {
+          id: true,
+          role: true,
+          organizationId: true,
+          lastActiveRole: true,
+        },
       });
       membership = m;
     }
@@ -287,13 +315,21 @@ export class AuthService {
       membership = await this.prisma.membership.findFirst({
         where: { userId: user.id, deletedAt: null },
         orderBy: { createdAt: 'asc' },
-        select: { id: true, role: true, organizationId: true },
+        select: {
+          id: true,
+          role: true,
+          organizationId: true,
+          lastActiveRole: true,
+        },
       });
     }
 
+    // Refresh obnovuje poslední aktivní role-kontext (multi-role Etapa A).
+    const activeRole = await this.resolveActiveRole(membership);
     const tokens = await this.generateTokens(
       user,
       membership as unknown as Membership,
+      activeRole,
     );
     await this.auditService.log({
       action: 'REFRESH',
@@ -469,6 +505,37 @@ export class AuthService {
       throw new ForbiddenException('Invite already used');
     }
 
+    // Multi-role (guardian Etapa A): existující membership v org → invite
+    // přidá roli (assignment), nezakládá druhé členství. Běží v transakci
+    // volajícího, proto přímý zápis assignmentu místo MembershipRolesService
+    // (invariant hlídají DB triggery; STUDENT exkluzivita validovaná níže).
+    const existingMembership = await tx.membership.findFirst({
+      where: {
+        userId,
+        organizationId: invite.organizationId,
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        role: true,
+        organizationId: true,
+        roleAssignments: {
+          where: { deletedAt: null },
+          select: { role: true },
+        },
+      },
+    });
+    if (existingMembership) {
+      return this.addRoleFromInvite(
+        tx,
+        userId,
+        existingMembership,
+        invite,
+        now,
+        context,
+      );
+    }
+
     const membership = await tx.membership.create({
       data: {
         userId,
@@ -611,6 +678,118 @@ export class AuthService {
     );
 
     return membership;
+  }
+
+  /**
+   * Invite accept pro uživatele, který už má v organizaci membership
+   * (multi-role, guardian Etapa A): přidá roli jako assignment, druhé
+   * členství nevzniká. STUDENT je exkluzivní (STOP #1). STUDENT_CLASS
+   * invite existující členství nepodporuje (enrollment řeší škola).
+   */
+  public async addRoleFromInvite(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    membership: {
+      id: string;
+      role: OrganizationRole;
+      organizationId: string;
+      roleAssignments: { role: OrganizationRole }[];
+    },
+    invite: {
+      id: string;
+      organizationId: string;
+      role: OrganizationRole;
+      type: InvitationType;
+      maxUses: number;
+    },
+    now: Date,
+    context?: { token?: string; ip?: string },
+  ) {
+    if (invite.type === InvitationType.STUDENT_CLASS) {
+      throw new ConflictException(
+        'Už jsi členem této organizace — zápis do třídy zařídí škola.',
+      );
+    }
+
+    const activeRoles = membership.roleAssignments.length
+      ? membership.roleAssignments.map((assignment) => assignment.role)
+      : [membership.role];
+
+    if (activeRoles.includes(invite.role)) {
+      throw new ConflictException(
+        'Už jsi členem této organizace s touto rolí.',
+      );
+    }
+    if (
+      invite.role === OrganizationRole.STUDENT ||
+      activeRoles.includes(OrganizationRole.STUDENT)
+    ) {
+      throw new ConflictException(
+        'Žákovský účet nelze kombinovat s dalšími rolemi.',
+      );
+    }
+
+    await tx.membershipRoleAssignment.upsert({
+      where: {
+        membershipId_role: { membershipId: membership.id, role: invite.role },
+      },
+      create: { membershipId: membership.id, role: invite.role },
+      update: { deletedAt: null },
+    });
+
+    if (invite.role === OrganizationRole.TEACHER) {
+      const teacher = await tx.teacher.findUnique({
+        where: { membershipId: membership.id },
+        select: { id: true, deletedAt: true },
+      });
+      if (!teacher) {
+        await tx.teacher.create({
+          data: {
+            membershipId: membership.id,
+            organizationId: membership.organizationId,
+          },
+          select: { id: true },
+        });
+      } else if (teacher.deletedAt !== null) {
+        await tx.teacher.update({
+          where: { id: teacher.id },
+          data: { deletedAt: null },
+        });
+      }
+    }
+
+    await tx.user.update({
+      where: { id: userId },
+      data: { lastActiveMembershipId: membership.id },
+    });
+
+    await tx.auditLog.create({
+      data: {
+        action: 'MEMBERSHIP_ROLE_ASSIGN',
+        entityType: AuditEntityType.PERMISSION,
+        entityId: membership.id,
+        userId,
+        organizationId: membership.organizationId,
+        metadata: { role: invite.role, source: 'INVITE', inviteId: invite.id },
+      },
+    });
+
+    await this.consumeInviteOrThrow(
+      tx,
+      invite.id,
+      now,
+      invite.maxUses,
+      context?.token,
+      context?.ip,
+    );
+
+    emitRbacInvalidation({
+      userId,
+      organizationId: membership.organizationId,
+      reason: 'MEMBERSHIP_ROLE_ASSIGN',
+    });
+
+    return { ...membership, userId } as unknown as Membership;
   }
 
   async register(dto: RegisterDto, context?: { ip?: string }) {
@@ -913,7 +1092,8 @@ export class AuthService {
       opts.organizationId ?? null,
     );
 
-    const tokens = await this.generateTokens(updatedUser, membership);
+    const activeRole = await this.resolveActiveRole(membership);
+    const tokens = await this.generateTokens(updatedUser, membership, activeRole);
 
     await this.auditService.log({
       action: opts.auditAction ?? 'LOGIN',
@@ -931,7 +1111,7 @@ export class AuthService {
         username: updatedUser.username,
         name: updatedUser.name,
         systemRole: updatedUser.systemRole,
-        organizationRole: membership?.role ?? null,
+        organizationRole: activeRole ?? membership?.role ?? null,
         organizationId: membership?.organizationId ?? null,
         lastLoginAt: updatedUser.lastLoginAt,
       },
@@ -989,7 +1169,9 @@ export class AuthService {
       dto.organizationId ?? null,
     );
 
-    const tokens = await this.generateTokens(updatedUser, membership);
+    // Login obnovuje poslední aktivní role-kontext (multi-role Etapa A).
+    const activeRole = await this.resolveActiveRole(membership);
+    const tokens = await this.generateTokens(updatedUser, membership, activeRole);
 
     if (membership?.id) {
       await this.gamification.awardXpForEvent(
@@ -1016,7 +1198,7 @@ export class AuthService {
         username: updatedUser.username,
         name: updatedUser.name,
         systemRole: updatedUser.systemRole,
-        organizationRole: membership?.role ?? null,
+        organizationRole: activeRole ?? membership?.role ?? null,
         organizationId: membership?.organizationId ?? null,
         lastLoginAt: updatedUser.lastLoginAt, // ← propsáno ven
       },
@@ -1198,7 +1380,12 @@ export class AuthService {
    */
   async getMeContext(
     userId: string,
-    claims?: { membershipId?: string | null; organizationId?: string | null },
+    claims?: {
+      membershipId?: string | null;
+      organizationId?: string | null;
+      /** Efektivní role requestu (už ověřená jwt.strategy). */
+      activeRole?: OrganizationRole | null;
+    },
   ): Promise<MeContext> {
     const userRow = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -1220,6 +1407,11 @@ export class AuthService {
             role: true,
             organizationId: true,
             organization: { select: { name: true, type: true, status: true } },
+            roleAssignments: {
+              where: { deletedAt: null },
+              orderBy: { createdAt: 'asc' },
+              select: { role: true },
+            },
           },
         },
       },
@@ -1246,6 +1438,11 @@ export class AuthService {
           role: true,
           organizationId: true,
           organization: { select: { name: true, type: true, status: true } },
+          roleAssignments: {
+            where: { deletedAt: null },
+            orderBy: { createdAt: 'asc' },
+            select: { role: true },
+          },
         },
       });
       if (m) {
@@ -1265,6 +1462,11 @@ export class AuthService {
           role: true,
           organizationId: true,
           organization: { select: { name: true, type: true, status: true } },
+          roleAssignments: {
+            where: { deletedAt: null },
+            orderBy: { createdAt: 'asc' },
+            select: { role: true },
+          },
         },
       });
       if (m) {
@@ -1336,6 +1538,27 @@ export class AuthService {
         }
       : null;
 
+    // Multi-role: všechny aktivně přiřazené role aktivního membershipu;
+    // efektivní role = ověřený claim (jwt.strategy), jinak primární.
+    const assignedRoles = activeMembership
+      ? activeMembership.roleAssignments?.length
+        ? activeMembership.roleAssignments.map((assignment) => assignment.role)
+        : [activeMembership.role]
+      : [];
+    const activeRole =
+      claims?.activeRole && assignedRoles.includes(claims.activeRole)
+        ? claims.activeRole
+        : (activeMembership?.role ?? null);
+
+    const membershipsOut = memberships.map(
+      ({ roleAssignments, ...summary }) => ({
+        ...summary,
+        roles: roleAssignments?.length
+          ? roleAssignments.map((assignment) => assignment.role)
+          : [summary.role],
+      }),
+    );
+
     const userContext = {
       id: userRow.id,
       email: userRow.email,
@@ -1348,8 +1571,8 @@ export class AuthService {
         userRow.systemRole === SystemRole.SUPERADMIN,
       createdAt: userRow.createdAt,
       lastLoginAt: userRow.lastLoginAt,
-      memberships,
-      organizationRole: activeMembership?.role ?? null,
+      memberships: membershipsOut,
+      organizationRole: activeRole,
       organizationId: activeMembership?.organizationId ?? null,
       needsOnboarding,
     };
@@ -1378,13 +1601,14 @@ export class AuthService {
       contextOrganizationId = null;
     }
 
-    const roles = activeMembership ? [activeMembership.role] : [];
+    const roles = assignedRoles;
     const permissionKeys = Object.values(PermissionKey);
     const permissionMap: Record<string, boolean> = activeMembership
       ? await this.rbac.canUserMultiple(
           userId,
           activeMembership.organizationId,
           permissionKeys,
+          activeRole,
         )
       : {};
     const permissions = permissionKeys.filter((key) => permissionMap[key]);
@@ -1394,6 +1618,7 @@ export class AuthService {
       organization,
       membership,
       roles,
+      activeRole,
       permissions,
       context: {
         mode: contextMode,
@@ -1412,6 +1637,7 @@ export class AuthService {
       select: {
         id: true,
         role: true,
+        lastActiveRole: true,
         organizationId: true,
         organization: {
           select: { id: true, name: true, type: true, status: true },
@@ -1433,9 +1659,11 @@ export class AuthService {
     });
     if (!user) throw new UnauthorizedException('User not found');
 
+    const activeRole = await this.resolveActiveRole(membership);
     const tokens = await this.generateTokens(
       user,
       membership as unknown as Membership,
+      activeRole,
     );
 
     await this.auditService.log({
@@ -1448,6 +1676,7 @@ export class AuthService {
 
     const ctx = await this.getMeContext(userId, {
       organizationId: membership.organizationId,
+      activeRole,
     });
 
     return {
@@ -1456,6 +1685,7 @@ export class AuthService {
       organization: ctx.organization,
       membership: ctx.membership,
       roles: ctx.roles,
+      activeRole: ctx.activeRole,
       permissions: ctx.permissions,
       context: ctx.context,
     };
@@ -1471,6 +1701,7 @@ export class AuthService {
       select: {
         id: true,
         role: true,
+        lastActiveRole: true,
         organizationId: true,
         organization: {
           select: { id: true, name: true, type: true, status: true },
@@ -1494,9 +1725,11 @@ export class AuthService {
     });
     if (!user) throw new UnauthorizedException('User not found');
 
+    const activeRole = await this.resolveActiveRole(membership);
     const tokens = await this.generateTokens(
       user,
       membership as unknown as Membership,
+      activeRole,
     );
 
     await this.auditService.log({
@@ -1509,6 +1742,7 @@ export class AuthService {
 
     const ctx = await this.getMeContext(userId, {
       membershipId: membership.id,
+      activeRole,
     });
 
     return {
@@ -1517,6 +1751,90 @@ export class AuthService {
       organization: ctx.organization,
       membership: ctx.membership,
       roles: ctx.roles,
+      activeRole: ctx.activeRole,
+      permissions: ctx.permissions,
+      context: ctx.context,
+    };
+  }
+
+  /**
+   * Přepnutí aktivního role-kontextu v rámci AKTIVNÍHO membershipu
+   * (multi-role, guardian Etapa A — kolizní bod učitel-rodič). Nemění
+   * organizaci ani membership; vydá nový access token s claimem activeRole
+   * a zapíše lastActiveRole pro kontinuitu (login/refresh/org-switch ho
+   * obnovují přes resolveActiveRole).
+   */
+  async switchRoleContext(
+    userId: string,
+    membershipId: string | null | undefined,
+    role: OrganizationRole,
+  ) {
+    if (!membershipId) {
+      throw new ForbiddenException('Missing organization context.');
+    }
+    const membership = await this.prisma.membership.findFirst({
+      where: { id: membershipId, userId, deletedAt: null },
+      select: {
+        id: true,
+        role: true,
+        organizationId: true,
+        roleAssignments: {
+          where: { deletedAt: null },
+          select: { role: true },
+        },
+      },
+    });
+    if (!membership) {
+      throw new ForbiddenException(
+        'Membership not found or does not belong to the current user',
+      );
+    }
+
+    const assigned = membership.roleAssignments.some(
+      (assignment) => assignment.role === role,
+    );
+    if (!assigned) {
+      throw new ForbiddenException({
+        code: 'ROLE_NOT_ASSIGNED',
+        message: 'Tuto roli v organizaci nemáš.',
+      });
+    }
+
+    await this.prisma.membership.update({
+      where: { id: membership.id },
+      data: { lastActiveRole: role },
+    });
+
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new UnauthorizedException('User not found');
+
+    const tokens = await this.generateTokens(
+      user,
+      membership as unknown as Membership,
+      role,
+    );
+
+    await this.auditService.log({
+      action: 'SWITCH_ROLE_CONTEXT',
+      entityType: AuditEntityType.PERMISSION,
+      userId,
+      organizationId: membership.organizationId,
+      entityId: membership.id,
+      metadata: { role, previousPrimaryRole: membership.role },
+    });
+
+    const ctx = await this.getMeContext(userId, {
+      membershipId: membership.id,
+      activeRole: role,
+    });
+
+    return {
+      tokens,
+      user: ctx.user,
+      organization: ctx.organization,
+      membership: ctx.membership,
+      roles: ctx.roles,
+      activeRole: ctx.activeRole,
       permissions: ctx.permissions,
       context: ctx.context,
     };

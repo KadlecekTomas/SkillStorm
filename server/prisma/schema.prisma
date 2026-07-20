@@ -173,6 +173,7 @@ model Membership {
   userId             String                   @map("user_id")
   organizationId     String                   @map("organization_id")
   role               OrganizationRole
+  lastActiveRole     OrganizationRole?        @map("last_active_role")
   xp                 Int                      @default(0)
   level              Int                      @default(1)
   avatarType         String?                  @map("avatar_type") @db.VarChar(50)
@@ -196,11 +197,30 @@ model Membership {
   xpEvents           XpEvent[]
   hostedLiveSessions LiveSession[]            @relation("HostedLiveSessions")
   liveParticipations LiveSessionParticipant[]
+  roleAssignments    MembershipRoleAssignment[]
 
   @@unique([userId, organizationId])
   @@index([organizationId, role])
   @@index([userId])
   @@map("memberships")
+}
+
+/// Přiřazené role membershipu (multi-role, guardian Etapa A).
+/// Membership.role zůstává primární rolí; invariant „primární role má aktivní
+/// assignment" vynucuje deferred constraint trigger membership_primary_role_guard
+/// + jediná servisní cesta zápisu (MembershipRolesService).
+model MembershipRoleAssignment {
+  id           String           @id @default(uuid()) @map("membership_role_assignment_id")
+  membershipId String           @map("membership_id")
+  role         OrganizationRole
+  createdAt    DateTime         @default(now()) @map("created_at")
+  createdById  String?          @map("created_by_membership_id")
+  deletedAt    DateTime?        @map("deleted_at")
+  membership   Membership       @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+
+  @@unique([membershipId, role])
+  @@index([role])
+  @@map("membership_role_assignments")
 }
 
 model Level {

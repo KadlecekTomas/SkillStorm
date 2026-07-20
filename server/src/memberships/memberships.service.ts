@@ -307,6 +307,12 @@ export class MembershipsService {
         where: { membershipId: id, deletedAt: null },
         data: { deletedAt: new Date() },
       }),
+      // Multi-role: kaskáda i na role assignments (hygiena; přístup blokuje
+      // už membership.deletedAt v jwt.strategy).
+      this.prisma.membershipRoleAssignment.updateMany({
+        where: { membershipId: id, deletedAt: null },
+        data: { deletedAt: new Date() },
+      }),
     ]);
 
     await Promise.all([

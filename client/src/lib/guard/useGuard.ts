@@ -35,6 +35,7 @@ export type GuardResult = {
 export const useGuard = (options?: GuardOptions): GuardResult => {
   const {
     roles,
+    activeRole,
     permissions,
     isAuthenticated,
     isLoading,
@@ -75,11 +76,16 @@ export const useGuard = (options?: GuardOptions): GuardResult => {
       };
     }
 
+    // Multi-role: route guard rozhoduje AKTIVNÍ role (konzistence se
+    // serverem — učitel-rodič musí na rodičovské stránky přepnout kontext).
+    // Fallback na roles (union) drží kompatibilitu se starším cache profilem
+    // bez activeRole.
+    const effectiveRoles = activeRole ? [activeRole] : roles;
     const roleCheck =
       !requiredRoles.length ||
-      requiredRoles.some((role) => roles.includes(role));
+      requiredRoles.some((role) => effectiveRoles.includes(role));
     const missingRoleList = requiredRoles.filter(
-      (role) => !roles.includes(role),
+      (role) => !effectiveRoles.includes(role),
     );
 
     const permissionCheck =
@@ -111,6 +117,7 @@ export const useGuard = (options?: GuardOptions): GuardResult => {
     isLoading,
     hasOrganization,
     roles,
+    activeRole,
     permissions,
     options?.requireRoles,
     options?.requirePerms,

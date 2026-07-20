@@ -22,6 +22,8 @@ type AuthEnvelope = {
   org?: OrganizationContext | null;
   organization?: OrganizationContext | null;
   roles: OrganizationRole[];
+  /** Efektivní role aktuálního kontextu (multi-role, guardian Etapa A). */
+  activeRole?: OrganizationRole | null;
   permissions: PermissionKey[];
   context: AuthContext;
 };
@@ -39,6 +41,7 @@ export type UseAuthResult = {
   user: User | null;
   org: OrganizationContext | null;
   roles: OrganizationRole[];
+  activeRole: OrganizationRole | null;
   permissions: PermissionKey[];
   context: AuthContext | null;
   isHydrated: boolean;
@@ -60,6 +63,8 @@ export type UseAuthResult = {
   syncProfile: (options?: { force?: boolean }) => Promise<AuthEnvelope>;
   switchOrganization: (membershipId: string) => Promise<void>;
   switchToOrganizationByOrgId: (orgId: string) => Promise<AuthContext | null>;
+  /** Přepnutí aktivního role-kontextu v rámci aktivního membershipu (multi-role). */
+  switchRole: (role: OrganizationRole) => Promise<void>;
 };
 
 type AuthResponse = AuthEnvelope;
@@ -97,6 +102,7 @@ export const useAuth = (): UseAuthResult => {
     user,
     org,
     roles,
+    activeRole,
     permissions,
     context,
     loading,
@@ -117,6 +123,7 @@ export const useAuth = (): UseAuthResult => {
     user: state.user,
     org: state.org,
     roles: state.roles,
+    activeRole: state.activeRole,
     permissions: state.permissions,
     context: state.context,
     loading: state.loading,
@@ -383,6 +390,7 @@ export const useAuth = (): UseAuthResult => {
           user: nextUser ?? null,
           org: nextOrg,
           roles: nextRoles,
+          activeRole: res?.activeRole ?? null,
           permissions: nextPermissions,
           context: res?.context ?? null,
         });
@@ -410,6 +418,41 @@ export const useAuth = (): UseAuthResult => {
       }
     },
     [org?.id, setLoading, setProfile, router],
+  );
+
+  const switchRole = useCallback(
+    async (role: OrganizationRole) => {
+      setLoading(true);
+      try {
+        const res = await fetchWithAuth<SwitchOrganizationResponse>(
+          "POST",
+          "/auth/switch-role",
+          { body: { role }, skipAuthRetry: true },
+        );
+        const nextOrg = res?.organization ?? res?.org ?? null;
+        setProfile({
+          user: res?.user ?? null,
+          org: nextOrg,
+          roles: res?.roles ?? [],
+          activeRole: res?.activeRole ?? role,
+          permissions: res?.permissions ?? [],
+          context: res?.context ?? null,
+        });
+        router.replace("/app");
+        showToastOnce(
+          role === "PARENT"
+            ? "Přepnuto do rodičovského zobrazení."
+            : "Přepnuli jsme aktivní roli.",
+          { type: "info" },
+        );
+      } catch (error) {
+        showToastOnce("Nepodařilo se přepnout roli.", { type: "error" });
+        throw error;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [setLoading, setProfile, router],
   );
 
   const switchToOrganizationByOrgId = useCallback(
@@ -485,6 +528,7 @@ export const useAuth = (): UseAuthResult => {
       user,
       org,
       roles,
+      activeRole,
       permissions,
       context,
       authPhase,
@@ -505,11 +549,13 @@ export const useAuth = (): UseAuthResult => {
       syncProfile,
       switchOrganization,
       switchToOrganizationByOrgId,
+      switchRole,
     }),
     [
       user,
       org,
       roles,
+      activeRole,
       permissions,
       context,
       authPhase,
@@ -525,6 +571,7 @@ export const useAuth = (): UseAuthResult => {
       syncProfile,
       switchOrganization,
       switchToOrganizationByOrgId,
+      switchRole,
     ],
   );
 

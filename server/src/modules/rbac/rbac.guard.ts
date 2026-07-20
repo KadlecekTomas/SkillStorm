@@ -101,7 +101,12 @@ export class RbacGuard implements CanActivate {
       return user.organizationRole === token;
     }
 
-    return this.rbac.canUser(user.userId ?? user.id, organizationId, token);
+    return this.rbac.canUser(
+      user.userId ?? user.id,
+      organizationId,
+      token,
+      user.organizationRole ?? null,
+    );
   }
 
   private isSystemRole(token: PermissionToken): token is SystemRole {

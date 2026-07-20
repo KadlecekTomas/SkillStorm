@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Controller,
   Get,
   Post,
@@ -20,6 +21,8 @@ import {
 } from '@nestjs/swagger';
 import { OrganizationRole, SystemRole } from '@prisma/client';
 import { MembershipsService } from './memberships.service';
+import { MembershipRolesService } from './membership-roles.service';
+import { AssignRoleDto } from './dto/assign-role.dto';
 import { CreateMembershipDto } from './dto/create-membership.dto';
 import { UpdateMembershipDto } from './dto/update-membership.dto';
 import { QueryMembershipsDto } from './dto/query-memberships.dto';
@@ -36,7 +39,10 @@ import {
 @Controller('memberships')
 @OrgOperation(OrgOperationType.AUTHORING)
 export class MembershipsController {
-  constructor(private readonly service: MembershipsService) {}
+  constructor(
+    private readonly service: MembershipsService,
+    private readonly rolesService: MembershipRolesService,
+  ) {}
 
   // CREATE
   @Post()
@@ -96,6 +102,70 @@ export class MembershipsController {
     @Req() req: RequestWithUser,
   ) {
     return this.service.update(id, dto, req.user);
+  }
+
+  // MULTI-ROLE (guardian Etapa A)
+  @Get(':id/roles')
+  @Permission(
+    SystemRole.SUPERADMIN,
+    OrganizationRole.OWNER,
+    OrganizationRole.DIRECTOR,
+  )
+  @ApiOperation({ summary: 'List active role assignments of a membership' })
+  async listRoles(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() req: RequestWithUser,
+  ) {
+    return this.rolesService.listActiveRolesFor(id, req.user);
+  }
+
+  @Post(':id/roles')
+  @Permission(
+    SystemRole.SUPERADMIN,
+    OrganizationRole.OWNER,
+    OrganizationRole.DIRECTOR,
+  )
+  @ApiOperation({
+    summary:
+      'Assign an additional role to a membership (multi-role; STUDENT is exclusive)',
+  })
+  async assignRole(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: AssignRoleDto,
+    @Req() req: RequestWithUser,
+  ) {
+    return this.rolesService.assignRole({
+      membershipId: id,
+      role: dto.role,
+      actor: req.user,
+    });
+  }
+
+  @Delete(':id/roles/:role')
+  @Permission(
+    SystemRole.SUPERADMIN,
+    OrganizationRole.OWNER,
+    OrganizationRole.DIRECTOR,
+  )
+  @ApiOperation({
+    summary:
+      'Revoke a non-primary role from a membership (takes effect on next request)',
+  })
+  async revokeRole(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Param('role') role: string,
+    @Req() req: RequestWithUser,
+  ) {
+    if (
+      !Object.values(OrganizationRole).includes(role as OrganizationRole)
+    ) {
+      throw new BadRequestException(`Neznámá role: ${role}`);
+    }
+    return this.rolesService.revokeRole({
+      membershipId: id,
+      role: role as OrganizationRole,
+      actor: req.user,
+    });
   }
 
   // DELETE
