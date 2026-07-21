@@ -21,9 +21,13 @@ import {
 
 /**
  * Rodičovská strana guardian API. Žádný @Permission — autorizace stojí na
- * aktivní roli PARENT + vztahu k dítěti, obojí vyhodnocuje GuardianService
- * z DB při každém požadavku (revokace platí okamžitě). Odpovědi nikdy
- * nenesou XP/level/parťáka (neporušitelný princip 5).
+ * aktivní roli PARENT + vztahu ke KONKRÉTNÍMU dítěti, obojí se vyhodnocuje
+ * z DB při každém požadavku (GuardianAccessGuard / requireParentMembership
+ * v GuardianService; revokace platí okamžitě). Plošný PermissionKey by tady
+ * byl slabší než per-dítě kontrola vztahu. Odpovědi nikdy nenesou
+ * XP/level/parťáka (neporušitelný princip 5).
+ *
+ * rbac-checked: inline (viz výše — vztahová autorizace per dítě, ne role)
  */
 @ApiTags('guardian')
 @ApiStandardResponses()
