@@ -1648,6 +1648,12 @@ enum OrganizationRole {
   TEACHER
   DIRECTOR
   OWNER
+  // PARENT nemá ŽÁDNÁ generická RBAC oprávnění (žádný PermissionKey, ani
+  // globální ani org-scoped RolePermission — vynuceno CHECK constraintem
+  // role_permissions_no_parent_role a aplikačním guardem). Veškerý
+  // rodičovský přístup jde výhradně přes vztahově autorizované /guardian/*
+  // endpointy (VERIFIED GuardianStudentRelation + GuardianPermissionKey per
+  // dítě). Viz docs/guardian.md §3.
   PARENT
 }
 

@@ -6,7 +6,10 @@ import {
 } from '@prisma/client';
 import { logDone, logStep } from './seed-helpers';
 import { USER_EMAILS } from './seed-constants';
-import { RBAC_DEFAULT_PERMISSIONS } from '@/modules/rbac/rbac.defaults';
+import {
+  RBAC_DEFAULT_PERMISSIONS,
+  roleAllowsGenericPermissions,
+} from '@/modules/rbac/rbac.defaults';
 
 const ROLE_MATRIX: Partial<Record<OrganizationRole, PermissionKey[]>> = Object.values(
   OrganizationRole,
@@ -46,6 +49,9 @@ export async function seed(prisma: PrismaClient) {
 
   // 2️⃣  RolePermission matrix
   for (const [role, keys] of Object.entries(ROLE_MATRIX)) {
+    // Bezpečnostní invariant (docs/guardian.md §3): role bez generického
+    // RBAC (PARENT) se do role_permissions nikdy neseedují.
+    if (!roleAllowsGenericPermissions(role as OrganizationRole)) continue;
     for (const key of keys ?? []) {
       const permissionId = permissionByKey.get(key);
       if (!permissionId) continue;

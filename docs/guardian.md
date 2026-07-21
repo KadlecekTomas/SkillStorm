@@ -104,3 +104,58 @@ Služby větvily **negativně** — „STUDENT dostane své, TEACHER třídy, *z
 ### 2.6 Další výskyty stejného antipatternu (cílený sweep)
 
 Prohledány všechny služby používající roli. **Bez dalšího nálezu** — zbytek už používá pozitivní allowlist s deny-fallthrough: `enrollments.listByClassSection`, `class-sections` (list/detail/org-subjects), `analytics.studentTimeline` (else → 403), `stats` dashboardy (explicitní role checky), `teachers`/`teacher-access` (DIRECTOR+ required), `learning-materials` (TEACHER+ required), `audit-data-scope` (DIRECTOR/OWNER same-org, jinak null), `student` detail (StudentAccessGuard, deny fallthrough). Guardian API (`/guardian/*`) nepoužívá PermissionKey — vztahová autorizace per dítě.
+
+---
+
+## 3. Bezpečnostní invariant — PARENT bez generických RBAC oprávnění (21. 7. 2026)
+
+### 3.1 Přesná podoba invariantu
+
+> Role `PARENT` nesmí mít **žádný** záznam v `role_permissions` — ani globální (`organization_id IS NULL`), ani organization-scoped. Veškerý rodičovský přístup jde **výhradně** přes vztahově autorizované `/guardian/*` endpointy (VERIFIED `GuardianStudentRelation` + `GuardianPermissionKey` per dítě), oddělené od generického RBAC. Org administrátor nesmí PARENT oprávnění vytvořit ani obnovit.
+
+Vynuceno **třemi vrstvami**:
+1. **DB CHECK constraint** `role_permissions_no_parent_role` (`CHECK (role <> 'PARENT')`) — strukturální, neobejde ho seed, sync, admin API, import ani ruční SQL.
+2. **Aplikační guard** `roleAllowsGenericPermissions(role)` (kanonicky v `rbac.defaults.ts`, konstanta `ROLES_WITHOUT_GENERIC_RBAC = [PARENT]`) na všech write cestách — srozumitelná 403 chyba před DB.
+3. **Prázdné defaults** `PARENT: []` (§2) — RbacGuard PARENTa neprozkoumá na žádném `@Permission` endpointu.
+
+### 3.2 Nalezené write cesty pro RolePermission (všechny ošetřené)
+
+| Write cesta | Soubor | Ošetření |
+|---|---|---|
+| Admin API service | `rbac-policy.service.ts` `grantRolePermission` | guard → `ForbiddenException` pro PARENT (revoke PARENT je no-op, nic nevytváří) |
+| Boot default sync | `rbac-default-sync.service.ts` | `continue` pro role bez generického RBAC |
+| Prisma seed | `prisma/seed/rbac.seed.ts` | `continue` pro role bez generického RBAC |
+| Klientské zrcadlo (UI gating, ne autoritativní) | `client/src/types/permissions.ts` | `ROLE_PERMISSION_MATRIX.PARENT = []`, `roleHome.PARENT = /app/family` |
+
+`RbacPolicyService` je exportovaná z `rbac.module`, ale žádný controller ji zatím nevystavuje — guard je preventivní pro budoucí admin UI/API. Žádný import/CSV cesta pro RolePermission neexistuje.
+
+### 3.3 Migrace before/after (ověřeno)
+
+Migrace `20260721150000_guardian_enforce_no_parent_permissions`: `DELETE FROM role_permissions WHERE role = 'PARENT'` (bez org filtru — maže globální i org-scoped) + idempotentní `ADD CONSTRAINT ... CHECK (role <> 'PARENT')`. Předchozí `20260721140000` (jen globální) zůstává v historii; tato ji dotahuje.
+
+Izolovaný test na čisté DB:
+```
+BEFORE enforcement — global PARENT rows: 2   (org-scoped by CHECK dřív nešlo vložit; DELETE nemá org filtr)
+AFTER enforcement  — PARENT rows (any org): 0
+CHECK present: 1
+idempotentní re-run migračního SQL: OK (DO bez chyby)
+```
+Přímé inserty po migraci (ověřeno psql): globální PARENT → `ERROR: violates check constraint role_permissions_no_parent_role`; org-scoped PARENT → stejná chyba; STUDENT → `INSERT 0 1` (constraint se ho netýká).
+
+### 3.4 Testovací důkaz
+
+`guardian-rbac-hardening.e2e-spec.ts` — **11/11**:
+- INV1: DB CHECK odmítne PARENT `role_permission` (globální i org-scoped) přes `prisma.$executeRaw`.
+- INV2: po bootu (seed + default sync) je `count(role_permissions WHERE role=PARENT) === 0`.
+- INV3: `RbacPolicyService.grantRolePermission(PARENT, …)` hodí výjimku a nic nevytvoří; STUDENT grant guardem projde.
+- D1–D5 + N1 → 403 pro PARENT (beze změny); `/guardian/*` (children, overview) dál 200.
+- Unit `rbac.defaults.invariant.spec.ts` 6/6; `isPermissionAllowedByDefault(PARENT, *) === false`.
+
+### 3.5 Schema / dokumentace
+
+- `schema.prisma`: komentář u `OrganizationRole.PARENT` vysvětluje, že PARENT nemá generická RBAC oprávnění a autorizace je relationship-based (`/guardian/*`). `PermissionKey` enum je beze změny (PARENT žádný klíč nedrží). `GuardianPermissionKey` je oddělený enum vztahových oprávnění — kolize názvu `VIEW_RESULTS`/`VIEW_ASSIGNMENTS` mezi oběma enumy je záměrná a nesouvisí (různé namespace).
+- `docs/guardian/etapa-a-analyza.md` zůstává historickým záznamem stavu Etapy A (tehdy PARENT měl VIEW_RESULTS/VIEW_SUBMISSIONS) — není to tvrzení o současnosti.
+
+### 3.6 Verdikt
+
+**READY_TO_MERGE** — invariant vynucen na DB + aplikační + defaults vrstvě; všechny write cesty ošetřené; migrace idempotentní s ověřeným before/after; 11/11 RBAC matice + plný e2e balík (viz níže). Bez merge dle zadání.

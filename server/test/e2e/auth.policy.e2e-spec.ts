@@ -366,10 +366,9 @@ describe('Auth & Role Policy (integration)', () => {
           PermissionKey.VIEW_SUBMISSIONS,
           PermissionKey.VIEW_OWN_ASSIGNMENTS,
         ],
-        PARENT: [
-          PermissionKey.VIEW_RESULTS,
-          PermissionKey.VIEW_SUBMISSIONS,
-        ],
+        // Guardian invariant (docs/guardian.md §3): PARENT nemá ŽÁDNÁ generická
+        // RBAC oprávnění — žádné role_permissions (DB CHECK to i vynucuje).
+        // Ověření nulového stavu je níže + v guardian-rbac-hardening INV1-3.
       };
 
       const permissions = await prisma.permission.findMany({

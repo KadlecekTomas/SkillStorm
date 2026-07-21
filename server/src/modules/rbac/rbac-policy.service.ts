@@ -1,8 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import type { OrganizationRole, PermissionKey, Prisma } from '@prisma/client';
 import { AuditEntityType } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
 import { emitRbacInvalidation } from './rbac.events';
+import { roleAllowsGenericPermissions } from './rbac.defaults';
 
 type ActorContext = {
   userId?: string | null;
@@ -28,6 +29,14 @@ export class RbacPolicyService {
   constructor(private readonly prisma: PrismaService) {}
 
   async grantRolePermission(actor: ActorContext, input: RolePermissionInput) {
+    // Bezpečnostní invariant (docs/guardian.md §3): rolím bez generického
+    // RBAC (PARENT) nelze permission přidělit žádnou cestou. DB CHECK to
+    // vynutí i strukturálně; tady vracíme srozumitelnou chybu předem.
+    if (!roleAllowsGenericPermissions(input.role)) {
+      throw new ForbiddenException(
+        `Role ${input.role} nesmí mít generická RBAC oprávnění (přístup jde přes /guardian/*).`,
+      );
+    }
     const permission = await this.prisma.permission.findUnique({
       where: { key: input.permissionKey },
       select: { id: true },

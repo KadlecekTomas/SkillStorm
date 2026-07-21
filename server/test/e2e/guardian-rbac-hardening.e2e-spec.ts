@@ -343,4 +343,65 @@ describe('Guardian Etapa D — RBAC hardening (e2e)', () => {
     expect(Object.values(GuardianPermissionKey).length).toBeGreaterThan(0);
     expect(GuardianRelationStatus.VERIFIED).toBe('VERIFIED');
   });
+
+  it('INV1: DB CHECK odmítne PARENT role_permission — globální i org-scoped', async () => {
+    const perm = await prisma.permission.findFirst({ select: { id: true } });
+    expect(perm).toBeTruthy();
+    // Globální
+    await expect(
+      prisma.$executeRaw`
+        INSERT INTO role_permissions (role_permission_id, role, permission_id, allowed)
+        VALUES (gen_random_uuid(), 'PARENT', ${perm!.id}, true)
+      `,
+    ).rejects.toThrow(/role_permissions_no_parent_role|check constraint/i);
+    // Org-scoped (reálné orgId, aby to nespadlo na FK dřív než na CHECK)
+    await expect(
+      prisma.$executeRaw`
+        INSERT INTO role_permissions (role_permission_id, role, permission_id, organization_id, allowed)
+        VALUES (gen_random_uuid(), 'PARENT', ${perm!.id}, ${orgA}, true)
+      `,
+    ).rejects.toThrow(/role_permissions_no_parent_role|check constraint/i);
+  });
+
+  it('INV2: po bootu (seed + default sync) neexistuje ŽÁDNÝ PARENT role_permission', async () => {
+    const count = await prisma.rolePermission.count({
+      where: { role: OrganizationRole.PARENT },
+    });
+    expect(count).toBe(0);
+  });
+
+  it('INV3: admin write cesta (RbacPolicyService.grantRolePermission) odmítne PARENT', async () => {
+    const { RbacPolicyService } = await import(
+      '@/modules/rbac/rbac-policy.service'
+    );
+    const { PermissionKey } = await import('@prisma/client');
+    const policy = app.get(RbacPolicyService);
+    await expect(
+      policy.grantRolePermission(
+        { userId: null, organizationId: orgA },
+        {
+          role: OrganizationRole.PARENT,
+          permissionKey: PermissionKey.VIEW_RESULTS,
+          organizationId: orgA,
+        },
+      ),
+    ).rejects.toThrow();
+    // Nic se nevytvořilo (guard běží před DB, DB CHECK je druhá pojistka).
+    expect(
+      await prisma.rolePermission.count({
+        where: { role: OrganizationRole.PARENT },
+      }),
+    ).toBe(0);
+    // Kontrola pozitivní: STUDENT grant guardem projde (dojde až k DB/permission).
+    await policy
+      .grantRolePermission(
+        { userId: null, organizationId: orgA },
+        {
+          role: OrganizationRole.STUDENT,
+          permissionKey: PermissionKey.VIEW_RESULTS,
+          organizationId: orgA,
+        },
+      )
+      .catch(() => undefined); // případný jiný důvod neřešíme; jde o to, že NEhodí PARENT guard
+  });
 });

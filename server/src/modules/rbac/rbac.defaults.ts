@@ -31,6 +31,23 @@ const DIRECTOR_EXTRA: PermissionKey[] = [
   PermissionKey.VIEW_ORG_ASSIGNMENTS,
 ];
 
+/**
+ * Bezpečnostní invariant (guardian, docs/guardian.md §3): role, které NIKDY
+ * nesmí mít generická RBAC oprávnění. Veškerý jejich přístup jde jinou,
+ * vztahově autorizovanou cestou (PARENT → /guardian/*). Vynucováno na všech
+ * write cestách RolePermission + DB CHECK constraint
+ * role_permissions_no_parent_role.
+ */
+export const ROLES_WITHOUT_GENERIC_RBAC: readonly OrganizationRole[] = [
+  'PARENT' as OrganizationRole,
+];
+
+export function roleAllowsGenericPermissions(
+  role: OrganizationRole,
+): boolean {
+  return !ROLES_WITHOUT_GENERIC_RBAC.includes(role);
+}
+
 export const RBAC_DEFAULT_PERMISSIONS: RoleDefaults = {
   OWNER: ALL_PERMISSIONS,
   DIRECTOR: [...TEACHER_PERMISSIONS, ...DIRECTOR_EXTRA],

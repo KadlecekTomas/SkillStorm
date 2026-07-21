@@ -53,7 +53,10 @@ export const ROLE_PERMISSION_MATRIX: Record<
     PermissionKey.VIEW_SUBMISSIONS,
     PermissionKey.VIEW_OWN_ASSIGNMENTS,
   ],
-  PARENT: [PermissionKey.VIEW_RESULTS, PermissionKey.VIEW_SUBMISSIONS],
+  // Bezpečnostní invariant (docs/guardian.md §3): PARENT nemá žádná generická
+  // RBAC oprávnění (zrcadlí server rbac.defaults.PARENT = []). Rodičovský
+  // přístup jde přes /guardian/*; server je autoritativní.
+  PARENT: [],
 };
 
 export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
@@ -73,6 +76,7 @@ export const roleHome: Record<OrganizationRole | "DEFAULT", string> = {
   DIRECTOR: "/app/settings",
   TEACHER: "/app/tests",
   STUDENT: "/app/results",
-  PARENT: "/app/results",
+  // Rodič má rodinný prostor (Etapa B); /app/results mu vrací 403.
+  PARENT: "/app/family",
   DEFAULT: "/app",
 };

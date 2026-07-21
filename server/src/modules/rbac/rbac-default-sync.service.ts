@@ -1,7 +1,10 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { OrganizationRole, PermissionKey } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
-import { RBAC_DEFAULT_PERMISSIONS } from './rbac.defaults';
+import {
+  RBAC_DEFAULT_PERMISSIONS,
+  roleAllowsGenericPermissions,
+} from './rbac.defaults';
 
 @Injectable()
 export class RbacDefaultSyncService implements OnModuleInit {
@@ -22,6 +25,10 @@ export class RbacDefaultSyncService implements OnModuleInit {
     let createdRolePermissions = 0;
 
     for (const role of Object.values(OrganizationRole)) {
+      // Bezpečnostní invariant: role bez generického RBAC (PARENT) nikdy
+      // neseedovat (defaults jsou stejně [], ale explicitně — obrana proti
+      // budoucí regresi defaults).
+      if (!roleAllowsGenericPermissions(role)) continue;
       const defaults = RBAC_DEFAULT_PERMISSIONS[role];
       if (!defaults) continue;
 
