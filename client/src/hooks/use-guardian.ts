@@ -30,6 +30,7 @@ export type ChildOverview = {
     title: string;
     dueAt: string;
     started: boolean;
+    guardianLaunchPolicy: "DISABLED" | "ALLOWED" | "REQUIRE_CHILD_PIN";
   }[];
   progress: { title: string; submittedAt: string; score: number | null }[];
   messages: never[];
@@ -94,4 +95,70 @@ export async function createGuardianCodesForClass(
     "POST",
     `/classrooms/${classSectionId}/guardian-invites/bulk`,
   );
+}
+
+// ── Guardian Etapa C: žákovské relace („Spustit pro Matěje") ────────────────
+
+export type LearningSessionInfo = {
+  id: string;
+  expiresAt: string;
+  studentName: string;
+  assignmentId: string;
+  assignmentTitle: string;
+};
+
+/** Klientský marker běžící relace (sessionStorage) — zdroj pravdy je server. */
+export const STUDENT_SESSION_KEY = "ss.guardian.studentSession";
+
+export function readStudentSessionMarker(): LearningSessionInfo | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(STUDENT_SESSION_KEY);
+    return raw ? (JSON.parse(raw) as LearningSessionInfo) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Vyčištění klientského stavu při vstupu/výstupu žákovského režimu —
+ * sourozenci na jednom zařízení nesmí vidět stav toho druhého (STOP #3).
+ */
+export function clearClientStateForSessionSwitch(): void {
+  try {
+    window.sessionStorage.clear();
+    window.localStorage.clear();
+  } catch {
+    // storage může být nedostupná (private mode) — server je soudce, UI stav
+    // je jen pohodlí
+  }
+}
+
+/**
+ * Spuštění relace: server PŘEPÍŠE auth cookies žákovskými tokeny — po
+ * úspěchu je prohlížeč dítětem. Volající pak naviguje na aktivitu.
+ */
+export async function startStudentSession(input: {
+  studentId: string;
+  assignmentId: string;
+  assistanceDeclared?: boolean;
+  pin?: string;
+}): Promise<LearningSessionInfo> {
+  const data = await fetchWithAuth<{ session: LearningSessionInfo }>(
+    "POST",
+    "/guardian/student-sessions",
+    { body: input },
+  );
+  clearClientStateForSessionSwitch();
+  window.sessionStorage.setItem(
+    STUDENT_SESSION_KEY,
+    JSON.stringify(data.session),
+  );
+  return data.session;
+}
+
+/** Ukončení relace (dítě i rodič). Cookies maže server; stav čistíme my. */
+export async function endStudentSession(sessionId: string): Promise<void> {
+  await fetchWithAuth("POST", `/guardian/student-sessions/${sessionId}/end`);
+  clearClientStateForSessionSwitch();
 }

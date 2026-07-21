@@ -1591,6 +1591,10 @@ export class TestsService {
         timeLimitSec: dto.timeLimitSec ?? null,
         shuffle: dto.shuffle,
         showExplain: dto.showExplain,
+        // Guardian Etapa C: bez explicitní volby platí DB default DISABLED.
+        ...(dto.guardianLaunchPolicy
+          ? { guardianLaunchPolicy: dto.guardianLaunchPolicy }
+          : {}),
         createdById: creatorMembership.id,
       },
     });

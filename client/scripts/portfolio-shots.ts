@@ -600,3 +600,35 @@ test('portfolio — rodič (rodinný prostor + potvrzení + arch kódů)', async
   await teacherContext.close();
   await context.close();
 });
+
+test('portfolio — rodinné spuštění aktivity (Etapa C)', async ({ browser }) => {
+  // POZOR vedlejší efekty: vytváří reálnou žákovskou relaci (a ukončí ji).
+  // Před dalším během sady vždy seed:showcase.
+  const context = await browser.newContext({
+    viewport: { width: 1920, height: 1080 },
+  });
+  const page = await context.newPage();
+  await login(page, 'rodic@jasminova.test');
+  await page.goto('/app/family', { waitUntil: 'domcontentloaded' });
+  await settle(page);
+
+  // 24 — panel spuštění s PINem (Rovnice = REQUIRE_CHILD_PIN)
+  await page.getByRole('button', { name: 'Spustit doma' }).first().click();
+  await page.getByText(/Předat zařízení\?/).waitFor();
+  await settle(page, 800);
+  await shot(page, '24-rodic-spusteni-aktivity');
+
+  // 25 — žákovský režim s trvalým pruhem (po zadání PIN)
+  await page.locator('input[type="password"]').fill('2468');
+  await page.getByRole('button', { name: /Předat zařízení a spustit/ }).click();
+  await page.waitForURL('**/assignments/**', { timeout: 20_000 });
+  await settle(page, 2500);
+  await shot(page, '25-zak-rezim-spusteno-rodicem');
+
+  // 26 — návratová obrazovka po ukončení (srozumitelná dítěti)
+  await page.getByRole('button', { name: /Ukončit režim žáka/ }).click();
+  await page.waitForURL('**/login**', { timeout: 20_000 });
+  await settle(page, 1200);
+  await shot(page, '26-navrat-po-zakovskem-rezimu');
+  await context.close();
+});

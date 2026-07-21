@@ -185,6 +185,7 @@ export class GuardianService {
       select: {
         id: true,
         closeAt: true,
+        guardianLaunchPolicy: true,
         test: { select: { title: true } },
         submissions: {
           where: { studentId: student.membershipId },
@@ -200,6 +201,9 @@ export class GuardianService {
         title: a.test.title,
         dueAt: a.closeAt,
         started: a.submissions.length > 0,
+        // Guardian Etapa C: klient podle policy ukáže „Spustit pro …"
+        // (ALLOWED), vyžádá PIN (REQUIRE_CHILD_PIN), nebo tlačítko neukáže.
+        guardianLaunchPolicy: a.guardianLaunchPolicy,
       }));
 
     const recentSubmissions = await this.prisma.submission.findMany({

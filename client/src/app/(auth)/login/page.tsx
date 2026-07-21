@@ -37,8 +37,22 @@ export default function LoginPage(): JSX.Element {
     );
   }
 
+  const afterStudentSession = searchParams.get("po-zakovskem-rezimu") === "1";
+
   return (
     <div className="space-y-6">
+      {afterStudentSession && (
+        // Guardian Etapa C: návratová obrazovka srozumitelná i dítěti —
+        // žákovský režim skončil, práce je uložená, dál pokračuje rodič.
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+          <p className="text-[15px] font-bold text-emerald-900">
+            Žákovský režim skončil — všechno je uložené. 👍
+          </p>
+          <p className="mt-1 text-sm text-emerald-800">
+            Teď prosím předej zařízení rodiči. Rodič se přihlásí svým heslem.
+          </p>
+        </div>
+      )}
       <div>
         <h1 className="text-2xl font-semibold text-slate-900">
           Přihlášení do SkillStorm

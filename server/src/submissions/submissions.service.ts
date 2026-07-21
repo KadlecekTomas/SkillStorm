@@ -15,6 +15,7 @@ import { Cache } from 'cache-manager';
 import { AuditEntityType, SubmissionStatus, XpEventType } from '@prisma/client';
 import { computeScore } from './submission-scoring';
 import { PrismaService } from '@/prisma/prisma.service';
+import { buildSubmissionProvenance } from '@/guardian/provenance.util';
 import {
   assertSameOrganizationIds,
   teacherClassScope,
@@ -945,6 +946,17 @@ export class SubmissionsService {
           },
         },
         student: { select: { user: { select: { name: true } } } },
+        // Guardian Etapa C — provenance pro učitelský pohled (spec bod 7).
+        learningSession: {
+          select: {
+            initiatedVia: true,
+            verificationMethod: true,
+            assistanceDeclared: true,
+            initiatorMembership: {
+              select: { user: { select: { name: true } } },
+            },
+          },
+        },
       },
     });
     if (!submission || submission.deletedAt)
@@ -982,6 +994,12 @@ export class SubmissionsService {
     if (role === 'STUDENT' && submission.studentId !== membership.id) {
       throw new ForbiddenException('Access denied');
     }
+    // Guardian: rodič má vlastní rodinný prostor — detail odevzdání je
+    // školní/žákovský pohled (jinak by RBAC klíč VIEW_SUBMISSIONS otevřel
+    // rodiči libovolné odevzdání v organizaci).
+    if (role === 'PARENT') {
+      throw new ForbiddenException('Access denied');
+    }
 
     if (role === 'TEACHER') {
       const teacher = await this.prisma.teacher.findFirst({
@@ -1006,7 +1024,18 @@ export class SubmissionsService {
       }
     }
 
-    return this.sanitizeSubmission(submission, role);
+    const sanitized = this.sanitizeSubmission(submission, role);
+    if (role === 'STUDENT') return sanitized;
+    // Učitel/ředitel: kdo práci spustil a jak bylo dítě ověřeno — lidsky.
+    const firstName =
+      (submission.student?.user?.name ?? 'Žák').split(' ')[0] ?? 'Žák';
+    return {
+      ...(sanitized as Record<string, unknown>),
+      provenance: buildSubmissionProvenance(
+        submission.learningSession,
+        firstName,
+      ),
+    };
   }
 
   /**

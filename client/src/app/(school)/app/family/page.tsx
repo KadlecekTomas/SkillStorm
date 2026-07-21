@@ -10,10 +10,13 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { usePermissions } from "@/hooks/use-permissions";
 import {
   resolveGuardianRelation,
+  startStudentSession,
   useChildOverview,
   useGuardianChildren,
+  type ChildOverview,
   type GuardianChild,
 } from "@/hooks/use-guardian";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/utils/cn";
 
 /**
@@ -23,11 +26,21 @@ import { cn } from "@/utils/cn";
  * basic zobrazení default. Parťák dítěte se tu NIKDY neukazuje.
  */
 
-const dayFormatter = new Intl.DateTimeFormat("cs-CZ", {
-  weekday: "long",
+const dateFormatter = new Intl.DateTimeFormat("cs-CZ", {
   day: "numeric",
   month: "numeric",
 });
+
+/** Genitiv dnů („do pátku", „do soboty") — Intl umí jen nominativ. */
+const WEEKDAY_GENITIVE = [
+  "neděle",
+  "pondělí",
+  "úterý",
+  "středy",
+  "čtvrtka",
+  "pátku",
+  "soboty",
+] as const;
 
 /** „Odevzdat do pátku 25. 7." — lidský termín místo timestampu. */
 function humanDue(dateIso: string): string {
@@ -38,7 +51,7 @@ function humanDue(dateIso: string): string {
   );
   if (diffDays <= 0) return "Odevzdat dnes";
   if (diffDays === 1) return "Odevzdat do zítřka";
-  return `Odevzdat do ${dayFormatter.format(date)}`;
+  return `Odevzdat do ${WEEKDAY_GENITIVE[date.getDay()]} ${dateFormatter.format(date)}`;
 }
 
 /** Lidský souhrn místo skóre — žádné srovnávání, žádná čísla v basic. */
@@ -176,9 +189,98 @@ function ChildSwitcher({
   );
 }
 
+/**
+ * „Spustit pro Matěje" (Etapa C): jedna dominantní akce; PIN jen když ho
+ * zadání vyžaduje. Po spuštění jsou cookies dítěte — tvrdá navigace na
+ * aktivitu (čistý stav, sourozenci se nepromíchají).
+ */
+function LaunchActivity({
+  child,
+  item,
+  onClose,
+}: {
+  child: GuardianChild;
+  item: ChildOverview["todo"][number];
+  onClose: () => void;
+}) {
+  const firstName = child.name.split(" ")[0];
+  const needsPin = item.guardianLaunchPolicy === "REQUIRE_CHILD_PIN";
+  const [pin, setPin] = useState("");
+  const [helping, setHelping] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const start = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await startStudentSession({
+        studentId: child.studentId,
+        assignmentId: item.assignmentId,
+        assistanceDeclared: helping,
+        ...(needsPin ? { pin } : {}),
+      });
+      window.location.href = `/app/assignments/${item.assignmentId}/test`;
+    } catch {
+      setError(
+        needsPin
+          ? "To se nepovedlo — zkontrolujte PIN a zkuste to znovu. Kdyby to nešlo, PIN nastavuje škola."
+          : "Spuštění se nepovedlo. Zkuste to prosím znovu.",
+      );
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3 rounded-xl border border-accent bg-accent-soft/50 p-4">
+      <p className="text-[15px] font-bold text-ink">
+        Předat zařízení? {firstName} bude pracovat na: {item.title}
+      </p>
+      {needsPin && (
+        <label className="block space-y-1 text-sm font-semibold text-ink-muted">
+          PIN, který zná {firstName}
+          <Input
+            type="password"
+            inputMode="numeric"
+            autoComplete="off"
+            maxLength={6}
+            value={pin}
+            onChange={(e) => setPin(e.target.value)}
+            className="h-12 max-w-[10rem] text-center text-lg tracking-[.3em]"
+          />
+        </label>
+      )}
+      <label className="flex min-h-[44px] items-center gap-2 text-[15px] text-ink">
+        <input
+          type="checkbox"
+          checked={helping}
+          onChange={(e) => setHelping(e.target.checked)}
+          className="h-5 w-5 accent-[rgb(var(--accent))]"
+        />
+        Budu u toho pomáhat (učitel to uvidí)
+      </label>
+      {error && <p className="text-sm font-semibold text-danger">{error}</p>}
+      <div className="flex flex-wrap gap-2">
+        <Button
+          size="lg"
+          className="h-12"
+          disabled={busy || (needsPin && pin.length < 4)}
+          onClick={() => void start()}
+        >
+          {busy ? "Spouštím…" : `Předat zařízení a spustit`}
+        </Button>
+        <Button variant="ghost" size="lg" className="h-12" onClick={onClose} disabled={busy}>
+          Zpět
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function FamilyOverview({ child }: { child: GuardianChild }) {
   const { data, isLoading } = useChildOverview(child.studentId);
   const [showDetail, setShowDetail] = useState(false);
+  const [launching, setLaunching] = useState<string | null>(null);
 
   if (isLoading || !data) {
     return (
@@ -226,14 +328,36 @@ function FamilyOverview({ child }: { child: GuardianChild }) {
           ) : (
             <ul className="divide-y divide-line">
               {data.todo.map((item) => (
-                <li key={item.assignmentId} className="flex items-center justify-between gap-3 py-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-[15px] font-bold text-ink">{item.title}</p>
-                    <p className="text-sm text-ink-muted">
-                      {humanDue(item.dueAt)}
-                      {item.started ? " · rozpracováno" : ""}
-                    </p>
+                <li key={item.assignmentId} className="space-y-3 py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-[15px] font-bold text-ink">{item.title}</p>
+                      <p className="text-sm text-ink-muted">
+                        {humanDue(item.dueAt)}
+                        {item.started ? " · rozpracováno" : ""}
+                      </p>
+                    </div>
+                    {item.guardianLaunchPolicy !== "DISABLED" && (
+                      <Button
+                        variant="outline"
+                        className="h-11 shrink-0"
+                        onClick={() =>
+                          setLaunching((cur) =>
+                            cur === item.assignmentId ? null : item.assignmentId,
+                          )
+                        }
+                      >
+                        Spustit doma
+                      </Button>
+                    )}
                   </div>
+                  {launching === item.assignmentId && (
+                    <LaunchActivity
+                      child={child}
+                      item={item}
+                      onClose={() => setLaunching(null)}
+                    />
+                  )}
                 </li>
               ))}
             </ul>
