@@ -9,6 +9,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
+import { buildSubmissionProvenance } from '@/guardian/provenance.util';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import {
@@ -1835,6 +1836,17 @@ export class TestsService {
         student: {
           select: { organizationId: true, user: { select: { name: true } } },
         },
+        // Guardian Etapa C — provenance odevzdání (spec bod 7).
+        learningSession: {
+          select: {
+            initiatedVia: true,
+            verificationMethod: true,
+            assistanceDeclared: true,
+            initiatorMembership: {
+              select: { user: { select: { name: true } } },
+            },
+          },
+        },
         responses: {
           select: {
             id: true,
@@ -1877,6 +1889,12 @@ export class TestsService {
       totalPoints,
       maxTotalPoints,
       percentage,
+      // Guardian Etapa C: kdo relaci spustil a jak bylo dítě ověřeno —
+      // lidská věta, žádné enum dumpy (bod 14).
+      provenance: buildSubmissionProvenance(
+        submission.learningSession,
+        (submission.student?.user?.name ?? 'Žák').split(' ')[0]!,
+      ),
       answers: submission.responses.map((r) => ({
         questionId: r.questionId,
         // Snapshot fields — immutable, taken at submit time.

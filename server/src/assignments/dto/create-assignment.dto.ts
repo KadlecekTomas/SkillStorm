@@ -10,8 +10,10 @@ import {
   IsArray,
   ArrayNotEmpty,
   ValidateIf,
+  IsEnum,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import { GuardianLaunchPolicy } from '@prisma/client';
 
 export class CreateAssignmentDto {
   @IsOptional()
@@ -67,4 +69,12 @@ export class CreateAssignmentDto {
   @IsOptional()
   @IsUUID()
   createdById?: string;
+
+  /**
+   * Guardian Etapa C: smí rodič zadání spustit pro dítě? Default DISABLED
+   * (konzervativní princip 4) — „domácí úkol" povoluje učitel explicitně.
+   */
+  @IsOptional()
+  @IsEnum(GuardianLaunchPolicy)
+  guardianLaunchPolicy?: GuardianLaunchPolicy;
 }

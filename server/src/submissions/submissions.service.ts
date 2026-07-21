@@ -348,6 +348,32 @@ export class SubmissionsService {
     if (now > assignment.closeAt)
       throw new BadRequestException('Assignment je uzavřen');
 
+    // 6a) Guardian relace (Etapa C, STOP #3 rozhodnutí 1): expirace/nové
+    // spuštění NAVAZUJE na rozpracovaný pokus — existující nedokončená
+    // submission se vrátí (a označí provenancí), nový pokus nikdy nevzniká.
+    // Vědomě jen pro tokeny relace: běžný žákovský flow se nemění.
+    if (user.learningSessionId) {
+      const unfinished = await this.prisma.submission.findFirst({
+        where: {
+          organizationId: assignment.organizationId,
+          assignmentId: assignment.id,
+          studentId: membership.id,
+          submittedAt: null,
+          deletedAt: null,
+        },
+        orderBy: { attemptNo: 'desc' },
+      });
+      if (unfinished) {
+        if (!unfinished.learningSessionId) {
+          return this.prisma.submission.update({
+            where: { id: unfinished.id },
+            data: { learningSessionId: user.learningSessionId },
+          });
+        }
+        return unfinished;
+      }
+    }
+
     // 6) count + create must be serialized for the same student to shrink the race window.
     try {
       const created = await this.prisma.$transaction(async (tx) => {
@@ -374,6 +400,8 @@ export class SubmissionsService {
             studentId: membership.id,
             attemptNo: attempts + 1,
             status: SubmissionStatus.PENDING,
+            // Guardian provenance (Etapa C): NULL = samostatné přihlášení.
+            learningSessionId: user.learningSessionId ?? null,
           },
         });
       });
@@ -707,6 +735,9 @@ export class SubmissionsService {
             score: null,
             earnedPoints: null,
             maxPoints: scoreResult.maxScore,
+            ...(user.learningSessionId && !submission.learningSessionId
+              ? { learningSessionId: user.learningSessionId }
+              : {}),
           },
         });
         await tx.auditLog.create({
@@ -736,6 +767,9 @@ export class SubmissionsService {
           score: scoreResult.normalizedScore,
           earnedPoints: scoreResult.total,
           maxPoints: scoreResult.maxScore,
+          ...(user.learningSessionId && !submission.learningSessionId
+            ? { learningSessionId: user.learningSessionId }
+            : {}),
         },
       });
 
