@@ -12,6 +12,22 @@ const ROLE_ORDER: Record<OrganizationRole, number> = {
   OWNER: 4,
 };
 
+/**
+ * Školní personál (TEACHER/DIRECTOR/OWNER) — pozitivní allowlist pro školní
+ * pohledy. Guardian audit (docs/guardian.md §1): služby NIKDY nesmí větvit
+ * „STUDENT…, TEACHER…, jinak škola" — role mimo tento výčet (dnes PARENT,
+ * zítra cokoliv dalšího) musí končit 403, ne školním fallbackem.
+ */
+export function isSchoolStaffRole(
+  role: OrganizationRole | string | null | undefined,
+): boolean {
+  return (
+    role === OrganizationRole.TEACHER ||
+    role === OrganizationRole.DIRECTOR ||
+    role === OrganizationRole.OWNER
+  );
+}
+
 export function hasAtLeastRole(
   roleOrMembership:
     | OrganizationRole

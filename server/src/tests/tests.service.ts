@@ -34,7 +34,7 @@ import type { CreateAnswerDto } from './dto/create-answer.dto';
 import type { UpdateAnswerDto } from './dto/update-answer.dto';
 import type { JwtPayload } from '@/auth/types/jwt-payload';
 import type { AssignTestDto } from './dto/assign-test.dto';
-import { hasAtLeastRole } from '@/shared/access.utils';
+import { hasAtLeastRole, isSchoolStaffRole } from '@/shared/access.utils';
 import {
   isInteractiveQuestionType,
   validateInteractiveContent,
@@ -937,6 +937,16 @@ export class TestsService {
       }
     }
 
+    // Guardian audit D3: školní listing testů jen pro školní role; STUDENT
+    // má vlastní zúženou větev níže. Pozitivní allowlist — jinak 403.
+    if (
+      !isSuper &&
+      user.organizationRole !== OrganizationRole.STUDENT &&
+      !isSchoolStaffRole(user.organizationRole)
+    ) {
+      throw new ForbiddenException('Access denied');
+    }
+
     if (user.organizationRole === OrganizationRole.STUDENT) {
       if (!effectiveOrgId || !user.membershipId) {
         throw new ForbiddenException('Access denied');
@@ -1168,6 +1178,12 @@ export class TestsService {
       });
       if (!studentView) throw new NotFoundException('Test nenalezen');
       return this.mapStudentView(studentView);
+    }
+
+    // Guardian audit D1: učitelská projekce (vč. klíče odpovědí) je JEN pro
+    // školní role — pozitivní allowlist, žádný „jinak škola" fallback.
+    if (!isSchoolStaffRole(user.organizationRole)) {
+      throw new ForbiddenException('Přístup pouze pro učitele a ředitele.');
     }
 
     const teacherView = await this.prisma.test.findUnique({
@@ -1647,6 +1663,16 @@ export class TestsService {
       test.organizationId,
     );
     const role = membership?.role ?? user.organizationRole ?? null;
+
+    // Guardian audit D2: agregované výsledky jen pro školní role + STUDENT
+    // (zúžený na sebe níže). Pozitivní allowlist — neznámá role = 403.
+    if (
+      user.systemRole !== SystemRole.SUPERADMIN &&
+      role !== OrganizationRole.STUDENT &&
+      !isSchoolStaffRole(role)
+    ) {
+      throw new ForbiddenException('Přístup pouze pro školu.');
+    }
 
     let assignmentScope: Prisma.AssignmentWhereInput | undefined;
     if (role === OrganizationRole.TEACHER && membership) {

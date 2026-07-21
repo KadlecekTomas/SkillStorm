@@ -9,9 +9,15 @@ import {
 import { Throttle, seconds } from '@nestjs/throttler';
 import { MetricsService } from './metrics.service';
 import { RecordRbacMetricDto } from './dto/record-rbac-metric.dto';
+import { UseGuards } from '@nestjs/common';
 import { Public } from '@/common/decorators/public.decorator';
-import { Permission } from '@/modules/rbac/permission.decorator';
-import { PermissionKey } from '@prisma/client';
+import { JwtAuthGuard } from '@/auth/guards/jwt-auth.guard';
+import { PlatformAccessGuard } from '@/common/guards/platform-access.guard';
+import {
+  PlatformAccessLevel,
+  RequirePlatformAccess,
+} from '@/common/decorators/platform-access.decorator';
+import { AllowAnyOrgStatus } from '@/common/decorators/allow-any-org-status.decorator';
 
 @Controller('metrics')
 export class MetricsController {
@@ -32,8 +38,13 @@ export class MetricsController {
     return { status: 'queued' };
   }
 
+  // Guardian audit N1: platformní metrika (počet FORBIDDEN_ACCESS bez org
+  // filtru) patří platformním rolím, ne komukoli s VIEW_RESULTS.
   @Get('summary')
-  @Permission(PermissionKey.VIEW_RESULTS)
+  @UseGuards(JwtAuthGuard, PlatformAccessGuard)
+  @RequirePlatformAccess(PlatformAccessLevel.READ)
+  // Platformní metrika je nezávislá na stavu organizace vyzyvatele.
+  @AllowAnyOrgStatus()
   async summary() {
     return this.metrics.summary();
   }

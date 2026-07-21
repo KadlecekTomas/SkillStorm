@@ -26,7 +26,7 @@ import {
 } from '@/shared/cache/org-cache.utils';
 import type { StatsOverviewResponse } from './dto/overview.dto';
 import { RiskService } from '@/risk/risk.service';
-import { teacherClassScope } from '@/shared/access.utils';
+import { isSchoolStaffRole, teacherClassScope } from '@/shared/access.utils';
 
 const DASHBOARD_SUBMISSION_LIMIT = 2_000;
 export function invalidateDirectorDashboardCache(
@@ -126,6 +126,16 @@ export class StatsService {
     await this.ensureOrgContext(user, organizationId);
     const membership = await this.resolveMembership(user, organizationId);
     const role = membership?.role ?? user.organizationRole ?? null;
+
+    // Guardian audit D5: org-wide overview jen pro školní role; STUDENT má
+    // níže zúženou větev. Pozitivní allowlist — neznámá role = 403.
+    if (
+      user.systemRole !== SystemRole.SUPERADMIN &&
+      role !== OrganizationRole.STUDENT &&
+      !isSchoolStaffRole(role)
+    ) {
+      throw new ForbiddenException('Access denied');
+    }
 
     // TVRDÁ normalizace scope – cokoliv mimo 'all' => 'evaluated'
     const safeScope: 'evaluated' | 'all' =

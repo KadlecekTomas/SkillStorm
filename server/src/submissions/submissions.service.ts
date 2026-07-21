@@ -18,6 +18,7 @@ import { PrismaService } from '@/prisma/prisma.service';
 import { buildSubmissionProvenance } from '@/guardian/provenance.util';
 import {
   assertSameOrganizationIds,
+  isSchoolStaffRole,
   teacherClassScope,
 } from '@/shared/access.utils';
 import {
@@ -848,6 +849,13 @@ export class SubmissionsService {
     );
     assertTenantWhere(where as Record<string, unknown>, ctx.organizationId);
 
+    // Guardian audit D4: pozitivní allowlist — výpis odevzdání smí jen
+    // STUDENT (svoje), TEACHER (svoje třídy) a DIRECTOR/OWNER (org).
+    // Filtr ?studentId= je jen pro školní personál.
+    if (role !== 'STUDENT' && !isSchoolStaffRole(role)) {
+      throw new ForbiddenException('Access denied');
+    }
+
     if (role === 'TEACHER') {
       const scope = await this.getTeacherAssignmentScope(membership.id);
       where.assignment = { OR: scope.OR };
@@ -855,7 +863,7 @@ export class SubmissionsService {
 
     if (role === 'STUDENT') {
       where.studentId = membership.id;
-    } else if (filter.studentId) {
+    } else if (filter.studentId && isSchoolStaffRole(role)) {
       where.studentId = filter.studentId;
     }
 

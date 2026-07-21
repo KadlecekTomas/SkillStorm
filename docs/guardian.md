@@ -54,3 +54,53 @@ Vzor selhání je vždy stejný: služby větví **negativně** („STUDENT dost
 - Obojí doplnit regresním e2e: „PARENT × každý dotčený endpoint → 403" (rozšíření matice z Etapy C).
 
 *Oprava se provede v samostatném kroku Etapy D po schválení tohoto auditu.*
+
+---
+
+## 2. RBAC hardening — oprava (21. 7. 2026, security commit)
+
+**Zvolený směr (schváleno):** kombinace (a) prázdné PARENT defaults + (b) pozitivní allowlisty ve službách. Dvojitá obrana: RbacGuard blokuje PARENTa na každém `@Permission` endpointu (defaults `[]`), a služby navíc denyují neznámé role explicitně (belt-and-suspenders pro budoucí role).
+
+### 2.1 Stav nálezů před/po
+
+| # | Endpoint | Před | Po | Uzavřeno čím |
+|---|---|---|---|---|
+| D1 | `GET /tests/:id` | rodič dostal učitelskou projekci vč. `correctAnswer` | 403 | prázdné defaults + `findOne` pozitivní allowlist (`isSchoolStaffRole`) |
+| D2 | `GET /tests/:id/results` | rodič viděl výsledky celého testu | 403 | prázdné defaults + `results` allowlist (STUDENT/škola) |
+| D3 | `GET /tests` | rodič viděl katalog testů | 403 | prázdné defaults + `findAll` allowlist |
+| D4 | `GET /submissions` | rodič listoval odevzdání, i s `?studentId=` | 403 | prázdné defaults + `findAll` allowlist; `?studentId=` jen pro školu |
+| D5 | `GET /stats/overview` | rodič viděl org průměry | 403 | prázdné defaults + `getOrgOverview` allowlist |
+| N1 | `GET /metrics/summary` | kdokoli s VIEW_RESULTS (i žák) viděl platformní metriku bez org filtru | 403 pro školní role, 200 jen platformní (SUPERADMIN/DEVOPS/SUPPORT) | přesun z `@Permission(VIEW_RESULTS)` na `PlatformAccessGuard` + `@AllowAnyOrgStatus` |
+
+Opravy z Etapy C (`getStudentResult`, `submissions.findOne`) zůstávají a jsou nezávisle pokryté.
+
+### 2.2 Kořenová příčina
+
+Služby větvily **negativně** — „STUDENT dostane své, TEACHER třídy, *zbytek je škola*". PARENT (role z Etapy A bez konzumentů) zdědil školní fallback i klíče `VIEW_RESULTS`/`VIEW_SUBMISSIONS` v defaults. Oprava překlápí větvení na **pozitivní allowlist** (`isSchoolStaffRole` v `shared/access.utils.ts`): role mimo výčet končí 403, nikdy školním fallbackem.
+
+### 2.3 Změněné permissions
+
+- `rbac.defaults.ts`: `PARENT: [VIEW_RESULTS, VIEW_SUBMISSIONS]` → `PARENT: []`.
+- **Produkční past:** RBAC default sync je pouze aditivní (nemaže zastaralé řádky). Migrace `20260721140000_guardian_purge_stale_parent_permissions` idempotentně smaže globální (`organization_id IS NULL`) `role_permissions` řádky role PARENT, aby DB nastartovaná se starými defaults nepřebila prázdný default. Org-scoped override (`organization_id != NULL`) zůstávají nedotčené.
+
+### 2.4 Změněné služby (pozitivní allowlist)
+
+- `tests.service.ts`: `findOne` (D1), `results` (D2), `findAll` (D3).
+- `submissions.service.ts`: `findAll` (D4) — `?studentId=` filtr jen pro `isSchoolStaffRole`.
+- `stats.service.ts`: `getOrgOverview` (D5).
+- `metrics.controller.ts`: `summary` (N1) — `PlatformAccessGuard` + `@RequirePlatformAccess(READ)` + `@AllowAnyOrgStatus`.
+- Nový helper `isSchoolStaffRole(role)` v `shared/access.utils.ts`.
+- Klient: `dashboard-layout.tsx` — lišta školního roku a `useAcademicYears` fetch vypnuté pro PARENT (rodič nemá školní klíče; kontext roku nese karta dítěte). `/academic-years` se rodiči neposkytuje vůbec — užší guardian endpoint není potřeba.
+
+### 2.5 Testovací důkaz
+
+`test/e2e/guardian-rbac-hardening.e2e-spec.ts` — 8/8:
+- D1 PARENT → 403 vč. přímého ID testu i cizí org; odpověď neobsahuje `correctAnswer` ani text otázky.
+- D2+D3, D4 (vč. `?studentId=` cizího žáka), D5+N1 → 403; metrics/summary 200 jen SUPERADMIN.
+- PARENT rodinný prostor (`/guardian/*`) dál 200 — nezávislý na školních klíčích.
+- STUDENT drží svůj rozsah (detail bez klíče, jen vlastní submissions), TEACHER jen své třídy, DIRECTOR/OWNER org-wide.
+- Invariant test: `isPermissionAllowedByDefault(PARENT, *)` je `false` pro všechny klíče.
+
+### 2.6 Další výskyty stejného antipatternu (cílený sweep)
+
+Prohledány všechny služby používající roli. **Bez dalšího nálezu** — zbytek už používá pozitivní allowlist s deny-fallthrough: `enrollments.listByClassSection`, `class-sections` (list/detail/org-subjects), `analytics.studentTimeline` (else → 403), `stats` dashboardy (explicitní role checky), `teachers`/`teacher-access` (DIRECTOR+ required), `learning-materials` (TEACHER+ required), `audit-data-scope` (DIRECTOR/OWNER same-org, jinak null), `student` detail (StudentAccessGuard, deny fallthrough). Guardian API (`/guardian/*`) nepoužívá PermissionKey — vztahová autorizace per dítě.

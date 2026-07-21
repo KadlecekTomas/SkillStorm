@@ -24,7 +24,10 @@ export const DashboardLayout = ({ children }: DashboardLayoutProps): React.JSX.E
   const { user, org, switchOrganization, isOffline, context } = useAuth();
   const memberships = user?.memberships ?? [];
   const currentMembershipId = memberships.find((m) => m.organizationId === org?.id)?.id ?? "";
-  const { selectedYear, bootstrapState, activeYear, isAcademicYearExpired, refresh: refreshYears } = useAcademicYears();
+  // Guardian audit: rodič nemá školní RBAC klíče — /academic-years by
+  // vrátilo 403. Lišta roku pro něj nemá význam (kontext nese karta dítěte).
+  const isParent = user?.organizationRole === "PARENT";
+  const { selectedYear, bootstrapState, activeYear, isAcademicYearExpired, refresh: refreshYears } = useAcademicYears({ enabled: !isParent });
   const { hasRole } = usePermissions();
   const [expiredModalDismissed, setExpiredModalDismissed] = useState(false);
   // Only directors/owners see the expired-year modal. They are the only ones who
@@ -67,7 +70,7 @@ export const DashboardLayout = ({ children }: DashboardLayoutProps): React.JSX.E
         />
       )}
       <div className="space-y-3">
-        {context?.mode === "organization" && (
+        {context?.mode === "organization" && !isParent && (
           <p data-app-chrome className="text-sm font-medium text-ink-dim" aria-label="Aktuální školní rok">
             Školní rok{" "}
             {bootstrapState === "READY" && selectedYear

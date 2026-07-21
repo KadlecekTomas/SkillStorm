@@ -41,7 +41,10 @@ export const RBAC_DEFAULT_PERMISSIONS: RoleDefaults = {
     PermissionKey.VIEW_SUBMISSIONS,
     PermissionKey.VIEW_OWN_ASSIGNMENTS,
   ],
-  PARENT: [PermissionKey.VIEW_RESULTS, PermissionKey.VIEW_SUBMISSIONS],
+  // Guardian audit (docs/guardian.md §1): rodič NEMÁ žádné školní klíče.
+  // Rodinný prostor jede výhradně přes /guardian/* se vztahovou autorizací
+  // per dítě; školní pohledy jsou pro PARENT vždy 403.
+  PARENT: [],
 };
 
 export function isPermissionAllowedByDefault(

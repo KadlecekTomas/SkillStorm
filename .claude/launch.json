@@ -4,20 +4,44 @@
     {
       "name": "client",
       "runtimeExecutable": "env",
-      "runtimeArgs": ["API_PROXY_TARGET=http://localhost:4201", "npm", "run", "dev", "--prefix", "client"],
-      "port": 3000
+      "runtimeArgs": [
+        "API_PROXY_TARGET=http://localhost:4201",
+        "npm",
+        "run",
+        "dev",
+        "--prefix",
+        "client"
+      ],
+      "port": 3000,
+      "autoPort": true
     },
     {
       "name": "backend-portfolio",
       "runtimeExecutable": "env",
-      "runtimeArgs": ["PORT=4202", "DISABLE_THROTTLE=1", "npm", "run", "start:dev", "--prefix", "server"],
+      "runtimeArgs": [
+        "PORT=4202",
+        "DISABLE_THROTTLE=1",
+        "npm",
+        "run",
+        "start:dev",
+        "--prefix",
+        "server"
+      ],
       "port": 4202
     },
     {
       "name": "client-portfolio",
       "runtimeExecutable": "env",
-      "runtimeArgs": ["API_PROXY_TARGET=http://localhost:4202", "npm", "run", "dev", "--prefix", "client"],
-      "port": 3000
+      "runtimeArgs": [
+        "API_PROXY_TARGET=http://localhost:4202",
+        "npm",
+        "run",
+        "dev",
+        "--prefix",
+        "client"
+      ],
+      "port": 3000,
+      "autoPort": true
     }
   ]
 }
