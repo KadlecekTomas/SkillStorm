@@ -7,6 +7,7 @@ import { WarningAlert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { withGuard } from "@/lib/guard/withGuard";
+import { assignmentLauncherHref } from "@/lib/student-assignments";
 import type { OrganizationRole } from "@/types";
 
 function StudentTestPage() {
@@ -16,7 +17,7 @@ function StudentTestPage() {
 
   useEffect(() => {
     if (!assignmentId) return;
-    router.replace(`/assignments/${assignmentId}`);
+    router.replace(assignmentLauncherHref(assignmentId));
   }, [assignmentId, router]);
 
   if (assignmentId) {
@@ -26,11 +27,11 @@ function StudentTestPage() {
   return (
     <div className="space-y-4">
       <WarningAlert
-        title="Chybí assignmentId"
-        description="Otevři zadání ze seznamu assignments."
+        title="Chybí informace o zadání"
+        description="Otevři zadání ze seznamu úkolů."
       />
       <Button asChild className="w-fit">
-        <Link href="/app/assignments">Přejít na assignments</Link>
+        <Link href="/app/assignments">Přejít na úkoly</Link>
       </Button>
     </div>
   );

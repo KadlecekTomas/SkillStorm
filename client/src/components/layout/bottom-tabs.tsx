@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { DASHBOARD_NAV_ITEMS } from "@/config/dashboard-navigation";
+import { getNavItemsForRole } from "@/config/dashboard-navigation";
+import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/utils/cn";
 
 function isActive(pathname: string, route: string): boolean {
@@ -19,13 +20,15 @@ function isActive(pathname: string, route: string): boolean {
  */
 export const BottomTabs = (): React.JSX.Element => {
   const pathname = usePathname();
+  const { user } = useAuth();
+  const navItems = getNavItemsForRole(user?.organizationRole);
 
   return (
     <nav
       aria-label="Hlavní navigace"
       className="fixed inset-x-0 bottom-0 z-50 flex border-t border-line bg-canvas pb-[env(safe-area-inset-bottom)] md:hidden"
     >
-      {DASHBOARD_NAV_ITEMS.map((item) => {
+      {navItems.map((item) => {
         const active = isActive(pathname ?? "", item.route);
         return (
           <Link

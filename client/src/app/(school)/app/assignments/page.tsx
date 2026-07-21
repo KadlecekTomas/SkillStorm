@@ -12,6 +12,10 @@ import { useAuth } from "@/lib/guard/useAuth";
 import { formatDate } from "@/lib/format-date";
 import { useQuery } from "@/lib/query-client";
 import { buildListQueryKey } from "@/lib/list-query";
+import {
+  resolveAssignmentCta,
+  type EffectiveAssignmentStatus,
+} from "@/lib/student-assignments";
 
 type AssignmentRow = {
   id: string;
@@ -26,14 +30,9 @@ type AssignmentRow = {
   attemptNo: number;
   attemptsUsed: number;
   submissionId: string | null;
+  submissionStatus: string | null;
+  effectiveStatus: EffectiveAssignmentStatus;
 };
-
-function assignmentTargetHref(assignment: AssignmentRow): string {
-  if (assignment.submissionId || assignment.attemptsUsed > 0) {
-    return `/app/results/${assignment.submissionId ?? assignment.id}`;
-  }
-  return `/app/assignments/${assignment.id}`;
-}
 
 function AssignmentsPage() {
   const router = useRouter();
@@ -50,35 +49,47 @@ function AssignmentsPage() {
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-semibold">Moje zadání</h1>
-      {error && <ErrorAlert title="Chyba" description={error} />}
+      {error && (
+        <ErrorAlert
+          title="Zadání se nepodařilo načíst"
+          description="Zkontroluj připojení a zkus to prosím znovu."
+        />
+      )}
       <div className="grid gap-3">
-        {items.map((a) => (
-          <Card key={a.id} className="flex items-center justify-between gap-4 p-4">
-            <div className="min-w-0">
-              <p className="truncate font-semibold text-ink">
-                {a.testTitle || "Zadání"}
-              </p>
-              <p className="text-sm text-ink-muted">
-                {a.subjectName ? `${a.subjectName} · ` : ""}
-                Otevřeno od {formatDate(a.openAt)}
-              </p>
-              <p className="text-sm text-ink-muted">
-                Uzavírá se {formatDate(a.closeAt)}
-              </p>
-            </div>
-            <Button
-              onClick={() => router.push(assignmentTargetHref(a))}
-              disabled={!isStudent}
-              title={isStudent ? "" : "Zadání může odevzdat pouze žák"}
-            >
-              {a.submissionId || a.attemptsUsed > 0 ? "Zobrazit výsledek" : "Otevřít test"}
-            </Button>
-          </Card>
-        ))}
+        {items.map((a) => {
+          const cta = resolveAssignmentCta(a);
+          return (
+            <Card key={a.id} className="flex items-center justify-between gap-4 p-4">
+              <div className="min-w-0">
+                <p className="truncate font-semibold text-ink">
+                  {a.testTitle || "Zadání"}
+                </p>
+                <p className="text-sm text-ink-muted">
+                  {a.subjectName ? `${a.subjectName} · ` : ""}
+                  Otevřeno od {formatDate(a.openAt)}
+                </p>
+                <p className="text-sm text-ink-muted">
+                  Uzavírá se {formatDate(a.closeAt)}
+                </p>
+              </div>
+              {!isStudent ? (
+                <Button disabled title="Zadání může odevzdat pouze žák">
+                  Otevřít test
+                </Button>
+              ) : cta.kind === "none" ? (
+                <span className="shrink-0 text-sm font-medium text-ink-muted">
+                  {cta.label}
+                </span>
+              ) : (
+                <Button onClick={() => router.push(cta.href)}>{cta.label}</Button>
+              )}
+            </Card>
+          );
+        })}
         {!items.length && (
           <Card className="p-4 text-sm text-slate-600">
             {isStudent
-              ? "Nemáš žádná aktivní zadání."
+              ? "Nemáš žádná aktivní zadání. Jakmile ti učitel přiřadí test, objeví se tady."
               : "Žádná zadání k zobrazení."}
           </Card>
         )}

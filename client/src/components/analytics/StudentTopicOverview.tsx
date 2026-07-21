@@ -43,7 +43,7 @@ export function StudentTopicOverview({ items }: Props): React.JSX.Element {
             {!items.length && (
               <tr>
                 <td colSpan={3} className="px-4 py-3 text-center text-slate-500">
-                  Zatím nejsou dostupná žádná data podle témat.
+                  Zatím tu nic není. Přehled témat se objeví, až dokončíš první test.
                 </td>
               </tr>
             )}

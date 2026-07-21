@@ -25,10 +25,10 @@ export const LevelUpModal = ({ open, level, onOpenChange }: LevelUpModalProps): 
           className="max-w-md rounded-3xl bg-gradient-to-br from-purple-600 to-indigo-600 p-6 text-white shadow-2xl"
           onClick={(event) => event.stopPropagation()}
         >
-          <p className="text-center text-2xl font-bold">Level up! 🎉</p>
+          <p className="text-center text-2xl font-bold">Nová úroveň! 🎉</p>
           <div className="mt-4 flex flex-col items-center gap-3">
             <div className="rounded-full bg-white/20 px-4 py-2 text-sm uppercase tracking-wide">
-              Level {level}
+              Úroveň {level}
             </div>
             <p className="text-center text-sm text-white/90">
               Skvělá práce! Pokračuj ve sbírání XP za testy a aktivitu v platformě.
