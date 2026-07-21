@@ -423,6 +423,11 @@ async function main() {
     GuardianPermissionKey.START_HOMEWORK,
     GuardianPermissionKey.RECEIVE_NOTIFICATIONS,
   ];
+  // PIN Ondřeje (guardian Etapa C — REQUIRE_CHILD_PIN scénografie): 2468
+  await prisma.student.update({
+    where: { id: students8A[0]!.studentId },
+    data: { pinHash: await hashPassword('2468'), pinUpdatedAt: daysAgo(5) },
+  });
   const parentSykora = await mkUser(
     `rodic@${DOMAIN}`,
     'Alena Sýkorová',
@@ -904,6 +909,8 @@ async function main() {
       shuffle: false,
       showExplain: 'after_submit',
       createdById: teacher1.membershipId,
+      // Guardian Etapa C: domácí úkol s PINem — screenshot PIN kroku.
+      guardianLaunchPolicy: 'REQUIRE_CHILD_PIN',
       students: { create: { studentId: students8A[0]!.membershipId } },
     },
   });
@@ -921,6 +928,8 @@ async function main() {
       shuffle: false,
       showExplain: 'after_submit',
       createdById: teacher1.membershipId,
+      // Guardian Etapa C: domácí úkol spustitelný rodičem („Spustit pro…").
+      guardianLaunchPolicy: 'ALLOWED',
     },
   });
   // Druhé young zadání — portfolio skript potřebuje startovatelný test

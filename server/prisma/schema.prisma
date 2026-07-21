@@ -92,6 +92,7 @@ model Organization {
   classPartaks       ClassPartak[]
   campaignProgresses CampaignProgress[]
   guardianRelations  GuardianStudentRelation[]
+  learningSessions   LearningSession[]
 
   @@index([name])
   @@index([city])
@@ -206,6 +207,7 @@ model Membership {
   verifiedGuardianRelations GuardianStudentRelation[] @relation("VerifiedGuardianRelations")
   revokedGuardianRelations  GuardianStudentRelation[] @relation("RevokedGuardianRelations")
   createdInvites     Invite[]                  @relation("CreatedInvites")
+  initiatedLearningSessions LearningSession[]   @relation("InitiatedLearningSessions")
 
   @@unique([userId, organizationId])
   @@index([organizationId, role])
@@ -583,6 +585,67 @@ enum InterfaceDetailLevel {
   DETAILED
 }
 
+// ── Guardian Etapa C: žákovské relace + provenance ──────────────────────────
+// docs/guardian/etapa-c-stop3-navrh.md (schválený STOP #3). Žádné rezervní
+// hodnoty v enumech — rozšíření až s implementací (rozhodnutí STOP #2).
+
+enum SessionInitiation {
+  GUARDIAN
+}
+
+enum ChildVerification {
+  NONE
+  PIN
+}
+
+enum LearningSessionStatus {
+  ACTIVE
+  ENDED
+  EXPIRED
+  REVOKED
+}
+
+enum GuardianLaunchPolicy {
+  DISABLED
+  ALLOWED
+  REQUIRE_CHILD_PIN
+}
+
+// Časově omezená žákovská relace spuštěná rodičem („Spustit pro Matěje").
+// Tokeny dítěte nesou claim learningSessionId; jwt.strategy validuje
+// ACTIVE ∧ neexpirované per request (okamžitá revokace). Řádky se nemažou —
+// jsou zdrojem provenance odevzdání. Jednu ACTIVE relaci na dítě drží
+// partial unique learning_session_single_active_per_student (SQL migrace),
+// org konzistenci composite FK (vzor guardian_student_relations).
+model LearningSession {
+  id                    String                @id @default(uuid()) @map("learning_session_id")
+  studentId             String                @map("student_id")
+  organizationId        String                @map("organization_id")
+  initiatorMembershipId String                @map("initiator_membership_id")
+  guardianRelationId    String                @map("guardian_relation_id")
+  assignmentId          String                @map("assignment_id")
+  initiatedVia          SessionInitiation     @default(GUARDIAN) @map("initiated_via")
+  verificationMethod    ChildVerification     @default(NONE) @map("verification_method")
+  assistanceDeclared    Boolean               @default(false) @map("assistance_declared")
+  status                LearningSessionStatus @default(ACTIVE)
+  startedAt             DateTime              @default(now()) @map("started_at")
+  expiresAt             DateTime              @map("expires_at")
+  endedAt               DateTime?             @map("ended_at")
+  createdAt             DateTime              @default(now()) @map("created_at")
+  updatedAt             DateTime              @updatedAt @map("updated_at")
+  student               Student               @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  organization          Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  initiatorMembership   Membership            @relation("InitiatedLearningSessions", fields: [initiatorMembershipId], references: [id], onDelete: Cascade)
+  guardianRelation      GuardianStudentRelation @relation(fields: [guardianRelationId], references: [id], onDelete: Restrict)
+  assignment            Assignment            @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  submissions           Submission[]
+
+  @@index([studentId, status])
+  @@index([organizationId])
+  @@index([assignmentId])
+  @@map("learning_sessions")
+}
+
 // Vztah rodič/zákonný zástupce ↔ žák. Guardian strana je Membership (role
 // PARENT z Etapy A), dětská strana org-scoped Student profil. Řádky se
 // nikdy nemažou — REVOKED/DISPUTED je konečný doménový stav; nový přístup
@@ -611,6 +674,7 @@ model GuardianStudentRelation {
   organization         Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   verifiedBy           Membership?             @relation("VerifiedGuardianRelations", fields: [verifiedById], references: [id], onDelete: SetNull)
   revokedBy            Membership?             @relation("RevokedGuardianRelations", fields: [revokedById], references: [id], onDelete: SetNull)
+  learningSessions     LearningSession[]
 
   @@index([organizationId])
   @@index([studentId])
@@ -747,6 +811,7 @@ model Student {
   StudentClassroom StudentClassroom[]
   guardianRelations GuardianStudentRelation[]
   guardianInvites   Invite[]           @relation("GuardianInvites")
+  learningSessions  LearningSession[]
   membership       Membership         @relation(fields: [membershipId], references: [id], onDelete: Cascade)
   organization     Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
@@ -1090,6 +1155,8 @@ model Submission {
   deletedAt      DateTime?        @map("deleted_at")
   assignmentId   String           @map("assignment_id")
   attemptNo      Int              @default(1) @map("attempt_no")
+  // Guardian Etapa C — provenance: NULL = dítě se přihlásilo samostatně.
+  learningSessionId String?       @map("learning_session_id")
   createdAt      DateTime         @default(now()) @map("created_at")
   updatedAt      DateTime         @updatedAt @map("updated_at")
   isAnonymous    Boolean          @default(false)
@@ -1098,8 +1165,10 @@ model Submission {
   organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   student        Membership       @relation(fields: [studentId], references: [id], onDelete: Cascade)
   test           Test             @relation(fields: [testId], references: [id], onDelete: Cascade)
+  learningSession LearningSession? @relation(fields: [learningSessionId], references: [id], onDelete: Restrict)
 
   @@unique([organizationId, studentId, assignmentId, attemptNo])
+  @@index([learningSessionId])
   @@index([assignmentId])
   @@index([organizationId])
   @@index([studentId, assignmentId])
@@ -1513,6 +1582,11 @@ model Assignment {
   timeLimitSec   Int?                @map("time_limit_sec")
   shuffle        Boolean             @default(true)
   showExplain    String              @default("after_close")
+  // Guardian Etapa C: smí rodič zadání spustit pro dítě? DB default DISABLED
+  // (neporušitelný princip 4 — klasifikovaný test nesmí být rodičovsky
+  // spustitelný jen proto, že učitel na volbu nesáhl); úkoly povoluje
+  // učitel přepínačem při vytvoření zadání.
+  guardianLaunchPolicy GuardianLaunchPolicy @default(DISABLED) @map("guardian_launch_policy")
   createdById    String              @map("created_by_id")
   createdAt      DateTime            @default(now()) @map("created_at")
   students       AssignmentStudent[]
@@ -1523,6 +1597,7 @@ model Assignment {
   test           Test                @relation("TestToAssignments", fields: [testId], references: [id], onDelete: Cascade)
   topicLevel     TopicLevel?         @relation(fields: [topicLevelId], references: [id])
   submissions    Submission[]
+  learningSessions LearningSession[]
 
   @@index([organizationId, classSectionId])
   @@index([yearId])

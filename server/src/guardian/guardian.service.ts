@@ -7,6 +7,7 @@ import {
 import {
   AuditEntityType,
   EnrollmentStatus,
+  GuardianPermissionKey,
   GuardianRelationStatus,
   OrganizationRole,
   Prisma,
@@ -184,6 +185,7 @@ export class GuardianService {
       select: {
         id: true,
         closeAt: true,
+        guardianLaunchPolicy: true,
         test: { select: { title: true } },
         submissions: {
           where: { studentId: student.membershipId },
@@ -199,6 +201,9 @@ export class GuardianService {
         title: a.test.title,
         dueAt: a.closeAt,
         started: a.submissions.length > 0,
+        // Guardian Etapa C: klient podle policy ukáže „Spustit pro …"
+        // (ALLOWED), vyžádá PIN (REQUIRE_CHILD_PIN), nebo tlačítko neukáže.
+        guardianLaunchPolicy: a.guardianLaunchPolicy,
       }));
 
     const recentSubmissions = await this.prisma.submission.findMany({
@@ -440,6 +445,38 @@ export class GuardianService {
       { studentId: relation.studentId },
     );
     return { relationId: relation.id, alreadyRevoked: false };
+  }
+
+  /**
+   * Veřejný kontrakt pro guardian operace mimo :studentId routy (Etapa C —
+   * spuštění relace se studentId v těle): VERIFIED vztah + oprávnění,
+   * sémantika 404/403 shodná s GuardianAccessGuard.
+   */
+  async requireVerifiedRelation(
+    guardianMembershipId: string,
+    organizationId: string,
+    studentId: string,
+    permission: GuardianPermissionKey,
+  ): Promise<{ relationId: string }> {
+    const student = await this.prisma.student.findFirst({
+      where: { id: studentId, orgId: organizationId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!student) throw new NotFoundException('Student not found');
+    const relation = await this.prisma.guardianStudentRelation.findFirst({
+      where: {
+        guardianMembershipId,
+        studentId,
+        status: GuardianRelationStatus.VERIFIED,
+        revokedAt: null,
+        OR: [{ validUntil: null }, { validUntil: { gt: new Date() } }],
+      },
+      select: { id: true, permissions: true },
+    });
+    if (!relation || !relation.permissions.includes(permission)) {
+      throw new ForbiddenException('NOT_YOUR_CHILD');
+    }
+    return { relationId: relation.id };
   }
 
   // ─────────────────────────────────────────────────────────────────────────

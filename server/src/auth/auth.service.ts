@@ -76,6 +76,8 @@ type JwtClaims = {
   organizationId: string | null;
   membershipId: string | null;
   tokenVersion: number;
+  /** Guardian Etapa C: token žákovské relace — platnost relace ověřuje jwt.strategy per request. */
+  learningSessionId?: string;
 };
 
 export type AuthContextMode = 'platform' | 'organization' | 'personal';
@@ -254,6 +256,52 @@ export class AuthService {
 
     const refreshToken = await this.issueRefreshToken(user.id);
     return { accessToken, refreshToken };
+  }
+
+  /**
+   * Guardian Etapa C: access token žákovské relace („Spustit pro Matěje").
+   * TTL = zbytek relace, refresh token se NEVYDÁVÁ (relace se neobnovuje),
+   * claim learningSessionId validuje jwt.strategy proti stavu relace v DB
+   * při každém requestu — ukončení relace zneplatní token okamžitě.
+   */
+  public async issueLearningSessionToken(input: {
+    childUserId: string;
+    childMembershipId: string;
+    learningSessionId: string;
+    expiresAt: Date;
+  }): Promise<{ accessToken: string }> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: input.childUserId },
+    });
+    if (!user || user.status !== UserStatus.ACTIVE || user.deletedAt) {
+      throw new UnauthorizedException('Account disabled');
+    }
+    const membership = await this.prisma.membership.findFirst({
+      where: {
+        id: input.childMembershipId,
+        userId: input.childUserId,
+        deletedAt: null,
+      },
+    });
+    if (!membership) throw new UnauthorizedException('Membership not found');
+
+    const ttlSeconds = Math.max(
+      1,
+      Math.floor((input.expiresAt.getTime() - Date.now()) / 1000),
+    );
+    const claims: JwtClaims = {
+      ...this.buildClaims(user, membership, OrganizationRole.STUDENT),
+      learningSessionId: input.learningSessionId,
+    };
+    const accessToken = this.jwtService.sign(
+      { ...claims },
+      {
+        secret: getJwtAccessSecret(this.config),
+        expiresIn: ttlSeconds,
+        jwtid: randomUUID(),
+      },
+    );
+    return { accessToken };
   }
 
   private async rotateRefreshToken(token: string) {

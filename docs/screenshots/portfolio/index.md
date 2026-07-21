@@ -71,7 +71,11 @@ Pro landing page bloky „text vlevo, detail vpravo" — bez app shellu.
 | ![Potvrzení dítěte](22-rodic-potvrzeni-ditete-mobil.png) **22-rodic-potvrzeni-ditete-mobil** | onboarding rodiče — „Je Vojta Hruška vaše dítě?", dvě velká tlačítka, žádný formulář. |
 | ![Arch kódů](23-ucitel-arch-kodu-pro-rodice.png) **23-ucitel-arch-kodu-pro-rodice** | učitelský pohled — tisknutelný arch lístečků s párovacími kódy (jméno + kód + 3 kroky + platnost), rozstříhatelný, tisk z prohlížeče. |
 
-Pozn.: záběr 23 generuje reálné jednorázové kódy — před dalším během sady
+| ![Spuštění aktivity](24-rodic-spusteni-aktivity.png) **24-rodic-spusteni-aktivity** | rodinné spuštění (Etapa C): „Předat zařízení?" + PIN dítěte + deklarace pomoci. |
+| ![Žákovský režim](25-zak-rezim-spusteno-rodicem.png) **25-zak-rezim-spusteno-rodicem** | žákovský režim s trvalým pruhem „Režim žáka · Spuštěno rodičem · do HH:MM · Ukončit". |
+| ![Návrat po režimu](26-navrat-po-zakovskem-rezimu.png) **26-navrat-po-zakovskem-rezimu** | návratová obrazovka srozumitelná dítěti — „všechno je uložené, předej zařízení rodiči". |
+
+Pozn.: záběry 23–26 generují reálné kódy/relace — před dalším během sady
 vždy `seed:showcase` (platí pro celou sadu, viz hlavička skriptu).
 
 ## Framed varianty
