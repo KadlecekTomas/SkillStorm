@@ -1772,7 +1772,14 @@ export class TestsService {
       test.organizationId,
     );
     const role = membership?.role ?? user.organizationRole ?? null;
-    if (role === OrganizationRole.STUDENT) {
+    // Učitelský detail je jen pro školu: STUDENT ani PARENT (guardian
+    // Etapa C — rodič má vlastní rodinný prostor, interní auditní pohled
+    // učitele nevidí) sem nesmí, bez ohledu na RBAC klíč VIEW_RESULTS.
+    if (
+      role === OrganizationRole.STUDENT ||
+      role === OrganizationRole.PARENT ||
+      user.organizationRole === OrganizationRole.PARENT
+    ) {
       throw new ForbiddenException('Přístup pouze pro učitele a ředitele.');
     }
 
