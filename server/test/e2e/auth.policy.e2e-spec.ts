@@ -366,10 +366,9 @@ describe('Auth & Role Policy (integration)', () => {
           PermissionKey.VIEW_SUBMISSIONS,
           PermissionKey.VIEW_OWN_ASSIGNMENTS,
         ],
-        PARENT: [
-          PermissionKey.VIEW_RESULTS,
-          PermissionKey.VIEW_SUBMISSIONS,
-        ],
+        // INV4: PARENT nezískává žádné generické oprávnění přes RolePermission.
+        // Rodičovský přístup je výhradně vztahový (GuardianStudentRelation).
+        PARENT: [],
       };
 
       const permissions = await prisma.permission.findMany({
