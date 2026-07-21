@@ -1720,16 +1720,29 @@ export function ClassroomsPageContent(): React.JSX.Element {
                       </p>
                     )}
                   </div>
-                  {canManageEnrollments && (
-                    <Button
-                      variant="outline"
-                      onClick={() => setAddOpen(true)}
-                      disabled={isReadOnly}
-                      title={isReadOnly ? "Minulý rok je pouze ke čtení" : undefined}
-                    >
-                      Přidat žáky
-                    </Button>
-                  )}
+                  <div className="flex shrink-0 gap-2">
+                    {canManageEnrollments && (
+                      <Button
+                        variant="outline"
+                        asChild
+                      >
+                        {/* Guardian Etapa B: arch párovacích kódů pro rodiče */}
+                        <Link href={`/app/classrooms/${detail.id}/guardian-codes`}>
+                          Kódy pro rodiče
+                        </Link>
+                      </Button>
+                    )}
+                    {canManageEnrollments && (
+                      <Button
+                        variant="outline"
+                        onClick={() => setAddOpen(true)}
+                        disabled={isReadOnly}
+                        title={isReadOnly ? "Minulý rok je pouze ke čtení" : undefined}
+                      >
+                        Přidat žáky
+                      </Button>
+                    )}
+                  </div>
                 </div>
 
                 <div className="space-y-2">

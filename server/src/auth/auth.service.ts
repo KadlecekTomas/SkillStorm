@@ -34,6 +34,7 @@ import {
 } from '@prisma/client';
 import { createHash, randomBytes, randomUUID } from 'crypto';
 import { addDays, addHours } from 'date-fns';
+import { createPendingGuardianRelation } from '@/guardian/guardian-relation.helpers';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { GamificationService } from '@/gamification/gamification.service';
 import { AuditService } from '@/audit/audit.service';
@@ -487,6 +488,8 @@ export class AuthService {
       maxUses: number;
       usedCount: number;
       revokedAt: Date | null;
+      targetStudentId?: string | null;
+      createdById?: string | null;
     },
     now: Date,
     context?: { token?: string; ip?: string },
@@ -559,6 +562,18 @@ export class AuthService {
           'Invite role is not allowed for ORG_ONLY.',
         );
       }
+    }
+
+    // Guardian Etapa B: párovací kód zakládá PENDING vztah k cílovému
+    // žákovi; potvrzení/rozporování řeší rodič na potvrzovací obrazovce.
+    if (invite.type === InvitationType.GUARDIAN) {
+      await createPendingGuardianRelation(tx, membership.id, {
+        organizationId: invite.organizationId,
+        role: invite.role,
+        type: invite.type,
+        targetStudentId: invite.targetStudentId ?? null,
+        createdById: invite.createdById ?? null,
+      });
     }
 
     if (invite.role === OrganizationRole.TEACHER) {
@@ -686,6 +701,43 @@ export class AuthService {
    * členství nevzniká. STUDENT je exkluzivní (STOP #1). STUDENT_CLASS
    * invite existující členství nepodporuje (enrollment řeší škola).
    */
+  /**
+   * GUARDIAN kód přijatý uživatelem, který PARENT roli v organizaci už má:
+   * role se nemění, jen vznikne PENDING vztah k dalšímu dítěti a kód se
+   * spotřebuje. (Např. rodič druhého dítěte v téže škole.)
+   */
+  public async attachGuardianRelationFromInvite(
+    tx: Prisma.TransactionClient,
+    membershipId: string,
+    invite: {
+      id: string;
+      organizationId: string;
+      role: OrganizationRole;
+      type: InvitationType;
+      maxUses: number;
+      targetStudentId?: string | null;
+      createdById?: string | null;
+    },
+    now: Date,
+    context?: { token?: string; ip?: string },
+  ) {
+    await createPendingGuardianRelation(tx, membershipId, {
+      organizationId: invite.organizationId,
+      role: invite.role,
+      type: invite.type,
+      targetStudentId: invite.targetStudentId ?? null,
+      createdById: invite.createdById ?? null,
+    });
+    await this.consumeInviteOrThrow(
+      tx,
+      invite.id,
+      now,
+      invite.maxUses,
+      context?.token,
+      context?.ip,
+    );
+  }
+
   public async addRoleFromInvite(
     tx: Prisma.TransactionClient,
     userId: string,
@@ -701,6 +753,8 @@ export class AuthService {
       role: OrganizationRole;
       type: InvitationType;
       maxUses: number;
+      targetStudentId?: string | null;
+      createdById?: string | null;
     },
     now: Date,
     context?: { token?: string; ip?: string },
@@ -756,6 +810,18 @@ export class AuthService {
           data: { deletedAt: null },
         });
       }
+    }
+
+    // Guardian Etapa B: GUARDIAN kód na existující membership přidá PARENT
+    // roli výše a tady založí PENDING vztah k cílovému žákovi.
+    if (invite.type === InvitationType.GUARDIAN) {
+      await createPendingGuardianRelation(tx, membership.id, {
+        organizationId: invite.organizationId,
+        role: invite.role,
+        type: invite.type,
+        targetStudentId: invite.targetStudentId ?? null,
+        createdById: invite.createdById ?? null,
+      });
     }
 
     await tx.user.update({

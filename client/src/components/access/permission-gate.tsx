@@ -26,7 +26,9 @@ export const PermissionGate = ({
   const allowed = permissions.some((perm) => can(perm));
 
   if (!allowed) {
-    if (fallback) {
+    // Explicitní fallback (včetně null = „nic nevykresluj") má přednost;
+    // RestrictedView je jen default, když volající fallback vůbec neuvedl.
+    if (fallback !== undefined) {
       return <>{fallback}</>;
     }
     return (

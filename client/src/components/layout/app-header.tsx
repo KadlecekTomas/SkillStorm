@@ -3,10 +3,14 @@
 import { Button } from "@/components/ui/button";
 import { Bell, Plus } from "lucide-react";
 import { usePathname } from "next/navigation";
-import { DASHBOARD_NAV_ITEMS } from "@/config/dashboard-navigation";
+import {
+  DASHBOARD_NAV_ITEMS,
+  PARENT_NAV_ITEMS,
+} from "@/config/dashboard-navigation";
 import { PermissionGate } from "@/components/access/permission-gate";
 import { PermissionKey } from "@/types";
 import Link from "next/link";
+import { useAuth } from "@/hooks/use-auth";
 
 function isActive(pathname: string, route: string): boolean {
   if (route === "/app") {
@@ -17,7 +21,11 @@ function isActive(pathname: string, route: string): boolean {
 
 export const AppHeader = (): React.JSX.Element => {
   const pathname = usePathname();
-  const activeItem = DASHBOARD_NAV_ITEMS.find((item) =>
+  const { user } = useAuth();
+  // Guardian Etapa B: rodičovský kontext má vlastní navigaci i titulky.
+  const navItems =
+    user?.organizationRole === "PARENT" ? PARENT_NAV_ITEMS : DASHBOARD_NAV_ITEMS;
+  const activeItem = navItems.find((item) =>
     isActive(pathname ?? "", item.route),
   );
 

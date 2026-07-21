@@ -62,6 +62,18 @@ Pro landing page bloky „text vlevo, detail vpravo" — bez app shellu.
 | ![Tactile outcome](19-detail-tactile-outcome.png) **19-detail-tactile-outcome** | **detail** — odhalená odpověď + taktilní tlačítka výsledku kola (Většina správně / Půl napůl / Většina špatně). |
 | ![XP konec výpravy](20-detail-xp-konec-vypravy.png) **20-detail-xp-konec-vypravy** | **detail** — +XP a parťákův progress bar na konci expediční Bleskovky. |
 
+## Guardian — rodinný prostor (Etapa B)
+
+| Záběr | Použití |
+| --- | --- |
+| ![Rodinný prostor](21-rodic-rodinny-prostor.png) **21-rodic-rodinny-prostor** | **hero kandidát prodejní stránky** — „rodič vidí, co dítě potřebuje": přepínač dětí, doporučený další krok, lidské termíny, žádný parťák/XP. |
+| ![Rodinný prostor mobil](21b-rodic-rodinny-prostor-mobil.png) **21b-rodic-rodinny-prostor-mobil** | mobilní varianta (rodiče = mobil), 390 px. |
+| ![Potvrzení dítěte](22-rodic-potvrzeni-ditete-mobil.png) **22-rodic-potvrzeni-ditete-mobil** | onboarding rodiče — „Je Vojta Hruška vaše dítě?", dvě velká tlačítka, žádný formulář. |
+| ![Arch kódů](23-ucitel-arch-kodu-pro-rodice.png) **23-ucitel-arch-kodu-pro-rodice** | učitelský pohled — tisknutelný arch lístečků s párovacími kódy (jméno + kód + 3 kroky + platnost), rozstříhatelný, tisk z prohlížeče. |
+
+Pozn.: záběr 23 generuje reálné jednorázové kódy — před dalším během sady
+vždy `seed:showcase` (platí pro celou sadu, viz hlavička skriptu).
+
 ## Framed varianty
 
 `01 / 04 / 08 / 09 / 11 + .framed.png` — browser mockup pro hero pozice, kde
