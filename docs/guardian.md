@@ -94,7 +94,7 @@ Služby větvily **negativně** — „STUDENT dostane své, TEACHER třídy, *z
 
 ### 2.5 Testovací důkaz
 
-`test/e2e/guardian-rbac-hardening.e2e-spec.ts` — 8/8:
+`test/e2e/guardian-rbac-hardening.e2e-spec.ts`:
 - D1 PARENT → 403 vč. přímého ID testu i cizí org; odpověď neobsahuje `correctAnswer` ani text otázky.
 - D2+D3, D4 (vč. `?studentId=` cizího žáka), D5+N1 → 403; metrics/summary 200 jen SUPERADMIN.
 - PARENT rodinný prostor (`/guardian/*`) dál 200 — nezávislý na školních klíčích.
@@ -144,12 +144,12 @@ Přímé inserty po migraci (ověřeno psql): globální PARENT → `ERROR: viol
 
 ### 3.4 Testovací důkaz
 
-`guardian-rbac-hardening.e2e-spec.ts` — **11/11**:
+`guardian-rbac-hardening.e2e-spec.ts`:
 - INV1: DB CHECK odmítne PARENT `role_permission` (globální i org-scoped) přes `prisma.$executeRaw`.
 - INV2: po bootu (seed + default sync) je `count(role_permissions WHERE role=PARENT) === 0`.
 - INV3: `RbacPolicyService.grantRolePermission(PARENT, …)` hodí výjimku a nic nevytvoří; STUDENT grant guardem projde.
 - D1–D5 + N1 → 403 pro PARENT (beze změny); `/guardian/*` (children, overview) dál 200.
-- Unit `rbac.defaults.invariant.spec.ts` 6/6; `isPermissionAllowedByDefault(PARENT, *) === false`.
+- Unit `rbac.defaults.invariant.spec.ts`; `isPermissionAllowedByDefault(PARENT, *) === false`.
 
 ### 3.5 Schema / dokumentace
 
@@ -158,4 +158,48 @@ Přímé inserty po migraci (ověřeno psql): globální PARENT → `ERROR: viol
 
 ### 3.6 Verdikt
 
-**READY_TO_MERGE** — invariant vynucen na DB + aplikační + defaults vrstvě; všechny write cesty ošetřené; migrace idempotentní s ověřeným before/after; 11/11 RBAC matice + plný e2e balík (viz níže). Bez merge dle zadání.
+**READY_TO_MERGE** — invariant vynucen na DB + aplikační + defaults vrstvě; všechny write cesty ošetřené; migrace idempotentní s ověřeným before/after; RBAC matice + plný e2e balík (viz níže). Bez merge dle zadání.
+
+---
+
+## 4. Doplnění — UserPermission cesta a resolver (INV4, 21. 7. 2026)
+
+§3 uzavřela `RolePermission` cestu (DB CHECK + guard + prázdné defaults). Zbýval ale **druhý, nezávislý zdroj generických oprávnění: `user_permissions`** a samotný resolver `RbacService.canUser`, který `role_permissions` ani DB CHECK z §3 neřeší. Tato sekce ho uzavírá.
+
+### 4.1 Nalezený obchvat
+
+`RbacService.canUser` vyhodnocoval `UserPermission(allowed=true)` **před** resolucí role a rovnou vracel `true`. Uživatel s aktivní rolí `PARENT` a `UserPermission` — **globálním (`organization_id IS NULL`) i org-scoped** — tak získal generické oprávnění (např. `VIEW_RESULTS`), přestože §3 blokuje pouze `role_permissions`. `user_permissions` nemá DB CHECK z §3 (constraint je na `role_permissions`), takže obchvat obcházel i strukturální vrstvu.
+
+### 4.2 Oprava (authoritative — resolver)
+
+`RbacService.canUser`: brána spadne, pokud je `PARENT` buď efektivní role requestu (`activeRole`), **nebo** primární role membershipu z DB (`membership.role`) — a to **před** vyhodnocením `UserPermission`, `RolePermission` i defaults. Tím `UserPermission` prokazatelně **není obchvat** — user grant se v PARENT kontextu nikdy neuplatní.
+
+**DB-autoritativní gate.** Díky `@@unique([userId, organizationId])` má uživatel v organizaci právě jednu membership; PARENT-only uživatel má vždy `membership.role = PARENT` (PARENT je u multi-role personálu pouze ne-primární assignment, nikdy primární role). Kontrola `membership.role` proto uzavírá i případný **stale nebo klientem podvržený `activeRole`**: eskalace PARENT-only membershipu na generická oprávnění není možná, protože autoritou je záznam v DB, ne token. Multi-role učitel-rodič (primární role TEACHER + PARENT assignment) není dotčen — jeho brána spadne jen v PARENT kontextu (`activeRole = PARENT`).
+
+Přes tento resolver prochází jak `RbacGuard`, tak výpočet pole `permissions` v `/auth/me`, takže aktivní PARENT role dostává vždy **prázdnou generickou množinu**. To doplňuje trojvrstvou obranu z §3.1 o čtvrtou, autoritativní vrstvu na úrovni vyhodnocení.
+
+### 4.3 Write path — `user_permissions` (defense-in-depth)
+
+`RbacPolicyService.grantUserPermission` (dosud jistil jen `grantRolePermission`):
+
+- **Org-scoped grant** cílený na membership, jehož všechny role v dané organizaci jsou relační-only (typicky **PARENT-only**, tj. `roleAllowsGenericPermissions` je `false` pro všechny), je **odmítnut 403** (`PARENT_GENERIC_PERMISSION_FORBIDDEN`). Používá stejný model jako `grantRolePermission` (`roleAllowsGenericPermissions`). Multi-role uživatel (učitel-rodič) není blokován — jeho PARENT kontext jistí resolver (§4.2).
+- **Globální grant** se u zápisu **neblokuje** záměrně: u multi-org učitele-rodiče by globální blok rozbil legitimní non-PARENT kontext v jiné organizaci. Globální `UserPermission` tedy **může** v DB existovat, ale při aktivní PARENT roli je **autoritativně neúčinný** díky resolveru (§4.2).
+
+### 4.4 Co invariant NEmění
+
+- Legitimní `UserPermission` override pro **non-PARENT** role (TEACHER, DIRECTOR, …) funguje beze změny — resolver ho pro tyto role dál respektuje.
+- `SUPERADMIN` / `DEVOPS` (systémové role) a `OWNER` (org) mají svoje bypass cesty beze změny.
+
+### 4.5 Testovací důkaz
+
+- Unit: `rbac.service.spec.ts` — aktivní PARENT odepřen i s org-scoped i globálním `UserPermission`; `canUserMultiple(PARENT)` = samé `false`; **TEACHER override zachován**.
+- E2E: `guardian-rbac-hardening.e2e-spec.ts` (sekce „INV4 — UserPermission cesta") —
+  PARENT + org-scoped `UserPermission(VIEW_RESULTS)` → učitelský endpoint 403;
+  PARENT + globální `UserPermission(VIEW_RESULTS)` → 403; `/auth/me` PARENT má
+  nulová generická `permissions`; PARENT + VERIFIED guardian vztah → `/guardian/*` 200;
+  PARENT bez vztahu / PENDING / cizí dítě → 403; TEACHER override funguje; write
+  org-scoped grant PARENT-only → aplikační 403.
+
+### 4.6 Verdikt
+
+**READY_TO_MERGE** — kombinovaný invariant: DB CHECK + guard + prázdné defaults (§3) **a** resolver blokace + `user_permissions` write guard (§4). PARENT nezíská generické oprávnění žádnou cestou (RolePermission, UserPermission, defaults), guardian přístup je výhradně vztahový přes VERIFIED `/guardian/*`, TEACHER override i OWNER/systémové bypassy zůstávají funkční. Bez merge dle zadání.

@@ -10,8 +10,10 @@ import {
   GuardianPermissionKey,
   OrganizationRole,
   OrganizationStatus,
+  PermissionKey,
   SystemRole,
 } from '@prisma/client';
+import { RbacPolicyService } from '@/modules/rbac/rbac-policy.service';
 
 /**
  * Guardian Etapa D — regresní matice RBAC hardeningu (docs/guardian.md §1):
@@ -41,6 +43,11 @@ describe('Guardian Etapa D — RBAC hardening (e2e)', () => {
   let testB: string; // cizí org
   let subA: string; // submission studentA (třída učitele)
   let subC: string; // submission studentC (mimo scope učitele)
+  let parentUserId: string;
+  let parentMembershipId: string;
+  let teacherUserId: string;
+  let teacherMembershipId: string;
+  let policy: RbacPolicyService;
 
   const api = () => request(app.getHttpServer());
   const auth = (t: string) => ({ Authorization: `Bearer ${t}` });
@@ -112,6 +119,8 @@ describe('Guardian Etapa D — RBAC hardening (e2e)', () => {
       .send({ email: teacherAuth.login.email, password: teacherAuth.login.password, organizationId: orgA })
       .expect(201);
     teacherToken = tLogin.body?.sessionToken;
+    teacherMembershipId = teacherMembership.id;
+    teacherUserId = teacherAuth.user.id;
 
     classA = (
       await prisma.classSection.create({
@@ -242,6 +251,15 @@ describe('Guardian Etapa D — RBAC hardening (e2e)', () => {
       .post(`/guardian/relations/${children.pendingConfirmation[0].relationId}/confirm`)
       .set(auth(parentToken))
       .expect(201);
+
+    const parentMembership = await prisma.membership.findFirst({
+      where: { organizationId: orgA, role: OrganizationRole.PARENT },
+      select: { id: true, userId: true },
+    });
+    if (!parentMembership) throw new Error('parent membership not found');
+    parentMembershipId = parentMembership.id;
+    parentUserId = parentMembership.userId;
+    policy = app.get(RbacPolicyService);
   });
 
   afterAll(async () => {
@@ -403,5 +421,172 @@ describe('Guardian Etapa D — RBAC hardening (e2e)', () => {
         },
       )
       .catch(() => undefined); // případný jiný důvod neřešíme; jde o to, že NEhodí PARENT guard
+  });
+
+  // ── INV4: UserPermission cesta (docs/guardian.md §4) ──────────────────────
+  // §3 uzavřela RolePermission (DB CHECK + guard + defaults). Zde ověřujeme
+  // druhý zdroj — user_permissions + resolver RbacService.canUser: aktivní
+  // PARENT role nezíská generické oprávnění ani přes user grant (globální ani
+  // org-scoped), guardian přístup zůstává výhradně vztahový, TEACHER override
+  // funguje.
+  describe('INV4 — UserPermission cesta', () => {
+    async function permId(key: PermissionKey): Promise<string> {
+      const p = await prisma.permission.findUnique({
+        where: { key },
+        select: { id: true },
+      });
+      if (p) return p.id;
+      return (
+        await prisma.permission.create({
+          data: { key, description: key.replace(/_/g, ' '), allowedTypes: [] },
+          select: { id: true },
+        })
+      ).id;
+    }
+    async function seedUP(
+      userId: string,
+      organizationId: string | null,
+      key: PermissionKey,
+    ) {
+      await prisma.userPermission.create({
+        data: {
+          userId,
+          organizationId,
+          permissionId: await permId(key),
+          allowed: true,
+        },
+      });
+    }
+    const meOf = async (token: string) =>
+      unwrap(await api().get('/auth/me').set(auth(token)).expect(200));
+
+    // Sdílený parentToken: uklidit seedované granty po každém testu.
+    afterEach(async () => {
+      await prisma.userPermission.deleteMany({ where: { userId: parentUserId } });
+    });
+
+    it('org-scoped UserPermission neodemkne učitelský endpoint (403) a /auth/me zůstává prázdné', async () => {
+      await seedUP(parentUserId, orgA, PermissionKey.VIEW_TEST_OVERVIEW);
+      await seedUP(parentUserId, orgA, PermissionKey.VIEW_RESULTS);
+
+      // /subjects je jištěno pouze VIEW_TEST_OVERVIEW (guard bez služebního
+      // allowlistu) → čistý důkaz resolver-level zamítnutí i s user grantem.
+      await api().get('/subjects').set(auth(parentToken)).expect(403);
+      // Endpoint dle znění zadání (VIEW_RESULTS):
+      await api()
+        .get(`/tests/${testA}/results`)
+        .set(auth(parentToken))
+        .expect(403);
+
+      const me = await meOf(parentToken);
+      expect(me.activeRole).toBe(OrganizationRole.PARENT);
+      expect(me.permissions).not.toContain(PermissionKey.VIEW_TEST_OVERVIEW);
+      expect(me.permissions).not.toContain(PermissionKey.VIEW_RESULTS);
+    });
+
+    it('globální UserPermission (organization_id NULL) rovněž neodemkne (403), /auth/me prázdné', async () => {
+      await seedUP(parentUserId, null, PermissionKey.VIEW_TEST_OVERVIEW);
+      await seedUP(parentUserId, null, PermissionKey.VIEW_RESULTS);
+
+      await api().get('/subjects').set(auth(parentToken)).expect(403);
+      await api()
+        .get(`/tests/${testA}/results`)
+        .set(auth(parentToken))
+        .expect(403);
+
+      const me = await meOf(parentToken);
+      expect(me.permissions).not.toContain(PermissionKey.VIEW_TEST_OVERVIEW);
+      expect(me.permissions).not.toContain(PermissionKey.VIEW_RESULTS);
+    });
+
+    it('/auth/me při aktivní PARENT roli má nulovou generickou množinu i s několika granty', async () => {
+      await seedUP(parentUserId, orgA, PermissionKey.VIEW_RESULTS);
+      await seedUP(parentUserId, null, PermissionKey.VIEW_SUBMISSIONS);
+      const me = await meOf(parentToken);
+      expect(me.activeRole).toBe(OrganizationRole.PARENT);
+      expect(me.permissions).toEqual([]);
+    });
+
+    it('VERIFIED guardian vztah dál umožní /guardian/* (200) — vztahová autorizace, ne PermissionKey', async () => {
+      const children = unwrap(
+        await api().get('/guardian/children').set(auth(parentToken)).expect(200),
+      );
+      expect(children.children).toHaveLength(1);
+      await api()
+        .get(`/guardian/children/${studentA.id}/overview`)
+        .set(auth(parentToken))
+        .expect(200);
+    });
+
+    it('PARENT bez vztahu / cizí dítě / PENDING vztah → /guardian/* 403', async () => {
+      // Cizí dítě (studentC — žádný vztah k tomuto rodiči)
+      const foreign = await api()
+        .get(`/guardian/children/${studentC.id}/overview`)
+        .set(auth(parentToken));
+      expect([403, 404]).toContain(foreign.status);
+
+      // PENDING vztah k dalšímu dítěti → stále bez přístupu
+      const pendingStudent = await mkStudent('gh_pending', orgA, yearA, classA);
+      await prisma.guardianStudentRelation.create({
+        data: {
+          guardianMembershipId: parentMembershipId,
+          studentId: pendingStudent.id,
+          organizationId: orgA,
+          status: GuardianRelationStatus.PENDING,
+        },
+      });
+      const pending = await api()
+        .get(`/guardian/children/${pendingStudent.id}/overview`)
+        .set(auth(parentToken));
+      expect([403, 404]).toContain(pending.status);
+    });
+
+    it('TEACHER aktivní role: legitimní UserPermission override funguje (oprava nerozbila RBAC)', async () => {
+      const before = await meOf(teacherToken);
+      expect(before.permissions).not.toContain(PermissionKey.MANAGE_TEACHERS);
+
+      await policy.grantUserPermission(
+        { userId: null, organizationId: orgA },
+        {
+          userId: teacherUserId,
+          organizationId: orgA,
+          permissionKey: PermissionKey.MANAGE_TEACHERS,
+        },
+      );
+
+      const after = await meOf(teacherToken);
+      expect(after.permissions).toContain(PermissionKey.MANAGE_TEACHERS);
+
+      await policy.revokeUserPermission(
+        { userId: null, organizationId: orgA },
+        {
+          userId: teacherUserId,
+          organizationId: orgA,
+          permissionKey: PermissionKey.MANAGE_TEACHERS,
+        },
+      );
+    });
+
+    it('write path: org-scoped UserPermission grant PARENT-only membershipu → aplikační 403, žádný záznam', async () => {
+      await expect(
+        policy.grantUserPermission(
+          { userId: null, organizationId: orgA },
+          {
+            userId: parentUserId,
+            organizationId: orgA,
+            permissionKey: PermissionKey.VIEW_RESULTS,
+          },
+        ),
+      ).rejects.toMatchObject({ status: 403 });
+
+      const leaked = await prisma.userPermission.findFirst({
+        where: {
+          userId: parentUserId,
+          organizationId: orgA,
+          permission: { key: PermissionKey.VIEW_RESULTS },
+        },
+      });
+      expect(leaked).toBeNull();
+    });
   });
 });
