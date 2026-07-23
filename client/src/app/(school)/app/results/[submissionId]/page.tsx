@@ -9,6 +9,7 @@ import { ErrorAlert, InfoAlert } from "@/components/ui/alert";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Button } from "@/components/ui/button";
 import { withGuard } from "@/lib/guard/withGuard";
+import { submissionStatusLabel } from "@/lib/labels";
 import type { OrganizationRole } from "@/types";
 
 type SubmissionResult = {
@@ -62,9 +63,9 @@ function SubmissionResultPage() {
           if (!cancelled) setTestTitle(testData?.title ?? null);
         }
       })
-      .catch((e: unknown) => {
+      .catch(() => {
         if (cancelled) return;
-        setError(e instanceof Error ? e.message : "Nepodařilo se načíst výsledek.");
+        setError("Výsledek se nepodařilo načíst. Zkus to prosím znovu.");
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -116,7 +117,7 @@ function SubmissionResultPage() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-sm text-slate-500">Stav</p>
-            <p className="font-semibold">{submission.status}</p>
+            <p className="font-semibold">{submissionStatusLabel(submission.status)}</p>
           </div>
           <div className="text-right">
             <p className="text-sm text-slate-500">Skóre</p>

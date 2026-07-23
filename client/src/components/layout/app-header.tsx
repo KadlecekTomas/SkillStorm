@@ -1,16 +1,13 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { Bell, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { usePathname } from "next/navigation";
-import {
-  DASHBOARD_NAV_ITEMS,
-  PARENT_NAV_ITEMS,
-} from "@/config/dashboard-navigation";
+import { getNavItemsForRole } from "@/config/dashboard-navigation";
 import { PermissionGate } from "@/components/access/permission-gate";
 import { PermissionKey } from "@/types";
-import Link from "next/link";
 import { useAuth } from "@/hooks/use-auth";
+import Link from "next/link";
 
 function isActive(pathname: string, route: string): boolean {
   if (route === "/app") {
@@ -22,10 +19,7 @@ function isActive(pathname: string, route: string): boolean {
 export const AppHeader = (): React.JSX.Element => {
   const pathname = usePathname();
   const { user } = useAuth();
-  // Guardian Etapa B: rodičovský kontext má vlastní navigaci i titulky.
-  const navItems =
-    user?.organizationRole === "PARENT" ? PARENT_NAV_ITEMS : DASHBOARD_NAV_ITEMS;
-  const activeItem = navItems.find((item) =>
+  const activeItem = getNavItemsForRole(user?.organizationRole).find((item) =>
     isActive(pathname ?? "", item.route),
   );
 
@@ -35,9 +29,6 @@ export const AppHeader = (): React.JSX.Element => {
         {activeItem?.label ?? "Přehled"}
       </h1>
       <div className="flex items-center gap-2">
-        <Button variant="outline" size="icon" className="rounded-lg h-8 w-8">
-          <Bell className="h-4 w-4" />
-        </Button>
         {/* Bez oprávnění tlačítko schováme — zašedlé „Omezeno" jen mate žáky */}
         <PermissionGate permission={PermissionKey.CREATE_TEST} fallback={null}>
           <Button className="rounded-lg h-8" asChild>

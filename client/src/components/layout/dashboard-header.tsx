@@ -13,14 +13,7 @@ import {
 import { UserMenu } from "@/components/layout/user-menu";
 import { useAuth } from "@/hooks/use-auth";
 import { ReportIssueButton } from "@/components/support/report-issue-button";
-
-const ROLE_LABELS: Record<string, string> = {
-  OWNER: "Vlastník",
-  DIRECTOR: "Ředitel",
-  TEACHER: "Učitel",
-  STUDENT: "Žák",
-  PARENT: "Rodič",
-};
+import { roleLabel } from "@/lib/labels";
 
 /** Role-deterministic dashboard title. No manual switching, derived only from the active role. */
 function getDashboardTitle(
@@ -106,7 +99,7 @@ export function DashboardHeader(): React.JSX.Element {
               {memberships.map((membership) => (
                 <SelectItem key={membership.id} value={membership.id}>
                   {membership.organization?.name ?? membership.organizationId}
-                  {membership.role ? ` (${membership.role.toLowerCase()})` : ""}
+                  {membership.role ? ` (${roleLabel(membership.role)})` : ""}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -128,15 +121,15 @@ export function DashboardHeader(): React.JSX.Element {
             <SelectContent>
               {availableRoles.map((availableRole) => (
                 <SelectItem key={availableRole} value={availableRole}>
-                  {ROLE_LABELS[availableRole] ?? availableRole.toLowerCase()}
+                  {roleLabel(availableRole)}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
         ) : (
           role && (
-            <Badge variant="secondary" className="capitalize">
-              {ROLE_LABELS[role] ?? role.toLowerCase()}
+            <Badge variant="secondary">
+              {roleLabel(role)}
             </Badge>
           )
         )}

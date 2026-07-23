@@ -45,7 +45,7 @@ export function StudentErrorOverview({ items }: Props): React.JSX.Element {
             {!items.length && (
               <tr>
                 <td colSpan={4} className="px-4 py-3 text-center text-slate-500">
-                  Zatím nejsou dostupná žádná data o chybách.
+                  Zatím tu nic není. Data o chybách se objeví, až dokončíš první test.
                 </td>
               </tr>
             )}

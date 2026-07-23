@@ -75,7 +75,8 @@ export const roleHome: Record<OrganizationRole | "DEFAULT", string> = {
   OWNER: "/app/settings",
   DIRECTOR: "/app/settings",
   TEACHER: "/app/tests",
-  STUDENT: "/app/results",
+  // Žák nesmí přistát na učitelské diagnostice /app/results — domovská plocha je dashboard.
+  STUDENT: "/app",
   // Rodič má rodinný prostor (Etapa B); /app/results mu vrací 403.
   PARENT: "/app/family",
   DEFAULT: "/app",

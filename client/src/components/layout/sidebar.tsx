@@ -3,24 +3,14 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import {
-  DASHBOARD_NAV_ITEMS,
-  PARENT_NAV_ITEMS,
-} from "@/config/dashboard-navigation";
+import { getNavItemsForRole } from "@/config/dashboard-navigation";
 import { cn } from "@/utils/cn";
 import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { PartakEmblem } from "@/components/partak";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/use-auth";
-
-const ROLE_LABELS: Record<string, string> = {
-  OWNER: "Vlastník",
-  DIRECTOR: "Ředitel",
-  TEACHER: "Učitel",
-  STUDENT: "Žák",
-  PARENT: "Rodič",
-};
+import { roleLabel } from "@/lib/labels";
 
 function isActive(pathname: string, route: string): boolean {
   if (route === "/app") {
@@ -60,11 +50,8 @@ export const Sidebar = (): React.JSX.Element => {
   const pathname = usePathname();
   const { user, hasOrganization } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
-  const displayName = user?.fullName ?? user?.name ?? "Učitel";
-
-  // Guardian Etapa B: rodičovský kontext má vlastní (minimální) navigaci.
-  const navItems =
-    user?.organizationRole === "PARENT" ? PARENT_NAV_ITEMS : DASHBOARD_NAV_ITEMS;
+  const displayName = user?.fullName ?? user?.name ?? "Uživatel";
+  const navItems = getNavItemsForRole(user?.organizationRole);
 
   const activeCount = navItems.filter((item) =>
     isActive(pathname ?? "", item.route),
@@ -153,10 +140,8 @@ export const Sidebar = (): React.JSX.Element => {
             <div className="min-w-0 space-y-0.5">
               <p className="truncate text-xs font-bold text-ink">{displayName}</p>
               {user?.organizationRole && (
-                <Badge variant="secondary" className="w-fit text-xs capitalize">
-                  {hasOrganization
-                    ? (ROLE_LABELS[user.organizationRole] ?? user.organizationRole.toLowerCase())
-                    : "bez školy"}
+                <Badge variant="secondary" className="w-fit text-xs">
+                  {hasOrganization ? roleLabel(user.organizationRole) : "Bez školy"}
                 </Badge>
               )}
             </div>
