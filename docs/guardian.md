@@ -156,9 +156,12 @@ Přímé inserty po migraci (ověřeno psql): globální PARENT → `ERROR: viol
 - `schema.prisma`: komentář u `OrganizationRole.PARENT` vysvětluje, že PARENT nemá generická RBAC oprávnění a autorizace je relationship-based (`/guardian/*`). `PermissionKey` enum je beze změny (PARENT žádný klíč nedrží). `GuardianPermissionKey` je oddělený enum vztahových oprávnění — kolize názvu `VIEW_RESULTS`/`VIEW_ASSIGNMENTS` mezi oběma enumy je záměrná a nesouvisí (různé namespace).
 - `docs/guardian/etapa-a-analyza.md` zůstává historickým záznamem stavu Etapy A (tehdy PARENT měl VIEW_RESULTS/VIEW_SUBMISSIONS) — není to tvrzení o současnosti.
 
-### 3.6 Verdikt
+### 3.6 Stav (RolePermission cesta)
 
-**READY_TO_MERGE** — invariant vynucen na DB + aplikační + defaults vrstvě; všechny write cesty ošetřené; migrace idempotentní s ověřeným before/after; RBAC matice + plný e2e balík (viz níže). Bez merge dle zadání.
+Invariant §3 (RolePermission) je vynucen na DB + aplikační + defaults vrstvě;
+všechny write cesty ošetřené; migrace idempotentní s ověřeným before/after.
+Tato sekce pokrývá pouze `RolePermission` cestu — `UserPermission` cestu a
+autoritu `activeRole` doplňuje §4. Souhrnný stav a merge verdikt viz §4.8 a PR.
 
 ---
 
@@ -200,6 +203,53 @@ Přes tento resolver prochází jak `RbacGuard`, tak výpočet pole `permissions
   PARENT bez vztahu / PENDING / cizí dítě → 403; TEACHER override funguje; write
   org-scoped grant PARENT-only → aplikační 403.
 
-### 4.6 Verdikt
+### 4.7 Autorita `activeRole` (role-context)
 
-**READY_TO_MERGE** — kombinovaný invariant: DB CHECK + guard + prázdné defaults (§3) **a** resolver blokace + `user_permissions` write guard (§4). PARENT nezíská generické oprávnění žádnou cestou (RolePermission, UserPermission, defaults), guardian přístup je výhradně vztahový přes VERIFIED `/guardian/*`, TEACHER override i OWNER/systémové bypassy zůstávají funkční. Bez merge dle zadání.
+`activeRole` (efektivní role requestu) je bezpečná pouze tehdy, když je to role,
+kterou uživatel v dané organizaci **skutečně vlastní**. To se ověřuje na dvou
+místech, se dvěma vrstvami:
+
+**Kanonické validační místo — `jwt.strategy.validate`** (`server/src/auth/jwt.strategy.ts`).
+Při každém requestu se z `payload.membershipId` načte membership
+(`deletedAt: null`) a její `roleAssignments` (`deletedAt: null`). Pokud token nese
+`payload.activeRole`, vyžaduje se, aby byla **aktivním assignmentem** té
+membership; jinak **401 `ROLE_CONTEXT_REVOKED`**. Bez `activeRole` se použije
+`membership.role`. Odebrání role (revokace assignmentu) se tak projeví **na
+příštím requestu** i pro živý token — stale/podvržený `activeRole` neprojde,
+protože JWT je podepsaný a strategie ho znovu ověřuje proti DB. Správná
+organizace je zajištěna vazbou `membershipId → organizationId`.
+
+**Defense-in-depth — `RbacService.canUser`.** Resolver navíc nezávisle ověří
+`activeRole` proti DB rolím: sestaví `authorizedRoles = {membership.role} ∪
+{aktivní roleAssignments.role}` (obojí `deletedAt: null`, pro daný
+`userId + organizationId`) a pokud `activeRole ∉ authorizedRoles`, vrátí `false`
+**před** vyhodnocením UserPermission, RolePermission i defaults. Žádná klientem
+dodaná role není důvěřována bez kontroly v DB. Org isolation je strukturální:
+membership se načítá pro daný `userId + organizationId`, jeho assignmenty patří
+téže organizaci — assignment z organizace A neautorizuje `activeRole` v
+organizaci B.
+
+Tím je pokryto (unit + e2e):
+
+- `STUDENT → TEACHER`, `TEACHER → DIRECTOR`, `TEACHER → OWNER`, `PARENT → TEACHER`
+  přes stale/podvržený `activeRole` → **zamítnuto** (401 v jwt.strategy nebo
+  `false` v canUser). OWNER bypass se u podvržené role nikdy nedostane ke slovu.
+- Legitimní multi-role učitel-rodič: `activeRole` musí být v jeho aktivních
+  assignmentech — smí `TEACHER` kontext (plná oprávnění i override) i `PARENT`
+  kontext (generická oprávnění prázdná, `/guardian/*` jen pro VERIFIED vazbu).
+- PARENT-only membership nelze eskalovat: `authorizedRoles = {PARENT}`, takže
+  jakákoli non-PARENT `activeRole` je mimo množinu; navíc PARENT brána (§4.2).
+
+> „DB-authoritative" v tomto dokumentu znamená právě toto: každá explicitní
+> `activeRole` je ověřena proti aktuálním DB rolím uživatele ve správné
+> organizaci (jwt.strategy jako primární, canUser jako druhá obrana).
+
+### 4.8 Stav
+
+Kombinovaný invariant: DB CHECK + guard + prázdné defaults (§3) **a** resolver
+blokace + `user_permissions` write guard + `activeRole` autorita (§4). PARENT
+nezíská generické oprávnění žádnou cestou (RolePermission, UserPermission,
+defaults), guardian přístup je výhradně vztahový přes VERIFIED `/guardian/*`,
+legitimní TEACHER override i multi-role přepínání i OWNER/systémové bypassy
+zůstávají funkční. Finální merge verdikt je veden v PR a je podmíněn zelenou
+plnou regresí a zelenými required CI checks; bez merge dle zadání.
