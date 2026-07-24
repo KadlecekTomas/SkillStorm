@@ -19,7 +19,8 @@ import { vocative } from "@/lib/czech-vocative";
 import { ErrorAlert } from "@/components/ui/alert";
 import { useAuth } from "@/hooks/use-auth";
 
-const EMPTY_SUBMISSIONS = "Zatím nemáš žádné odevzdané testy.";
+const EMPTY_SUBMISSIONS =
+  "Zatím nemáš žádné odevzdané testy. Až nějaký dokončíš, najdeš ho tady i s výsledkem.";
 const EMPTY_OPEN = "Teď na tebe nic nečeká. 🎉";
 
 const scoreToPercent = (score: number | null | undefined): string => {
@@ -204,23 +205,38 @@ export function StudentDashboard(): React.JSX.Element {
           <SectionLabel>Hotovo</SectionLabel>
           {submissions.length > 0 ? (
             <div className="space-y-2.5">
-              {submissions.slice(0, 5).map((sub) => (
-                <Card key={sub.id} className="flex items-center justify-between gap-3 px-5 py-4">
-                  <div>
-                    <p className="text-base font-bold text-ink">{sub.testTitle}</p>
-                    <p className="mt-0.5 text-sm text-ink-muted">
-                      {sub.submittedAt
-                        ? new Date(sub.submittedAt).toLocaleDateString("cs-CZ")
-                        : "Datum není k dispozici"}
-                    </p>
-                  </div>
-                  {sub.score !== null ? (
+              {submissions.slice(0, 5).map((sub) => {
+                const badge =
+                  sub.score !== null ? (
                     <Badge variant="success">{scoreToPercent(sub.score)}</Badge>
                   ) : (
                     <Badge variant="neutral">Čeká na vyhodnocení</Badge>
-                  )}
-                </Card>
-              ))}
+                  );
+                const body = (
+                  <Card
+                    hoverable={Boolean(sub.id)}
+                    className="flex items-center justify-between gap-3 px-5 py-4"
+                  >
+                    <div>
+                      <p className="text-base font-bold text-ink">{sub.testTitle}</p>
+                      <p className="mt-0.5 text-sm text-ink-muted">
+                        {sub.submittedAt
+                          ? new Date(sub.submittedAt).toLocaleDateString("cs-CZ")
+                          : "Datum není k dispozici"}
+                      </p>
+                    </div>
+                    {badge}
+                  </Card>
+                );
+                // Odkaz na výsledek jen když existuje skutečné submissionId.
+                return sub.id ? (
+                  <Link key={sub.id} href={`/app/results/${sub.id}`} className="block">
+                    {body}
+                  </Link>
+                ) : (
+                  <div key={`${sub.testId}-${sub.submittedAt}`}>{body}</div>
+                );
+              })}
             </div>
           ) : (
             <Card className="px-5 py-8 text-center text-sm text-ink-muted">{EMPTY_SUBMISSIONS}</Card>

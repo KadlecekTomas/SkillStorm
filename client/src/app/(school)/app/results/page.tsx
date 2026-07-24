@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
-import { Download } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { fetchWithAuth } from "@/lib/http/client";
 import { ErrorAlert, InfoAlert } from "@/components/ui/alert";
 import { withGuard } from "@/lib/guard/withGuard";
@@ -39,7 +39,6 @@ import {
   type PeriodOption,
 } from "@/components/results/PerformanceTrend";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
-import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -58,7 +57,17 @@ function mapTrend(t: TrendLabel): "up" | "down" | "same" {
 }
 
 function ResultsPage(): React.JSX.Element {
-  const { hasOrganization, org, isLoading: isAuthLoading, isAuthenticated } = useAuth();
+  const router = useRouter();
+  const { hasOrganization, org, user, isLoading: isAuthLoading, isAuthenticated } = useAuth();
+  const isStudent = user?.organizationRole === "STUDENT";
+  // Žák se sem nesmí dostat — tato diagnostika je učitelská (a backend její data
+  // žákovi stejně odepře). Přesměrujeme ho na jeho vlastní výsledky.
+  useEffect(() => {
+    if (isStudent) {
+      router.replace("/app/student/analytics");
+    }
+  }, [isStudent, router]);
+
   const { selectedYearId, bootstrapState } = useAcademicYears();
   const classroomsState = useClassrooms({
     isAuthLoading,
@@ -307,15 +316,18 @@ function ResultsPage(): React.JSX.Element {
     [topics],
   );
 
+  if (isStudent) {
+    // Přesměrování probíhá v efektu výše; nerenderujeme učitelskou plochu.
+    return (
+      <div className="py-12">
+        <LoadingSpinner label="Přesměrovávám na tvoje výsledky…" />
+      </div>
+    );
+  }
+
   if (!hasOrganization) {
     return (
       <div className="space-y-6">
-        <div className="flex justify-end">
-          <Button variant="secondary" size="sm" disabled title="Vyžaduje školu">
-            <Download className="h-4 w-4" />
-            Export PDF
-          </Button>
-        </div>
         <InfoAlert
           title="Osobní režim"
           description={
@@ -334,12 +346,6 @@ function ResultsPage(): React.JSX.Element {
   if (hasNoData && !loading) {
     return (
       <div className="space-y-6">
-        <div className="flex justify-end">
-          <Button variant="secondary" size="sm" disabled>
-            <Download className="h-4 w-4" />
-            Export PDF
-          </Button>
-        </div>
         <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-6 py-12 text-center">
           <p className="text-slate-600">
             V aktuálním školním roce zatím nejsou žádné úkoly ani data k zobrazení.
@@ -387,16 +393,6 @@ function ResultsPage(): React.JSX.Element {
             </div>
           )}
         </div>
-        <Button
-          variant="secondary"
-          size="sm"
-          className="shrink-0"
-          disabled={!hasOrganization}
-          title={hasOrganization ? "Export do PDF" : "Vyžaduje školu"}
-        >
-          <Download className="h-4 w-4" />
-          Export PDF
-        </Button>
       </div>
 
       {error && (
