@@ -74,8 +74,38 @@ export class RbacService implements OnModuleDestroy {
       // Deterministický výběr (dřív findFirst bez orderBy — latentní bug):
       // bez explicitní role rozhoduje nejstarší membership.
       orderBy: { createdAt: 'asc' },
-      select: { role: true, organizationId: true },
+      select: {
+        role: true,
+        organizationId: true,
+        // Aktivní (non-deleted) role assignmenty téže membership — autorita pro
+        // ověření activeRole.
+        roleAssignments: {
+          where: { deletedAt: null },
+          select: { role: true },
+        },
+      },
     });
+
+    // ── activeRole autorizace (defense-in-depth) ────────────────────────────
+    // Kanonické (primární) validační místo je jwt.strategy.validate: activeRole
+    // claim je platný jen když je aktivním assignmentem membershipu, jinak 401
+    // ROLE_CONTEXT_REVOKED. Tato kontrola je druhá obrana pro každý přímý caller
+    // canUser: activeRole musí patřit uživateli v DÁNÉ organizaci —
+    // `membership.role` NEBO některý aktivní `roleAssignments.role` (obojí z DB,
+    // deletedAt: null). Nikdy nedůvěřujeme klientem dodané roli bez kontroly.
+    // Zamezuje eskalaci STUDENT→TEACHER, TEACHER→DIRECTOR/OWNER, PARENT→TEACHER
+    // přes stale/podvržený token. Org isolation je strukturální: membership se
+    // načítá pro daný userId+organizationId, jeho assignmenty patří téže org.
+    if (membership && activeRole) {
+      const authorizedRoles = new Set<OrganizationRole>([
+        membership.role,
+        ...membership.roleAssignments.map((assignment) => assignment.role),
+      ]);
+      if (!authorizedRoles.has(activeRole)) {
+        this.setCache(cacheKey, userId, organizationId, false);
+        return false;
+      }
+    }
 
     // Multi-role: rozhoduje efektivní (aktivní) role requestu, ne primární.
     const effectiveRole = activeRole ?? membership?.role ?? null;
