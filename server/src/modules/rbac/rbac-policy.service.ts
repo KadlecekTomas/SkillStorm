@@ -138,6 +138,21 @@ export class RbacPolicyService {
       );
     }
 
+    // INV4 write-path hardening: org-scoped generický grant nesmí zamířit na
+    // PARENT-only membership (rodič nezískává generická oprávnění; přístup je
+    // výhradně vztahový). Teacher-parent (má i non-PARENT roli) není blokován —
+    // grant se v jeho PARENT kontextu stejně ignoruje v resolveru (canUser).
+    // Globální granty se zde neblokují záměrně: u multi-org teacher-parent by
+    // globální blok rozbil legitimní non-PARENT kontext; jejich neúčinnost pod
+    // aktivní PARENT rolí garantuje resolver. Viz docs/guardian.md.
+    if (input.organizationId) {
+      await this.assertTargetNotParentOnly(
+        input.userId,
+        input.organizationId,
+        input.permissionKey,
+      );
+    }
+
     const record = input.organizationId
       ? await this.prisma.userPermission.upsert({
           where: {
@@ -218,6 +233,46 @@ export class RbacPolicyService {
     });
 
     return existing;
+  }
+
+  /**
+   * INV4: odmítne org-scoped user-permission grant, pokud cílová membership
+   * v dané organizaci nemá ŽÁDNOU roli schopnou držet generická oprávnění
+   * (tj. je „relační-only", typicky PARENT-only). Multi-role teacher/ředitel-
+   * rodič projde — jeho PARENT kontext jistí resolver (canUser). Používá stejný
+   * model jako grantRolePermission: roleAllowsGenericPermissions.
+   */
+  private async assertTargetNotParentOnly(
+    userId: string,
+    organizationId: string,
+    permissionKey: PermissionKey,
+  ): Promise<void> {
+    const membership = await this.prisma.membership.findFirst({
+      where: { userId, organizationId, deletedAt: null },
+      select: {
+        role: true,
+        roleAssignments: { select: { role: true } },
+      },
+    });
+    if (!membership) {
+      return;
+    }
+    const roles: OrganizationRole[] = [
+      membership.role,
+      ...membership.roleAssignments.map((r) => r.role),
+    ];
+    const hasGenericCapableRole = roles.some((role) =>
+      roleAllowsGenericPermissions(role),
+    );
+    if (!hasGenericCapableRole) {
+      throw new ForbiddenException({
+        statusCode: 403,
+        message:
+          'Rodičovská role nezískává generická oprávnění. Použij vztahový guardian přístup.',
+        code: 'PARENT_GENERIC_PERMISSION_FORBIDDEN',
+        permissionKey,
+      });
+    }
   }
 
   private audit(

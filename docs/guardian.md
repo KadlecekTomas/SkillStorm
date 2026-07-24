@@ -94,7 +94,7 @@ Služby větvily **negativně** — „STUDENT dostane své, TEACHER třídy, *z
 
 ### 2.5 Testovací důkaz
 
-`test/e2e/guardian-rbac-hardening.e2e-spec.ts` — 8/8:
+`test/e2e/guardian-rbac-hardening.e2e-spec.ts`:
 - D1 PARENT → 403 vč. přímého ID testu i cizí org; odpověď neobsahuje `correctAnswer` ani text otázky.
 - D2+D3, D4 (vč. `?studentId=` cizího žáka), D5+N1 → 403; metrics/summary 200 jen SUPERADMIN.
 - PARENT rodinný prostor (`/guardian/*`) dál 200 — nezávislý na školních klíčích.
@@ -144,18 +144,112 @@ Přímé inserty po migraci (ověřeno psql): globální PARENT → `ERROR: viol
 
 ### 3.4 Testovací důkaz
 
-`guardian-rbac-hardening.e2e-spec.ts` — **11/11**:
+`guardian-rbac-hardening.e2e-spec.ts`:
 - INV1: DB CHECK odmítne PARENT `role_permission` (globální i org-scoped) přes `prisma.$executeRaw`.
 - INV2: po bootu (seed + default sync) je `count(role_permissions WHERE role=PARENT) === 0`.
 - INV3: `RbacPolicyService.grantRolePermission(PARENT, …)` hodí výjimku a nic nevytvoří; STUDENT grant guardem projde.
 - D1–D5 + N1 → 403 pro PARENT (beze změny); `/guardian/*` (children, overview) dál 200.
-- Unit `rbac.defaults.invariant.spec.ts` 6/6; `isPermissionAllowedByDefault(PARENT, *) === false`.
+- Unit `rbac.defaults.invariant.spec.ts`; `isPermissionAllowedByDefault(PARENT, *) === false`.
 
 ### 3.5 Schema / dokumentace
 
 - `schema.prisma`: komentář u `OrganizationRole.PARENT` vysvětluje, že PARENT nemá generická RBAC oprávnění a autorizace je relationship-based (`/guardian/*`). `PermissionKey` enum je beze změny (PARENT žádný klíč nedrží). `GuardianPermissionKey` je oddělený enum vztahových oprávnění — kolize názvu `VIEW_RESULTS`/`VIEW_ASSIGNMENTS` mezi oběma enumy je záměrná a nesouvisí (různé namespace).
 - `docs/guardian/etapa-a-analyza.md` zůstává historickým záznamem stavu Etapy A (tehdy PARENT měl VIEW_RESULTS/VIEW_SUBMISSIONS) — není to tvrzení o současnosti.
 
-### 3.6 Verdikt
+### 3.6 Stav (RolePermission cesta)
 
-**READY_TO_MERGE** — invariant vynucen na DB + aplikační + defaults vrstvě; všechny write cesty ošetřené; migrace idempotentní s ověřeným before/after; 11/11 RBAC matice + plný e2e balík (viz níže). Bez merge dle zadání.
+Invariant §3 (RolePermission) je vynucen na DB + aplikační + defaults vrstvě;
+všechny write cesty ošetřené; migrace idempotentní s ověřeným before/after.
+Tato sekce pokrývá pouze `RolePermission` cestu — `UserPermission` cestu a
+autoritu `activeRole` doplňuje §4. Souhrnný stav a merge verdikt viz §4.8 a PR.
+
+---
+
+## 4. Doplnění — UserPermission cesta a resolver (INV4, 21. 7. 2026)
+
+§3 uzavřela `RolePermission` cestu (DB CHECK + guard + prázdné defaults). Zbýval ale **druhý, nezávislý zdroj generických oprávnění: `user_permissions`** a samotný resolver `RbacService.canUser`, který `role_permissions` ani DB CHECK z §3 neřeší. Tato sekce ho uzavírá.
+
+### 4.1 Nalezený obchvat
+
+`RbacService.canUser` vyhodnocoval `UserPermission(allowed=true)` **před** resolucí role a rovnou vracel `true`. Uživatel s aktivní rolí `PARENT` a `UserPermission` — **globálním (`organization_id IS NULL`) i org-scoped** — tak získal generické oprávnění (např. `VIEW_RESULTS`), přestože §3 blokuje pouze `role_permissions`. `user_permissions` nemá DB CHECK z §3 (constraint je na `role_permissions`), takže obchvat obcházel i strukturální vrstvu.
+
+### 4.2 Oprava (authoritative — resolver)
+
+`RbacService.canUser`: brána spadne, pokud je `PARENT` buď efektivní role requestu (`activeRole`), **nebo** primární role membershipu z DB (`membership.role`) — a to **před** vyhodnocením `UserPermission`, `RolePermission` i defaults. Tím `UserPermission` prokazatelně **není obchvat** — user grant se v PARENT kontextu nikdy neuplatní.
+
+**DB-autoritativní gate.** Díky `@@unique([userId, organizationId])` má uživatel v organizaci právě jednu membership; PARENT-only uživatel má vždy `membership.role = PARENT` (PARENT je u multi-role personálu pouze ne-primární assignment, nikdy primární role). Kontrola `membership.role` proto uzavírá i případný **stale nebo klientem podvržený `activeRole`**: eskalace PARENT-only membershipu na generická oprávnění není možná, protože autoritou je záznam v DB, ne token. Multi-role učitel-rodič (primární role TEACHER + PARENT assignment) není dotčen — jeho brána spadne jen v PARENT kontextu (`activeRole = PARENT`).
+
+Přes tento resolver prochází jak `RbacGuard`, tak výpočet pole `permissions` v `/auth/me`, takže aktivní PARENT role dostává vždy **prázdnou generickou množinu**. To doplňuje trojvrstvou obranu z §3.1 o čtvrtou, autoritativní vrstvu na úrovni vyhodnocení.
+
+### 4.3 Write path — `user_permissions` (defense-in-depth)
+
+`RbacPolicyService.grantUserPermission` (dosud jistil jen `grantRolePermission`):
+
+- **Org-scoped grant** cílený na membership, jehož všechny role v dané organizaci jsou relační-only (typicky **PARENT-only**, tj. `roleAllowsGenericPermissions` je `false` pro všechny), je **odmítnut 403** (`PARENT_GENERIC_PERMISSION_FORBIDDEN`). Používá stejný model jako `grantRolePermission` (`roleAllowsGenericPermissions`). Multi-role uživatel (učitel-rodič) není blokován — jeho PARENT kontext jistí resolver (§4.2).
+- **Globální grant** se u zápisu **neblokuje** záměrně: u multi-org učitele-rodiče by globální blok rozbil legitimní non-PARENT kontext v jiné organizaci. Globální `UserPermission` tedy **může** v DB existovat, ale při aktivní PARENT roli je **autoritativně neúčinný** díky resolveru (§4.2).
+
+### 4.4 Co invariant NEmění
+
+- Legitimní `UserPermission` override pro **non-PARENT** role (TEACHER, DIRECTOR, …) funguje beze změny — resolver ho pro tyto role dál respektuje.
+- `SUPERADMIN` / `DEVOPS` (systémové role) a `OWNER` (org) mají svoje bypass cesty beze změny.
+
+### 4.5 Testovací důkaz
+
+- Unit: `rbac.service.spec.ts` — aktivní PARENT odepřen i s org-scoped i globálním `UserPermission`; `canUserMultiple(PARENT)` = samé `false`; **TEACHER override zachován**.
+- E2E: `guardian-rbac-hardening.e2e-spec.ts` (sekce „INV4 — UserPermission cesta") —
+  PARENT + org-scoped `UserPermission(VIEW_RESULTS)` → učitelský endpoint 403;
+  PARENT + globální `UserPermission(VIEW_RESULTS)` → 403; `/auth/me` PARENT má
+  nulová generická `permissions`; PARENT + VERIFIED guardian vztah → `/guardian/*` 200;
+  PARENT bez vztahu / PENDING / cizí dítě → 403; TEACHER override funguje; write
+  org-scoped grant PARENT-only → aplikační 403.
+
+### 4.7 Autorita `activeRole` (role-context)
+
+`activeRole` (efektivní role requestu) je bezpečná pouze tehdy, když je to role,
+kterou uživatel v dané organizaci **skutečně vlastní**. To se ověřuje na dvou
+místech, se dvěma vrstvami:
+
+**Kanonické validační místo — `jwt.strategy.validate`** (`server/src/auth/jwt.strategy.ts`).
+Při každém requestu se z `payload.membershipId` načte membership
+(`deletedAt: null`) a její `roleAssignments` (`deletedAt: null`). Pokud token nese
+`payload.activeRole`, vyžaduje se, aby byla **aktivním assignmentem** té
+membership; jinak **401 `ROLE_CONTEXT_REVOKED`**. Bez `activeRole` se použije
+`membership.role`. Odebrání role (revokace assignmentu) se tak projeví **na
+příštím requestu** i pro živý token — stale/podvržený `activeRole` neprojde,
+protože JWT je podepsaný a strategie ho znovu ověřuje proti DB. Správná
+organizace je zajištěna vazbou `membershipId → organizationId`.
+
+**Defense-in-depth — `RbacService.canUser`.** Resolver navíc nezávisle ověří
+`activeRole` proti DB rolím: sestaví `authorizedRoles = {membership.role} ∪
+{aktivní roleAssignments.role}` (obojí `deletedAt: null`, pro daný
+`userId + organizationId`) a pokud `activeRole ∉ authorizedRoles`, vrátí `false`
+**před** vyhodnocením UserPermission, RolePermission i defaults. Žádná klientem
+dodaná role není důvěřována bez kontroly v DB. Org isolation je strukturální:
+membership se načítá pro daný `userId + organizationId`, jeho assignmenty patří
+téže organizaci — assignment z organizace A neautorizuje `activeRole` v
+organizaci B.
+
+Tím je pokryto (unit + e2e):
+
+- `STUDENT → TEACHER`, `TEACHER → DIRECTOR`, `TEACHER → OWNER`, `PARENT → TEACHER`
+  přes stale/podvržený `activeRole` → **zamítnuto** (401 v jwt.strategy nebo
+  `false` v canUser). OWNER bypass se u podvržené role nikdy nedostane ke slovu.
+- Legitimní multi-role učitel-rodič: `activeRole` musí být v jeho aktivních
+  assignmentech — smí `TEACHER` kontext (plná oprávnění i override) i `PARENT`
+  kontext (generická oprávnění prázdná, `/guardian/*` jen pro VERIFIED vazbu).
+- PARENT-only membership nelze eskalovat: `authorizedRoles = {PARENT}`, takže
+  jakákoli non-PARENT `activeRole` je mimo množinu; navíc PARENT brána (§4.2).
+
+> „DB-authoritative" v tomto dokumentu znamená právě toto: každá explicitní
+> `activeRole` je ověřena proti aktuálním DB rolím uživatele ve správné
+> organizaci (jwt.strategy jako primární, canUser jako druhá obrana).
+
+### 4.8 Stav
+
+Kombinovaný invariant: DB CHECK + guard + prázdné defaults (§3) **a** resolver
+blokace + `user_permissions` write guard + `activeRole` autorita (§4). PARENT
+nezíská generické oprávnění žádnou cestou (RolePermission, UserPermission,
+defaults), guardian přístup je výhradně vztahový přes VERIFIED `/guardian/*`,
+legitimní TEACHER override i multi-role přepínání i OWNER/systémové bypassy
+zůstávají funkční. Finální merge verdikt je veden v PR a je podmíněn zelenou
+plnou regresí a zelenými required CI checks; bez merge dle zadání.

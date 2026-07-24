@@ -60,7 +60,9 @@ export const RBAC_DEFAULT_PERMISSIONS: RoleDefaults = {
   ],
   // Guardian audit (docs/guardian.md §1): rodič NEMÁ žádné školní klíče.
   // Rodinný prostor jede výhradně přes /guardian/* se vztahovou autorizací
-  // per dítě; školní pohledy jsou pro PARENT vždy 403.
+  // per dítě; školní pohledy jsou pro PARENT vždy 403. Prázdný default navíc
+  // zajišťuje, že ani boot-sync ani seed nevytvoří generické PARENT
+  // role_permissions (INV4).
   PARENT: [],
 };
 

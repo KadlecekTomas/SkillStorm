@@ -68,8 +68,12 @@ export const RBAC: RolePermissionMatrix = {
     notes: ['Students are limited to their own progress visibility'],
   },
   [OrganizationRole.PARENT]: {
-    permissions: [PermissionKey.VIEW_RESULTS],
-    endpoints: PERMISSION_ENDPOINTS[PermissionKey.VIEW_RESULTS],
-    notes: ['Read-only access focused on student performance'],
+    // Guardian invariant (docs/guardian.md §3): PARENT nemá ŽÁDNÁ generická
+    // RBAC oprávnění. Rodičovský přístup je výhradně vztahový přes VERIFIED
+    // GuardianStudentRelation a /guardian/* (GuardianPermissionKey), ne přes
+    // PermissionKey. Prázdná sada odpovídá RBAC_DEFAULT_PERMISSIONS.PARENT = [].
+    permissions: [],
+    endpoints: [],
+    notes: ['No generic RBAC — relation-authorized via /guardian/* only'],
   },
 };

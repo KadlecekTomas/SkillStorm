@@ -41,6 +41,7 @@ import {
 import { randomUUID } from 'crypto';
 import * as bcrypt from 'bcryptjs';
 import { RBAC } from './rbac.matrix';
+import { roleAllowsGenericPermissions } from '@/modules/rbac/rbac.defaults';
 
 export interface SeededMember {
   user: User;
@@ -484,9 +485,16 @@ export async function seedPolicyData(
     },
   });
 
-  // Role permissions derived from matrix
+  // Role permissions derived from matrix. Kanonický invariant: role bez
+  // generických RBAC oprávnění (PARENT) nevytvoří ŽÁDNÝ RolePermission řádek —
+  // stejné pravidlo jako produkční RBAC (rbac.defaults.roleAllowsGenericPermissions)
+  // a DB CHECK role_permissions_no_parent_role. Bez tohoto filtru by seed spadl
+  // na constraint (PostgreSQL 23514).
   await prisma.$transaction(
     Object.entries(RBAC).flatMap(([role, config]) => {
+      if (!roleAllowsGenericPermissions(role as OrganizationRole)) {
+        return [];
+      }
       const isWildcard =
         (config.permissions as (PermissionKey | '*')[])[0] === '*';
       const perms = isWildcard

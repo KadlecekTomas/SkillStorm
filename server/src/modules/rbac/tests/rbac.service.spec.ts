@@ -59,6 +59,7 @@ describe('RbacService (unit)', () => {
     prismaMock.membership.findFirst.mockResolvedValue({
       role: 'TEACHER',
       organizationId: 'org-1',
+      roleAssignments: [{ role: 'TEACHER' }],
     } as any);
     prismaMock.rolePermission.findFirst.mockResolvedValue({ allowed: true });
 
@@ -89,12 +90,213 @@ describe('RbacService (unit)', () => {
     expect(afterInvalidation).toBe(false);
   });
 
+  // ── INV4: PARENT nesmí získat generické oprávnění ──────────────────────────
+  describe('INV4 — PARENT generic-permission invariant', () => {
+    beforeEach(() => {
+      prismaMock.user.findUnique.mockResolvedValue({ systemRole: null } as any);
+      prismaMock.membership.findFirst.mockResolvedValue({
+        role: 'PARENT',
+        organizationId: 'org-1',
+        roleAssignments: [{ role: 'PARENT' }],
+      } as any);
+    });
+
+    it('aktivní PARENT role je odepřena i při org-scoped UserPermission(allowed=true)', async () => {
+      // UserPermission by "povolil" — nesmí být ani dotázán (gate je před ním).
+      prismaMock.userPermission.findFirst.mockResolvedValue({ id: 'up-1' } as any);
+
+      const allowed = await service.canUser(
+        'parent-1',
+        'org-1',
+        PermissionKey.VIEW_RESULTS,
+        'PARENT',
+      );
+
+      expect(allowed).toBe(false);
+      expect(prismaMock.userPermission.findFirst).not.toHaveBeenCalled();
+      expect(prismaMock.rolePermission.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('aktivní PARENT role je odepřena i při globální UserPermission (organizationId=null)', async () => {
+      prismaMock.userPermission.findFirst.mockResolvedValue({ id: 'up-global' } as any);
+
+      const allowed = await service.canUser(
+        'parent-1',
+        null,
+        PermissionKey.VIEW_RESULTS,
+        'PARENT',
+      );
+
+      expect(allowed).toBe(false);
+      expect(prismaMock.userPermission.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('PARENT jako primární role (bez activeRole) je také odepřena', async () => {
+      prismaMock.userPermission.findFirst.mockResolvedValue({ id: 'up-2' } as any);
+
+      const allowed = await service.canUser(
+        'parent-1',
+        'org-1',
+        PermissionKey.VIEW_SUBMISSIONS,
+      );
+
+      expect(allowed).toBe(false);
+      expect(prismaMock.userPermission.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('resolver vrací pro PARENT nulovou generickou množinu (canUserMultiple)', async () => {
+      prismaMock.userPermission.findFirst.mockResolvedValue({ id: 'up-3' } as any);
+      const keys = Object.values(PermissionKey);
+
+      const map = await service.canUserMultiple('parent-1', 'org-1', keys, 'PARENT');
+
+      expect(Object.values(map).every((v) => v === false)).toBe(true);
+      expect(keys.every((k) => map[k] === false)).toBe(true);
+    });
+
+    it('DB-autoritativní: PARENT-only membership nelze eskalovat podvrženým activeRole=TEACHER', async () => {
+      // Membership v DB je PARENT (@@unique([userId, organizationId]) → jediná
+      // membership; PARENT-only má vždy primární roli PARENT). I když klient/stale
+      // token dodá activeRole=TEACHER, brána spadne na membership.role z DB.
+      prismaMock.userPermission.findFirst.mockResolvedValue({ id: 'up-forge' } as any);
+      prismaMock.rolePermission.findFirst.mockResolvedValue({ allowed: true } as any);
+
+      const allowed = await service.canUser(
+        'parent-1',
+        'org-1',
+        PermissionKey.VIEW_RESULTS,
+        'TEACHER', // podvržená/zastaralá aktivní role
+      );
+
+      expect(allowed).toBe(false);
+      expect(prismaMock.userPermission.findFirst).not.toHaveBeenCalled();
+      expect(prismaMock.rolePermission.findFirst).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── activeRole autorizace (defense-in-depth) ───────────────────────────────
+  // Kanonické validační místo je jwt.strategy.validate (activeRole ∈ aktivní
+  // roleAssignments, jinak 401). canUser je druhá obrana: neautorizovaná
+  // activeRole (klientem dodaná / stale) je zamítnuta proti DB rolím.
+  describe('activeRole authorizace (defense-in-depth)', () => {
+    beforeEach(() => {
+      prismaMock.user.findUnique.mockResolvedValue({ systemRole: null } as any);
+    });
+
+    it('STUDENT nemůže eskalovat na TEACHER podvrženým activeRole', async () => {
+      prismaMock.membership.findFirst.mockResolvedValue({
+        role: 'STUDENT',
+        organizationId: 'org-1',
+        roleAssignments: [{ role: 'STUDENT' }],
+      } as any);
+      prismaMock.userPermission.findFirst.mockResolvedValue({ id: 'x' } as any);
+      prismaMock.rolePermission.findFirst.mockResolvedValue({ allowed: true } as any);
+
+      const allowed = await service.canUser(
+        'stu-1',
+        'org-1',
+        PermissionKey.CREATE_TEST,
+        'TEACHER',
+      );
+
+      expect(allowed).toBe(false);
+      expect(prismaMock.userPermission.findFirst).not.toHaveBeenCalled();
+      expect(prismaMock.rolePermission.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('TEACHER nemůže eskalovat na DIRECTOR ani OWNER', async () => {
+      prismaMock.membership.findFirst.mockResolvedValue({
+        role: 'TEACHER',
+        organizationId: 'org-1',
+        roleAssignments: [{ role: 'TEACHER' }],
+      } as any);
+      prismaMock.rolePermission.findFirst.mockResolvedValue({ allowed: true } as any);
+
+      const asDirector = await service.canUser(
+        'tea-1',
+        'org-1',
+        PermissionKey.DELETE_TEST,
+        'DIRECTOR',
+      );
+      const asOwner = await service.canUser(
+        'tea-1',
+        'org-1',
+        PermissionKey.DELETE_TEST,
+        'OWNER',
+      );
+
+      expect(asDirector).toBe(false);
+      expect(asOwner).toBe(false); // OWNER bypass se NIKDY nedostane ke slovu
+    });
+
+    it('multi-role: legitimní activeRole z roleAssignments projde (TEACHER kontext)', async () => {
+      prismaMock.membership.findFirst.mockResolvedValue({
+        role: 'TEACHER',
+        organizationId: 'org-1',
+        roleAssignments: [{ role: 'TEACHER' }, { role: 'PARENT' }],
+      } as any);
+      prismaMock.userPermission.findFirst.mockResolvedValue(null);
+      prismaMock.rolePermission.findFirst.mockResolvedValue({ allowed: true } as any);
+
+      const allowed = await service.canUser(
+        'tp-1',
+        'org-1',
+        PermissionKey.CREATE_TEST,
+        'TEACHER',
+      );
+
+      expect(allowed).toBe(true);
+    });
+
+    it('multi-role teacher-parent: v PARENT kontextu prázdná generická oprávnění', async () => {
+      prismaMock.membership.findFirst.mockResolvedValue({
+        role: 'TEACHER',
+        organizationId: 'org-1',
+        roleAssignments: [{ role: 'TEACHER' }, { role: 'PARENT' }],
+      } as any);
+      prismaMock.userPermission.findFirst.mockResolvedValue({ id: 'x' } as any);
+
+      const allowed = await service.canUser(
+        'tp-1',
+        'org-1',
+        PermissionKey.VIEW_RESULTS,
+        'PARENT',
+      );
+
+      // PARENT je autorizovaná role (∈ assignments), ale PARENT kontext = deny.
+      expect(allowed).toBe(false);
+      expect(prismaMock.userPermission.findFirst).not.toHaveBeenCalled();
+    });
+  });
+
+  it('non-PARENT role (TEACHER) si UserPermission override zachová', async () => {
+    // Regrese proti přehnané opravě: legitimní user override musí dál fungovat.
+    prismaMock.user.findUnique.mockResolvedValue({ systemRole: null } as any);
+    prismaMock.membership.findFirst.mockResolvedValue({
+      role: 'TEACHER',
+      organizationId: 'org-9',
+      roleAssignments: [{ role: 'TEACHER' }],
+    } as any);
+    prismaMock.userPermission.findFirst.mockResolvedValue({ id: 'up-teacher' } as any);
+
+    const allowed = await service.canUser(
+      'teacher-1',
+      'org-9',
+      PermissionKey.MANAGE_STUDENTS,
+      'TEACHER',
+    );
+
+    expect(allowed).toBe(true);
+    expect(prismaMock.userPermission.findFirst).toHaveBeenCalled();
+  });
+
   it('invalidates cache when userId changes permissions', async () => {
     prismaMock.user.findUnique.mockResolvedValue({ systemRole: null } as any);
     prismaMock.userPermission.findFirst.mockResolvedValue(null);
     prismaMock.membership.findFirst.mockResolvedValue({
       role: 'STUDENT',
       organizationId: 'org-2',
+      roleAssignments: [{ role: 'STUDENT' }],
     } as any);
     prismaMock.rolePermission.findFirst.mockResolvedValue(null);
 

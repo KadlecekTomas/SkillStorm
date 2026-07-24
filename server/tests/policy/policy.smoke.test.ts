@@ -395,14 +395,28 @@ describe('Policy smoke suite', () => {
         expect(allowed).toBe(false);
       });
 
-      await policyCheck('RBAC', 'Parent → VIEW_RESULTS allowed', async () => {
+      // Guardian invariant (docs/guardian.md §3–§4): PARENT nezískává generická
+      // RBAC oprávnění. Dřívější „Parent → VIEW_RESULTS allowed" byl relikt
+      // Etapy A; rodičovský přístup je nyní výhradně vztahový přes /guardian/*.
+      await policyCheck('RBAC', 'Parent → VIEW_RESULTS denied', async () => {
         const allowed = await rbac.canUser(
           seed.users.parent.user.id,
           seed.organizations.primary.id,
           PermissionKey.VIEW_RESULTS,
         );
-        expect(allowed).toBe(true);
+        expect(allowed).toBe(false);
       });
+
+      await policyCheck(
+        'RBAC',
+        'Parent → no role_permissions rows (invariant)',
+        async () => {
+          const count = await prisma.rolePermission.count({
+            where: { role: OrganizationRole.PARENT },
+          });
+          expect(count).toBe(0);
+        },
+      );
     });
 
     it('treats owner as wildcard', async () => {
