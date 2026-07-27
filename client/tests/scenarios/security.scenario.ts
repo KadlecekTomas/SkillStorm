@@ -89,9 +89,23 @@ test('login rate limit surfaces a clear message, not a broken page', async ({ ba
     (r) => /\/auth\/login/.test(r.url()) && r.status() === 429,
     { timeout: 20_000 },
   );
-  await page.getByRole('button', { name: /sign in|přihlásit/i }).click();
+  const submit = page.getByRole('button', { name: /sign in|přihlásit/i });
+  await submit.click();
   await throttled; // the login request was rate-limited
+
+  // 1) the user is told what happened, in plain Czech
   await expect(page.getByText(/Příliš mnoho pokusů/i)).toBeVisible({ timeout: 20_000 });
-  await expect(page.getByRole('heading', { name: /Přihlášení do SkillStorm/i })).toBeVisible();
+
+  // 2) …and the page is still a working login page. Assert the CONTRACT
+  //    (stayed put, heading intact, both fields and submit usable), not the
+  //    brand wording — the heading text changes whenever the product is
+  //    renamed and that must not break a security regression test.
+  await expect(page).toHaveURL(/\/login/);
+  await expect(page.getByRole('heading', { name: /přihlášení/i })).toBeVisible();
+  await expect(page.getByRole('textbox', { name: /e-?mail/i })).toBeVisible();
+  await expect(page.getByRole('textbox', { name: /heslo/i })).toBeVisible();
+  // loading state released → the user can actually retry after the cooldown
+  await expect(submit).toBeEnabled();
+
   await ctx.close();
 });
