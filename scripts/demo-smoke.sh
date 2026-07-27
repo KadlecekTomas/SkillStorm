@@ -67,7 +67,11 @@ wait_for_health frontend
 curl --fail --silent --show-error "$BACKEND_URL/health" >/dev/null
 echo "Backend /health OK"
 
-docker compose exec -T backend sh -lc 'DEMO_SEED=1 npm run db:seed'
+# docker-compose.yml má výchozí NODE_ENV=production, takže demo seed narazí na
+# guard v prisma/seed-guards.js. Tady je to vědomé: jde o lokální jednorázový
+# smoke test proti dočasnému kontejneru, ne o nasazené prostředí.
+docker compose exec -T backend sh -lc \
+  'ALLOW_DEMO_SEED_IN_PRODUCTION=1 DEMO_SEED=1 npm run db:seed'
 echo "Demo seed profile applied"
 
 curl --fail --silent --show-error \

@@ -42,7 +42,8 @@
     "verify:submissions": "ts-node scripts/verify-submissions.ts",
     "bootstrap:search": "ts-node scripts/bootstrap-search-all.ts",
     "prebuild": "npm run prisma:generate && npm run typecheck",
-    "db:seed": "npx prisma db seed"
+    "db:seed": "npx prisma db seed",
+    "purge:demo-accounts": "ts-node prisma/purge-demo-accounts.ts"
   },
   "prisma": {
     "seed": "node prisma/seed.js"

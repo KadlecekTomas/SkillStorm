@@ -38,8 +38,11 @@ services:
         value: "1"
       - key: RUN_SEED
         value: "1"
+      # Demo seed zakládá účty s heslem, které je natvrdo v public repu.
+      # Na službě s NODE_ENV=production musí zůstat vypnutý; guard v
+      # prisma/seed-guards.js by ho stejně odmítl spustit.
       - key: DEMO_SEED
-        value: "1"
+        value: "0"
       - key: DEMO_MODE
         value: "1"
       - key: ALLOW_PUBLIC_ORG_CREATION

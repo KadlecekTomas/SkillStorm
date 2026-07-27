@@ -10,12 +10,13 @@ const {
   UserStatus,
 } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
+const { assertDemoSeedAllowed } = require('./seed-guards');
 
 const prisma = new PrismaClient();
 
 const DEMO_PASSWORD = 'Password123!';
 const DEMO = {
-  organizationName: 'SkillStorm Demo School',
+  organizationName: 'Eduto Demo School',
   classSection: { grade: SchoolGrade.GRADE_8, section: 'A', label: '8.A Demo' },
   director: {
     email: 'director.demo@skillstorm.local',
@@ -650,6 +651,10 @@ async function resetDemoSubmission(assignmentId, studentMembershipId) {
 }
 
 async function runDemoSeed() {
+  // Poslední pojistka: platí i když někdo zavolá runDemoSeed() přímo,
+  // mimo prisma/seed.js (například z docker exec nebo smoke skriptu).
+  assertDemoSeedAllowed();
+
   const organization = await ensureOrganization();
   await ensureDefaultSubjects(organization.id);
   await ensureDefaultOrgSubjects(organization.id);

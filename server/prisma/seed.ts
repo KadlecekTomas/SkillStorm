@@ -1,6 +1,7 @@
 import { PrismaClient, SystemRole, UserStatus } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { runDemoSeed } from './demo-seed';
+import { assertDemoSeedAllowed } from './seed-guards';
 
 /**
  * Environment variables are used ONLY for initial bootstrap.
@@ -16,6 +17,12 @@ import { runDemoSeed } from './demo-seed';
 const prisma = new PrismaClient();
 
 async function main(): Promise<void> {
+  // 0) Demo seed se v produkci nesmí spustit — zakládá účty s veřejně známým
+  //    heslem. Kontrola je až před prací s databází, aby deploy spadl hned.
+  if (process.env.DEMO_SEED === '1') {
+    assertDemoSeedAllowed();
+  }
+
   // 1) Pokud už SUPERADMIN existuje, .env je "mrtvé" – nic nebootstrapujeme.
   const existingSuperadmin = await prisma.user.findFirst({
     where: { systemRole: SystemRole.SUPERADMIN },
@@ -53,7 +60,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  const name = 'SkillStorm Superadmin';
+  const name = 'Eduto Superadmin';
   const passwordHash = await bcrypt.hash(plainPassword, 10);
 
   // SUPERADMIN není navázán na žádnou organizaci, nemá membership,

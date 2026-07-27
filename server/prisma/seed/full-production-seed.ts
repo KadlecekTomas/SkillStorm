@@ -1,5 +1,5 @@
 /**
- * Full production-grade seed for SkillStorm (Variant A or B).
+ * Full production-grade seed for Eduto (Variant A or B).
  * Deterministic, idempotent, safe (*.demo.local only). No random().
  *
  * Run: npm run seed:prod:a | seed:prod:b (from server/)
@@ -21,6 +21,7 @@ import {
   UserStatus,
 } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
+import { resolveSeedUserPassword } from '../seed-guards';
 
 const prisma = new PrismaClient();
 
@@ -794,8 +795,13 @@ async function main(): Promise<void> {
       );
     }
   }
+  // Heslo pro ne-superadmin účty se řeší PŘED jakoukoli prací s databází.
+  // V produkci musí přijít z env; jinak by ředitelé, učitelé i žáci z tohohle
+  // seedu dostali veřejně známé demo heslo.
+  const seedUserPassword = resolveSeedUserPassword();
+
   await cleanupDemoData();
-  const passwordHash = await hash(DEMO_PASSWORD);
+  const passwordHash = await hash(seedUserPassword);
   const orgs = await createOrganizations();
   const years = await createAcademicYears(orgs);
   const sections = await createClassSections(orgs, years);
@@ -840,7 +846,11 @@ async function main(): Promise<void> {
     { email: 'student01.6a@beta.demo.local', org: 'Gymnázium Beta', role: 'STUDENT' },
     { email: 'admin@gama.demo.local', org: 'Komunitní centrum Gama', role: 'DIRECTOR' },
   ];
-  printDemoBanner(demoUserRows, DEMO_PASSWORD, superadminEmail, superadminPasswordSource);
+  // Banner nesmí tvrdit demo heslo, když se reálně použilo heslo z env.
+  const bannerPassword = isProduction()
+    ? '(from SEED_USER_PASSWORD env)'
+    : seedUserPassword;
+  printDemoBanner(demoUserRows, bannerPassword, superadminEmail, superadminPasswordSource);
 
   console.log('✅ Full production seed – done');
 }
