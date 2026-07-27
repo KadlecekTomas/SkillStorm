@@ -1,4 +1,4 @@
-# SkillStorm
+# Eduto
 
 Webová vzdělávací platforma pro školy.
 
@@ -18,7 +18,7 @@ Nejmenší nutné minimum:
 ```env
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=postgres
-POSTGRES_DB=skillstorm
+POSTGRES_DB=eduto
 POSTGRES_PORT=5432
 JWT_SECRET=supersecret
 PUBLIC_APP_URL=http://localhost:3000
@@ -85,6 +85,6 @@ docker compose --profile dev down -v
 
 ## Poznámky
 
-- `seed-full` je jednorázová služba definovaná v [docker-compose.yml](/Users/tomaskadlecek/Documents/GitHub/SkillStorm/docker-compose.yml).
+- `seed-full` je jednorázová služba definovaná v [docker-compose.yml](/Users/tomaskadlecek/Documents/GitHub/Eduto/docker-compose.yml).
 - Backend běží na portu `4200`, frontend na portu `3000`.
 - Pokud seed nebo start selže, nejdřív ověřte obsah `.env` a dostupnost Docker daemonu.

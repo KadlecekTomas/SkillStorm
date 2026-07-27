@@ -11,6 +11,7 @@ import {
   LogOut,
   LifeBuoy,
   BookCopy,
+  BookOpen,
 } from "lucide-react";
 import { cn } from "@/utils/cn";
 import { useAuth } from "@/hooks/use-auth";
@@ -52,6 +53,11 @@ export const PLATFORM_NAV_ITEMS: PlatformNavItem[] = [
     label: "Support",
     icon: <LifeBuoy className="h-4 w-4" />,
     href: "/app/platform/support",
+  },
+  {
+    label: "Handbook",
+    icon: <BookOpen className="h-4 w-4" />,
+    href: "/handbook",
   },
 ];
 
@@ -120,7 +126,7 @@ export const PlatformSidebar = (): React.JSX.Element => {
           </div>
           <div>
             <p className="text-sm font-semibold leading-none text-gray-900">
-              SkillStorm
+              Eduto
             </p>
             <p className="mt-0.5 text-xs text-gray-500">Platform workspace</p>
           </div>

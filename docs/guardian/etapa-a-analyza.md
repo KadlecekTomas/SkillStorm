@@ -146,7 +146,7 @@ stávajících testů identické.
 | `utils/permissions.ts:43-55` | `derivePermissions` — **jen singulár `user.organizationRole`** | zůstává singulár = aktivní role (konzistentní se serverem) |
 | `hooks/use-permissions.ts:24-32` | `hasRole` — singulár | aktivní role |
 | `lib/guard/useGuard.ts:36,78-80` | `requireRoles.some(r => roles.includes(r))` — **jediné union místo** | sjednotit na aktivní roli (viz §3.5) |
-| `lib/guard/useAuth.ts:150-230,330-440` | syncProfile, `switchOrganization(membershipId)`, `use-org` | + `switchRole(role)`; localStorage `skillstorm_activeMembershipId` + nově aktivní role |
+| `lib/guard/useAuth.ts:150-230,330-440` | syncProfile, `switchOrganization(membershipId)`, `use-org` | + `switchRole(role)`; localStorage `eduto_activeMembershipId` + nově aktivní role |
 | `components/layout/dashboard-layout.tsx:24-54` a `dashboard-header.tsx:43-98` | `.find(m => m.organizationId === org.id)` — kolize při 2 membershipech/org | unique zůstává → **kolize nevznikne** (důvod proti variantě „2 memberships“) |
 | `types/permissions.ts:3` + `ROLE_PERMISSION_MATRIX` + `roleHome` | typy, matice, landing per role (PARENT → /app/results) | + `activeRole`/`availableRoles` v typech; roleHome dle aktivní role |
 | `types/index.ts:190,205` | `MembershipSummary.role`, `User.organizationRole` | `MembershipSummary.roles: OrganizationRole[]` + `role` (primární) zůstává |

@@ -1,4 +1,4 @@
-# Production SSO hardening audit — SkillStorm
+# Production SSO hardening audit — Eduto
 
 Datum: 2026-06-13
 Branch: `feat/google-sso-identity` (uncommitted working tree)

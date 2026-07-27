@@ -11,14 +11,14 @@ ls -lt backups/daily/ | head
 
 # 2. Obnov ji do NOVÉ databáze (nikdy nepřepisuj původní, dokud si nejsi jistý)
 scripts/ops/restore-db.sh \
-  --file backups/daily/skillstorm_YYYYMMDD_HHMMSS.dump \
-  --target-db skillstorm_restore_test --recreate
+  --file backups/daily/eduto_YYYYMMDD_HHMMSS.dump \
+  --target-db eduto_restore_test --recreate
 
 # 3. Ověř obnovená data smoke testem (sekce „Smoke test" níže)
 
 # 4. Teprve po úspěšném smoke testu přepni aplikaci na obnovenou DB,
 #    NEBO obnov do produkčního názvu (vyžádá si interaktivní potvrzení):
-scripts/ops/restore-db.sh --file <dump> --target-db skillstorm --recreate
+scripts/ops/restore-db.sh --file <dump> --target-db eduto --recreate
 ```
 
 ## Jak fungují zálohy
@@ -33,14 +33,14 @@ scripts/ops/restore-db.sh --file <dump> --target-db skillstorm --recreate
 Ruční spuštění zálohy:
 
 ```bash
-DATABASE_URL='postgresql://postgres:postgres@localhost:5433/skillstorm' \
+DATABASE_URL='postgresql://postgres:postgres@localhost:5433/eduto' \
   scripts/ops/backup-db.sh
 ```
 
 Doporučený cron (denně ve 2:00, viz `crontab -e` na serveru):
 
 ```cron
-0 2 * * * cd /path/to/SkillStorm && DATABASE_URL='<produkční URL>' BACKUP_DIR=/var/backups/skillstorm scripts/ops/backup-db.sh >> /var/log/skillstorm-backup.log 2>&1
+0 2 * * * cd /path/to/Eduto && DATABASE_URL='<produkční URL>' BACKUP_DIR=/var/backups/skillstorm scripts/ops/backup-db.sh >> /var/log/skillstorm-backup.log 2>&1
 ```
 
 > Zálohy ukládej mimo stroj s databází (rsync/S3 sync adresáře
@@ -64,7 +64,7 @@ Doporučený cron (denně ve 2:00, viz `crontab -e` na serveru):
 3. **Obnov do zkušební databáze** (`*_test` název → bez potvrzování):
 
    ```bash
-   scripts/ops/restore-db.sh --file <dump> --target-db skillstorm_restore_test --recreate
+   scripts/ops/restore-db.sh --file <dump> --target-db eduto_restore_test --recreate
    ```
 
    Connection na admin úrovni řídí standardní proměnné `PGHOST`, `PGPORT`,
@@ -82,7 +82,7 @@ Doporučený cron (denně ve 2:00, viz `crontab -e` na serveru):
 ```bash
 cd server
 # aplikaci spusť proti obnovené DB na vedlejším portu
-DATABASE_URL='postgresql://postgres:postgres@localhost:5432/skillstorm_restore_test' \
+DATABASE_URL='postgresql://postgres:postgres@localhost:5432/eduto_restore_test' \
   PORT=4250 JWT_SECRET=dev DISABLE_CSRF=1 npm run start &
 
 # počkej na health

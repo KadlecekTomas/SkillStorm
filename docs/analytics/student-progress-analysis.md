@@ -13,7 +13,7 @@
 
 ## 0. Shrnutí pro netrpělivé (TL;DR)
 
-SkillStorm už dnes **umí překvapivě hodně**: máme snapshoty na úrovni odpovědi
+Eduto už dnes **umí překvapivě hodně**: máme snapshoty na úrovni odpovědi
 (`Response.awardedPoints/maxPoints/correctAnswerSnapshot/questionTextSnapshot`),
 máme bodové součty na submission (`earnedPoints/maxPoints/score`), máme oddělené
 pokusy (`attemptNo`), máme diagnostiku témat (`StudentDiagnosticService`) a

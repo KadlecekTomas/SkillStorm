@@ -15,7 +15,7 @@ const databaseUrl = assertTestDatabaseUrl(
 const prisma = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
 
 async function main() {
-  console.log('🌱 Starting full SkillStorm E2E seed...');
+  console.log('🌱 Starting full Eduto E2E seed...');
 
   // 🧹 Clean up to prevent unique constraint errors in CI.
   // The submission-immutability DB trigger (SUBMISSION_LOCKED) blocks deleting

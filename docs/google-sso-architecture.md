@@ -1,4 +1,4 @@
-# Google SSO architektura — SkillStorm
+# Google SSO architektura — Eduto
 
 Datum: 2026-06-13
 Stav: PILOT ID-TOKEN VERIFICATION FLOW (vědomé rozhodnutí, viz níže)
@@ -17,7 +17,7 @@ POST /auth/sso/google  { idToken, organizationId? }
    ▼
 identity match / e-mail link / org-scoped auto-provision
    ▼
-standardní SkillStorm session (httpOnly cookies ss_at / ss_rt + ss_csrf)
+standardní Eduto session (httpOnly cookies ss_at / ss_rt + ss_csrf)
 ```
 
 **Toto NENÍ plné enterprise production SSO.** Plná produkční varianta je backend-first authorization-code flow (`GET /auth/sso/google/start` → Google → `GET /auth/sso/google/callback` se state/nonce, client secret výhradně na backendu). Ten v této iteraci implementovaný není.

@@ -71,7 +71,7 @@ export const Sidebar = (): React.JSX.Element => {
           {!collapsed && (
             <Link href="/app" className="flex items-center gap-2.5 text-ink">
               <PartakEmblem size={30} />
-              <span className="text-lg font-extrabold tracking-[-.01em]">SkillStorm</span>
+              <span className="text-lg font-extrabold tracking-[-.01em]">Eduto</span>
             </Link>
           )}
           {collapsed && (

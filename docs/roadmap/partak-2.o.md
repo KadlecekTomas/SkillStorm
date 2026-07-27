@@ -115,7 +115,7 @@ Zeptal se některý rodič/učitel sám od sebe na fyzické samolepky? (→ sign
 Dokument patří do docs/roadmap/partak-2.0.md. Při zařazení do vývoje každou fázi rozpracovat do zadání se STOP checkpointy dle zavedeného procesu.
 
 Project content
-SkillStorm
+Eduto
 Created by you
 Add PDFs, documents, or other text to reference in this project.
 Content
@@ -160,6 +160,6 @@ Rozumím — nejdřív prozkoumám stávající model Bleskovek (Prisma schéma,
 
 PASTED
 
-# SkillStorm – zjednodušení rodičovského prostředí a rodinné spuštění žákovských aktivit Proveď analýzu a následnou implementaci zjednodušeného rodičovského prostředí v aplikaci SkillStorm. Cílem není pouze graficky upravit rodičovský dashboard. Je potřeba vyřešit celý uživatelský, bezpečnostní a
+# Eduto – zjednodušení rodičovského prostředí a rodinné spuštění žákovských aktivit Proveď analýzu a následnou implementaci zjednodušeného rodičovského prostředí v aplikaci Eduto. Cílem není pouze graficky upravit rodičovský dashboard. Je potřeba vyřešit celý uživatelský, bezpečnostní a
 
 PASTED

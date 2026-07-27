@@ -66,7 +66,7 @@ export async function seed(prisma: PrismaClient) {
   const baseUsers = [
     {
       email: USER_EMAILS.superadmin,
-      name: 'SkillStorm Superadmin',
+      name: 'Eduto Superadmin',
       systemRole: SystemRole.SUPERADMIN,
     },
     {

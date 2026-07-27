@@ -8,7 +8,7 @@ Stav po `fix/ci-infrastructure` (2026-07). Cíl: **main je kompletně zelený** 
 
 | Workflow | Job(y) | Co hlídá |
 |---|---|---|
-| `ci.yml` (SkillStorm CI) | `build` | FE build + FE component policy, BE typecheck/build, `test:policy` (RBAC scorecard), seed, RBAC testy BE/FE, gamifikace, dekorátorový check |
+| `ci.yml` (Eduto CI) | `build` | FE build + FE component policy, BE typecheck/build, `test:policy` (RBAC scorecard), seed, RBAC testy BE/FE, gamifikace, dekorátorový check |
 | | `Onboarding invariant (backend E2E)` | kontrakt registrace + přístup do PENDING org (jest e2e proti čerstvé DB) |
 | | `Onboarding invariant (frontend E2E)` | create-org flow v prohlížeči: routing + `context.mode` (production-mode backend) |
 | `e2e-scenarios.yml` | `Playwright scenarios (real browser + backend)` | deterministická fullstack sada (`client/tests/scenarios`): lifecycle, věkové režimy, souběh, security, mobil, bleskovky |
@@ -70,7 +70,7 @@ návrat kterékoli další suity do gate = opravit podle vzorů ve scénářové
 Nastavit v Settings → Branches → `main` → Require status checks:
 
 **Required (blokují merge):**
-1. `build` (SkillStorm CI) — největší záběr: buildy, policy scorecard, RBAC
+1. `build` (Eduto CI) — největší záběr: buildy, policy scorecard, RBAC
 2. `Onboarding invariant (backend E2E)`
 3. `Onboarding invariant (frontend E2E)`
 4. `Playwright scenarios (real browser + backend)` — jediný fullstack gate

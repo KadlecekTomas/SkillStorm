@@ -104,7 +104,7 @@ async function upsertMember(
 }
 
 /**
- * Cross-tenant negative fixture in a SECOND organization (skillStormDemo): its own academic
+ * Cross-tenant negative fixture in a SECOND organization (edutoDemo): its own academic
  * year, class, teacher, student, test and an OPEN assignment. This gives the focus e2e suite a
  * real "exists-but-forbidden" assignment so it can prove tenant isolation rather than just
  * unknown-id handling. Idempotent (stable ids + upserts).

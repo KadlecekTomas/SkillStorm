@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { ClipboardList, LineChart, AlertCircle, Users, GraduationCap, User } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "SkillStorm – Moderní platforma pro základní školy",
+  title: "Eduto – Moderní platforma pro základní školy",
   description:
     "Digitální nástroj pro tvorbu testů a analýzu výsledků žáků.",
 };
@@ -59,7 +59,7 @@ export default function PublicPage(): React.JSX.Element {
             Moderní nástroj pro řízení výuky na základní škole
           </h1>
           <p className="mt-6 text-lg text-slate-600 sm:text-xl">
-            SkillStorm pomáhá učitelům tvořit testy, analyzovat výsledky a zlepšovat studijní progres žáků.
+            Eduto pomáhá učitelům tvořit testy, analyzovat výsledky a zlepšovat studijní progres žáků.
           </p>
           <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
             <Button asChild size="lg" className="rounded-2xl px-8 py-6 text-base">
@@ -152,7 +152,7 @@ export default function PublicPage(): React.JSX.Element {
       <section className="border-t border-slate-200 bg-primary py-20">
         <div className="mx-auto max-w-7xl px-4 text-center sm:px-6 lg:px-8">
           <h2 className="text-2xl font-bold text-white sm:text-3xl">
-            Začít používat SkillStorm
+            Začít používat Eduto
           </h2>
           <p className="mt-4 text-lg text-white/90">
             Registrujte se zdarma a vyzkoušejte platformu pro vaši školu.
@@ -163,7 +163,7 @@ export default function PublicPage(): React.JSX.Element {
             variant="secondary"
             className="mt-8 rounded-2xl bg-white px-8 py-6 text-base text-primary hover:bg-slate-100"
           >
-            <Link href="/register">Začít používat SkillStorm</Link>
+            <Link href="/register">Začít používat Eduto</Link>
           </Button>
         </div>
       </section>

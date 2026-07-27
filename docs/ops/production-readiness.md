@@ -7,7 +7,7 @@ systému, co zbývá, doporučený hosting.
 
 ### 1. Izolace testovací databáze
 Destruktivní test tooling (migrate reset, DROP SCHEMA, e2e seed) projde jen
-proti whitelistované DB `skillstorm_test`; konfigurace výhradně přes
+proti whitelistované DB `eduto_test`; konfigurace výhradně přes
 `DATABASE_URL_TEST`, guard bez bypassu (`server/scripts/db-safety.js`).
 Kořen původního incidentu (auto-load `server/.env` Prisma klientem) uzavřen.
 Dokumentace: `docs/testing/test-database-isolation.md`.

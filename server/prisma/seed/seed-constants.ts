@@ -2,19 +2,19 @@ import { OrganizationType, SchoolGrade } from '@prisma/client';
 
 export const ORG_IDS = {
   chodovicka: '11111111-2222-4000-8000-000000000001',
-  skillStormDemo: '11111111-2222-4000-8000-000000000002',
+  edutoDemo: '11111111-2222-4000-8000-000000000002',
   pythonCommunity: '11111111-2222-4000-8000-000000000003',
 } as const;
 
 export const ORG_NAMES: Record<keyof typeof ORG_IDS, string> = {
   chodovicka: 'FZŠ Chodovická',
-  skillStormDemo: 'SkillStorm Demo Class',
+  edutoDemo: 'Eduto — ukázková třída',
   pythonCommunity: 'Komunitní kurz Python',
 };
 
 export const ORG_TYPES: Record<keyof typeof ORG_IDS, OrganizationType> = {
   chodovicka: OrganizationType.SCHOOL,
-  skillStormDemo: OrganizationType.PRIVATE,
+  edutoDemo: OrganizationType.PRIVATE,
   pythonCommunity: OrganizationType.COMMUNITY,
 };
 
@@ -93,12 +93,12 @@ export const DEFAULT_GRADE = SchoolGrade.GRADE_6;
 
 /**
  * Cross-tenant negative fixture. A fully real, openable assignment in a SECOND organization
- * (skillStormDemo) with its own teacher + student, so e2e can prove a student from another org
+ * (edutoDemo) with its own teacher + student, so e2e can prove a student from another org
  * (chodovicka) is denied access (404) — distinguishing tenant isolation from an unknown id.
  * The assignment id is stable and referenced verbatim by the focus e2e cross-org test.
  */
 export const CROSS_ORG = {
-  orgId: ORG_IDS.skillStormDemo,
+  orgId: ORG_IDS.edutoDemo,
   academicYearId: '99999999-aaaa-4000-b000-0000000000b0',
   classSectionId: 'aaaa1111-bbbb-4000-b000-0000000000b1',
   testId: '88888888-9999-4000-b000-0000000000b2',

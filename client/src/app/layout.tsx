@@ -23,7 +23,7 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SkillStorm Platform",
+  title: "Eduto Platform",
   description:
     "Modular learning experience platform for teachers and students built with Next.js 14.",
 };
@@ -49,7 +49,7 @@ export default async function RootLayout({
   const MswLoader = await getMswLoader();
 
   return (
-    <html lang="en" className={`${inter.variable} ${plexMono.variable}`}>
+    <html lang="cs" className={`${inter.variable} ${plexMono.variable}`}>
       <body className="bg-canvas text-ink">
         <AppErrorBoundary>
           <TooltipProvider>

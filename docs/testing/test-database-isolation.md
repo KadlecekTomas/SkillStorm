@@ -13,8 +13,8 @@ zaručuje, že se to už nemůže stát.
    setupu (`server/test/jest-env.js`, `client/playwright.config.ts`)
    **zahozena** a nikdy se nepoužije.
 2. **Název testovací databáze musí být na explicitním whitelistu** —
-   povolen je pouze `skillstorm_test` (sufix `_test` je nutná, ale ne
-   postačující podmínka; `skillstorm_production_test` neprojde). Rozšíření
+   povolen je pouze `eduto_test` (sufix `_test` je nutná, ale ne
+   postačující podmínka; `eduto_production_test` neprojde). Rozšíření
    whitelistu vyžaduje úpravu kódu `server/scripts/db-safety.js`, ne env.
    Guard (`assertTestDatabaseUrl`) běží před každou destruktivní operací:
    - `server/test/jest-env.js` — vstupní bod všech jest běhů,
@@ -34,7 +34,7 @@ zaručuje, že se to už nemůže stát.
 Varianta A — lokální Postgres (výchozí, `.env.test.example`):
 
 ```bash
-createdb -h localhost -p 5432 -U postgres skillstorm_test
+createdb -h localhost -p 5432 -U postgres eduto_test
 cp server/.env.test.example server/.env.test
 ```
 
@@ -43,10 +43,10 @@ Varianta B — vyhrazený Docker kontejner (vlastní port 5434 a volume):
 ```bash
 docker compose --profile test up -d postgres-test
 # v server/.env.test pak:
-# DATABASE_URL_TEST=postgresql://postgres:postgres@localhost:5434/skillstorm_test?schema=public
+# DATABASE_URL_TEST=postgresql://postgres:postgres@localhost:5434/eduto_test?schema=public
 ```
 
-Dev databáze (`skillstorm`, docker port 5433 dle `server/.env`) zůstává
+Dev databáze (`eduto`, docker port 5433 dle `server/.env`) zůstává
 testy zcela nedotčená.
 
 ## Spouštění
@@ -60,7 +60,7 @@ testy zcela nedotčená.
 ## CI
 
 Workflow soubory (`ci.yml`, `e2e.yml`, `ci-seed-validate.yml`) používají
-service container s databází `skillstorm_test` a nastavují `DATABASE_URL`
+service container s databází `eduto_test` a nastavují `DATABASE_URL`
 i `DATABASE_URL_TEST` na stejnou hodnotu.
 
 ## Regresní testy guardu
