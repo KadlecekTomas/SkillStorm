@@ -43,6 +43,7 @@ import { PrivacyModule } from './privacy/privacy.module';
 import { EnrollmentsModule } from './enrollments/enrollments.module';
 import { AcademicYearsModule } from './academic-years/academic-years.module';
 import { InvitesModule } from './invites/invites.module';
+import { GuardianModule } from './guardian/guardian.module';
 import { EventsModule } from './events/events.module';
 import { LiveSessionsModule } from './live-sessions/live-sessions.module';
 import { CampaignsModule } from './campaigns/campaigns.module';
@@ -121,6 +122,7 @@ import { ImportsModule } from './imports/imports.module';
     EnrollmentsModule,
     AcademicYearsModule,
     InvitesModule,
+    GuardianModule,
     EventsModule,
     LiveSessionsModule,
     CampaignsModule,

@@ -14,4 +14,10 @@ export type JwtPayload = {
   organizationId?: string;
   membershipId?: string;
   isPlatformAdmin?: boolean;
+  /**
+   * Guardian Etapa C: identifikátor žákovské relace („Spustit pro Matěje").
+   * Přítomnost claimu znamená token relace — jwt.strategy ověřuje, že relace
+   * je ACTIVE a neexpirovaná, při každém requestu.
+   */
+  learningSessionId?: string;
 };

@@ -85,6 +85,9 @@ export function AssignToClassModal({
     openAt: defaultOpen().slice(0, 16),
     closeAt: defaultClose().slice(0, 16),
     maxAttempts: 1,
+    // Guardian Etapa C: default DISABLED (klasifikovaný test) — domácí
+    // úkol povoluje učitel touto volbou (STOP #3 rozhodnutí 4).
+    guardianLaunchPolicy: "DISABLED" as "DISABLED" | "ALLOWED" | "REQUIRE_CHILD_PIN",
   });
 
   useEffect(() => {
@@ -216,6 +219,7 @@ export function AssignToClassModal({
           maxAttempts: Math.max(1, Number(form.maxAttempts) || 1),
           shuffle: true,
           showExplain: "after_close",
+          guardianLaunchPolicy: form.guardianLaunchPolicy,
         },
       });
       showToastOnce("Test byl zadán třídě.", { type: "success" });
@@ -227,6 +231,7 @@ export function AssignToClassModal({
         openAt: defaultOpen().slice(0, 16),
         closeAt: defaultClose().slice(0, 16),
         maxAttempts: 1,
+        guardianLaunchPolicy: "DISABLED",
       });
     } catch (e: unknown) {
       const isHttp = e instanceof HttpError;
@@ -371,6 +376,29 @@ export function AssignToClassModal({
               value={form.maxAttempts}
               onChange={(e) => setForm((p) => ({ ...p, maxAttempts: parseInt(e.target.value, 10) || 1 }))}
             />
+          </div>
+          <div className="space-y-2">
+            <label htmlFor="assign-guardian" className="text-sm font-medium text-slate-700">
+              Domácí práce s rodičem
+            </label>
+            <select
+              id="assign-guardian"
+              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
+              value={form.guardianLaunchPolicy}
+              onChange={(e) =>
+                setForm((p) => ({
+                  ...p,
+                  guardianLaunchPolicy: e.target.value as typeof form.guardianLaunchPolicy,
+                }))
+              }
+            >
+              <option value="DISABLED">Žák pracuje sám (klasifikovaný test)</option>
+              <option value="ALLOWED">Rodič může spustit doma (domácí úkol)</option>
+              <option value="REQUIRE_CHILD_PIN">Rodič spustí, žák potvrdí svým PINem</option>
+            </select>
+            <p className="text-xs text-slate-500">
+              U výsledku vždy uvidíte, kdo práci spustil a jak byl žák ověřen.
+            </p>
           </div>
           {error && (
             <div className="space-y-2">

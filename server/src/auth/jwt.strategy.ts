@@ -145,6 +145,31 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       membershipId = null;
     }
 
+    // Guardian Etapa C: token žákovské relace platí jen dokud je relace
+    // ACTIVE a neexpirovaná — server je jediný soudce, ukončení platí
+    // okamžitě (vzor okamžité revokace rolí z Etapy A). Expirovanou relaci
+    // líně překlopíme na EXPIRED, ať ji škola/rodič vidí pravdivě.
+    let learningSessionId: string | null = null;
+    const sessionClaim = (payload as { learningSessionId?: string })
+      .learningSessionId;
+    if (sessionClaim) {
+      const session = await this.prisma.learningSession.findFirst({
+        where: { id: sessionClaim },
+        select: { id: true, status: true, expiresAt: true },
+      });
+      if (!session || session.status !== 'ACTIVE') {
+        throw new UnauthorizedException('SESSION_ENDED');
+      }
+      if (session.expiresAt < new Date()) {
+        await this.prisma.learningSession.updateMany({
+          where: { id: session.id, status: 'ACTIVE' },
+          data: { status: 'EXPIRED', endedAt: new Date() },
+        });
+        throw new UnauthorizedException('SESSION_ENDED');
+      }
+      learningSessionId = session.id;
+    }
+
     // CONTRACT (effective platform admin): SUPERADMIN is always platform admin (governance).
     // DB flag user.isPlatformAdmin is ONLY for delegated platform admins (non-SUPERADMIN).
     // Effective value must be (user.isPlatformAdmin ?? false) || user.systemRole === SUPERADMIN.
@@ -164,6 +189,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       organizationId: organizationId ?? null,
       membershipId: membershipId ?? null,
       isPlatformAdmin,
+      ...(learningSessionId ? { learningSessionId } : {}),
     };
   }
 }

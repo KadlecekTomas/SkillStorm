@@ -7,6 +7,7 @@ import { OrganizationGate } from "@/components/onboarding/OrganizationGate";
 import { BootstrapGate } from "@/components/onboarding/BootstrapGate";
 import { AppReadinessGate } from "@/components/app-state/AppReadinessGate";
 import { useAuth } from "@/hooks/use-auth";
+import { StudentSessionBar } from "@/components/guardian/student-session-bar";
 
 /**
  * School group layout.
@@ -34,6 +35,7 @@ export default function SchoolGroupLayout({
       <OrganizationGate>
         <BootstrapGate>
           <AppReadinessGate>
+            <StudentSessionBar />
             <DashboardLayout>{children}</DashboardLayout>
           </AppReadinessGate>
         </BootstrapGate>

@@ -51,6 +51,29 @@ export function setAuthCookies(
   });
 }
 
+/**
+ * Guardian Etapa C: cookies žákovské relace. Nastaví JEN access token
+ * (TTL = zbytek relace) a refresh cookie SMAŽE — rodičovská identita v
+ * prohlížeči nezůstává a relace se nedá obnovit (bod 13: oddělení od
+ * rodičovské session, neobnovitelnost přes back).
+ */
+export function setLearningSessionCookies(
+  res: Response,
+  accessToken: string,
+  maxAgeMs: number,
+) {
+  res.cookie(ACCESS_TOKEN_COOKIE, accessToken, {
+    ...base,
+    maxAge: maxAgeMs,
+  });
+  res.clearCookie(REFRESH_TOKEN_COOKIE, {
+    path: '/',
+    httpOnly: true,
+    secure: isSecure,
+    sameSite: 'lax',
+  });
+}
+
 export function clearAuthCookies(res: Response) {
   res.clearCookie(ACCESS_TOKEN_COOKIE, {
     path: '/',

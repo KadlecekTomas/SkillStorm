@@ -446,6 +446,25 @@ describe('Sprint 1 security hardening (e2e)', () => {
     ).rejects.toThrow();
   });
 
+  it('DB rejects moving an enrolled student to another org', async () => {
+    // Students-side path: the enrollment_org_consistency trigger only fires
+    // on enrollments writes, so without the composite FK
+    // enrollments(student_id, organization_id) → students this UPDATE would
+    // silently leave enrollmentA1 pointing cross-org.
+    await expect(
+      prisma.student.update({
+        where: { id: studentA.studentId },
+        data: { orgId: orgB.id },
+      }),
+    ).rejects.toThrow();
+
+    const student = await prisma.student.findUniqueOrThrow({
+      where: { id: studentA.studentId },
+      select: { orgId: true },
+    });
+    expect(student.orgId).toBe(orgA.id);
+  });
+
   it('API blocks creating second active academic year (400), DB prevents direct SQL', async () => {
     // Contract: POST with isActive=true while a current year exists is a
     // 400 CURRENT_YEAR_ALREADY_EXISTS (switching goes through /activate).

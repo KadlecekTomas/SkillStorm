@@ -1,3 +1,4 @@
+import { GuardianLaunchPolicy } from '@prisma/client';
 import {
   IsUUID,
   IsDateString,
@@ -6,6 +7,7 @@ import {
   IsOptional,
   IsBoolean,
   IsString,
+  IsEnum,
 } from 'class-validator';
 
 export class AssignTestDto {
@@ -39,4 +41,9 @@ export class AssignTestDto {
 
   @IsString()
   showExplain!: string;
+
+  /** Guardian Etapa C: rodičovské spuštění (default DISABLED — princip 4). */
+  @IsOptional()
+  @IsEnum(GuardianLaunchPolicy)
+  guardianLaunchPolicy?: GuardianLaunchPolicy;
 }

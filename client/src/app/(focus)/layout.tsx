@@ -6,6 +6,7 @@ import { OrganizationGate } from "@/components/onboarding/OrganizationGate";
 import { BootstrapGate } from "@/components/onboarding/BootstrapGate";
 import { AppReadinessGate } from "@/components/app-state/AppReadinessGate";
 import { useAuth } from "@/hooks/use-auth";
+import { StudentSessionBar } from "@/components/guardian/student-session-bar";
 
 /**
  * Focus group layout.
@@ -26,7 +27,10 @@ export default function FocusGroupLayout({
     <GuardBoundary>
       <OrganizationGate>
         <BootstrapGate chrome={false}>
-          <AppReadinessGate>{children}</AppReadinessGate>
+          <AppReadinessGate>
+            <StudentSessionBar />
+            {children}
+          </AppReadinessGate>
         </BootstrapGate>
       </OrganizationGate>
     </GuardBoundary>

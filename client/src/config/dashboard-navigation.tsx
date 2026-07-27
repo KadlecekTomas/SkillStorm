@@ -8,6 +8,7 @@ import {
   LibraryBig,
   LineChart,
   Settings,
+  HeartHandshake,
 } from "lucide-react";
 
 export type DashboardNavItem = {
@@ -24,5 +25,14 @@ export const DASHBOARD_NAV_ITEMS: DashboardNavItem[] = [
   { label: "Testy", route: "/app/tests", icon: <ClipboardList className={iconClass} /> },
   { label: "Knihovna", route: "/app/library", icon: <LibraryBig className={iconClass} /> },
   { label: "Výsledky", route: "/app/results", icon: <LineChart className={iconClass} /> },
+  { label: "Nastavení", route: "/app/settings", icon: <Settings className={iconClass} /> },
+];
+
+/**
+ * Rodič (guardian Etapa B) vidí jen rodinný prostor a nastavení — školní
+ * navigace pro něj nemá význam a jen by mátla (jedna dominantní akce).
+ */
+export const PARENT_NAV_ITEMS: DashboardNavItem[] = [
+  { label: "Moje děti", route: "/app/family", icon: <HeartHandshake className={iconClass} /> },
   { label: "Nastavení", route: "/app/settings", icon: <Settings className={iconClass} /> },
 ];

@@ -27,6 +27,14 @@ type SubmissionResult = {
     givenText: string;
     isCorrect: boolean | null;
   }>;
+  /** Guardian Etapa C — jen pro učitelský/ředitelský pohled. */
+  provenance?: {
+    initiatedVia: string | null;
+    verificationMethod: string | null;
+    assistanceDeclared: boolean;
+    initiatorName: string | null;
+    label: string;
+  };
 };
 
 type TestDetail = {
@@ -119,6 +127,19 @@ function SubmissionResultPage() {
         <p className="text-sm text-slate-500">
           Odevzdáno: {submission.submittedAt ? new Date(submission.submittedAt).toLocaleString("cs-CZ") : "zatím ne"}
         </p>
+        {submission.provenance && (
+          // Guardian Etapa C (spec bod 7): původ odevzdání lidsky — kdo
+          // spustil, jak byl žák ověřen, deklarovaná pomoc.
+          <p
+            className={
+              submission.provenance.initiatedVia
+                ? "rounded-xl bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900"
+                : "text-sm text-slate-500"
+            }
+          >
+            {submission.provenance.label}
+          </p>
+        )}
       </Card>
 
       {submission.status === "PENDING" && (

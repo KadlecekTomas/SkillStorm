@@ -34,6 +34,7 @@ import {
 } from '@prisma/client';
 import { createHash, randomBytes, randomUUID } from 'crypto';
 import { addDays, addHours } from 'date-fns';
+import { createPendingGuardianRelation } from '@/guardian/guardian-relation.helpers';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { GamificationService } from '@/gamification/gamification.service';
 import { AuditService } from '@/audit/audit.service';
@@ -75,6 +76,8 @@ type JwtClaims = {
   organizationId: string | null;
   membershipId: string | null;
   tokenVersion: number;
+  /** Guardian Etapa C: token žákovské relace — platnost relace ověřuje jwt.strategy per request. */
+  learningSessionId?: string;
 };
 
 export type AuthContextMode = 'platform' | 'organization' | 'personal';
@@ -253,6 +256,52 @@ export class AuthService {
 
     const refreshToken = await this.issueRefreshToken(user.id);
     return { accessToken, refreshToken };
+  }
+
+  /**
+   * Guardian Etapa C: access token žákovské relace („Spustit pro Matěje").
+   * TTL = zbytek relace, refresh token se NEVYDÁVÁ (relace se neobnovuje),
+   * claim learningSessionId validuje jwt.strategy proti stavu relace v DB
+   * při každém requestu — ukončení relace zneplatní token okamžitě.
+   */
+  public async issueLearningSessionToken(input: {
+    childUserId: string;
+    childMembershipId: string;
+    learningSessionId: string;
+    expiresAt: Date;
+  }): Promise<{ accessToken: string }> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: input.childUserId },
+    });
+    if (!user || user.status !== UserStatus.ACTIVE || user.deletedAt) {
+      throw new UnauthorizedException('Account disabled');
+    }
+    const membership = await this.prisma.membership.findFirst({
+      where: {
+        id: input.childMembershipId,
+        userId: input.childUserId,
+        deletedAt: null,
+      },
+    });
+    if (!membership) throw new UnauthorizedException('Membership not found');
+
+    const ttlSeconds = Math.max(
+      1,
+      Math.floor((input.expiresAt.getTime() - Date.now()) / 1000),
+    );
+    const claims: JwtClaims = {
+      ...this.buildClaims(user, membership, OrganizationRole.STUDENT),
+      learningSessionId: input.learningSessionId,
+    };
+    const accessToken = this.jwtService.sign(
+      { ...claims },
+      {
+        secret: getJwtAccessSecret(this.config),
+        expiresIn: ttlSeconds,
+        jwtid: randomUUID(),
+      },
+    );
+    return { accessToken };
   }
 
   private async rotateRefreshToken(token: string) {
@@ -487,6 +536,8 @@ export class AuthService {
       maxUses: number;
       usedCount: number;
       revokedAt: Date | null;
+      targetStudentId?: string | null;
+      createdById?: string | null;
     },
     now: Date,
     context?: { token?: string; ip?: string },
@@ -559,6 +610,18 @@ export class AuthService {
           'Invite role is not allowed for ORG_ONLY.',
         );
       }
+    }
+
+    // Guardian Etapa B: párovací kód zakládá PENDING vztah k cílovému
+    // žákovi; potvrzení/rozporování řeší rodič na potvrzovací obrazovce.
+    if (invite.type === InvitationType.GUARDIAN) {
+      await createPendingGuardianRelation(tx, membership.id, {
+        organizationId: invite.organizationId,
+        role: invite.role,
+        type: invite.type,
+        targetStudentId: invite.targetStudentId ?? null,
+        createdById: invite.createdById ?? null,
+      });
     }
 
     if (invite.role === OrganizationRole.TEACHER) {
@@ -686,6 +749,43 @@ export class AuthService {
    * členství nevzniká. STUDENT je exkluzivní (STOP #1). STUDENT_CLASS
    * invite existující členství nepodporuje (enrollment řeší škola).
    */
+  /**
+   * GUARDIAN kód přijatý uživatelem, který PARENT roli v organizaci už má:
+   * role se nemění, jen vznikne PENDING vztah k dalšímu dítěti a kód se
+   * spotřebuje. (Např. rodič druhého dítěte v téže škole.)
+   */
+  public async attachGuardianRelationFromInvite(
+    tx: Prisma.TransactionClient,
+    membershipId: string,
+    invite: {
+      id: string;
+      organizationId: string;
+      role: OrganizationRole;
+      type: InvitationType;
+      maxUses: number;
+      targetStudentId?: string | null;
+      createdById?: string | null;
+    },
+    now: Date,
+    context?: { token?: string; ip?: string },
+  ) {
+    await createPendingGuardianRelation(tx, membershipId, {
+      organizationId: invite.organizationId,
+      role: invite.role,
+      type: invite.type,
+      targetStudentId: invite.targetStudentId ?? null,
+      createdById: invite.createdById ?? null,
+    });
+    await this.consumeInviteOrThrow(
+      tx,
+      invite.id,
+      now,
+      invite.maxUses,
+      context?.token,
+      context?.ip,
+    );
+  }
+
   public async addRoleFromInvite(
     tx: Prisma.TransactionClient,
     userId: string,
@@ -701,6 +801,8 @@ export class AuthService {
       role: OrganizationRole;
       type: InvitationType;
       maxUses: number;
+      targetStudentId?: string | null;
+      createdById?: string | null;
     },
     now: Date,
     context?: { token?: string; ip?: string },
@@ -756,6 +858,18 @@ export class AuthService {
           data: { deletedAt: null },
         });
       }
+    }
+
+    // Guardian Etapa B: GUARDIAN kód na existující membership přidá PARENT
+    // roli výše a tady založí PENDING vztah k cílovému žákovi.
+    if (invite.type === InvitationType.GUARDIAN) {
+      await createPendingGuardianRelation(tx, membership.id, {
+        organizationId: invite.organizationId,
+        role: invite.role,
+        type: invite.type,
+        targetStudentId: invite.targetStudentId ?? null,
+        createdById: invite.createdById ?? null,
+      });
     }
 
     await tx.user.update({
