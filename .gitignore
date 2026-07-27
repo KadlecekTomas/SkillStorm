@@ -31,3 +31,7 @@ docs/screenshots/portfolio/.frame-*.html
 
 # Zastaralý build artefakt (server/.dockerignore ho ignoruje taky)
 disttmp/
+
+# Playwright-generated authenticated browser state — obsahuje živé session
+# cookies (access/refresh token). Regeneruje se v auth.setup.ts při každém běhu.
+client/tests/scenarios/.auth/
