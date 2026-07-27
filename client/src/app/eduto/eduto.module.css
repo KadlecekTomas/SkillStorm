@@ -1,0 +1,746 @@
+/*
+ * Eduto landing — CSS Module (scoped, žádná kolize s globals.css ani Tailwind).
+ *
+ * PRAVIDLO VERTIKÁLNÍHO RYTMU (nerušit):
+ * Blokový padding mezi sekcemi nastavuje VÝHRADNĚ .section.
+ * Žádná jiná třída nesmí sahat na padding-block / margin-block na úrovni sekce.
+ * Vnitřní odsazení řeší gap uvnitř gridů a flexů.
+ */
+
+.page {
+  /* --- barvy --- */
+  --tabule: #101a17;
+  --papir: #eff1ea;
+  --papir-ryha: #e2e6da;
+  --zvyraznovac: #e4a11b;
+  --hloubka: #26514a;
+  --tisk: #5b665f;
+
+  /* mono přebíráme z root layoutu (IBM Plex Mono, už v bundlu) */
+  --eduto-mono: var(--font-plex-mono);
+
+  /* role, které se v tmavé sekci překlopí */
+  --ground: var(--papir);
+  --text: var(--tabule);
+  --text-tlumeny: var(--tisk);
+  --linka: var(--papir-ryha);
+  --plocha: #f7f8f4;
+
+  /* --- rytmus --- */
+  --sekce-y: 4.5rem;
+  --sirka: 68rem;
+  --okraj-x: 1.25rem;
+
+  background: var(--ground);
+  color: var(--text);
+  font-family: var(--eduto-body), Georgia, "Times New Roman", serif;
+  font-size: 1.0625rem;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+
+@media (min-width: 48rem) {
+  .page {
+    --sekce-y: 6rem;
+    --okraj-x: 2rem;
+    font-size: 1.125rem;
+  }
+}
+
+@media (min-width: 64rem) {
+  .page {
+    --sekce-y: 7.5rem;
+    --okraj-x: 2.5rem;
+  }
+}
+
+/* ---------- sekce a marginální mřížka ---------- */
+
+.section {
+  padding-block: var(--sekce-y);
+  background: var(--ground);
+  color: var(--text);
+}
+
+.section + .section {
+  border-top: 1px solid var(--linka);
+}
+
+/* tmavá polovina — překlopí role, ne jednotlivé prvky */
+.dark {
+  --ground: var(--tabule);
+  --text: var(--papir);
+  --text-tlumeny: #97a49b;
+  --linka: #24352f;
+  --plocha: #17241f;
+}
+
+.dark + .dark {
+  border-top-color: var(--linka);
+}
+
+.shell {
+  max-width: var(--sirka);
+  margin-inline: auto;
+  padding-inline: var(--okraj-x);
+}
+
+/* „Opravený sešit" — okraj vlevo, tělo vpravo. Do 64rem okraj kolabuje nad blok. */
+.sheet {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+}
+
+@media (min-width: 64rem) {
+  .sheet {
+    grid-template-columns: 10rem 1fr;
+    gap: 3rem;
+  }
+}
+
+.marginalie {
+  font-family: var(--eduto-mono, var(--font-plex-mono)), ui-monospace, monospace;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-tlumeny);
+  border-top: 1px solid var(--linka);
+  padding-top: 0.5rem;
+}
+
+@media (min-width: 64rem) {
+  .marginalie {
+    border-top: none;
+    padding-top: 0.4rem;
+    text-align: right;
+    position: sticky;
+    top: 2rem;
+    align-self: start;
+  }
+}
+
+.marginalie span {
+  display: block;
+  text-transform: none;
+  letter-spacing: 0.02em;
+  color: var(--text-tlumeny);
+  margin-top: 0.35rem;
+}
+
+/* ---------- typografie ---------- */
+
+.h1,
+.h2 {
+  font-family: var(--eduto-display), system-ui, sans-serif;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  line-height: 1.05;
+  text-wrap: balance;
+  margin: 0;
+}
+
+/* strop drží signature moment (heroSheet) nad ohybem i na 1280×800 */
+.h1 {
+  font-size: clamp(2.125rem, 5.6vw, 3.375rem);
+}
+
+.h2 {
+  font-size: clamp(1.75rem, 4.5vw, 2.75rem);
+  margin-bottom: 1.25rem;
+}
+
+.h3 {
+  font-family: var(--eduto-display), system-ui, sans-serif;
+  font-weight: 600;
+  font-size: 1.25rem;
+  letter-spacing: -0.015em;
+  line-height: 1.25;
+  margin: 0 0 0.5rem;
+}
+
+.lead {
+  font-size: 1.1875rem;
+  color: var(--text-tlumeny);
+  max-width: 44ch;
+  margin: 1.25rem 0 0;
+}
+
+.p {
+  margin: 0;
+  max-width: 62ch;
+}
+
+.p + .p {
+  margin-top: 1rem;
+}
+
+/* signature: zvýrazňovač. Jediný ornament stránky.
+   Podtrhává výhradně slova, která pojmenovávají odstraněnou práci. */
+.mark {
+  position: relative;
+  /* z-index:0 vytvoří stacking context, jinak ::before propadne za pozadí stránky */
+  z-index: 0;
+  white-space: nowrap;
+}
+
+.mark::before {
+  content: "";
+  position: absolute;
+  left: -0.12em;
+  right: -0.12em;
+  bottom: 0.06em;
+  height: 0.42em;
+  background: var(--zvyraznovac);
+  opacity: 0.42;
+  z-index: -1;
+  transform-origin: left center;
+  border-radius: 0.06em;
+}
+
+/* ---------- hero ---------- */
+
+.hero {
+  padding-block: calc(var(--sekce-y) * 0.7) var(--sekce-y);
+}
+
+/* úplně první marginálie na stránce — linka nad ní by vypadala jako artefakt */
+.hero .marginalie {
+  border-top: none;
+  padding-top: 0;
+}
+
+.hero .lead {
+  margin-top: 1rem;
+}
+
+.hero .cta {
+  margin-top: 1.5rem;
+}
+
+.heroSheet {
+  background: var(--plocha);
+  border: 1px solid var(--linka);
+  border-radius: 2px;
+  padding: clamp(1.25rem, 3vw, 2rem);
+  margin-top: 2rem;
+}
+
+.radekLabel {
+  font-family: var(--eduto-mono, var(--font-plex-mono)), ui-monospace, monospace;
+  font-size: 0.6875rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-tlumeny);
+  margin: 0 0 0.75rem;
+}
+
+.otazka {
+  font-weight: 600;
+  margin: 0 0 1rem;
+}
+
+.dlazdice {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.5rem;
+}
+
+@media (min-width: 40rem) {
+  .dlazdice {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.dlazdice li {
+  list-style: none;
+  border: 1px solid var(--linka);
+  border-radius: 2px;
+  background: var(--ground);
+  padding: 0.75rem 1rem;
+  font-size: 1rem;
+}
+
+.vybrano {
+  border-color: var(--hloubka);
+  box-shadow: inset 0 0 0 1px var(--hloubka);
+}
+
+.ucitelskyRadek {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem 1rem;
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px dashed var(--linka);
+  font-family: var(--eduto-mono, var(--font-plex-mono)), ui-monospace, monospace;
+  font-size: 0.8125rem;
+  letter-spacing: 0.04em;
+  color: var(--hloubka);
+}
+
+.ucitelskyRadek strong {
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* --- jediná orchestrovaná sekvence, ~1,8 s, jednorázová ---
+   Základní stav = koncový stav. Keyframes animují Z počátku,
+   takže při prefers-reduced-motion (animation: none) je vše rovnou vidět. */
+
+@keyframes edutoPrichod {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@keyframes edutoVyber {
+  from {
+    border-color: var(--linka);
+    box-shadow: inset 0 0 0 1px transparent;
+  }
+}
+
+@keyframes edutoMarker {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .heroSheet .dlazdice li {
+    animation: edutoPrichod 0.45s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+  }
+
+  .heroSheet .dlazdice li:nth-child(1) {
+    animation-delay: 0.15s;
+  }
+
+  .heroSheet .dlazdice li:nth-child(2) {
+    animation-delay: 0.25s;
+  }
+
+  .heroSheet .dlazdice li:nth-child(3) {
+    animation-delay: 0.35s;
+  }
+
+  /* 1. doba — vybere se odpověď */
+  .vybrano {
+    animation: edutoVyber 0.35s ease-out 0.7s both;
+  }
+
+  /* 2. doba — přejede zvýrazňovač */
+  .hero .mark::before {
+    animation: edutoMarker 0.45s cubic-bezier(0.3, 0.8, 0.4, 1) 1.05s both;
+  }
+
+  /* 3. doba — naskočí učitelská strana, bez mezikroku */
+  .ucitelskyRadek {
+    animation: edutoPrichod 0.5s cubic-bezier(0.2, 0.7, 0.3, 1) 1.45s both;
+  }
+}
+
+/* ---------- CTA ---------- */
+
+.cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 2rem;
+}
+
+.btnPrimar,
+.btnSekundar {
+  font-family: var(--eduto-mono, var(--font-plex-mono)), ui-monospace, monospace;
+  font-size: 0.8125rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.85rem 1.5rem;
+  border-radius: 2px;
+  border: 1px solid var(--text);
+  cursor: pointer;
+  transition: background-color 0.18s ease, color 0.18s ease,
+    border-color 0.18s ease;
+}
+
+.btnPrimar {
+  background: var(--text);
+  color: var(--ground);
+}
+
+.btnPrimar:hover {
+  background: var(--hloubka);
+  border-color: var(--hloubka);
+}
+
+.btnSekundar {
+  background: transparent;
+  color: var(--text);
+  text-decoration: none;
+  display: inline-block;
+}
+
+.btnSekundar:hover {
+  border-color: var(--hloubka);
+  color: var(--hloubka);
+}
+
+.page :is(a, button, summary):focus-visible {
+  outline: 3px solid var(--zvyraznovac);
+  outline-offset: 3px;
+}
+
+/* ---------- obrázky ---------- */
+
+.shotRam {
+  border: 1px solid var(--linka);
+  border-radius: 2px;
+  overflow: hidden;
+  background: var(--plocha);
+  line-height: 0;
+}
+
+.shotRam img {
+  width: 100%;
+  height: auto;
+}
+
+/* sekce 02 — záběr přes celou šířku viewportu, mimo .shell */
+.plnaSirka {
+  margin-top: 2rem;
+  border-block: 1px solid var(--linka);
+  background: var(--plocha);
+  line-height: 0;
+}
+
+.plnaSirka img {
+  width: 100%;
+  height: auto;
+}
+
+.popisek {
+  font-family: var(--eduto-mono, var(--font-plex-mono)), ui-monospace, monospace;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  color: var(--text-tlumeny);
+  margin: 0.75rem 0 0;
+}
+
+/* ---------- 03 problém → řešení (jediný scroll reveal) ---------- */
+
+.kroky {
+  margin: 2rem 0 0;
+  padding: 0;
+  max-width: 44rem;
+}
+
+.krok {
+  list-style: none;
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  padding: 0.9rem 0;
+  border-bottom: 1px solid var(--linka);
+}
+
+.krokCislo {
+  font-family: var(--eduto-mono, var(--font-plex-mono)), ui-monospace, monospace;
+  font-size: 0.75rem;
+  color: var(--text-tlumeny);
+  flex: none;
+  width: 2rem;
+}
+
+.krokText {
+  position: relative;
+}
+
+.krokText::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 55%;
+  height: 2px;
+  background: var(--zvyraznovac);
+  transform: scaleX(0);
+  transform-origin: left center;
+}
+
+.zbytek {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  padding: 1.25rem 0 0;
+  font-weight: 600;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .kroky[data-revealed="true"] .krokText::after {
+    transition: transform 0.5s cubic-bezier(0.3, 0.8, 0.4, 1);
+    transform: scaleX(1);
+  }
+
+  .kroky[data-revealed="true"] .krok:nth-child(2) .krokText::after {
+    transition-delay: 0.12s;
+  }
+
+  .kroky[data-revealed="true"] .krok:nth-child(3) .krokText::after {
+    transition-delay: 0.24s;
+  }
+
+  .kroky .zbytek {
+    opacity: 0;
+    transition: opacity 0.5s ease 0.5s;
+  }
+
+  .kroky[data-revealed="true"] .zbytek {
+    opacity: 1;
+  }
+}
+
+/* bez pohybu: koncový stav rovnou */
+@media (prefers-reduced-motion: reduce) {
+  .krokText::after {
+    transform: scaleX(1);
+  }
+}
+
+/* ---------- 04 funkce ---------- */
+
+.funkce {
+  display: grid;
+  gap: 2rem;
+  align-items: center;
+}
+
+.funkce + .funkce {
+  margin-top: 4rem;
+  padding-top: 4rem;
+  border-top: 1px solid var(--linka);
+}
+
+@media (min-width: 64rem) {
+  .funkce {
+    grid-template-columns: 1fr 1.35fr;
+    gap: 3.5rem;
+  }
+
+  .obracene .funkceText {
+    order: 2;
+  }
+}
+
+/* ---------- 05 Kde jsme ---------- */
+
+.pilire {
+  margin: 2.5rem 0 0;
+  padding: 0;
+}
+
+.pilir {
+  list-style: none;
+  display: grid;
+  gap: 0.5rem;
+  padding: 1.5rem 0;
+  border-top: 1px solid var(--linka);
+}
+
+@media (min-width: 64rem) {
+  .pilir {
+    grid-template-columns: 1fr 16rem;
+    gap: 3rem;
+    align-items: start;
+  }
+}
+
+.pilirText {
+  font-size: 1.0625rem;
+  margin: 0;
+  max-width: 52ch;
+}
+
+@media (min-width: 48rem) {
+  .pilirText {
+    font-size: 1.1875rem;
+  }
+}
+
+.pilirDukaz {
+  font-family: var(--eduto-mono, var(--font-plex-mono)), ui-monospace, monospace;
+  font-size: 0.75rem;
+  line-height: 1.6;
+  letter-spacing: 0.03em;
+  color: var(--text-tlumeny);
+  margin: 0;
+}
+
+/* ---------- 06 technika ---------- */
+
+.techMrizka {
+  display: grid;
+  gap: 1.5rem;
+  margin-top: 2.5rem;
+}
+
+@media (min-width: 48rem) {
+  .techMrizka {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 2rem 3rem;
+  }
+}
+
+.techPolozka h3 {
+  font-family: var(--eduto-mono, var(--font-plex-mono)), ui-monospace, monospace;
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--zvyraznovac);
+  margin: 0 0 0.5rem;
+  font-weight: 500;
+}
+
+.techPolozka p {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--text);
+}
+
+.odkazy {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  margin-top: 2.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--linka);
+}
+
+.odkaz {
+  color: var(--text);
+  text-decoration: none;
+  font-family: var(--eduto-mono, var(--font-plex-mono)), ui-monospace, monospace;
+  font-size: 0.8125rem;
+  letter-spacing: 0.06em;
+  position: relative;
+  padding-bottom: 2px;
+}
+
+.odkaz::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 1px;
+  background: var(--zvyraznovac);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 0.22s ease;
+}
+
+.odkaz:hover::after {
+  transform: scaleX(1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .odkaz::after {
+    transition: none;
+  }
+}
+
+/* ---------- 07 autor ---------- */
+
+.autor {
+  display: grid;
+  gap: 1.5rem;
+  max-width: 46rem;
+}
+
+.paticka {
+  padding-block: 2.5rem;
+  background: var(--tabule);
+  color: #97a49b;
+  border-top: 1px solid #24352f;
+  font-family: var(--eduto-mono, var(--font-plex-mono)), ui-monospace, monospace;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+}
+
+/* ---------- modál s videem ---------- */
+
+.modal {
+  border: none;
+  padding: 0;
+  background: transparent;
+  max-width: min(60rem, 92vw);
+  width: 100%;
+}
+
+.modal::backdrop {
+  background: rgb(16 26 23 / 0.82);
+}
+
+.modalObsah {
+  background: var(--tabule);
+  border: 1px solid #24352f;
+  border-radius: 2px;
+  padding: 1rem;
+}
+
+.modalHlavicka {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.modalTitulek {
+  font-family: var(--eduto-mono, var(--font-plex-mono)), ui-monospace, monospace;
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #97a49b;
+  margin: 0;
+}
+
+.modalZavrit {
+  background: transparent;
+  border: 1px solid #3a4d46;
+  color: #eff1ea;
+  font-family: var(--eduto-mono, var(--font-plex-mono)), ui-monospace, monospace;
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  padding: 0.5rem 0.9rem;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.modalZavrit:hover {
+  border-color: var(--zvyraznovac);
+}
+
+.modalVideo {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  display: block;
+  background: #0a120f;
+}
+
+.modalChybi {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  aspect-ratio: 16 / 9;
+  background: #0a120f;
+  border: 1px dashed #3a4d46;
+  color: #97a49b;
+  font-family: var(--eduto-mono, var(--font-plex-mono)), ui-monospace, monospace;
+  font-size: 0.8125rem;
+  padding: 1.5rem;
+}
