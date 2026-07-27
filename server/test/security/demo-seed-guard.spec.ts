@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 /**
@@ -66,6 +67,39 @@ describe('demo seed — produkční guard', () => {
     // Guard mlčí; skript pokračuje a padne až na nedostupné databázi.
     expect(output).not.toContain('ALLOW_DEMO_SEED_IN_PRODUCTION=1 to override');
     expect(output).toMatch(/Can't reach database server|ECONNREFUSED|P1001/i);
+  });
+});
+
+describe('demo seed — heslo z prostředí', () => {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { runDemoSeed } = require('../../prisma/demo-seed') as {
+    runDemoSeed: () => Promise<void>;
+  };
+  const ORIGINAL = process.env.DEMO_PASSWORD;
+
+  afterEach(() => {
+    if (ORIGINAL === undefined) delete process.env.DEMO_PASSWORD;
+    else process.env.DEMO_PASSWORD = ORIGINAL;
+  });
+
+  it('bez DEMO_PASSWORD odmítne běžet', async () => {
+    delete process.env.DEMO_PASSWORD;
+    await expect(runDemoSeed()).rejects.toThrow(/at least 16 characters/i);
+  });
+
+  it('krátké heslo odmítne — i to původní z repa', async () => {
+    process.env.DEMO_PASSWORD = 'Password123!';
+    await expect(runDemoSeed()).rejects.toThrow(/at least 16 characters/i);
+  });
+
+  it('zdrojový kód demo seedu neobsahuje heslo natvrdo', () => {
+    const src = readFileSync(
+      join(SERVER_ROOT, 'prisma', 'demo-seed.js'),
+      'utf8',
+    );
+    // Přiřazení literálu do DEMO_PASSWORD se sem nesmí vrátit.
+    expect(src).toMatch(/const DEMO_PASSWORD = process\.env\.DEMO_PASSWORD/);
+    expect(src).not.toMatch(/const DEMO_PASSWORD = ['"][^'"]+['"]/);
   });
 });
 

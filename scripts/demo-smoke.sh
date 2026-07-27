@@ -9,7 +9,13 @@ trap 'rm -f "$COOKIE_JAR"; rm -rf "$TMP_DIR"' EXIT
 FRONTEND_URL="${FRONTEND_URL:-http://localhost:3000}"
 BACKEND_URL="${BACKEND_URL:-http://localhost:4200}"
 STUDENT_EMAIL="${DEMO_STUDENT_EMAIL:-student-d@zs.demo.local}"
-STUDENT_PASSWORD="${DEMO_STUDENT_PASSWORD:-Password123!}"
+
+# Demo seed už heslo nedrží v repu (vyžaduje DEMO_PASSWORD, min. 16 znaků).
+# Pro smoke test si vygenerujeme jednorázové — není co uniknout a zároveň to
+# ověří, že seed s heslem z prostředí opravdu funguje.
+DEMO_PASSWORD="${DEMO_PASSWORD:-$(LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 24)}"
+export DEMO_PASSWORD
+STUDENT_PASSWORD="${DEMO_STUDENT_PASSWORD:-$DEMO_PASSWORD}"
 
 wait_for_health() {
   local service="$1"
@@ -70,7 +76,7 @@ echo "Backend /health OK"
 # docker-compose.yml má výchozí NODE_ENV=production, takže demo seed narazí na
 # guard v prisma/seed-guards.js. Tady je to vědomé: jde o lokální jednorázový
 # smoke test proti dočasnému kontejneru, ne o nasazené prostředí.
-docker compose exec -T backend sh -lc \
+docker compose exec -T -e DEMO_PASSWORD="$DEMO_PASSWORD" backend sh -lc \
   'ALLOW_DEMO_SEED_IN_PRODUCTION=1 DEMO_SEED=1 npm run db:seed'
 echo "Demo seed profile applied"
 

@@ -45,6 +45,10 @@ services:
         value: "0"
       - key: DEMO_MODE
         value: "1"
+      # Demo seed heslo v repu není. Když DEMO_SEED zapneš, nastav ho v
+      # Render UI (min. 16 znaků) — jinak seed při deployi selže.
+      - key: DEMO_PASSWORD
+        sync: false
       - key: ALLOW_PUBLIC_ORG_CREATION
         value: "true"
       - key: ENABLE_RBAC_TELEMETRY_CLIENT
