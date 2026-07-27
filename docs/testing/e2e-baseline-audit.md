@@ -5,7 +5,7 @@
 > **odděleně** od analytics PR (`feat/analytics-submission-facts`).
 >
 > **Datum:** 2026-06-16
-> **Prostředí:** lokální Postgres `skillstorm_test` @ localhost:5432, `NODE_ENV=test`,
+> **Prostředí:** lokální Postgres `eduto_test` @ localhost:5432, `NODE_ENV=test`,
 > `jest --config ./test/jest-e2e.config.js --maxWorkers=1`.
 
 ---

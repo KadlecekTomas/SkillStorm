@@ -38,6 +38,10 @@ COPY package*.json ./
 COPY prisma ./prisma
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
+# Runtime assets — definice kampaní leží mimo src/, takže je nest build
+# nekopíruje do dist/. CampaignContentService je čte při startu z
+# process.cwd()/content/campaigns (WORKDIR /app) a bez nich fail-fast spadne.
+COPY content ./content
 COPY entrypoint.sh ./entrypoint.sh
 
 RUN chmod +x /app/entrypoint.sh

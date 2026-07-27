@@ -89,6 +89,90 @@ describe('RbacService (unit)', () => {
     expect(afterInvalidation).toBe(false);
   });
 
+  // ── INV4: PARENT nesmí získat generické oprávnění ──────────────────────────
+  describe('INV4 — PARENT generic-permission invariant', () => {
+    beforeEach(() => {
+      prismaMock.user.findUnique.mockResolvedValue({ systemRole: null } as any);
+      prismaMock.membership.findFirst.mockResolvedValue({
+        role: 'PARENT',
+        organizationId: 'org-1',
+      } as any);
+    });
+
+    it('aktivní PARENT role je odepřena i při org-scoped UserPermission(allowed=true)', async () => {
+      // UserPermission by "povolil" — nesmí být ani dotázán (gate je před ním).
+      prismaMock.userPermission.findFirst.mockResolvedValue({ id: 'up-1' } as any);
+
+      const allowed = await service.canUser(
+        'parent-1',
+        'org-1',
+        PermissionKey.VIEW_RESULTS,
+        'PARENT',
+      );
+
+      expect(allowed).toBe(false);
+      expect(prismaMock.userPermission.findFirst).not.toHaveBeenCalled();
+      expect(prismaMock.rolePermission.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('aktivní PARENT role je odepřena i při globální UserPermission (organizationId=null)', async () => {
+      prismaMock.userPermission.findFirst.mockResolvedValue({ id: 'up-global' } as any);
+
+      const allowed = await service.canUser(
+        'parent-1',
+        null,
+        PermissionKey.VIEW_RESULTS,
+        'PARENT',
+      );
+
+      expect(allowed).toBe(false);
+      expect(prismaMock.userPermission.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('PARENT jako primární role (bez activeRole) je také odepřena', async () => {
+      prismaMock.userPermission.findFirst.mockResolvedValue({ id: 'up-2' } as any);
+
+      const allowed = await service.canUser(
+        'parent-1',
+        'org-1',
+        PermissionKey.VIEW_SUBMISSIONS,
+      );
+
+      expect(allowed).toBe(false);
+      expect(prismaMock.userPermission.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('resolver vrací pro PARENT nulovou generickou množinu (canUserMultiple)', async () => {
+      prismaMock.userPermission.findFirst.mockResolvedValue({ id: 'up-3' } as any);
+      const keys = Object.values(PermissionKey);
+
+      const map = await service.canUserMultiple('parent-1', 'org-1', keys, 'PARENT');
+
+      expect(Object.values(map).every((v) => v === false)).toBe(true);
+      expect(keys.every((k) => map[k] === false)).toBe(true);
+    });
+  });
+
+  it('non-PARENT role (TEACHER) si UserPermission override zachová', async () => {
+    // Regrese proti přehnané opravě: legitimní user override musí dál fungovat.
+    prismaMock.user.findUnique.mockResolvedValue({ systemRole: null } as any);
+    prismaMock.membership.findFirst.mockResolvedValue({
+      role: 'TEACHER',
+      organizationId: 'org-9',
+    } as any);
+    prismaMock.userPermission.findFirst.mockResolvedValue({ id: 'up-teacher' } as any);
+
+    const allowed = await service.canUser(
+      'teacher-1',
+      'org-9',
+      PermissionKey.MANAGE_STUDENTS,
+      'TEACHER',
+    );
+
+    expect(allowed).toBe(true);
+    expect(prismaMock.userPermission.findFirst).toHaveBeenCalled();
+  });
+
   it('invalidates cache when userId changes permissions', async () => {
     prismaMock.user.findUnique.mockResolvedValue({ systemRole: null } as any);
     prismaMock.userPermission.findFirst.mockResolvedValue(null);

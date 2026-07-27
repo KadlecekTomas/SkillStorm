@@ -11,15 +11,76 @@ ls -lt backups/daily/ | head
 
 # 2. Obnov ji do NOVÉ databáze (nikdy nepřepisuj původní, dokud si nejsi jistý)
 scripts/ops/restore-db.sh \
-  --file backups/daily/skillstorm_YYYYMMDD_HHMMSS.dump \
-  --target-db skillstorm_restore_test --recreate
+  --file backups/daily/eduto_YYYYMMDD_HHMMSS.dump \
+  --target-db eduto_restore_test --recreate
 
 # 3. Ověř obnovená data smoke testem (sekce „Smoke test" níže)
 
 # 4. Teprve po úspěšném smoke testu přepni aplikaci na obnovenou DB,
 #    NEBO obnov do produkčního názvu (vyžádá si interaktivní potvrzení):
-scripts/ops/restore-db.sh --file <dump> --target-db skillstorm --recreate
+scripts/ops/restore-db.sh --file <dump> --target-db eduto --recreate
 ```
+
+## Co dělá Render a co si musíš zařídit sám
+
+Ověřeno v dokumentaci Renderu 27. 7. 2026 — před spuštěním produkce si to
+potvrď v jejich UI, ceníky a limity se mění.
+
+| | Free | Hobby (placený) | Pro a výš |
+|---|---|---|---|
+| Point-in-time recovery | **není** | posledních **3 dny** | posledních **7 dní** |
+| Logické zálohy (export) | **nevytváří se** | ruční export z dashboardu | ruční export z dashboardu |
+| Retence logických záloh | — | 7 dní od vytvoření | 7 dní od vytvoření |
+| Automatická denní záloha | **ne** | **ne** | **ne** |
+
+Tři věci, které z toho plynou a které se snadno přehlédnou:
+
+1. **Render nedělá automatické logické zálohy na žádném plánu.** PITR je
+   něco jiného — obnovuje instanci do bodu v čase, ale je vázaný na běžící
+   instanci. Když ti někdo smaže instanci nebo vyprší platba, PITR ti
+   nepomůže. Vlastní dumpy přes `backup-db.sh` jsou proto povinné, ne
+   doplňkové.
+2. **Free Postgres vyprší 30 dní po vytvoření** a po dalších 14 dnech
+   Render databázi i s daty smaže. Limit 1 GB, žádné zálohy. Pro data žáků
+   je Free instance vyloučená.
+3. **Retence 7 dní u logických záloh je krátká.** Chyba, kterou nikdo
+   nezpozoruje do týdne (například tichý mazací skript), přežije celé
+   Render okno. Vlastní dumpy s rotací 7 denních + 4 týdenní jsou to,
+   co takový případ pokrývá.
+
+**Dělitelnost odpovědnosti:**
+
+- *Render:* PITR na placeném plánu, dostupnost instance, ruční export z UI.
+- *Ty:* denní `backup-db.sh` z cronu, odvoz dumpů mimo Render (S3/rsync),
+  měsíční cvičení obnovy, hlídání, že cron opravdu běží.
+
+## Nanečisto obnova (restore drill)
+
+Záloha, kterou jsi nikdy neobnovil, není záloha. Skript
+`scripts/ops/restore-drill.sh` vezme poslední dump, obnoví ho do dočasné
+databáze, ověří ho a po sobě uklidí. Nic produkčního nesahá.
+
+```bash
+PGHOST=localhost PGPORT=5433 PGUSER=postgres PGPASSWORD=postgres \
+  scripts/ops/restore-drill.sh
+```
+
+Co kontroluje:
+
+- SHA-256 checksum dumpu (poškozený dump budí falešný klid),
+- že záloha není starší než 2 dny — tím se pozná, že cron přestal běhat,
+- že `pg_restore` neskončil skutečnou chybou (verzní šum se ignoruje),
+- že schéma má přes 20 tabulek a `users`, `organizations`, `memberships`
+  nejsou prázdné — prázdná databáze by „obnovou" prošla taky,
+- že nejsou osiřelá členství (obnova, která rozbije tenanty, je k ničemu),
+- že v `_prisma_migrations` nezůstala nedokončená migrace.
+
+Vrací nenulový kód při selhání, takže se dá pověsit do cronu jako měsíční
+cvičení. `--keep` nechá obnovenou databázi k ručnímu prohlédnutí,
+`--file` vybere konkrétní zálohu.
+
+**Doporučená kadence:** jednou měsíčně a vždy po změně schématu, která
+mění migrace.
 
 ## Jak fungují zálohy
 
@@ -33,14 +94,14 @@ scripts/ops/restore-db.sh --file <dump> --target-db skillstorm --recreate
 Ruční spuštění zálohy:
 
 ```bash
-DATABASE_URL='postgresql://postgres:postgres@localhost:5433/skillstorm' \
+DATABASE_URL='postgresql://postgres:postgres@localhost:5433/eduto' \
   scripts/ops/backup-db.sh
 ```
 
 Doporučený cron (denně ve 2:00, viz `crontab -e` na serveru):
 
 ```cron
-0 2 * * * cd /path/to/SkillStorm && DATABASE_URL='<produkční URL>' BACKUP_DIR=/var/backups/skillstorm scripts/ops/backup-db.sh >> /var/log/skillstorm-backup.log 2>&1
+0 2 * * * cd /path/to/Eduto && DATABASE_URL='<produkční URL>' BACKUP_DIR=/var/backups/skillstorm scripts/ops/backup-db.sh >> /var/log/skillstorm-backup.log 2>&1
 ```
 
 > Zálohy ukládej mimo stroj s databází (rsync/S3 sync adresáře
@@ -64,7 +125,7 @@ Doporučený cron (denně ve 2:00, viz `crontab -e` na serveru):
 3. **Obnov do zkušební databáze** (`*_test` název → bez potvrzování):
 
    ```bash
-   scripts/ops/restore-db.sh --file <dump> --target-db skillstorm_restore_test --recreate
+   scripts/ops/restore-db.sh --file <dump> --target-db eduto_restore_test --recreate
    ```
 
    Connection na admin úrovni řídí standardní proměnné `PGHOST`, `PGPORT`,
@@ -82,7 +143,7 @@ Doporučený cron (denně ve 2:00, viz `crontab -e` na serveru):
 ```bash
 cd server
 # aplikaci spusť proti obnovené DB na vedlejším portu
-DATABASE_URL='postgresql://postgres:postgres@localhost:5432/skillstorm_restore_test' \
+DATABASE_URL='postgresql://postgres:postgres@localhost:5432/eduto_restore_test' \
   PORT=4250 JWT_SECRET=dev DISABLE_CSRF=1 npm run start &
 
 # počkej na health

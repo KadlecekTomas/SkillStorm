@@ -41,7 +41,12 @@ export const RBAC_DEFAULT_PERMISSIONS: RoleDefaults = {
     PermissionKey.VIEW_SUBMISSIONS,
     PermissionKey.VIEW_OWN_ASSIGNMENTS,
   ],
-  PARENT: [PermissionKey.VIEW_RESULTS, PermissionKey.VIEW_SUBMISSIONS],
+  // PARENT invariant (INV4): rodič nezískává ŽÁDNÉ generické oprávnění přes
+  // roli. Rodičovský přístup se vyhodnocuje výhradně vztahovou cestou vůči
+  // konkrétnímu dítěti (GuardianStudentRelation / GuardianPermissionKey), viz
+  // guardian-spec.md §9 a docs/guardian.md. Prázdný default zajišťuje, že ani
+  // boot-sync ani seed nevytvoří generické PARENT role_permissions.
+  PARENT: [],
 };
 
 export function isPermissionAllowedByDefault(

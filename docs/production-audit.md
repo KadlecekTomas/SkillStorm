@@ -1,4 +1,4 @@
-# SkillStorm Production Readiness Audit
+# Eduto Production Readiness Audit
 
 Datum auditu: 2026-06-10
 

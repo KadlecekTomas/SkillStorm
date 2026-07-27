@@ -8,7 +8,7 @@ export interface PartakBlobProps {
 }
 
 /*
- * Parťák — motivační společník SkillStormu (mladší podoba, 1.–3. třída).
+ * Parťák — motivační společník Eduta (mladší podoba, 1.–3. třída).
  * SVG převzato 1:1 z docs/design-reference.jsx; barvy vedou přes tokeny
  * (fill-accent apod.), detaily obličeje jsou vlastní konstanty maskota.
  */

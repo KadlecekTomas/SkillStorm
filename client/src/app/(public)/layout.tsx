@@ -15,7 +15,7 @@ export default function PublicLayout({
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
               <GraduationCap className="h-5 w-5" />
             </div>
-            <span className="text-lg font-semibold">SkillStorm</span>
+            <span className="text-lg font-semibold">Eduto</span>
           </Link>
           <Button asChild variant="outline" size="sm" className="rounded-2xl">
             <Link href="/login">Přihlásit se</Link>
@@ -26,7 +26,7 @@ export default function PublicLayout({
       <footer className="border-t border-slate-200 bg-slate-50 py-8">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <p className="text-center text-sm text-slate-500">
-            © {new Date().getFullYear()} SkillStorm. Platforma pro základní školy.
+            © {new Date().getFullYear()} Eduto. Platforma pro základní školy.
           </p>
         </div>
       </footer>

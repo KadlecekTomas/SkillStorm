@@ -83,7 +83,7 @@ async function validateSeed(prisma: PrismaClient) {
 
 async function main() {
   const prisma = new PrismaClient();
-  console.log('🌱 Running SkillStorm seed pipeline (index) ...');
+  console.log('🌱 Running Eduto seed pipeline (index) ...');
   await runSeedPipeline(prisma);
   console.log('✅ Seed pipeline finished.');
   await prisma.$disconnect();

@@ -65,6 +65,35 @@ export class RbacService implements OnModuleDestroy {
       return true;
     }
 
+    const membership = await this.prisma.membership.findFirst({
+      where: {
+        userId,
+        ...(organizationId ? { organizationId } : {}),
+        deletedAt: null,
+      },
+      // Deterministický výběr (dřív findFirst bez orderBy — latentní bug):
+      // bez explicitní role rozhoduje nejstarší membership.
+      orderBy: { createdAt: 'asc' },
+      select: { role: true, organizationId: true },
+    });
+
+    // Multi-role: rozhoduje efektivní (aktivní) role requestu, ne primární.
+    const effectiveRole = activeRole ?? membership?.role ?? null;
+
+    // ── PARENT invariant (INV4) ────────────────────────────────────────────
+    // Aktivní role PARENT NIKDY nezíská generické RBAC oprávnění — ani přes
+    // role_permissions, ani přes user_permissions (globální i org-scoped), ani
+    // přes defaulty. Tato brána stojí PŘED vyhodnocením UserPermission, takže
+    // user grant nemůže být obchvatem invariantu. Rodičovský přístup se
+    // vyhodnocuje výhradně samostatnou vztahovou cestou
+    // (GuardianStudentRelation / GuardianPermissionKey), ne přes PermissionKey.
+    // Viz docs/guardian.md.
+    if (effectiveRole === OrganizationRole.PARENT) {
+      this.setCache(cacheKey, userId, organizationId, false);
+      return false;
+    }
+
+    // UserPermission override (legitimní pouze pro non-PARENT role, viz výše).
     const userPermission = await this.prisma.userPermission.findFirst({
       where: {
         userId,
@@ -83,28 +112,16 @@ export class RbacService implements OnModuleDestroy {
       return true;
     }
 
-    const membership = await this.prisma.membership.findFirst({
-      where: {
-        userId,
-        ...(organizationId ? { organizationId } : {}),
-        deletedAt: null,
-      },
-      // Deterministický výběr (dřív findFirst bez orderBy — latentní bug):
-      // bez explicitní role rozhoduje nejstarší membership.
-      orderBy: { createdAt: 'asc' },
-      select: { role: true, organizationId: true },
-    });
-
     if (!membership) {
       this.setCache(cacheKey, userId, organizationId, false);
       return false;
     }
 
-    // Multi-role: rozhoduje efektivní (aktivní) role requestu, ne primární.
-    const effectiveRole = activeRole ?? membership.role;
+    // Non-null role pro role/default checks (PARENT už je vyřazen výše).
+    const resolvedRole: OrganizationRole = activeRole ?? membership.role;
 
     // Invariant: OWNER has full access; bypass all permission checks.
-    if (effectiveRole === OrganizationRole.OWNER) {
+    if (resolvedRole === OrganizationRole.OWNER) {
       this.setCache(cacheKey, userId, organizationId, true);
       return true;
     }
@@ -112,7 +129,7 @@ export class RbacService implements OnModuleDestroy {
     const rolePermission =
       (await this.prisma.rolePermission.findFirst({
         where: {
-          role: effectiveRole,
+          role: resolvedRole,
           permission: { key: permissionKey },
           organizationId: membership.organizationId,
         },
@@ -120,7 +137,7 @@ export class RbacService implements OnModuleDestroy {
       })) ??
       (await this.prisma.rolePermission.findFirst({
         where: {
-          role: effectiveRole,
+          role: resolvedRole,
           permission: { key: permissionKey },
           organizationId: null,
         },
@@ -129,7 +146,7 @@ export class RbacService implements OnModuleDestroy {
 
     const allowed = rolePermission
       ? rolePermission.allowed
-      : this.isAllowedByDefault(effectiveRole, permissionKey);
+      : this.isAllowedByDefault(resolvedRole, permissionKey);
     this.setCache(cacheKey, userId, organizationId, allowed);
     return allowed;
   }

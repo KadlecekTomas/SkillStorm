@@ -1,6 +1,7 @@
 const { PrismaClient, SystemRole, UserStatus } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
 const { runDemoSeed } = require('./demo-seed');
+const { assertDemoSeedAllowed } = require('./seed-guards');
 
 const prisma = new PrismaClient();
 
@@ -52,7 +53,7 @@ async function seedSuperadmin() {
   const user = await prisma.user.create({
     data: {
       email,
-      name: 'SkillStorm Superadmin',
+      name: 'Eduto Superadmin',
       passwordHash,
       systemRole: SystemRole.SUPERADMIN,
       status: UserStatus.ACTIVE,
@@ -67,6 +68,12 @@ async function seedSuperadmin() {
 }
 
 async function main() {
+  // Guard běží PŘED superadmin seedem — ať deploy spadne dřív, než se stihne
+  // provést půlka práce a teprve pak se narazí na zakázaný demo seed.
+  if (process.env.DEMO_SEED === '1') {
+    assertDemoSeedAllowed();
+  }
+
   await seedSuperadmin();
 
   if (process.env.DEMO_SEED === '1') {

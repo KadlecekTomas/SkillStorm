@@ -28,3 +28,6 @@ client/tests/snapshots/
 # Database backups (scripts/ops/backup-db.sh) — never commit dumps
 backups/
 docs/screenshots/portfolio/.frame-*.html
+
+# Zastaralý build artefakt (server/.dockerignore ho ignoruje taky)
+disttmp/

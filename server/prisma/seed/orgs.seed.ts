@@ -12,7 +12,7 @@ const ORG_ADDRESSES = {
     city: 'Praha',
     country: 'CZ',
   },
-  [ORG_IDS.skillStormDemo]: {
+  [ORG_IDS.edutoDemo]: {
     address: 'Remote',
     city: 'Online',
     country: 'CZ',

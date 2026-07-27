@@ -1,4 +1,4 @@
-# SkillStorm — Master Roadmap
+# Eduto — Master Roadmap
 
 > **Jediný zdroj pravdy o pořadí a prioritách.** Všechny dílčí roadmapy a zadání na tento dokument odkazují; při konfliktu platí tento dokument.
 > **Vlastník:** Profesor · **Poslední revize:** 20. 7. 2026 · Revidovat po každém dokončeném milníku a po pilotu.

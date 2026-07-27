@@ -1,6 +1,6 @@
-# SkillStorm – zjednodušení rodičovského prostředí a rodinné spuštění žákovských aktivit
+# Eduto – zjednodušení rodičovského prostředí a rodinné spuštění žákovských aktivit
 
-Proveď analýzu a následnou implementaci zjednodušeného rodičovského prostředí v aplikaci SkillStorm.
+Proveď analýzu a následnou implementaci zjednodušeného rodičovského prostředí v aplikaci Eduto.
 
 Cílem není pouze graficky upravit rodičovský dashboard. Je potřeba vyřešit celý uživatelský, bezpečnostní a datový model tak, aby:
 

@@ -74,9 +74,9 @@ export function DashboardHeader(): React.JSX.Element {
       className="flex flex-wrap items-center justify-between gap-4 border-b border-line pb-4"
     >
       <div className="flex flex-wrap items-center gap-4">
-        <Link href="/app" className="flex items-center gap-2 text-ink md:hidden" aria-label="SkillStorm — přehled">
+        <Link href="/app" className="flex items-center gap-2 text-ink md:hidden" aria-label="Eduto — přehled">
           <PartakEmblem size={26} />
-          <span className="text-base font-extrabold tracking-[-.01em]">SkillStorm</span>
+          <span className="text-base font-extrabold tracking-[-.01em]">Eduto</span>
         </Link>
         <p className="text-lg font-semibold text-ink-muted">{title}</p>
         {showBetaBadge && (

@@ -10,12 +10,17 @@ const {
   UserStatus,
 } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
+const { assertDemoSeedAllowed } = require('./seed-guards');
 
 const prisma = new PrismaClient();
 
-const DEMO_PASSWORD = 'Password123!';
+/**
+ * Heslo demo účtů. Musí přijít z prostředí — v repozitáři žádné nedržíme.
+ * Minimálně 16 znaků, ať se sem nevrátí něco jako 'Password123!'.
+ */
+const DEMO_PASSWORD = process.env.DEMO_PASSWORD?.trim() ?? '';
 const DEMO = {
-  organizationName: 'SkillStorm Demo School',
+  organizationName: 'Eduto Demo School',
   classSection: { grade: SchoolGrade.GRADE_8, section: 'A', label: '8.A Demo' },
   director: {
     email: 'director.demo@skillstorm.local',
@@ -650,6 +655,16 @@ async function resetDemoSubmission(assignmentId, studentMembershipId) {
 }
 
 async function runDemoSeed() {
+  if (DEMO_PASSWORD.length < 16) {
+    throw new Error(
+      'DEMO_PASSWORD must be set and contain at least 16 characters.',
+    );
+  }
+
+  // Poslední pojistka: platí i když někdo zavolá runDemoSeed() přímo,
+  // mimo prisma/seed.js (například z docker exec nebo smoke skriptu).
+  assertDemoSeedAllowed();
+
   const organization = await ensureOrganization();
   await ensureDefaultSubjects(organization.id);
   await ensureDefaultOrgSubjects(organization.id);

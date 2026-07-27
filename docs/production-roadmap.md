@@ -1,4 +1,4 @@
-# SkillStorm Production Readiness Roadmap
+# Eduto Production Readiness Roadmap
 
 Datum aktualizace: 2026-06-10
 

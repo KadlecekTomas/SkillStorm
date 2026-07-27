@@ -1,6 +1,6 @@
 # Jak pracujeme s Claudem (a Claude Code)
 
-> Návod pro každého, kdo zadává práci na SkillStormu. Jedna stránka — přečti celou, pak zadávej.
+> Návod pro každého, kdo zadává práci na Eduta. Jedna stránka — přečti celou, pak zadávej.
 > Vzniklo destilací procesu, kterým prošel celý projekt: redesign, hardening, Bleskovky, kampaně, hlasování, interakce.
 
 ---

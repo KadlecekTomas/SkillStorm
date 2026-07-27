@@ -3,7 +3,7 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('🔍 Validating SkillStorm seed data...\n');
+  console.log('🔍 Validating Eduto seed data...\n');
 
   const results = await Promise.all([
     prisma.user.count(),

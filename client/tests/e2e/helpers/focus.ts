@@ -39,14 +39,14 @@ const TEACHER_SEED = {
   email: process.env.FOCUS_SEED_TEACHER_EMAIL ?? "teacher@chodovicka.cz",
   password: process.env.FOCUS_SEED_PASSWORD ?? "SkillStorm123!",
 };
-// A student in a DIFFERENT org (skillStormDemo). Exists only in the canonical e2e seed.
+// A student in a DIFFERENT org (edutoDemo). Exists only in the canonical e2e seed.
 const CROSS_ORG_STUDENT = {
   email: process.env.FOCUS_CROSS_ORG_STUDENT_EMAIL ?? "student.b@skillstorm.demo",
   password: process.env.FOCUS_CROSS_ORG_PASSWORD ?? "SkillStorm123!",
 };
 
 /**
- * A REAL assignment in another org (skillStormDemo), seeded by the canonical e2e seed
+ * A REAL assignment in another org (edutoDemo), seeded by the canonical e2e seed
  * (server `prisma/seed/cross-org.seed.ts` → CROSS_ORG.assignmentId). A student from another org
  * must get a 404 / safe error for it. Kept in sync with that seed constant.
  */

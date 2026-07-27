@@ -77,7 +77,7 @@ Učitelé rozumí provenance bez školení (ověřit rozhovorem s 3 kolegy).
 Původní specifikace zůstává přílohou tohoto dokumentu a platí v plném rozsahu tam, kde ji tento dokument výslovně nemění (parťák, sociální sítě, pořadí etap).
 
 Project content
-SkillStorm
+Eduto
 Created by you
 Add PDFs, documents, or other text to reference in this project.
 Content
@@ -122,6 +122,6 @@ Rozumím — nejdřív prozkoumám stávající model Bleskovek (Prisma schéma,
 
 PASTED
 
-# SkillStorm – zjednodušení rodičovského prostředí a rodinné spuštění žákovských aktivit Proveď analýzu a následnou implementaci zjednodušeného rodičovského prostředí v aplikaci SkillStorm. Cílem není pouze graficky upravit rodičovský dashboard. Je potřeba vyřešit celý uživatelský, bezpečnostní a
+# Eduto – zjednodušení rodičovského prostředí a rodinné spuštění žákovských aktivit Proveď analýzu a následnou implementaci zjednodušeného rodičovského prostředí v aplikaci Eduto. Cílem není pouze graficky upravit rodičovský dashboard. Je potřeba vyřešit celý uživatelský, bezpečnostní a
 
 PASTED
