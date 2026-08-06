@@ -11,6 +11,7 @@ import { useClassrooms } from "@/hooks/use-classrooms";
 import type { ClassroomRiskOverview } from "@/hooks/use-classroom-risk-overview";
 import { formatClassName } from "@/lib/class-label";
 import Link from "next/link";
+import type { OrganizationRole } from "@/types";
 import type {
   TeacherTopicAnalyticsItem,
   TeacherErrorAnalyticsItem,
@@ -50,6 +51,8 @@ import {
 
 type TeacherTopicsResponse = { items?: TeacherTopicAnalyticsItem[] };
 type TeacherErrorsResponse = { items?: TeacherErrorAnalyticsItem[] };
+
+const RESULTS_ROLES: OrganizationRole[] = ["OWNER", "DIRECTOR", "TEACHER"];
 
 function mapTrend(t: TrendLabel): "up" | "down" | "same" {
   if (t === "BETTER") return "up";
@@ -117,7 +120,6 @@ function ResultsPage(): React.JSX.Element {
       const topicItems = topicsRes?.items ?? [];
       const errorItems = errorsRes?.items ?? [];
       const riskStudents = riskRes?.students ?? [];
-      // NO_DATA (žádné odevzdání) není riziko — do součtů nepatří
       const atRiskStudents = riskStudents.filter(
         (student) => student.riskLevel === "HIGH" || student.riskLevel === "MEDIUM",
       );
@@ -249,6 +251,18 @@ function ResultsPage(): React.JSX.Element {
     studentRadarRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
+  const handleExportPdf = useCallback(() => {
+    if (typeof window === "undefined") return;
+    const previousTitle = document.title;
+    const selectedClass = classrooms.find((item) => item.id === classId);
+    const classLabel = selectedClass ? formatClassName(selectedClass) : "trida";
+    document.title = `SkillStorm-vysledky-${classLabel.replace(/\s+/g, "-")}`;
+    window.print();
+    window.setTimeout(() => {
+      document.title = previousTitle;
+    }, 0);
+  }, [classId, classrooms]);
+
   const priorityAlerts = useMemo((): PriorityAlertItem[] => {
     const out: PriorityAlertItem[] = [];
     const highRiskStudents = students.filter((student) => student.riskLevel === "HIGH");
@@ -294,7 +308,7 @@ function ResultsPage(): React.JSX.Element {
       });
     }
     return out;
-  }, [snapshot, students, topics, errorTypes]);
+  }, [snapshot, students, errorTypes]);
 
   const onViewTopicDetail = useCallback(
     (topicName: string) => {
@@ -390,22 +404,19 @@ function ResultsPage(): React.JSX.Element {
         <Button
           variant="secondary"
           size="sm"
-          className="shrink-0"
-          disabled={!hasOrganization}
-          title={hasOrganization ? "Export do PDF" : "Vyžaduje školu"}
+          className="shrink-0 print:hidden"
+          onClick={handleExportPdf}
+          disabled={!hasOrganization || !classId || loading}
+          title="Otevřít tiskový dialog a uložit jako PDF"
         >
           <Download className="h-4 w-4" />
           Export PDF
         </Button>
       </div>
 
-      {error && (
-        <ErrorAlert title="Chyba" description={error} />
-      )}
+      {error && <ErrorAlert title="Chyba" description={error} />}
 
-      {priorityAlerts.length > 0 && (
-        <PriorityAlerts alerts={priorityAlerts} />
-      )}
+      {priorityAlerts.length > 0 && <PriorityAlerts alerts={priorityAlerts} />}
 
       <DiagnosticSnapshot
         data={snapshot}
@@ -435,4 +446,7 @@ function ResultsPage(): React.JSX.Element {
   );
 }
 
-export default withGuard()(ResultsPage);
+export default withGuard({
+  requireRoles: RESULTS_ROLES,
+  requireSchoolWorkspace: true,
+})(ResultsPage);
