@@ -60,6 +60,9 @@ function studentAssignmentTargetHref(testId: string, assignment?: MyAssignment):
   if (assignment?.submissionId) {
     return `/app/results/${assignment.submissionId}`;
   }
+  if (assignment?.id) {
+    return `/app/assignments/${assignment.id}`;
+  }
   return `/app/tests/${testId}`;
 }
 
@@ -71,10 +74,21 @@ type TestRowProps = {
   onArchive: (id: string) => Promise<void>;
   onAssign: (id: string) => void;
   loadingId: string | null;
-  showCreator?: true;
+  showCreator?: boolean;
+  canEdit: boolean;
+  canAssign: boolean;
 };
 
-function TestRow({ test, onPublish, onArchive, onAssign, loadingId, showCreator }: TestRowProps) {
+function TestRow({
+  test,
+  onPublish,
+  onArchive,
+  onAssign,
+  loadingId,
+  showCreator = false,
+  canEdit,
+  canAssign,
+}: TestRowProps) {
   const router = useRouter();
   const busy = loadingId === test.id;
   const creatorName = showCreator ? (test.creator?.user?.name ?? "Neznámý autor") : null;
@@ -98,7 +112,7 @@ function TestRow({ test, onPublish, onArchive, onAssign, loadingId, showCreator 
       )}
 
       <div className="flex flex-wrap items-center gap-2">
-        {test.status === "DRAFT" && (
+        {test.status === "DRAFT" && canEdit && (
           <>
             <Button variant="outline" size="sm" onClick={() => router.push(`/app/tests/${test.id}/edit`)} className="gap-1">
               <Pencil className="h-3.5 w-3.5" />
@@ -117,26 +131,37 @@ function TestRow({ test, onPublish, onArchive, onAssign, loadingId, showCreator 
           </>
         )}
 
+        {test.status === "DRAFT" && !canEdit && (
+          <Button variant="outline" size="sm" onClick={() => router.push(`/app/tests/${test.id}`)} className="gap-1">
+            <Eye className="h-3.5 w-3.5" />
+            Zobrazit
+          </Button>
+        )}
+
         {test.status === "PUBLISHED" && (
           <>
             <Button variant="outline" size="sm" onClick={() => router.push(`/app/tests/${test.id}`)} className="gap-1">
               <Eye className="h-3.5 w-3.5" />
               Zobrazit
             </Button>
-            <Button variant="outline" size="sm" onClick={() => onAssign(test.id)} className="gap-1">
-              <Users className="h-3.5 w-3.5" />
-              Přiřadit
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void onArchive(test.id)}
-              disabled={busy}
-              className="gap-1"
-            >
-              {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Archive className="h-3.5 w-3.5" />}
-              Archivovat
-            </Button>
+            {canAssign && (
+              <Button variant="outline" size="sm" onClick={() => onAssign(test.id)} className="gap-1">
+                <Users className="h-3.5 w-3.5" />
+                Přiřadit
+              </Button>
+            )}
+            {canEdit && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void onArchive(test.id)}
+                disabled={busy}
+                className="gap-1"
+              >
+                {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Archive className="h-3.5 w-3.5" />}
+                Archivovat
+              </Button>
+            )}
           </>
         )}
 
@@ -150,8 +175,6 @@ function TestRow({ test, onPublish, onArchive, onAssign, loadingId, showCreator 
     </div>
   );
 }
-
-// ─── Section ─────────────────────────────────────────────────────────────────
 
 function Section({
   title,
@@ -181,8 +204,6 @@ function Section({
   );
 }
 
-// ─── Student DataTable columns ────────────────────────────────────────────────
-
 const studentColumns: Column<TestSummary>[] = [
   { key: "title", label: "Test" },
   {
@@ -197,8 +218,6 @@ const studentColumns: Column<TestSummary>[] = [
   },
 ];
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
-
 function TestsPage(): React.JSX.Element {
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [assignModalOpen, setAssignModalOpen] = useState(false);
@@ -208,12 +227,15 @@ function TestsPage(): React.JSX.Element {
   const [teacherFilter, setTeacherFilter] = useState<string>("");
   const [studentAssignments, setStudentAssignments] = useState<MyAssignment[]>([]);
   const router = useRouter();
-  const { org, context, user } = useAuth();
+  const { org, context, user, activeRole, permissions } = useAuth();
   const { selectedYearId } = useAcademicYears();
   const { subjects: orgSubjects } = useSubjects();
 
-  const isDirector = user?.organizationRole === "DIRECTOR" || user?.organizationRole === "OWNER";
-  const isStudent = user?.organizationRole === "STUDENT";
+  const effectiveRole = activeRole ?? user?.organizationRole ?? null;
+  const isDirector = effectiveRole === "DIRECTOR" || effectiveRole === "OWNER";
+  const isStudent = effectiveRole === "STUDENT";
+  const isTeacher = effectiveRole === "TEACHER";
+  const canAssignTests = permissions.includes(PermissionKey.ASSIGN_TESTS);
 
   const {
     tests,
@@ -256,6 +278,15 @@ function TestsPage(): React.JSX.Element {
 
   const filteredTests = useMemo(() => {
     let list = tests;
+
+    // Teachers collaborate on published school tests, but drafts/archives are
+    // private to their author. This mirrors the backend mutation contract and
+    // prevents edit/archive buttons that would inevitably return 403.
+    if (isTeacher) {
+      list = list.filter(
+        (t) => t.status === "PUBLISHED" || t.creator?.user?.id === user?.id,
+      );
+    }
     if (teacherFilter) {
       list = list.filter((t) => t.creator?.user?.name?.trim() === teacherFilter);
     }
@@ -266,7 +297,7 @@ function TestsPage(): React.JSX.Element {
       list = list.filter((t) => normalizeAllowedGrades(t.allowedGrades).includes(gradeFilter));
     }
     return list;
-  }, [gradeFilter, subjectFilterId, teacherFilter, tests]);
+  }, [gradeFilter, isTeacher, subjectFilterId, teacherFilter, tests, user?.id]);
 
   const studentAssignmentsByTestId = useMemo(() => {
     const map: Record<string, MyAssignment> = {};
@@ -333,6 +364,9 @@ function TestsPage(): React.JSX.Element {
     },
   ], [studentAssignmentsByTestId]);
 
+  const canEditTest = (test: TestListItem): boolean =>
+    isDirector || test.creator?.user?.id === user?.id;
+
   return (
     <div className="space-y-8">
       {fetchError && (
@@ -345,18 +379,17 @@ function TestsPage(): React.JSX.Element {
         </div>
       )}
 
-      {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-2xl font-semibold text-slate-900">
-            {isDirector ? "Testy v organizaci" : isStudent ? "Přiřazené testy" : "Moje testy"}
+            {isDirector ? "Testy v organizaci" : isStudent ? "Přiřazené testy" : "Testy školy"}
           </h2>
           <p className="text-sm text-slate-500">
             {isDirector
               ? "Všechny testy a přiřazení. Filtruj podle učitele."
               : isStudent
               ? "Testy přiřazené tobě nebo tvé třídě."
-              : "Přehled testů, odevzdání a průměry."}
+              : "Tvoje testy a publikované testy kolegů, které můžeš použít ve svých třídách."}
           </p>
         </div>
         {!isStudent && (
@@ -369,7 +402,6 @@ function TestsPage(): React.JSX.Element {
         )}
       </div>
 
-      {/* Filters */}
       {!isStudent && (
         <div className="flex flex-wrap items-center gap-4">
           {isDirector && teachers.length > 0 && (
@@ -435,11 +467,9 @@ function TestsPage(): React.JSX.Element {
         />
       )}
 
-      {/* Content */}
       {loading ? (
         <LoadingSpinner label="Načítám testy" />
       ) : fetchError ? null : isStudent ? (
-        /* Student view — table with assignment status */
         filteredTests.length === 0 ? (
           <div className="flex flex-col items-center justify-center rounded-xl border border-slate-200 bg-slate-50/50 py-16 px-6 text-center">
             <h3 className="text-lg font-semibold text-slate-900">Žádné přiřazené testy</h3>
@@ -456,10 +486,9 @@ function TestsPage(): React.JSX.Element {
           />
         )
       ) : (
-        /* Teacher / Director view — 3 sections */
         filteredTests.length === 0 ? (
           <div className="flex flex-col items-center justify-center rounded-xl border border-slate-200 bg-slate-50/50 py-16 px-6 text-center">
-            <h3 className="text-lg font-semibold text-slate-900">Zatím nemáš žádné testy</h3>
+            <h3 className="text-lg font-semibold text-slate-900">Zatím nejsou dostupné žádné testy</h3>
             <p className="mt-2 max-w-sm text-sm text-slate-500">
               Vytvoř první test a přiřaď ho třídě.
             </p>
@@ -481,7 +510,9 @@ function TestsPage(): React.JSX.Element {
                   onArchive={handleArchive}
                   onAssign={(id) => { setAssignTestId(id); setAssignModalOpen(true); }}
                   loadingId={loadingId}
-                  {...(isDirector ? { showCreator: true as const } : {})}
+                  showCreator
+                  canEdit={canEditTest(test)}
+                  canAssign={canAssignTests}
                 />
               ))}
             </Section>
@@ -495,7 +526,9 @@ function TestsPage(): React.JSX.Element {
                   onArchive={handleArchive}
                   onAssign={(id) => { setAssignTestId(id); setAssignModalOpen(true); }}
                   loadingId={loadingId}
-                  {...(isDirector ? { showCreator: true as const } : {})}
+                  showCreator
+                  canEdit={canEditTest(test)}
+                  canAssign={canAssignTests}
                 />
               ))}
             </Section>
@@ -509,7 +542,9 @@ function TestsPage(): React.JSX.Element {
                   onArchive={handleArchive}
                   onAssign={(id) => { setAssignTestId(id); setAssignModalOpen(true); }}
                   loadingId={loadingId}
-                  {...(isDirector ? { showCreator: true as const } : {})}
+                  showCreator
+                  canEdit={canEditTest(test)}
+                  canAssign={canAssignTests}
                 />
               ))}
             </Section>
@@ -536,4 +571,5 @@ export default withGuard({
     PermissionKey.EDIT_TEST,
     PermissionKey.VIEW_OWN_ASSIGNMENTS,
   ],
+  requireSchoolWorkspace: true,
 })(TestsPage);
