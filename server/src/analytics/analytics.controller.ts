@@ -21,6 +21,7 @@ import {
   OrgOperationType,
 } from '@/common/decorators/org-operation.decorator';
 import { OrgContextService } from '@/common/org-context/org-context.service';
+import { TeacherClassAnalyticsAccessGuard } from './guards/teacher-class-analytics-access.guard';
 
 @Controller('analytics')
 @OrgOperation(OrgOperationType.EXECUTION)
@@ -56,8 +57,6 @@ export class AnalyticsController {
     @Query('studentId') studentId: string | undefined,
     @Req() req: RequestWithUser,
   ) {
-    const _ = yearId;
-    void _;
     const resolvedStudentId: string | null =
       typeof studentId === 'string' && studentId.length > 0 ? studentId : null;
     return this.orgContext.get(req).then((ctx) => {
@@ -70,7 +69,7 @@ export class AnalyticsController {
       return this.analytics.studentTimeline(
         ctx.activeAcademicYearId,
         req.user,
-        resolvedStudentId ?? null,
+        resolvedStudentId,
       );
     });
   }
@@ -130,7 +129,11 @@ export class AnalyticsController {
   }
 
   @Get('teacher/:classId/errors')
-  @UseGuards(JwtAuthGuard, RequireCurrentAcademicYearGuard)
+  @UseGuards(
+    JwtAuthGuard,
+    RequireCurrentAcademicYearGuard,
+    TeacherClassAnalyticsAccessGuard,
+  )
   @Permission(PermissionKey.VIEW_RESULTS)
   teacherErrors(
     @Param('classId') classId: string,
@@ -153,7 +156,11 @@ export class AnalyticsController {
   }
 
   @Get('teacher/:classId/topics')
-  @UseGuards(JwtAuthGuard, RequireCurrentAcademicYearGuard)
+  @UseGuards(
+    JwtAuthGuard,
+    RequireCurrentAcademicYearGuard,
+    TeacherClassAnalyticsAccessGuard,
+  )
   @Permission(PermissionKey.VIEW_RESULTS)
   teacherTopics(
     @Param('classId') classId: string,
