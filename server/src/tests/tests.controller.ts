@@ -22,7 +22,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { Permission } from '@/modules/rbac/permission.decorator';
-import { PermissionKey } from '@prisma/client';
+import { OrganizationRole, PermissionKey } from '@prisma/client';
 import { InvalidateScopes } from '@/common/cache/invalidate.decorator';
 import { NoHttpCache } from '@/common/cache/no-http-cache.decorator';
 
@@ -104,16 +104,45 @@ export class TestsController {
     return ok(this.service.findAll(req.user, q, ctx));
   }
 
-  @Get(':id')
+  /**
+   * Explicit read-only detail used for published colleague tests. It preserves
+   * same-org visibility while keeping edit/publish/archive UI on the editable
+   * route reserved for an author or school leadership.
+   */
+  @Get(':id/view')
   @Permission(PermissionKey.VIEW_RESULTS)
-  @ApiOperation({ summary: 'Get test detail' })
+  @ApiOperation({ summary: 'Get read-only test detail' })
   @NoHttpCache()
   @Header('Cache-Control', 'no-store')
-  findOne(
+  viewOne(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Req() req: RequestWithUser,
   ) {
     return ok(this.service.findOne(id, req.user));
+  }
+
+  @Get(':id')
+  @Permission(PermissionKey.VIEW_RESULTS)
+  @ApiOperation({ summary: 'Get editable test detail' })
+  @NoHttpCache()
+  @Header('Cache-Control', 'no-store')
+  async findOne(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() req: RequestWithUser,
+  ) {
+    const detail = await this.service.findOne(id, req.user);
+    if (
+      req.user.organizationRole === OrganizationRole.TEACHER &&
+      typeof detail === 'object' &&
+      detail !== null &&
+      'editMode' in detail &&
+      (detail as { editMode?: unknown }).editMode === 'NONE'
+    ) {
+      throw new ForbiddenException(
+        'Tento test je dostupný pouze pro čtení. Použijte read-only detail.',
+      );
+    }
+    return ok(detail);
   }
 
   @Patch(':id')
