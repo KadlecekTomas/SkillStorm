@@ -1,8 +1,7 @@
 "use client";
 
 import { ShieldBan } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { audit } from "@/lib/audit/audit.client";
+import { ReportIssueButton } from "@/components/support/report-issue-button";
 
 type AccessDeniedProps = {
   title?: string;
@@ -11,17 +10,10 @@ type AccessDeniedProps = {
 };
 
 export const AccessDenied = ({
-  title = "Access denied",
-  description = "Nemáš oprávnění pro tento modul. Požádej správce organizace o přístup.",
-  actionLabel = "Požádat správce",
+  title = "Přístup není povolen",
+  description = "Pro tuto část aplikace nemáte oprávnění. Pokud očekáváte přístup, odešlete požadavek podpoře.",
+  actionLabel = "Nahlásit problém s přístupem",
 }: AccessDeniedProps): React.JSX.Element => {
-  const handleClick = (): void => {
-    audit({
-      action: "ACCESS_REQUEST",
-      meta: { source: "GuardBoundary", message: description },
-    });
-  };
-
   return (
     <div className="flex flex-col items-start gap-4 rounded-3xl border border-dashed border-rose-200 bg-rose-50/80 p-6 text-rose-700">
       <div className="flex items-center gap-3">
@@ -33,9 +25,12 @@ export const AccessDenied = ({
           <p className="text-sm text-rose-600">{description}</p>
         </div>
       </div>
-      <Button variant="outline" onClick={handleClick}>
-        {actionLabel}
-      </Button>
+      <ReportIssueButton
+        label={actionLabel}
+        componentContext="access_denied"
+        defaultCategory="OTHER"
+        defaultMessage={`Problém s přístupem: ${description}`}
+      />
     </div>
   );
 };
