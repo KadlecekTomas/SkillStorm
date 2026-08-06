@@ -8,7 +8,8 @@ import { test, expect } from './fixtures';
  * - student navigation never advertises teacher-only modules;
  * - direct navigation to a teacher route is blocked before teacher APIs fire;
  * - teacher diagnostics load without legitimate 403s;
- * - every visible primary action exercised here actually performs its action.
+ * - every visible primary action exercised here actually performs its action;
+ * - every visible main-navigation target must render successfully for that role.
  */
 test.describe('school readiness — RBAC and visible-action contract', () => {
   test('teacher can open a student exposed by their own class risk roster', async ({ asRole, manifest }) => {
@@ -56,6 +57,46 @@ test.describe('school readiness — RBAC and visible-action contract', () => {
       'guard must block student before teacher analytics requests are issued',
     ).toEqual([]);
   });
+
+  for (const role of ['director', 'teacher', 'student8a'] as const) {
+    test(`${role} can open every visible main-navigation target without 403 or error boundary`, async ({ asRole }) => {
+      const { page } = await asRole(role);
+      await page.goto('/app', { waitUntil: 'commit' });
+      const nav = page.getByRole('navigation', { name: 'Hlavní navigace' }).first();
+      await expect(nav).toBeVisible();
+      const hrefs = Array.from(
+        new Set(
+          await nav.locator('a[href]').evaluateAll((links) =>
+            links
+              .map((link) => link.getAttribute('href'))
+              .filter((href): href is string => Boolean(href && href.startsWith('/app'))),
+          ),
+        ),
+      );
+      expect(hrefs.length, `${role} should have visible navigation targets`).toBeGreaterThan(0);
+
+      for (const href of hrefs) {
+        const forbidden: string[] = [];
+        const listener = (response: { status(): number; url(): string }) => {
+          if (response.status() === 403) forbidden.push(response.url());
+        };
+        page.on('response', listener);
+        await page.goto(href, { waitUntil: 'commit' });
+        await page.waitForSelector('[data-testid="profile-ready"]', {
+          state: 'attached',
+          timeout: 15_000,
+        });
+        await expect(page.getByText('Přístup není povolen')).toHaveCount(0);
+        await expect(page.getByText('Access denied')).toHaveCount(0);
+        await expect(page.getByText('Něco se pokazilo')).toHaveCount(0);
+        expect(
+          forbidden,
+          `${role} visible navigation ${href} produced 403: ${forbidden.join(', ')}`,
+        ).toEqual([]);
+        page.off('response', listener);
+      }
+    });
+  }
 
   test('teacher diagnostics load without 403 and Export PDF invokes the print-to-PDF action', async ({ asRole }) => {
     const { page } = await asRole('teacher');
@@ -119,8 +160,6 @@ test.describe('school readiness — RBAC and visible-action contract', () => {
     const { page: teacherPage } = await asRole('teacher');
     await teacherPage.goto('/app/tests', { waitUntil: 'commit' });
 
-    // Teacher drafts are private in the UI: a foreign draft must not be
-    // actionable, while the page itself remains healthy.
     await expect(teacherPage.getByText('Ředitelský koncept — RBAC gate')).toHaveCount(0);
     await expect(teacherPage.getByRole('heading', { name: /Testy školy/i })).toBeVisible();
     expect(manifest.orgId).toBeTruthy();
@@ -173,12 +212,20 @@ test.describe('school readiness — RBAC and visible-action contract', () => {
     expect(created.id).toBeTruthy();
 
     await page.goto('/app/library', { waitUntil: 'commit' });
-    const card = page.getByText(title).locator('..').locator('..');
     await expect(page.getByText(title)).toBeVisible();
     await page.locator(`a[href="/app/library/${created.id}"]`).click();
     await expect(page).toHaveURL(new RegExp(`/app/library/${created.id}$`));
     await expect(page.getByRole('heading', { name: title })).toBeVisible();
     await expect(page.getByText('Material created by the school-readiness browser gate.')).toBeVisible();
-    void card;
+  });
+
+  test('legacy assignment id on a result URL recovers to the assignment workflow', async ({ asRole, manifest }) => {
+    const { page } = await asRole('student8a');
+    const legacyResultUrl = `/app/results/${manifest.assignment8AId}`;
+    await page.goto(legacyResultUrl, { waitUntil: 'commit' });
+    await expect
+      .poll(() => page.url(), { timeout: 15_000 })
+      .not.toContain(legacyResultUrl);
+    expect(page.url()).toContain(`/app/assignments/${manifest.assignment8AId}`);
   });
 });
