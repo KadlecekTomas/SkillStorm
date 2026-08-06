@@ -93,10 +93,6 @@ test.describe('school readiness — RBAC and visible-action contract', () => {
   test('teacher test list never offers edit/archive actions for a non-author test', async ({ asRole, manifest }) => {
     const { page: directorPage } = await asRole('director');
 
-    // Create a director-owned draft through the same API contract the UI uses.
-    // It intentionally remains a draft: the school-readiness invariant we need
-    // here is that a teacher may VIEW same-org metadata but must not receive a
-    // mutating CTA that the backend will reject as non-author.
     const subjectsResponse = await directorPage.request.get('/api/org-subjects');
     expect(subjectsResponse.ok(), 'director can load organization subjects').toBeTruthy();
     const subjectsBody = await subjectsResponse.json();
@@ -114,7 +110,6 @@ test.describe('school readiness — RBAC and visible-action contract', () => {
         title: 'Ředitelský koncept — RBAC gate',
         description: 'Non-author CTA regression fixture',
         subjectId,
-        academicYearId: undefined,
         allowedGrades: ['GRADE_8'],
         status: 'DRAFT',
       },
@@ -128,9 +123,31 @@ test.describe('school readiness — RBAC and visible-action contract', () => {
     // actionable, while the page itself remains healthy.
     await expect(teacherPage.getByText('Ředitelský koncept — RBAC gate')).toHaveCount(0);
     await expect(teacherPage.getByRole('heading', { name: /Testy školy/i })).toBeVisible();
-
-    // Preserve manifest use so this scenario stays coupled to the deterministic
-    // seeded organization and cannot silently become a personal-mode test.
     expect(manifest.orgId).toBeTruthy();
+  });
+
+  test('profile settings perform a real self-update request instead of a local fake submit', async ({ asRole }) => {
+    const { page } = await asRole('teacher');
+    const meResponse = await page.request.get('/api/auth/me');
+    expect(meResponse.ok(), 'teacher auth profile').toBeTruthy();
+    const meBody = await meResponse.json();
+    const me = meBody.data ?? meBody;
+    const user = me.user ?? me;
+    expect(user.id).toBeTruthy();
+    expect(user.email).toBeTruthy();
+
+    await page.goto('/app/settings', { waitUntil: 'commit' });
+    await page.getByPlaceholder('Celé jméno').fill(user.name ?? user.fullName ?? 'Učitel Scénář');
+    await page.getByPlaceholder('E-mail').fill(user.email);
+
+    const updateResponsePromise = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'PATCH' &&
+        response.url().includes(`/api/users/${user.id}`),
+    );
+    await page.getByRole('button', { name: 'Uložit profil' }).click();
+    const updateResponse = await updateResponsePromise;
+    expect(updateResponse.ok(), 'profile save must reach backend successfully').toBeTruthy();
+    await expect(page.getByText('Profil byl uložen.')).toBeVisible();
   });
 });
