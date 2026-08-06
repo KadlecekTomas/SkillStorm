@@ -29,10 +29,18 @@ type AssignmentRow = {
 };
 
 function assignmentTargetHref(assignment: AssignmentRow): string {
-  if (assignment.submissionId || assignment.attemptsUsed > 0) {
-    return `/app/results/${assignment.submissionId ?? assignment.id}`;
+  if (assignment.submissionId) {
+    return `/app/results/${assignment.submissionId}`;
   }
+  // A started attempt without a final submission must resume through the
+  // assignment session. assignment.id is never a valid submission id.
   return `/app/assignments/${assignment.id}`;
+}
+
+function assignmentActionLabel(assignment: AssignmentRow): string {
+  if (assignment.submissionId) return "Zobrazit výsledek";
+  if (assignment.attemptsUsed > 0) return "Pokračovat";
+  return "Otevřít test";
 }
 
 function AssignmentsPage() {
@@ -71,7 +79,7 @@ function AssignmentsPage() {
               disabled={!isStudent}
               title={isStudent ? "" : "Zadání může odevzdat pouze žák"}
             >
-              {a.submissionId || a.attemptsUsed > 0 ? "Zobrazit výsledek" : "Otevřít test"}
+              {assignmentActionLabel(a)}
             </Button>
           </Card>
         ))}
