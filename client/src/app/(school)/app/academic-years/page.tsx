@@ -23,7 +23,7 @@ import {
   promoteAcademicYear,
 } from "@/lib/api/academic-years";
 import { withGuard } from "@/lib/guard/withGuard";
-import { PermissionKey } from "@/types";
+import { PermissionKey, type OrganizationRole } from "@/types";
 import { showToastOnce } from "@/utils/toast";
 
 type PromotionEligibility = {
@@ -31,6 +31,8 @@ type PromotionEligibility = {
   toYearId: string;
   toYearLabel: string;
 };
+
+const STAFF_ROLES: OrganizationRole[] = ["OWNER", "DIRECTOR", "TEACHER"];
 
 function AcademicYearsPage(): React.JSX.Element {
   const router = useRouter();
@@ -296,5 +298,6 @@ function AcademicYearsPage(): React.JSX.Element {
 }
 
 export default withGuard({
-  requirePerms: [PermissionKey.VIEW_RESULTS],
+  requireRoles: STAFF_ROLES,
+  requireSchoolWorkspace: true,
 })(AcademicYearsPage);
