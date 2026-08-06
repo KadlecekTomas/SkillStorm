@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { withGuard } from "@/lib/guard/withGuard";
-import { PermissionKey } from "@/types";
+import type { OrganizationRole } from "@/types";
 import { fetchWithAuth } from "@/lib/http/client";
 import { useAcademicYears } from "@/hooks/use-academic-years";
 import type {
@@ -16,6 +16,8 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 type TeacherErrorsResponse = { items: TeacherErrorAnalyticsItem[] };
 type TeacherTopicsResponse = { items: TeacherTopicAnalyticsItem[] };
+
+const STAFF_ROLES: OrganizationRole[] = ["OWNER", "DIRECTOR", "TEACHER"];
 
 function TeacherAnalyticsPage() {
   const searchParams = useSearchParams();
@@ -54,7 +56,7 @@ function TeacherAnalyticsPage() {
   if (!classId) {
     return (
       <div className="mt-6 rounded-3xl border border-slate-200 bg-white/80 px-4 py-3 text-sm text-slate-700">
-        Vyber třídu (parametr <code>classId</code>) pro zobrazení analytiky.
+        Vyber třídu pro zobrazení analytiky.
       </div>
     );
   }
@@ -76,7 +78,6 @@ function TeacherAnalyticsPage() {
 }
 
 export default withGuard({
-  requirePerms: [PermissionKey.VIEW_RESULTS],
+  requireRoles: STAFF_ROLES,
   requireSchoolWorkspace: true,
 })(TeacherAnalyticsPage);
-
