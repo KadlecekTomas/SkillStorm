@@ -16,6 +16,12 @@ import type { RequestWithUser } from '@/types/request-with-user';
  * GDPR student detail: only CLASS_TEACHER (homeroom), SUBJECT_TEACHER (aktivní
  * úvazek TeacherClassSection na třídu žáka v aktuálním roce),
  * SCHOOL_DIRECTOR (DIRECTOR/OWNER), SUPERADMIN. Students cannot view detail (including self).
+ *
+ * Enrollment visibility intentionally matches classroom/risk-overview roster
+ * semantics: every current-year enrollment except LEFT can be opened from the
+ * UI. This prevents the broken contract where a teacher could see a student in
+ * a class/risk list but the profile click returned 403.
+ *
  * On deny: 403 + audit STUDENT_DETAIL_ACCESS_DENIED.
  */
 @Injectable()
@@ -24,7 +30,9 @@ export class StudentAccessGuard implements CanActivate {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly reflector: Reflector,
-  ) {}
+  ) {
+    void this.reflector;
+  }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<RequestWithUser>();
@@ -42,7 +50,7 @@ export class StudentAccessGuard implements CanActivate {
         membershipId: true,
         deletedAt: true,
         enrollments: {
-          where: { status: EnrollmentStatus.ACTIVE },
+          where: { status: { not: EnrollmentStatus.LEFT } },
           select: {
             classSectionId: true,
             classSection: {
@@ -107,20 +115,19 @@ export class StudentAccessGuard implements CanActivate {
     }
 
     if (user.organizationRole === OrganizationRole.TEACHER) {
-      const isHomeroom = student.enrollments.some(
+      const currentEnrollments = student.enrollments.filter(
+        (e) => e.academicYear?.isCurrent === true,
+      );
+
+      const isHomeroom = currentEnrollments.some(
         (e) =>
-          e.academicYear?.isCurrent === true &&
           e.classSection?.teacher?.membership?.userId &&
           String(e.classSection.teacher.membership.userId) ===
             String(user.userId),
       );
       if (isHomeroom) return true;
 
-      // Aktivní úvazek na třídu žáka v aktuálním roce (audit homeroom-only):
-      // stejné pravidlo jako teacherClassScope, tady přes enrollmenty žáka.
-      const currentClassIds = student.enrollments
-        .filter((e) => e.academicYear?.isCurrent === true)
-        .map((e) => e.classSectionId);
+      const currentClassIds = currentEnrollments.map((e) => e.classSectionId);
       if (currentClassIds.length > 0) {
         const now = new Date();
         const scoped = await this.prisma.teacherClassSection.findFirst({
