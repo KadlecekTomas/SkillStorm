@@ -26,6 +26,7 @@ setup('authenticate all roles', async ({ baseURL }) => {
     ['student8a', m.accounts.student8a, m.orgId],
     ['student2a', m.accounts.student2a, m.orgId],
     ['studentHs', m.accounts.studentHs, m.orgId],
+    ['parent', m.accounts.parent, m.orgId],
     ['otherOrgStudent', m.accounts.otherOrgStudent, m.foreignOrgId],
   ];
 
@@ -50,7 +51,6 @@ setup('authenticate all roles', async ({ baseURL }) => {
       headers: { 'X-Forwarded-For': randomIp() },
     });
     expect(res.ok(), `login for ${role} (${email})`).toBeTruthy();
-    // /api/auth/me confirms the cookie session is live before we persist it
     const me = await ctx.get('/api/auth/me');
     expect(me.ok(), `me for ${role}`).toBeTruthy();
     await ctx.storageState({ path: storageStateFor(role) });
