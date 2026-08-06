@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { PermissionKey } from "@/types";
 import { Card } from "@/components/ui/card";
 import { httpClient } from "@/lib/http/client";
 import { withGuard } from "@/lib/guard/withGuard";
 import { useAcademicYears } from "@/hooks/use-academic-years";
+import type { OrganizationRole } from "@/types";
 
 type HeatmapItem = {
   classSectionId: string;
@@ -13,10 +13,13 @@ type HeatmapItem = {
   section: string;
   assignmentId: string;
   testTitle: string;
+  /** Backend returns a percentage in the 0..100 range. */
   avgScore: number | null;
   submissionCount: number;
   totalStudents: number;
 };
+
+const LEADERSHIP_ROLES: OrganizationRole[] = ["OWNER", "DIRECTOR"];
 
 function ClassHeatmapPage() {
   const { selectedYearId } = useAcademicYears();
@@ -54,19 +57,18 @@ function ClassHeatmapPage() {
   return (
     <div className="space-y-6">
       <div>
-        <p className="text-sm text-slate-500">Sprint 3</p>
         <h1 className="text-2xl font-semibold text-slate-900">
-          Class heatmap
+          Přehled výsledků tříd
         </h1>
         <p className="mt-1 text-sm text-slate-600">
-          Agregované skóre po třídách a zadáních. Žádná jména studentů.
+          Agregované skóre po třídách a zadáních bez jmen žáků.
         </p>
       </div>
 
       {!selectedYearId && (
         <Card className="rounded-3xl border border-amber-200 bg-amber-50/50 p-6">
           <p className="text-sm text-amber-800">
-            Vyberte školní rok pro zobrazení heatmapy.
+            Vyberte školní rok pro zobrazení přehledu.
           </p>
         </Card>
       )}
@@ -99,7 +101,7 @@ function ClassHeatmapPage() {
                     Odevzdání
                   </th>
                   <th className="px-4 py-2 text-right font-medium text-slate-600">
-                    Studentů
+                    Žáků
                   </th>
                 </tr>
               </thead>
@@ -112,7 +114,7 @@ function ClassHeatmapPage() {
                     <td className="px-4 py-2 text-slate-600">{i.testTitle}</td>
                     <td className="px-4 py-2 text-right">
                       {i.avgScore != null
-                        ? `${Math.round(i.avgScore * 100)} %`
+                        ? `${Math.round(i.avgScore)} %`
                         : "—"}
                     </td>
                     <td className="px-4 py-2 text-right">{i.submissionCount}</td>
@@ -136,6 +138,6 @@ function ClassHeatmapPage() {
 }
 
 export default withGuard({
-  requirePerms: [PermissionKey.VIEW_ANALYTICS],
+  requireRoles: LEADERSHIP_ROLES,
   requireSchoolWorkspace: true,
 })(ClassHeatmapPage);
