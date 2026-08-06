@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
-import { fetchWithAuth } from "@/lib/http/client";
+import { useParams, useRouter } from "next/navigation";
+import { fetchWithAuth, HttpError } from "@/lib/http/client";
 import { Card } from "@/components/ui/card";
 import { ErrorAlert, InfoAlert } from "@/components/ui/alert";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
@@ -43,6 +43,7 @@ type TestDetail = {
 
 function SubmissionResultPage() {
   const { submissionId } = useParams<{ submissionId: string }>();
+  const router = useRouter();
   const [submission, setSubmission] = useState<SubmissionResult | null>(null);
   const [testTitle, setTestTitle] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -50,30 +51,56 @@ function SubmissionResultPage() {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setError(null);
 
-    fetchWithAuth<SubmissionResult>("GET", `/submissions/${submissionId}`)
-      .then(async (data) => {
+    const load = async () => {
+      setLoading(true);
+      setError(null);
+      setSubmission(null);
+      try {
+        const data = await fetchWithAuth<SubmissionResult>(
+          "GET",
+          `/submissions/${submissionId}`,
+        );
         if (cancelled) return;
         setSubmission(data ?? null);
         if (data?.testId) {
-          const testData = await fetchWithAuth<TestDetail>("GET", `/tests/${data.testId}`).catch(() => null);
+          const testData = await fetchWithAuth<TestDetail>(
+            "GET",
+            `/tests/${data.testId}`,
+          ).catch(() => null);
           if (!cancelled) setTestTitle(testData?.title ?? null);
         }
-      })
-      .catch((e: unknown) => {
+      } catch (e: unknown) {
         if (cancelled) return;
-        setError(e instanceof Error ? e.message : "Nepodařilo se načíst výsledek.");
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
 
+        // Backward-compatible safety net: older UI paths could accidentally
+        // put assignmentId into /results/:submissionId while an attempt was
+        // still in progress. Never present that as a broken result; if the id
+        // is a valid assignment for this student, resume the assignment.
+        if (e instanceof HttpError && e.status === 404) {
+          const assignment = await fetchWithAuth<unknown>(
+            "GET",
+            `/assignments/${submissionId}`,
+          ).catch(() => null);
+          if (assignment && !cancelled) {
+            router.replace(`/app/assignments/${submissionId}`);
+            return;
+          }
+        }
+
+        setError(
+          e instanceof Error ? e.message : "Nepodařilo se načíst výsledek.",
+        );
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    void load();
     return () => {
       cancelled = true;
     };
-  }, [submissionId]);
+  }, [router, submissionId]);
 
   const scoreLabel = useMemo(() => {
     if (!submission) return null;
@@ -128,8 +155,6 @@ function SubmissionResultPage() {
           Odevzdáno: {submission.submittedAt ? new Date(submission.submittedAt).toLocaleString("cs-CZ") : "zatím ne"}
         </p>
         {submission.provenance && (
-          // Guardian Etapa C (spec bod 7): původ odevzdání lidsky — kdo
-          // spustil, jak byl žák ověřen, deklarovaná pomoc.
           <p
             className={
               submission.provenance.initiatedVia
