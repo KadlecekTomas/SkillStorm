@@ -12,7 +12,7 @@ import {
 import { AnalyticsService } from './analytics.service';
 import { LogAnalyticsEventDto } from './dto/log-analytics-event.dto';
 import { Permission } from '@/modules/rbac/permission.decorator';
-import { PermissionKey } from '@prisma/client';
+import { OrganizationRole, PermissionKey } from '@prisma/client';
 import { RequestWithUser } from '@/types/request-with-user';
 import { JwtAuthGuard } from '@/auth/guards/jwt-auth.guard';
 import { RequireCurrentAcademicYearGuard } from '@/academic-years/require-current-academic-year.guard';
@@ -81,7 +81,7 @@ export class AnalyticsController {
 
   @Get('class-heatmap')
   @UseGuards(JwtAuthGuard, RequireCurrentAcademicYearGuard)
-  @Permission(PermissionKey.VIEW_ANALYTICS)
+  @Permission(OrganizationRole.DIRECTOR)
   classHeatmap(@Query('yearId') yearId: string, @Req() req: RequestWithUser) {
     return this.orgContext.get(req).then((ctx) => {
       if (!ctx.activeAcademicYearId) {
