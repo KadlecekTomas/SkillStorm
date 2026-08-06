@@ -5,9 +5,10 @@ import { test, expect } from './fixtures';
  *
  * These scenarios encode the UX/RBAC contract that matters in a real school:
  * - if a teacher can see a student in their class, the student profile opens;
- * - student navigation never advertises teacher-only modules;
+ * - student and parent navigation never advertises teacher-only modules;
  * - direct navigation to a teacher route is blocked before teacher APIs fire;
  * - teacher diagnostics load without legitimate 403s;
+ * - a teacher cannot assign a test to a same-org class they do not teach;
  * - every visible primary action exercised here actually performs its action;
  * - every visible main-navigation target must render successfully for that role.
  */
@@ -58,10 +59,35 @@ test.describe('school readiness — RBAC and visible-action contract', () => {
     ).toEqual([]);
   });
 
-  for (const role of ['director', 'teacher', 'student8a'] as const) {
+  test('parent sees only family workflows and a verified child', async ({ asRole }) => {
+    const { page } = await asRole('parent');
+    const teacherAnalyticsRequests: string[] = [];
+    page.on('request', (request) => {
+      if (request.url().includes('/api/analytics/teacher/')) {
+        teacherAnalyticsRequests.push(request.url());
+      }
+    });
+
+    await page.goto('/app/family', { waitUntil: 'commit' });
+    await page.waitForLoadState('networkidle').catch(() => undefined);
+
+    const nav = page.getByRole('navigation', { name: 'Hlavní navigace' }).first();
+    await expect(nav.locator('a[href="/app/family"]')).toBeVisible();
+    await expect(nav.locator('a[href="/app/settings"]')).toBeVisible();
+    await expect(nav.locator('a[href="/app/classrooms"]')).toHaveCount(0);
+    await expect(nav.locator('a[href="/app/tests"]')).toHaveCount(0);
+    await expect(nav.locator('a[href="/app/results"]')).toHaveCount(0);
+    await expect(page.getByText(/Žák 8A 1/i)).toBeVisible();
+
+    await page.goto('/app/results', { waitUntil: 'commit' });
+    await expect(page.getByText('Přístup není povolen')).toBeVisible();
+    expect(teacherAnalyticsRequests).toEqual([]);
+  });
+
+  for (const role of ['director', 'teacher', 'student8a', 'parent'] as const) {
     test(`${role} can open every visible main-navigation target without 403 or error boundary`, async ({ asRole }) => {
       const { page } = await asRole(role);
-      await page.goto('/app', { waitUntil: 'commit' });
+      await page.goto(role === 'parent' ? '/app/family' : '/app', { waitUntil: 'commit' });
       const nav = page.getByRole('navigation', { name: 'Hlavní navigace' }).first();
       await expect(nav).toBeVisible();
       const hrefs = Array.from(
@@ -127,6 +153,36 @@ test.describe('school readiness — RBAC and visible-action contract', () => {
       .toBe(true);
 
     expect(forbidden, `teacher diagnostics returned 403: ${forbidden.join(', ')}`).toEqual([]);
+  });
+
+  test('teacher cannot assign a test to an unrelated class in the same organization', async ({ asRole, manifest }) => {
+    const { page: directorPage } = await asRole('director');
+    const createClassResponse = await directorPage.request.post('/api/class-sections', {
+      data: {
+        grade: 'GRADE_9',
+        section: 'SECURITY_GATE',
+        label: '9.SECURITY_GATE',
+      },
+    });
+    expect(createClassResponse.ok(), 'director can create untaught class fixture').toBeTruthy();
+    const classBody = await createClassResponse.json();
+    const untaughtClass = classBody.data ?? classBody;
+    expect(untaughtClass.id).toBeTruthy();
+
+    const { page: teacherPage } = await asRole('teacher');
+    const assignmentResponse = await teacherPage.request.get(
+      `/api/assignments/${manifest.assignment8AId}`,
+    );
+    expect(assignmentResponse.ok(), 'teacher can read own assignment fixture').toBeTruthy();
+    const assignmentBody = await assignmentResponse.json();
+    const assignment = assignmentBody.data ?? assignmentBody;
+    expect(assignment.testId).toBeTruthy();
+
+    const forbidden = await teacherPage.request.post(
+      `/api/tests/${assignment.testId}/assign`,
+      { data: { classSectionId: untaughtClass.id } },
+    );
+    expect(forbidden.status()).toBe(403);
   });
 
   test('teacher test list never offers edit/archive actions for a non-author test', async ({ asRole, manifest }) => {
