@@ -62,7 +62,7 @@ function ReadOnlyTestPage(): React.JSX.Element {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetchWithAuth<ReadOnlyTest>("GET", `/tests/${testId}`)
+    fetchWithAuth<ReadOnlyTest>("GET", `/tests/${testId}/view`)
       .then((data) => {
         if (!cancelled) setTest(data ?? null);
       })
