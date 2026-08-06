@@ -47,6 +47,7 @@ import {
   OrgOperationType,
 } from '@/common/decorators/org-operation.decorator';
 import { OrgContextService } from '@/common/org-context/org-context.service';
+import { TeacherAssignmentClassAccessGuard } from './guards/teacher-assignment-class-access.guard';
 
 @ApiTags('tests')
 @ApiStandardResponses()
@@ -144,6 +145,7 @@ export class TestsController {
 
   @Post(':id/assign')
   @OrgOperation(OrgOperationType.EXECUTION)
+  @UseGuards(TeacherAssignmentClassAccessGuard)
   @Permission(PermissionKey.ASSIGN_TESTS, PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'Assign test to class or students' })
   assignTest(
@@ -187,7 +189,6 @@ export class TestsController {
 
   // QUESTIONS -------------------------------------------
 
-  // Reorder MUSÍ být nad ':id/questions/:questionId'
   @Patch(':id/questions/reorder')
   @Permission(PermissionKey.EDIT_TEST)
   @ApiOperation({ summary: 'Reorder questions' })
