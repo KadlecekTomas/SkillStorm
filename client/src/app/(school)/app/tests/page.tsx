@@ -66,8 +66,6 @@ function studentAssignmentTargetHref(testId: string, assignment?: MyAssignment):
   return `/app/tests/${testId}`;
 }
 
-// ─── Test Row (teacher / director) ───────────────────────────────────────────
-
 type TestRowProps = {
   test: TestListItem;
   onPublish: (id: string) => Promise<void>;
@@ -92,6 +90,9 @@ function TestRow({
   const router = useRouter();
   const busy = loadingId === test.id;
   const creatorName = showCreator ? (test.creator?.user?.name ?? "Neznámý autor") : null;
+  const viewHref = canEdit
+    ? `/app/tests/${test.id}`
+    : `/app/tests/${test.id}/view`;
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 transition hover:bg-slate-50">
@@ -132,7 +133,7 @@ function TestRow({
         )}
 
         {test.status === "DRAFT" && !canEdit && (
-          <Button variant="outline" size="sm" onClick={() => router.push(`/app/tests/${test.id}`)} className="gap-1">
+          <Button variant="outline" size="sm" onClick={() => router.push(viewHref)} className="gap-1">
             <Eye className="h-3.5 w-3.5" />
             Zobrazit
           </Button>
@@ -140,7 +141,7 @@ function TestRow({
 
         {test.status === "PUBLISHED" && (
           <>
-            <Button variant="outline" size="sm" onClick={() => router.push(`/app/tests/${test.id}`)} className="gap-1">
+            <Button variant="outline" size="sm" onClick={() => router.push(viewHref)} className="gap-1">
               <Eye className="h-3.5 w-3.5" />
               Zobrazit
             </Button>
@@ -166,7 +167,7 @@ function TestRow({
         )}
 
         {test.status === "ARCHIVED" && (
-          <Button variant="outline" size="sm" onClick={() => router.push(`/app/tests/${test.id}`)} className="gap-1">
+          <Button variant="outline" size="sm" onClick={() => router.push(viewHref)} className="gap-1">
             <Eye className="h-3.5 w-3.5" />
             Zobrazit
           </Button>
@@ -279,9 +280,6 @@ function TestsPage(): React.JSX.Element {
   const filteredTests = useMemo(() => {
     let list = tests;
 
-    // Teachers collaborate on published school tests, but drafts/archives are
-    // private to their author. This mirrors the backend mutation contract and
-    // prevents edit/archive buttons that would inevitably return 403.
     if (isTeacher) {
       list = list.filter(
         (t) => t.status === "PUBLISHED" || t.creator?.user?.id === user?.id,
@@ -489,7 +487,7 @@ function TestsPage(): React.JSX.Element {
         filteredTests.length === 0 ? (
           <div className="flex flex-col items-center justify-center rounded-xl border border-slate-200 bg-slate-50/50 py-16 px-6 text-center">
             <h3 className="text-lg font-semibold text-slate-900">Zatím nejsou dostupné žádné testy</h3>
-            <p className="mt-2 max-w-sm text-sm text-slate-500">
+            <p className="mt-2 max-w-sm text-slate-500">
               Vytvoř první test a přiřaď ho třídě.
             </p>
             <Link
