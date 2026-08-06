@@ -150,4 +150,35 @@ test.describe('school readiness — RBAC and visible-action contract', () => {
     expect(updateResponse.ok(), 'profile save must reach backend successfully').toBeTruthy();
     await expect(page.getByText('Profil byl uložen.')).toBeVisible();
   });
+
+  test('library Open action navigates to a real material detail', async ({ asRole, manifest }) => {
+    const { page } = await asRole('teacher');
+    const title = 'School readiness material';
+    const createResponse = await page.request.post('/api/learning-materials', {
+      data: {
+        title,
+        description: 'Material created by the school-readiness browser gate.',
+        contentType: 'MATERIAL',
+        educationLevel: 'PRIMARY_2',
+        schoolGrade: 'GRADE_8',
+        scope: 'ORGANIZATION',
+        organizationId: manifest.orgId,
+        accessLevel: 'FREE',
+        isDownloadable: true,
+      },
+    });
+    expect(createResponse.ok(), 'teacher can create material fixture').toBeTruthy();
+    const createdBody = await createResponse.json();
+    const created = createdBody.data ?? createdBody;
+    expect(created.id).toBeTruthy();
+
+    await page.goto('/app/library', { waitUntil: 'commit' });
+    const card = page.getByText(title).locator('..').locator('..');
+    await expect(page.getByText(title)).toBeVisible();
+    await page.locator(`a[href="/app/library/${created.id}"]`).click();
+    await expect(page).toHaveURL(new RegExp(`/app/library/${created.id}$`));
+    await expect(page.getByRole('heading', { name: title })).toBeVisible();
+    await expect(page.getByText('Material created by the school-readiness browser gate.')).toBeVisible();
+    void card;
+  });
 });
