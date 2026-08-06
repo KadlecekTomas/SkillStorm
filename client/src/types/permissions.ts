@@ -28,17 +28,40 @@ export enum PermissionKey {
   VIEW_ORG_ASSIGNMENTS = "VIEW_ORG_ASSIGNMENTS",
 }
 
+/**
+ * Documentation/test fallback only. Runtime authorization MUST use the
+ * effective `permissions` returned by `/auth/me`; see derivePermissions().
+ * Keep this matrix aligned with server/src/modules/rbac/rbac.defaults.ts.
+ */
 export const ROLE_PERMISSION_MATRIX: Record<
   OrganizationRole,
   PermissionKey[]
 > = {
   OWNER: Object.values(PermissionKey),
-  DIRECTOR: Object.values(PermissionKey),
+  DIRECTOR: [
+    PermissionKey.CREATE_TEST,
+    PermissionKey.EDIT_TEST,
+    PermissionKey.DELETE_TEST,
+    PermissionKey.VIEW_RESULTS,
+    PermissionKey.MANAGE_STUDENTS,
+    PermissionKey.MANAGE_TEACHERS,
+    PermissionKey.VIEW_ANALYTICS,
+    PermissionKey.INVITE_STUDENTS,
+    PermissionKey.INVITE_TEACHERS,
+    PermissionKey.VIEW_TEST_OVERVIEW,
+    PermissionKey.MANAGE_TESTS,
+    PermissionKey.ASSIGN_TESTS,
+    PermissionKey.VIEW_SUBMISSIONS,
+    PermissionKey.MANAGE_ASSIGNMENTS,
+    PermissionKey.VIEW_OWN_ASSIGNMENTS,
+    PermissionKey.VIEW_CLASS_ASSIGNMENTS,
+    PermissionKey.VIEW_ORG_ASSIGNMENTS,
+  ],
   TEACHER: [
     PermissionKey.CREATE_TEST,
     PermissionKey.EDIT_TEST,
     PermissionKey.VIEW_RESULTS,
-    PermissionKey.MANAGE_STUDENTS,
+    PermissionKey.VIEW_ANALYTICS,
     PermissionKey.INVITE_STUDENTS,
     PermissionKey.VIEW_TEST_OVERVIEW,
     PermissionKey.MANAGE_TESTS,
@@ -53,7 +76,9 @@ export const ROLE_PERMISSION_MATRIX: Record<
     PermissionKey.VIEW_SUBMISSIONS,
     PermissionKey.VIEW_OWN_ASSIGNMENTS,
   ],
-  PARENT: [PermissionKey.VIEW_RESULTS, PermissionKey.VIEW_SUBMISSIONS],
+  // Guardian access is relationship-scoped on the server. A parent must never
+  // inherit generic school permissions from a static client matrix.
+  PARENT: [],
 };
 
 export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
@@ -68,11 +93,15 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRole, PermissionKey[]> = {
   SUPPORT: [PermissionKey.VIEW_RESULTS],
 };
 
+/**
+ * Role landing must always be a route that the role can render successfully.
+ * Role-specific modules are reached from the dashboard navigation afterwards.
+ */
 export const roleHome: Record<OrganizationRole | "DEFAULT", string> = {
-  OWNER: "/app/settings",
-  DIRECTOR: "/app/settings",
-  TEACHER: "/app/tests",
-  STUDENT: "/app/results",
-  PARENT: "/app/results",
+  OWNER: "/app",
+  DIRECTOR: "/app",
+  TEACHER: "/app",
+  STUDENT: "/app",
+  PARENT: "/app/family",
   DEFAULT: "/app",
 };
