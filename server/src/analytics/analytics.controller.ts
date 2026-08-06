@@ -22,6 +22,7 @@ import {
 } from '@/common/decorators/org-operation.decorator';
 import { OrgContextService } from '@/common/org-context/org-context.service';
 import { TeacherClassAnalyticsAccessGuard } from './guards/teacher-class-analytics-access.guard';
+import { StudentAnalyticsAccessGuard } from './guards/student-analytics-access.guard';
 
 @Controller('analytics')
 @OrgOperation(OrgOperationType.EXECUTION)
@@ -50,7 +51,11 @@ export class AnalyticsController {
   }
 
   @Get('student-timeline')
-  @UseGuards(JwtAuthGuard, RequireCurrentAcademicYearGuard)
+  @UseGuards(
+    JwtAuthGuard,
+    RequireCurrentAcademicYearGuard,
+    StudentAnalyticsAccessGuard,
+  )
   @Permission(PermissionKey.VIEW_RESULTS, PermissionKey.VIEW_ANALYTICS)
   studentTimeline(
     @Query('yearId') yearId: string,
