@@ -3,10 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import {
-  DASHBOARD_NAV_ITEMS,
-  PARENT_NAV_ITEMS,
-} from "@/config/dashboard-navigation";
+import { getDashboardNavItems } from "@/config/dashboard-navigation";
 import { cn } from "@/utils/cn";
 import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { PartakEmblem } from "@/components/partak";
@@ -58,13 +55,11 @@ function SidebarItem({ label, icon, href, active, collapsed }: SidebarItemProps)
 
 export const Sidebar = (): React.JSX.Element => {
   const pathname = usePathname();
-  const { user, hasOrganization } = useAuth();
+  const { user, activeRole, hasOrganization } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
-  const displayName = user?.fullName ?? user?.name ?? "Učitel";
-
-  // Guardian Etapa B: rodičovský kontext má vlastní (minimální) navigaci.
-  const navItems =
-    user?.organizationRole === "PARENT" ? PARENT_NAV_ITEMS : DASHBOARD_NAV_ITEMS;
+  const displayName = user?.fullName ?? user?.name ?? "Uživatel";
+  const effectiveRole = activeRole ?? user?.organizationRole ?? null;
+  const navItems = getDashboardNavItems(effectiveRole);
 
   const activeCount = navItems.filter((item) =>
     isActive(pathname ?? "", item.route),
@@ -81,7 +76,6 @@ export const Sidebar = (): React.JSX.Element => {
       )}
     >
       <div className="space-y-6">
-        {/* Logo + toggle */}
         <div className={cn("flex items-center", collapsed ? "justify-center" : "justify-between px-1")}>
           {!collapsed && (
             <Link href="/app" className="flex items-center gap-2.5 text-ink">
@@ -107,7 +101,6 @@ export const Sidebar = (): React.JSX.Element => {
           </button>
         </div>
 
-        {/* Expand button when collapsed */}
         {collapsed && (
           <button
             type="button"
@@ -119,7 +112,7 @@ export const Sidebar = (): React.JSX.Element => {
           </button>
         )}
 
-        <nav className="space-y-0.5">
+        <nav className="space-y-0.5" aria-label="Hlavní navigace">
           {navItems.map((item) => (
             <SidebarItem
               key={item.route}
@@ -152,10 +145,10 @@ export const Sidebar = (): React.JSX.Element => {
           {!collapsed && (
             <div className="min-w-0 space-y-0.5">
               <p className="truncate text-xs font-bold text-ink">{displayName}</p>
-              {user?.organizationRole && (
+              {effectiveRole && (
                 <Badge variant="secondary" className="w-fit text-xs capitalize">
                   {hasOrganization
-                    ? (ROLE_LABELS[user.organizationRole] ?? user.organizationRole.toLowerCase())
+                    ? (ROLE_LABELS[effectiveRole] ?? effectiveRole.toLowerCase())
                     : "bez školy"}
                 </Badge>
               )}
