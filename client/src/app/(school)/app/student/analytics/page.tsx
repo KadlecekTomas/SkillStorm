@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { withGuard } from "@/lib/guard/withGuard";
-import { PermissionKey } from "@/types";
+import type { OrganizationRole } from "@/types";
 import { fetchWithAuth } from "@/lib/http/client";
 import { useAcademicYears } from "@/hooks/use-academic-years";
 import type {
@@ -15,6 +15,8 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 
 type StudentErrorsResponse = { items: StudentErrorAnalyticsItem[] };
 type StudentTopicsResponse = { items: StudentTopicAnalyticsItem[] };
+
+const STUDENT_ONLY: OrganizationRole[] = ["STUDENT"];
 
 function StudentAnalyticsPage() {
   const { selectedYearId, bootstrapState } = useAcademicYears();
@@ -61,7 +63,6 @@ function StudentAnalyticsPage() {
 }
 
 export default withGuard({
-  requirePerms: [PermissionKey.VIEW_RESULTS],
+  requireRoles: STUDENT_ONLY,
   requireSchoolWorkspace: true,
 })(StudentAnalyticsPage);
-
