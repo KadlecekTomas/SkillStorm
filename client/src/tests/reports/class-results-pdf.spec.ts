@@ -72,6 +72,9 @@ describe("class results PDF", () => {
     expect(JSON.stringify(doc)).toContain("Diagnostický report třídy");
     expect(JSON.stringify(doc)).toContain("Zlomky");
     expect(JSON.stringify(doc)).toContain("Jan Novák");
-    expect(JSON.stringify(doc)).toContain("Důvěrné školní údaje");
+
+    const footer = doc.footer as (currentPage: number, pageCount: number) => unknown;
+    expect(JSON.stringify(footer(1, 2))).toContain("Důvěrné školní údaje");
+    expect(JSON.stringify(footer(1, 2))).toContain("Strana 1 / 2");
   });
 });
