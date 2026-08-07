@@ -91,6 +91,13 @@ function resolveLocalTarget(fromDoc, rawTarget) {
   );
 }
 
+function annotationSafe(value) {
+  return value
+    .replaceAll('%', '%25')
+    .replaceAll('\r', '%0D')
+    .replaceAll('\n', '%0A');
+}
+
 const docs = [...new Set(HUMAN_DOC_ROOTS.flatMap(walk))].sort();
 const registryPath = 'docs/README.md';
 const errors = [];
@@ -231,7 +238,10 @@ if (warnings.length > 0) {
 
 if (errors.length > 0) {
   console.error(`Errors (${errors.length}):`);
-  for (const error of errors) console.error(`  - ${error}`);
+  for (const error of errors) {
+    console.error(`  - ${error}`);
+    console.error(`::error title=Documentation Integrity::${annotationSafe(error)}`);
+  }
   process.exit(1);
 }
 
