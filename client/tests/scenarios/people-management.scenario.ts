@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, request as playwrightRequest, test } from '@playwright/test';
 import { loadManifest, storageStateFor } from './manifest';
 
 const SIZES = [
@@ -165,13 +165,18 @@ test.describe('school people management', () => {
     }
   });
 
-  test('teacher cannot issue a leadership invite through the API', async ({ browser }) => {
-    const context = await browser.newContext({ storageState: storageStateFor('teacher') });
-    const request = context.request;
-    const response = await request.post('/api/invites', {
-      data: { type: 'ORG_ONLY', role: 'DIRECTOR' },
+  test('teacher cannot issue a leadership invite through the API', async () => {
+    const teacherRequest = await playwrightRequest.newContext({
+      baseURL: process.env.BASE_URL || 'http://127.0.0.1:3001',
+      storageState: storageStateFor('teacher'),
     });
-    expect(response.status()).toBe(403);
-    await context.close();
+    try {
+      const response = await teacherRequest.post('/api/invites', {
+        data: { type: 'ORG_ONLY', role: 'DIRECTOR' },
+      });
+      expect(response.status()).toBe(403);
+    } finally {
+      await teacherRequest.dispose();
+    }
   });
 });
