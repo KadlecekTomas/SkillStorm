@@ -91,14 +91,20 @@ async function loadChildOverview(studentId: string): Promise<ChildOverview> {
 
   const messages = school.timeline
     .filter(
-      (item): item is StudentProgressDetail["timeline"][number] & {
-        kind: "COMMENT" | "PRAISE";
-      } => item.kind === "COMMENT" || item.kind === "PRAISE",
+      (item) =>
+        item.kind === "COMMENT" ||
+        item.kind === "PRAISE" ||
+        ((item.kind === "GRADE" || item.kind === "COMPETENCY") && Boolean(item.detail?.trim())),
     )
     .map((item) => ({
       id: item.id,
-      kind: item.kind,
-      title: item.kind === "PRAISE" ? "Pochvala" : "Poznámka učitele",
+      kind: item.kind === "PRAISE" ? ("PRAISE" as const) : ("COMMENT" as const),
+      title:
+        item.kind === "PRAISE"
+          ? "Pochvala"
+          : item.kind === "GRADE" || item.kind === "COMPETENCY"
+            ? item.title
+            : "Poznámka učitele",
       body: item.detail,
       occurredAt: item.occurredAt,
       authorName: item.authorName,
