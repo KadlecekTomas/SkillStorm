@@ -34,15 +34,14 @@ jobs:
           text = path.read_text()
 
           old_log = '''        if (found) {\n          console.log("assignment.openAt raw:", found.openAt);\n        }\n        setAssignment(found);'''
-          new_log = '''        setAssignment(found);'''
           if text.count(old_log) != 1:
               raise SystemExit(f"debug-log block match count: {text.count(old_log)}")
-          text = text.replace(old_log, new_log, 1)
+          text = text.replace(old_log, '        setAssignment(found);', 1)
 
           old_link = '<Link href="/app/tests"><Button variant="outline">Zpět na testy</Button></Link>'
           new_link = '''<Button asChild variant="outline">\n          <Link href="/app/tests">Zpět na testy</Link>\n        </Button>'''
           count = text.count(old_link)
-          if count != 2:
+          if count != 6:
               raise SystemExit(f"nested Link/Button match count: {count}")
           text = text.replace(old_link, new_link)
 
