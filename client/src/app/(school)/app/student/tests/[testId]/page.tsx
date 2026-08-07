@@ -9,14 +9,14 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { withGuard } from "@/lib/guard/withGuard";
 import type { OrganizationRole } from "@/types";
 
-function StudentTestPage() {
+function StudentTestPage(): React.JSX.Element {
   const router = useRouter();
   const search = useSearchParams();
   const assignmentId = search.get("assignmentId");
 
   useEffect(() => {
     if (!assignmentId) return;
-    router.replace(`/assignments/${assignmentId}`);
+    router.replace(`/app/assignments/${encodeURIComponent(assignmentId)}`);
   }, [assignmentId, router]);
 
   if (assignmentId) {
@@ -26,11 +26,11 @@ function StudentTestPage() {
   return (
     <div className="space-y-4">
       <WarningAlert
-        title="Chybí assignmentId"
-        description="Otevři zadání ze seznamu assignments."
+        title="Tento odkaz už není aktuální"
+        description="Test otevři ze seznamu svých zadání. Tam vždy uvidíš správný aktuální pokus."
       />
       <Button asChild className="w-fit">
-        <Link href="/app/assignments">Přejít na assignments</Link>
+        <Link href="/app/assignments">Přejít na zadání</Link>
       </Button>
     </div>
   );
