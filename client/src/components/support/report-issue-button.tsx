@@ -114,7 +114,9 @@ export function ReportIssueButton({
         variant={compact ? "ghost" : "secondary"}
         size={compact ? "sm" : "md"}
         className={cn(
-          compact ? "h-auto rounded-xl px-2 py-1 text-xs text-slate-500 hover:text-slate-700" : "rounded-2xl",
+          compact
+            ? "min-h-11 rounded-xl px-3 py-2 text-xs text-slate-500 hover:text-slate-700"
+            : "rounded-2xl",
           className,
         )}
         onClick={() => setOpen(true)}
