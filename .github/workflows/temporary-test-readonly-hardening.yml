@@ -1,0 +1,77 @@
+name: Temporary test read-only hardening
+
+on:
+  push:
+    branches:
+      - fix/school-readiness-rbac-contracts
+    paths:
+      - '.github/workflows/temporary-test-readonly-hardening.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  harden:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/school-readiness-rbac-contracts
+          fetch-depth: 0
+
+      - name: Patch read-only colleague-test visibility
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          controller = Path('server/src/tests/tests.controller.ts')
+          text = controller.read_text()
+
+          def swap(old, new, label):
+              global text
+              if old in text:
+                  text = text.replace(old, new, 1)
+              elif new not in text:
+                  raise SystemExit(f'marker not found: {label}')
+
+          swap('  ForbiddenException,\n  UseGuards,', '  ForbiddenException,\n  NotFoundException,\n  UseGuards,', 'not found import')
+          swap('import { OrganizationRole, PermissionKey } from \'@prisma/client\';', 'import { OrganizationRole, PermissionKey, PublishStatus } from \'@prisma/client\';', 'publish status import')
+          swap('  viewOne(\n    @Param(\'id\', new ParseUUIDPipe()) id: string,\n    @Req() req: RequestWithUser,\n  ) {\n    return ok(this.service.findOne(id, req.user));\n  }', '  async viewOne(\n    @Param(\'id\', new ParseUUIDPipe()) id: string,\n    @Req() req: RequestWithUser,\n  ) {\n    const detail = await this.service.findOne(id, req.user);\n    const teacherDetail = detail as { editMode?: unknown; status?: unknown } | null;\n    if (\n      req.user.organizationRole === OrganizationRole.TEACHER &&\n      teacherDetail?.editMode === \'NONE\' &&\n      teacherDetail.status !== PublishStatus.PUBLISHED\n    ) {\n      throw new NotFoundException(\'Test nenalezen\');\n    }\n    return ok(detail);\n  }', 'read-only route')
+          controller.write_text(text)
+
+          spec = Path('server/src/tests/tests.controller.spec.ts')
+          s = spec.read_text()
+          if "from '@nestjs/common';" not in s:
+              s = s.replace("import type { TestingModule } from '@nestjs/testing';\n", "import { NotFoundException } from '@nestjs/common';\nimport { OrganizationRole, PublishStatus } from '@prisma/client';\nimport type { TestingModule } from '@nestjs/testing';\n", 1)
+          s = s.replace('  let controller: TestsController;\n', '  let controller: TestsController;\n  let service: TestsService;\n', 1)
+          s = s.replace('    controller = module.get<TestsController>(TestsController);\n', '    controller = module.get<TestsController>(TestsController);\n    service = module.get<TestsService>(TestsService);\n', 1)
+          anchor = "  it('should be defined', () => {\n    expect(controller).toBeDefined();\n  });\n"
+          tests = anchor + "\n  it('hides an unpublished colleague test from the teacher read-only route', async () => {\n    jest.spyOn(service, 'findOne').mockResolvedValue({\n      id: '11111111-1111-4111-8111-111111111111',\n      status: PublishStatus.DRAFT,\n      editMode: 'NONE',\n    });\n\n    const req = {\n      user: { organizationRole: OrganizationRole.TEACHER },\n    } as Parameters<TestsController['viewOne']>[1];\n\n    await expect(\n      controller.viewOne('11111111-1111-4111-8111-111111111111', req),\n    ).rejects.toBeInstanceOf(NotFoundException);\n  });\n\n  it('allows a published colleague test through the teacher read-only route', async () => {\n    jest.spyOn(service, 'findOne').mockResolvedValue({\n      id: '22222222-2222-4222-8222-222222222222',\n      status: PublishStatus.PUBLISHED,\n      editMode: 'NONE',\n    });\n\n    const req = {\n      user: { organizationRole: OrganizationRole.TEACHER },\n    } as Parameters<TestsController['viewOne']>[1];\n\n    await expect(\n      controller.viewOne('22222222-2222-4222-8222-222222222222', req),\n    ).resolves.toBeDefined();\n  });\n"
+          if "hides an unpublished colleague test" not in s:
+              if anchor not in s:
+                  raise SystemExit('controller spec anchor not found')
+              s = s.replace(anchor, tests, 1)
+          spec.write_text(s)
+          PY
+
+      - name: Verify backend read-only contract
+        working-directory: server
+        run: |
+          npm ci
+          npx jest src/tests/tests.controller.spec.ts --runInBand
+          npm run typecheck
+
+      - name: Commit security hardening
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add server/src/tests/tests.controller.ts server/src/tests/tests.controller.spec.ts
+          if git diff --cached --quiet; then
+            echo "Read-only hardening already applied"
+            exit 0
+          fi
+          git commit -m "fix(tests): hide unpublished colleague drafts"
+          git pull --rebase origin fix/school-readiness-rbac-contracts
+          git push origin HEAD:fix/school-readiness-rbac-contracts
