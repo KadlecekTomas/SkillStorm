@@ -5,6 +5,7 @@ import {
   Home,
   Users2,
   ClipboardList,
+  ClipboardCheck,
   LibraryBig,
   LineChart,
   Settings,
@@ -24,6 +25,7 @@ const iconClass = "h-4 w-4";
 /** Teacher/director/owner workspace. */
 export const DASHBOARD_NAV_ITEMS: DashboardNavItem[] = [
   { label: "Přehled", route: "/app", icon: <Home className={iconClass} /> },
+  { label: "Hodnocení", route: "/app/progress", icon: <ClipboardCheck className={iconClass} /> },
   { label: "Třídy", route: "/app/classrooms", icon: <Users2 className={iconClass} /> },
   { label: "Testy", route: "/app/tests", icon: <ClipboardList className={iconClass} /> },
   { label: "Knihovna", route: "/app/library", icon: <LibraryBig className={iconClass} /> },
