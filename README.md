@@ -2,6 +2,12 @@
 
 Webová vzdělávací platforma pro školy.
 
+## Product vision
+
+- [SkillStorm Interactive IT Lab](./docs/interactive-it-lab/README.md) — cílová vize interaktivní výuky informatiky pro celou třídu: Activity Engine, Build-a-PC showcase, adaptivní obtížnost, Teacher Mission Control a práce s interaktivní tabulí.
+- [Live Sessions](./docs/live-sessions.md) — současný koncept a implementační kontrakty Bleskovek.
+- [Live Sessions — interactive rounds](./docs/live-sessions-interactions.md) — současné drag & drop interakce na tabuli.
+
 ## Spuštění přes Docker
 
 ### Požadavky
