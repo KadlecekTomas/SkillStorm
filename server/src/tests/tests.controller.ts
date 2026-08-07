@@ -240,7 +240,7 @@ export class TestsController {
     return ok(this.service.addQuestion(testId, dto, req.user));
   }
 
-  @Patch(':id/questions/:questionId([0-9a-fA-F-]{36})')
+  @Patch(':id/questions/:questionId')
   @Permission(PermissionKey.EDIT_TEST)
   @ApiOperation({ summary: 'Update question' })
   updateQuestion(
@@ -252,7 +252,7 @@ export class TestsController {
     return ok(this.service.updateQuestion(testId, questionId, dto, req.user));
   }
 
-  @Delete(':id/questions/:questionId([0-9a-fA-F-]{36})')
+  @Delete(':id/questions/:questionId')
   @Permission(PermissionKey.EDIT_TEST)
   @ApiOperation({ summary: 'Remove question' })
   removeQuestion(
@@ -264,7 +264,7 @@ export class TestsController {
   }
 
   // OPTIONS ---------------------------------------------
-  @Post(':id/questions/:questionId([0-9a-fA-F-]{36})/options')
+  @Post(':id/questions/:questionId/options')
   @Permission(PermissionKey.EDIT_TEST)
   addOption(
     @Param('id', new ParseUUIDPipe()) testId: string,
@@ -275,9 +275,7 @@ export class TestsController {
     return ok(this.service.addOption(testId, questionId, dto, req.user));
   }
 
-  @Patch(
-    ':id/questions/:questionId([0-9a-fA-F-]{36})/options/:optionId([0-9a-fA-F-]{36})',
-  )
+  @Patch(':id/questions/:questionId/options/:optionId')
   @Permission(PermissionKey.EDIT_TEST)
   updateOption(
     @Param('id', new ParseUUIDPipe()) testId: string,
@@ -291,9 +289,7 @@ export class TestsController {
     );
   }
 
-  @Delete(
-    ':id/questions/:questionId([0-9a-fA-F-]{36})/options/:optionId([0-9a-fA-F-]{36})',
-  )
+  @Delete(':id/questions/:questionId/options/:optionId')
   @Permission(PermissionKey.EDIT_TEST)
   removeOption(
     @Param('id', new ParseUUIDPipe()) testId: string,
@@ -307,7 +303,7 @@ export class TestsController {
   }
 
   // ANSWERS (správné odpovědi) --------------------------
-  @Post(':id/questions/:questionId([0-9a-fA-F-]{36})/answers')
+  @Post(':id/questions/:questionId/answers')
   @Permission(PermissionKey.EDIT_TEST)
   addAnswer(
     @Param('id', new ParseUUIDPipe()) testId: string,
@@ -318,9 +314,7 @@ export class TestsController {
     return ok(this.service.addAnswer(testId, questionId, dto, req.user));
   }
 
-  @Patch(
-    ':id/questions/:questionId([0-9a-fA-F-]{36})/answers/:answerId([0-9a-fA-F-]{36})',
-  )
+  @Patch(':id/questions/:questionId/answers/:answerId')
   @Permission(PermissionKey.EDIT_TEST)
   updateAnswer(
     @Param('id', new ParseUUIDPipe()) testId: string,
@@ -334,9 +328,7 @@ export class TestsController {
     );
   }
 
-  @Delete(
-    ':id/questions/:questionId([0-9a-fA-F-]{36})/answers/:answerId([0-9a-fA-F-]{36})',
-  )
+  @Delete(':id/questions/:questionId/answers/:answerId')
   @Permission(PermissionKey.EDIT_TEST)
   removeAnswer(
     @Param('id', new ParseUUIDPipe()) testId: string,
