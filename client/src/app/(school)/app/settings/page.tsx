@@ -57,7 +57,7 @@ type CatalogTopicOption = {
 };
 
 export default function SettingsPage(): React.JSX.Element {
-  const { hasOrganization, org, user, syncProfile } = useAuth();
+  const { org, user, syncProfile, activeRole } = useAuth();
   const { can } = usePermissions();
   const profileForm = useForm<ProfileValues>({
     resolver: zodResolver(profileSchema),
@@ -76,18 +76,6 @@ export default function SettingsPage(): React.JSX.Element {
   });
   const [profileSaving, setProfileSaving] = useState(false);
   const [passwordSaving, setPasswordSaving] = useState(false);
-  const [origin, setOrigin] = useState("");
-  const [inviteRole, setInviteRole] = useState<"STUDENT" | "TEACHER" | null>(null);
-  const [inviteCode, setInviteCode] = useState("");
-  const [inviteToken, setInviteToken] = useState("");
-  const [inviteLoading, setInviteLoading] = useState(false);
-  const [inviteError, setInviteError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      setOrigin(window.location.origin);
-    }
-  }, []);
 
   useEffect(() => {
     if (!user) return;
@@ -97,88 +85,8 @@ export default function SettingsPage(): React.JSX.Element {
     });
   }, [profileForm, user]);
 
-  const canInviteStudents = useMemo(
-    () => can(PermissionKey.INVITE_STUDENTS),
-    [can],
-  );
-  const canInviteTeachers = useMemo(
-    () => can(PermissionKey.INVITE_TEACHERS),
-    [can],
-  );
-  const canInvite = hasOrganization && (canInviteStudents || canInviteTeachers);
-  const inviteRoleOptions = useMemo<Array<{ value: "STUDENT" | "TEACHER"; label: string }>>(() => {
-    const options: Array<{ value: "STUDENT" | "TEACHER"; label: string }> = [];
-    if (canInviteStudents) options.push({ value: "STUDENT", label: "Žák" });
-    if (canInviteTeachers) options.push({ value: "TEACHER", label: "Učitel" });
-    return options;
-  }, [canInviteStudents, canInviteTeachers]);
-
-  const effectiveInviteRole = useMemo(() => {
-    if (!inviteRoleOptions.length) return null;
-    return inviteRole && inviteRoleOptions.some((opt) => opt.value === inviteRole)
-      ? inviteRole
-      : inviteRoleOptions[0]?.value ?? null;
-  }, [inviteRole, inviteRoleOptions]);
-
-  const inviteLink = inviteToken && origin
-    ? `${origin}/join?token=${encodeURIComponent(inviteToken)}`
-    : "";
-
-  const generateInvite = useCallback(async () => {
-    if (!effectiveInviteRole || !canInvite) {
-      setInviteCode("");
-      setInviteToken("");
-      setInviteError(null);
-      return;
-    }
-    setInviteLoading(true);
-    setInviteError(null);
-    try {
-      const invite = await fetchWithAuth<{
-        id: string;
-        inviteToken?: string;
-        code: string;
-        expiresAt: string;
-      }>("POST", "/invites", {
-        body: {
-          type: "ORG_ONLY",
-          role: effectiveInviteRole,
-        },
-      });
-      setInviteCode(invite?.code ?? "");
-      setInviteToken(invite?.inviteToken ?? invite?.code ?? "");
-      showToastOnce("Pozvánka byla vytvořena.", { type: "success" });
-    } catch (e) {
-      setInviteCode("");
-      setInviteToken("");
-      setInviteError(
-        e instanceof Error ? e.message : "Pozvánku se nepodařilo vytvořit.",
-      );
-    } finally {
-      setInviteLoading(false);
-    }
-  }, [canInvite, effectiveInviteRole]);
-
-  // Změna role zneplatní předchozí token v UI. Nový vznikne až explicitně
-  // po kliknutí uživatele — pouhé otevření Nastavení už nevytváří invite.
-  useEffect(() => {
-    setInviteCode("");
-    setInviteToken("");
-    setInviteError(null);
-  }, [effectiveInviteRole]);
-
-  const copyToClipboard = async (value: string, message: string) => {
-    if (!value) {
-      showToastOnce("Nejdřív vygenerujte pozvánku.", { type: "error" });
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(value);
-      showToastOnce(message, { type: "success" });
-    } catch {
-      showToastOnce("Nepodařilo se zkopírovat.", { type: "error" });
-    }
-  };
+  const effectiveRole = activeRole ?? user?.organizationRole ?? null;
+  const canManagePeople = effectiveRole === "OWNER" || effectiveRole === "DIRECTOR";
 
   const onProfileSubmit = async (values: ProfileValues) => {
     if (!user?.id) {
@@ -669,76 +577,16 @@ export default function SettingsPage(): React.JSX.Element {
         </div>
       </Card>
 
-      {canInvite && (
-        <Card className="md:col-span-2 flex flex-col gap-4 rounded-3xl border border-emerald-200 bg-emerald-50/70 p-6">
-          <h3 className="text-lg font-semibold text-slate-900">Pozvat členy</h3>
-          <p className="text-sm text-slate-600">
-            Vyberte roli a vytvořte jednorázově nový kód nebo odkaz. Pouhé otevření stránky pozvánku nevytváří.
-          </p>
-          {inviteLoading && <p className="text-sm text-slate-600">Generuji pozvánku…</p>}
-          {inviteError && <p className="text-sm text-red-600">{inviteError}</p>}
-          <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-700">Role pozvánky</label>
-              <div className="flex flex-wrap gap-2">
-                <select
-                  className="min-w-[180px] rounded-2xl border border-slate-200 px-3 py-2 text-sm"
-                  value={effectiveInviteRole ?? ""}
-                  onChange={(event) => setInviteRole(event.target.value as "STUDENT" | "TEACHER")}
-                >
-                  {inviteRoleOptions.map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
-                <Button
-                  type="button"
-                  onClick={() => void generateInvite()}
-                  disabled={inviteLoading || !effectiveInviteRole}
-                >
-                  {inviteCode ? "Vytvořit nový kód" : "Vygenerovat pozvánku"}
-                </Button>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-700">Kód pozvánky</label>
-              <div className="flex flex-wrap gap-2">
-                <Input readOnly value={inviteCode} placeholder="Nejdřív vygenerujte pozvánku" />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => copyToClipboard(inviteCode, "Kód zkopírován.")}
-                  disabled={!inviteCode || inviteLoading}
-                >
-                  Kopírovat
-                </Button>
-              </div>
-            </div>
-            <div className="space-y-2 md:col-span-2">
-              <label className="text-sm font-medium text-slate-700">Odkaz pozvánky</label>
-              <div className="flex flex-wrap gap-2">
-                <Input readOnly value={inviteLink} placeholder="Nejdřív vygenerujte pozvánku" />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => copyToClipboard(inviteLink, "Pozvánka zkopírována.")}
-                  disabled={!inviteLink || inviteLoading}
-                >
-                  Zkopírovat odkaz
-                </Button>
-              </div>
-            </div>
+      {canManagePeople && (
+        <Card className="md:col-span-2 flex flex-col gap-3 p-6">
+          <div>
+            <h3 className="text-lg font-semibold text-slate-900">Lidé ve škole</h3>
+            <p className="mt-1 text-sm text-slate-500">
+              Přidávání a úpravy žáků, učitelů a vedení jsou na jednom místě.
+            </p>
           </div>
-        </Card>
-      )}
-
-      {can(PermissionKey.MANAGE_TEACHERS) && (
-        <Card className="md:col-span-2 flex flex-col gap-3 rounded-3xl border border-dashed border-blue-200 bg-blue-50/70 p-6">
-          <h3 className="text-lg font-semibold text-slate-900">Správa učitelů</h3>
-          <p className="text-sm text-slate-600">
-            Přístup pouze pro ředitele nebo ownera. Umožňuje přidávat a odebírat učitele.
-          </p>
-          <Button asChild className="w-fit rounded-2xl" variant="outline">
-            <Link href="/app/settings/teachers">Otevřít správu učitelů</Link>
+          <Button asChild variant="outline" className="min-h-11 w-full sm:w-fit">
+            <Link href="/app/people">Otevřít lidi ve škole</Link>
           </Button>
         </Card>
       )}
