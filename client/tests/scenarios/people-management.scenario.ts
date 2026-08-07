@@ -15,6 +15,11 @@ type SchoolPerson = {
   role: 'OWNER' | 'DIRECTOR' | 'TEACHER';
 };
 
+type StudentListItem = {
+  id: string;
+  membership?: { user?: { email?: string | null } | null } | null;
+};
+
 function unwrap<T>(value: T | { data?: T }): T {
   if (value && typeof value === 'object' && 'data' in value) {
     return ((value as { data?: T }).data ?? value) as T;
@@ -127,11 +132,26 @@ test.describe('school people management', () => {
 
   test('student profile edit persists and can be restored', async ({ page }) => {
     const manifest = loadManifest();
-    const studentId = manifest.students8A[0];
-    expect(studentId).toBeTruthy();
+    const studentEmail = manifest.accounts.student8a;
+    const studentSearch = await page.request.get(
+      `/api/students?search=${encodeURIComponent(studentEmail)}&limit=10`,
+    );
+    expect(studentSearch.ok()).toBeTruthy();
+    const studentSearchBody = await studentSearch.json();
+    const studentRows = Array.isArray(studentSearchBody?.data)
+      ? (studentSearchBody.data as StudentListItem[])
+      : Array.isArray(studentSearchBody)
+        ? (studentSearchBody as StudentListItem[])
+        : [];
+    const seededStudent = studentRows.find(
+      (student) => student.membership?.user?.email === studentEmail,
+    ) ?? studentRows[0];
+    expect(seededStudent?.id, 'seeded student resolves to Student.id').toBeTruthy();
+    const studentId = seededStudent!.id;
 
     await page.goto(`/app/students/${studentId}`);
     await expect(page.getByTestId('student-admin-editor')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Upravit žáka' })).toBeEnabled();
     await page.getByRole('button', { name: 'Upravit žáka' }).click();
 
     const nameInput = page.getByLabel('Jméno a příjmení žáka');
