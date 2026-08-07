@@ -1,123 +1,329 @@
-# Google SSO architektura — Eduto
+# SkillStorm — Google SSO Architecture
 
-Datum: 2026-06-13
-Stav: PILOT ID-TOKEN VERIFICATION FLOW (vědomé rozhodnutí, viz níže)
-Feature flag: `GOOGLE_SSO_ENABLED` (default **false** → endpoint vrací 404 a je nerozlišitelný od neexistující routy)
+> **Status:** `CURRENT / IMPLEMENTED — PILOT ONLY`  
+> **Owner:** Engineering + Security  
+> **Last verified:** 2026-08-07  
+> **Scope:** current Google ID-token verification flow, identity/membership policy, organization SSO policy and explicit production gaps  
+> **Implementation authority:** current code under `server/src/auth/` has technical precedence. This document must be updated in the same PR when the SSO contract changes.
 
-## 1. Jaký flow je implementovaný a proč
+---
 
-**Implementováno: pilot ID-token verification flow.**
+## 0. Production-readiness statement
 
+The repository currently implements a **feature-flagged Google ID-token verification pilot**.
+
+It is **not** the final enterprise Google Workspace SSO integration and must not be marketed or operated as such.
+
+Current endpoint:
+
+```text
+POST /auth/sso/google
 ```
-Browser (Google Identity Services / One Tap)
-   │  získá jednorázový Google ID token (JWT)
-   ▼
-POST /auth/sso/google  { idToken, organizationId? }
-   │  backend token POUZE ověří (issuer, audience, expirace, email_verified)
-   ▼
-identity match / e-mail link / org-scoped auto-provision
-   ▼
-standardní Eduto session (httpOnly cookies ss_at / ss_rt + ss_csrf)
+
+Current feature flag:
+
+```text
+GOOGLE_SSO_ENABLED=false   # default/off unless explicitly enabled
 ```
 
-**Toto NENÍ plné enterprise production SSO.** Plná produkční varianta je backend-first authorization-code flow (`GET /auth/sso/google/start` → Google → `GET /auth/sso/google/callback` se state/nonce, client secret výhradně na backendu). Ten v této iteraci implementovaný není.
+When the flag is off, the SSO service intentionally returns `404` so the dark endpoint is not exposed as an enabled capability.
 
-Proč je pilot flow zvolen:
+A future enterprise production SSO release requires a separately reviewed backend-first authorization-code/OIDC flow and the production gate in section 11.
 
-* Nevyžaduje client secret — backend žádný Google secret nedrží, nemá co uniknout.
-* Žádné Google access/refresh tokeny se nezískávají ani neukládají (nepotřebujeme Google API, jen autentizaci).
-* Menší attack surface pro pilot: jeden endpoint, server-side verifikace, feature flag.
-* Upgrade na authorization-code flow je aditivní (přidání /start a /callback), identity vrstva (UserIdentity, policy, audit) zůstává beze změny.
+---
 
-Bezpečnostní pravidla pilot flow (závazná):
+# 1. Current flow
 
-1. Frontend Google token nikam neukládá (žádné localStorage/sessionStorage/cookie) — token se jednorázově POSTne a zahodí.
-2. Backend ID token pouze ověří; nikdy ho neukládá, neloguje a nevrací.
-3. Backend nevytváří žádnou Google session a nevolá žádné Google API kromě verifikace tokenu.
-4. Endpoint je defaultně dark (`GOOGLE_SSO_ENABLED=false` → 404).
-5. Rate limit 10 požadavků / 15 min / IP (`@Throttle`).
-6. Produkční enterprise nasazení = přechod na start/callback authorization-code flow (BLOCKER pro „READY FOR PRODUCTION“ SSO).
+```text
+Browser / Google Identity Services
+        ↓ obtains one-shot Google ID token
+POST /auth/sso/google { idToken, organizationId? }
+        ↓
+GoogleTokenVerifier
+  - verifies against Google tokeninfo
+  - issuer
+  - audience == GOOGLE_CLIENT_ID
+  - expiry
+  - subject
+        ↓
+GoogleSsoService additionally requires
+  - verified e-mail
+  - organization policy when organizationId is supplied
+        ↓
+identity match / verified-email link / explicitly allowed auto-provision
+        ↓
+standard SkillStorm session
+  - httpOnly access/refresh cookies
+  - CSRF cookie
+```
 
-## 2. Endpoints
+### Current intentional limits
 
-| Endpoint | Stav |
-|---|---|
-| `POST /auth/sso/google` `{ idToken, organizationId? }` | implementováno, za flagem |
-| `GET /auth/sso/google/start` | neimplementováno (production upgrade path) |
-| `GET /auth/sso/google/callback` | neimplementováno (production upgrade path) |
+- no `/auth/sso/google/start` endpoint;
+- no `/auth/sso/google/callback` endpoint;
+- no Google client secret in the pilot flow;
+- no Google access token stored;
+- no Google refresh token stored;
+- no Google API access beyond token verification;
+- no claim that this is production enterprise SSO.
 
-Pozn.: `/auth/sso/google` je v CSRF middleware na seznamu auth-bootstrap výjimek (stejně jako `/auth/login`) — prohlížeč před přihlášením CSRF cookie nemá. Login-CSRF riziko je mitigováno tím, že požadavek vyžaduje platný Google ID token; útočník bez tokenu oběti session nevyrobí.
+---
 
-## 3. Env proměnné
+# 2. Current endpoint contract
 
-| Proměnná | Význam | Default |
-|---|---|---|
-| `GOOGLE_SSO_ENABLED` | zapíná endpoint (`'true'`) | false (dark) |
-| `GOOGLE_CLIENT_ID` | OAuth 2.0 Web client ID — očekávaná `aud` ID tokenu | prázdné |
+| Endpoint | Status | Notes |
+| --- | --- | --- |
+| `POST /auth/sso/google` | `IMPLEMENTED / PILOT` | public auth-bootstrap endpoint, gated by `GOOGLE_SSO_ENABLED`; rate limited |
+| `GET /auth/sso/google/start` | `NOT IMPLEMENTED` | target production authorization-code/OIDC flow |
+| `GET /auth/sso/google/callback` | `NOT IMPLEMENTED` | target production authorization-code/OIDC callback |
 
-Žádný `GOOGLE_CLIENT_SECRET` neexistuje — pilot flow ho nepotřebuje.
+The current controller applies:
 
-## 4. Verifikace tokenu (`GoogleTokenVerifier`)
+```text
+10 requests / 15 minutes / throttling key configured by Nest throttler
+```
 
-* Google `tokeninfo` endpoint (server-side); injectable — výměna za `google-auth-library` (offline verifikace podpisu) bez zásahu do služby.
-* Kontroluje: issuer ∈ {accounts.google.com, https://accounts.google.com}, `aud === GOOGLE_CLIENT_ID`, expirace, přítomnost `sub`.
-* Služba navíc vyžaduje `email_verified === true` a přítomný e-mail.
+The endpoint participates in the same session/cookie issuance path as normal verified-user authentication.
 
-## 5. Identity model a membership policy
+---
 
-**Identita je globální, přístup je membership.**
+# 3. Token handling invariants
 
-* `UserIdentity`: max. jedna identita na (user, provider); `(provider, providerSubject)` globálně unikátní. `organization_id` na identitě je **pouze provenance** (která organizace identitu připustila/provisionovala — audit + GDPR scoping). Nikdy neomezuje, kam se uživatel přihlásí.
-* Přístup do organizace určuje výhradně živý `Membership` (vynucováno v `AuthService.resolveSessionMembership` a znovu při každém požadavku v JWT strategy).
+The pilot flow has strict token handling rules:
 
-Výběr organizace při SSO loginu je **explicitní** (žádné „vezmu první membership“):
+1. The Google ID token is one-shot authentication input.
+2. Frontend must not persist the token in `localStorage`, `sessionStorage` or application cookies.
+3. Backend must not persist the Google ID token.
+4. Backend must not include token material in audit records or application logs.
+5. Backend must never return the Google ID token to the client.
+6. Google access/refresh tokens are not requested or stored by this pilot.
+7. Error logging must contain only coarse authentication context, never credential/token material.
 
-| Vstup | Výsledek |
-|---|---|
-| `organizationId` zadané | uživatel musí mít živý membership, jinak 401 + audit `SSO_MEMBERSHIP_REQUIRED_FAILED` |
-| bez `organizationId`, 0 membershipů | personal session (PRIVATE účty, čerstvě provisionovaní) |
-| bez `organizationId`, 1 membership | jednoznačné → použije se |
-| bez `organizationId`, ≥2 membershipy | 400 `SSO_ORG_SELECTION_REQUIRED` + audit |
+Any future authorization-code flow must define equally explicit handling for authorization codes, state, nonce and any provider tokens.
 
-Multi-organization user: stejná Google identita se přihlásí do org A i org B — pokaždé s explicitním `organizationId` a platným membershipem; do org C bez membershipu selže. (Pokryto unit testy v `google-sso.service.spec.ts`.)
+---
 
-## 6. Org SSO policy (`OrganizationSettings`)
+# 4. Verification contract
 
-| Pole | Význam |
-|---|---|
-| `ssoProvider` | string sloupec; **jediná podporovaná hodnota je `'google'`** (`SUPPORTED_SSO_PROVIDERS` + `isSupportedSsoProvider()`); cokoliv jiného („googleeee“, „admin“, „*“) = SSO vypnuté |
-| `sso_allowed_domains` | allowlist e-mailových domén; uplatní se jen při org-scoped loginu (admise identity), ne při pozdějším loginu už propojené identity — autentizace ≠ admise |
-| `sso_auto_provision` | default false; `true` dovolí založit lokální účet bez membershipu |
+Current `GoogleTokenVerifier` uses Google's server-side `tokeninfo` endpoint and validates at least:
 
-Správa těchto polí zatím nemá API endpoint (nastavuje se interním toolingem/DB). Až vznikne, musí být chráněna stejnou politikou jako ostatní org administrace (OWNER/DIRECTOR/SUPERADMIN) a auditována akcí `SSO_PROVIDER_CONFIG_UPDATED`. Do té doby je to PRODUCT gap, ne security hole (žádná cesta, jak to změnit přes API).
+- issuer is `accounts.google.com` or `https://accounts.google.com`;
+- `aud` equals configured `GOOGLE_CLIENT_ID`;
+- token has a finite future expiry;
+- `sub` exists;
+- service layer requires a verified e-mail address.
 
-## 7. Auto-provisioning policy
+Current implementation intentionally keeps verification injectable so a later implementation can move to local signature/JWK verification (for example via an appropriate maintained Google/OIDC library) without rewriting identity policy.
 
-* Default **false**; zapíná se per organizace.
-* Vytvoří POUZE lokální účet + identitu — **žádný membership, žádný přístup do organizace**. Role/přístup vzniká výhradně přes invite/import flow.
-* Provisioned účet má bcrypt hash 256bit náhodného tajemství → lokální login heslem je fakticky nemožný, dokud uživatel neprojde standardním password resetem.
-* Pro žáky se auto-provisioning **nedoporučuje** (děti — viz GDPR doc); určeno primárně pro učitele/zaměstnance s doménovým allowlistem.
+### Failure behavior
 
-## 8. Audit akce
+Verification/configuration failures are authentication failures. The system must not fall back to trusting an unverified e-mail or client-provided identity data.
 
-| Akce | Kdy |
-|---|---|
-| `SSO_LOGIN_GOOGLE` | úspěšný SSO login (vč. po linknutí/provisionu) |
-| `SSO_IDENTITY_LINKED_GOOGLE` | propojení identity s existujícím účtem |
-| `SSO_USER_PROVISIONED_GOOGLE` | auto-provision účtu |
-| `SSO_INVALID_TOKEN` | neplatný/neověřený token, neověřený e-mail |
-| `SSO_DOMAIN_MISMATCH_GOOGLE` | e-mail mimo allowlist organizace |
-| `SSO_MEMBERSHIP_REQUIRED_FAILED` | chybějící membership / vynucený výběr organizace |
-| `SSO_LOGIN_GOOGLE_FAILED` | ostatní selhání (disabled účet, neznámá identita bez provisioningu, nepodporovaný provider) |
-| `SSO_PROVIDER_CONFIG_UPDATED` | rezervováno pro budoucí admin endpoint (zatím neexistuje) |
+---
 
-Vypnutý flag (404) se záměrně neaudituje — endpoint je dark a audit by byl spam vektor. Do auditu se nikdy nezapisuje idToken, access/refresh token, authorization code ani secret (regression test: spec ověřuje, že se token nedostane do audit payloadů).
+# 5. Identity vs. organization access
 
-## 9. Co chybí do plného production SSO
+Core invariant:
 
-1. Backend-first authorization-code flow (/start, /callback, state single-use + expirace, nonce).
-2. Admin API + UI pro SSO policy organizace (RBAC: OWNER/DIRECTOR/SUPERADMIN, audit `SSO_PROVIDER_CONFIG_UPDATED`).
-3. Self-service odpojení identity v nastavení účtu.
-4. `google-auth-library` offline verifikace podpisu místo tokeninfo endpointu.
-5. Frontend tlačítko/flow (zatím není — endpoint je připravená serverová vrstva).
-6. E2E test SSO flow proti reálné DB (unit vrstva je pokrytá, integrační test vyžaduje test harness).
+> **Identity is global. Organization access is granted by a live Membership.**
+
+A Google identity proves which global SkillStorm user is authenticating. It does not by itself grant membership, role or permission in a school.
+
+Current `UserIdentity` policy is designed around:
+
+- unique provider subject identity;
+- optional organization provenance for the admission/linking event;
+- live `Membership` as the authority for organization access.
+
+Client-visible organization selection is never authorization. Membership is resolved/enforced server-side during session issuance and subsequent authenticated requests.
+
+---
+
+# 6. Explicit organization selection
+
+The current login path must not silently choose the first organization for a multi-organization user.
+
+| Input/state | Result |
+| --- | --- |
+| `organizationId` supplied | user must have a valid live membership for that organization; otherwise authentication fails |
+| no `organizationId`, 0 memberships | personal/unscoped session can be issued according to current account policy |
+| no `organizationId`, exactly 1 membership | that membership is unambiguous |
+| no `organizationId`, 2+ memberships | fail with `SSO_ORG_SELECTION_REQUIRED` |
+
+This rule protects multi-school users from accidentally receiving a session in the wrong tenant context.
+
+---
+
+# 7. Organization SSO policy
+
+Current organization policy is read from organization settings.
+
+Relevant concepts:
+
+```text
+ssoProvider
+ssoAllowedDomains
+ssoAutoProvision
+```
+
+### Supported provider value
+
+Current code supports only:
+
+```text
+google
+```
+
+Arbitrary strings are treated as unsupported/disabled rather than as aliases.
+
+### Domain allowlist
+
+For organization-scoped admission/linking, configured e-mail domains are normalized and checked server-side.
+
+A hosted-domain claim or e-mail domain is not a substitute for membership authorization.
+
+### Auto-provisioning
+
+Default policy is restrictive.
+
+When explicitly enabled for an organization, auto-provisioning may create:
+
+```text
+User + UserIdentity
+```
+
+It does **not** create an organization membership or assign a role.
+
+Role/membership assignment remains a separate controlled organization workflow.
+
+This is particularly important for schools: successful Google authentication must never automatically make an unknown account a teacher, student, director or owner.
+
+---
+
+# 8. Auto-provisioned local credential
+
+Current auto-provision code creates a random password hash so the newly created user cannot meaningfully use a known local password created by the SSO path.
+
+Local password authentication must become available only through the standard account/password-reset policy if the product allows that transition.
+
+The random secret itself must never be returned, logged or documented.
+
+---
+
+# 9. Audit contract
+
+Current SSO behavior uses coarse audit actions such as:
+
+```text
+SSO_LOGIN_GOOGLE
+SSO_IDENTITY_LINKED_GOOGLE
+SSO_USER_PROVISIONED_GOOGLE
+SSO_INVALID_TOKEN
+SSO_DOMAIN_MISMATCH_GOOGLE
+SSO_MEMBERSHIP_REQUIRED_FAILED
+SSO_LOGIN_GOOGLE_FAILED
+```
+
+A future organization SSO configuration write path must also be audited.
+
+### Audit data prohibition
+
+Never audit/log:
+
+- Google ID token;
+- provider access token;
+- provider refresh token;
+- authorization code;
+- client secret;
+- session access/refresh token;
+- raw credentials.
+
+The disabled/dark endpoint does not need to create an audit event for every probe; doing so would create an unauthenticated audit-spam path.
+
+---
+
+# 10. School-specific safety rules
+
+Before SSO is enabled for a real school:
+
+```text
+[ ] school/tenant identity domain ownership is confirmed
+[ ] organization SSO policy is reviewed
+[ ] auto-provisioning choice is explicit
+[ ] no SSO path grants Membership or OrganizationRole implicitly
+[ ] multi-organization selection is tested
+[ ] disabled/deleted/anonymized user behavior is tested
+[ ] student account policy is reviewed separately from staff policy
+[ ] audit/log redaction is tested
+[ ] recovery path exists if provider login is unavailable
+[ ] break-glass/admin access policy is documented without creating a bypass
+```
+
+Do not assume staff and pupil identity lifecycle should use identical provisioning rules.
+
+---
+
+# 11. Blockers for production enterprise Google SSO
+
+The current pilot must not be relabeled `production SSO` until a dedicated implementation/review closes at least these gaps:
+
+1. **Backend-first authorization-code/OIDC flow** with server-generated state and nonce.
+2. **Single-use + expiry semantics** for login transaction state/nonce.
+3. **Secure callback handling** and exact redirect URI policy.
+4. **Production-grade provider-token verification** without using a diagnostic tokeninfo request as the final architecture.
+5. **Organization admin API/UI** for SSO configuration with strict RBAC + audit.
+6. **Identity lifecycle management**, including safe unlink/relink and account-recovery semantics.
+7. **End-to-end tests** for success, invalid state/nonce, wrong audience/issuer, domain mismatch, disabled user, missing membership and multi-org selection.
+8. **Provider outage/failure behavior** and operational monitoring.
+9. **Privacy/security review** for school/staff/student identity data.
+10. **Rollback/disable plan** that does not strand administrators.
+
+The exact production flow should follow the provider's current supported OIDC/OAuth guidance at implementation time and be security-reviewed then; this document intentionally does not freeze a future provider protocol implementation before that work begins.
+
+---
+
+# 12. Current environment variables
+
+Pilot variables:
+
+| Variable | Meaning | Default expectation |
+| --- | --- | --- |
+| `GOOGLE_SSO_ENABLED` | enables current pilot endpoint when equal to `'true'` | off unless explicitly configured |
+| `GOOGLE_CLIENT_ID` | expected OAuth/OIDC Web client ID / ID-token audience | required when pilot is enabled |
+
+The current pilot does not require a `GOOGLE_CLIENT_SECRET` because it does not implement the authorization-code exchange.
+
+A future production code-flow implementation will define a new reviewed secret/configuration contract.
+
+---
+
+# 13. Test requirements for changes
+
+Any SSO change must preserve/add regression coverage for the relevant invariants:
+
+```text
+[ ] flag off -> endpoint unavailable/dark behavior
+[ ] issuer validation
+[ ] audience validation
+[ ] expiry validation
+[ ] verified e-mail required
+[ ] token material absent from logs/audit payloads
+[ ] known identity login
+[ ] verified e-mail linking policy
+[ ] unsupported organization provider rejected
+[ ] domain mismatch rejected
+[ ] auto-provision off rejected for unknown identity
+[ ] auto-provision creates no membership/role
+[ ] requested organization requires live membership
+[ ] multi-org login requires explicit organization choice
+[ ] disabled/deleted/anonymized account rejected
+[ ] tenant context cannot be selected by client assertion alone
+```
+
+When the authorization-code flow is implemented, its state/nonce/replay/callback tests become release blockers.
+
+---
+
+## Final invariant
+
+> **Google authentication may establish a SkillStorm identity; only SkillStorm's own live tenant membership and RBAC model may establish access to a school. The current Google path remains an explicitly labeled pilot until the production OIDC flow and its security/operations gates are complete.**
