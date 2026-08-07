@@ -74,6 +74,7 @@ export class ClassroomsController {
 
   @Get('my-structure')
   @Permission(PermissionKey.MANAGE_STUDENTS, PermissionKey.VIEW_RESULTS)
+  @NoHttpCache()
   @CacheTTL(0)
   @ApiOperation({
     summary:
@@ -90,6 +91,7 @@ export class ClassroomsController {
   @Get(':id/risk-overview')
   @Permission(PermissionKey.MANAGE_STUDENTS, PermissionKey.VIEW_RESULTS)
   @Throttle({ default: { limit: 30, ttl: 60000 } })
+  @NoHttpCache()
   @CacheTTL(0)
   @ApiOperation({ summary: 'Classroom risk overview (Early Warning Panel)' })
   riskOverview(
@@ -105,6 +107,7 @@ export class ClassroomsController {
 
   @Get(':id/subject-performance')
   @Permission(PermissionKey.MANAGE_STUDENTS, PermissionKey.VIEW_RESULTS)
+  @NoHttpCache()
   @CacheTTL(0)
   @ApiOperation({ summary: 'Subject performance summary for classroom' })
   async subjectPerformance(
