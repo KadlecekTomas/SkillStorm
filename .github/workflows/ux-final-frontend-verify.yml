@@ -24,18 +24,27 @@ jobs:
           cache: npm
           cache-dependency-path: client/package-lock.json
 
-      - name: Harden nested-interaction regression matcher
+      - name: Apply final interaction fix and harden regression matcher
         shell: bash
         run: |
           python - <<'PY'
           from pathlib import Path
-          p = Path("client/src/tests/ux-action-integrity.spec.ts")
-          text = p.read_text()
-          old = '  const nestedInteractive = /<Link\\b[^>]*>[\\s\\S]*?<Button\\b[\\s\\S]*?<\\/Link>/;'
-          new = '  const nestedInteractive = /<Link\\b[^>]*>(?:(?!<\\/Link>)[\\s\\S])*?<Button\\b(?:(?!<\\/Link>)[\\s\\S])*?<\\/Link>/;'
-          if text.count(old) != 1:
-              raise SystemExit(f"nested matcher count: {text.count(old)}")
-          p.write_text(text.replace(old, new, 1))
+
+          detail = Path("client/src/app/(school)/app/tests/[testId]/page.tsx")
+          detail_text = detail.read_text()
+          old_action = '''        <Link href="/app/tests">\n          <Button variant="outline">Zpět na testy</Button>\n        </Link>'''
+          new_action = '''        <Button asChild variant="outline">\n          <Link href="/app/tests">Zpět na testy</Link>\n        </Button>'''
+          if detail_text.count(old_action) != 1:
+              raise SystemExit(f"remaining nested test action count: {detail_text.count(old_action)}")
+          detail.write_text(detail_text.replace(old_action, new_action, 1))
+
+          test = Path("client/src/tests/ux-action-integrity.spec.ts")
+          test_text = test.read_text()
+          old_matcher = '  const nestedInteractive = /<Link\\b[^>]*>[\\s\\S]*?<Button\\b[\\s\\S]*?<\\/Link>/;'
+          new_matcher = '  const nestedInteractive = /<Link\\b[^>]*>(?:(?!<\\/Link>)[\\s\\S])*?<Button\\b(?:(?!<\\/Link>)[\\s\\S])*?<\\/Link>/;'
+          if test_text.count(old_matcher) != 1:
+              raise SystemExit(f"nested matcher count: {test_text.count(old_matcher)}")
+          test.write_text(test_text.replace(old_matcher, new_matcher, 1))
           PY
 
       - name: Install frontend dependencies
@@ -61,13 +70,14 @@ jobs:
           API_PROXY_TARGET: http://localhost:4200
         run: npm run build
 
-      - name: Commit verified regression matcher and remove helper
+      - name: Commit verified fix and remove helper
         shell: bash
         run: |
           rm .github/workflows/ux-final-frontend-verify.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add client/src/tests/ux-action-integrity.spec.ts \
+          git add client/src/app/\(school\)/app/tests/\[testId\]/page.tsx \
+                  client/src/tests/ux-action-integrity.spec.ts \
                   .github/workflows/ux-final-frontend-verify.yml
           git commit -m "test(ux): lock school action integrity"
           git push origin HEAD:fix/school-readiness-rbac-contracts
