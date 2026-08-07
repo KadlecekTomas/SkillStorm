@@ -96,4 +96,12 @@ describe("school UI surface policy", () => {
     expect(text).toContain("Zkusit znovu");
     expect(text).toContain("!loading && !error");
   });
+
+  it("globální hlavička nezobrazuje mrtvou notifikační akci", () => {
+    const text = source("src/components/layout/app-header.tsx");
+
+    expect(text).not.toContain("Notifikace zatím nejsou aktivní");
+    expect(text).not.toContain("<Bell");
+    expect(text).toContain("Vytvořit test");
+  });
 });

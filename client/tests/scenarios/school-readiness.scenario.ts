@@ -121,7 +121,7 @@ test.describe('school readiness — RBAC and visible-action contract', () => {
     });
   }
 
-  test('teacher diagnostics load without 403 and Export PDF invokes the print-to-PDF action', async ({ asRole }) => {
+  test('teacher diagnostics load without 403 and Tisk / uložit PDF invokes browser print', async ({ asRole }) => {
     const { page } = await asRole('teacher');
     const forbidden: string[] = [];
     page.on('response', (response) => {
@@ -138,7 +138,7 @@ test.describe('school readiness — RBAC and visible-action contract', () => {
         (window as Window & { __skillstormPrintCalled?: boolean }).__skillstormPrintCalled = true;
       };
     });
-    const exportButton = page.getByRole('button', { name: 'Export PDF' });
+    const exportButton = page.getByRole('button', { name: 'Tisk / uložit PDF' });
     await expect(exportButton).toBeEnabled();
     await exportButton.click();
     await expect
