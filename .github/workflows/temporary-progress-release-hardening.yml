@@ -1,0 +1,315 @@
+name: Temporary progress release hardening
+
+on:
+  push:
+    branches:
+      - fix/school-readiness-rbac-contracts
+    paths:
+      - '.github/workflows/temporary-progress-release-hardening.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  harden:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/school-readiness-rbac-contracts
+          fetch-depth: 0
+
+      - name: Harden progress UX and responsive contracts
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          progress = Path('client/src/app/(school)/app/progress/page.tsx')
+          text = progress.read_text()
+
+          def replace_once(old: str, new: str, label: str):
+              global text
+              if old not in text:
+                  if new in text:
+                      return
+                  raise SystemExit(f'marker not found: {label}')
+              text = text.replace(old, new, 1)
+
+          replace_once(
+              '''const isBrowserOnline = (): boolean =>\n  typeof navigator === "undefined" ? true : navigator.onLine;\n\nfunction MetricCard''',
+              '''const isBrowserOnline = (): boolean =>\n  typeof navigator === "undefined" ? true : navigator.onLine;\n\nfunction useOnlineStatus(): boolean {\n  const [online, setOnline] = useState(isBrowserOnline);\n\n  useEffect(() => {\n    const sync = () => setOnline(navigator.onLine);\n    window.addEventListener("online", sync);\n    window.addEventListener("offline", sync);\n    sync();\n    return () => {\n      window.removeEventListener("online", sync);\n      window.removeEventListener("offline", sync);\n    };\n  }, []);\n\n  return online;\n}\n\nfunction MetricCard''',
+              'reactive online status',
+          )
+
+          replace_once(
+              '''  offlineScope: string;\n}) {\n  const [mode, setMode] = useState<WorkspaceMode>("ASSESSMENT");''',
+              '''  offlineScope: string;\n}) {\n  const online = useOnlineStatus();\n  const [mode, setMode] = useState<WorkspaceMode>("ASSESSMENT");''',
+              'teacher online hook',
+          )
+
+          # Every call site inside the component/page should use reactive state.
+          text = text.replace('isBrowserOnline()', 'online')
+
+          replace_once(
+              '''  useEffect(() => {\n    if (competencyId !== "none" && !competencies.some((item) => item.id === competencyId)) {\n      setCompetencyId("none");\n      setCompetencyLevel(null);\n    }\n  }, [competencies, competencyId]);\n\n  const loadStudent''',
+              '''  useEffect(() => {\n    if (competencyId !== "none" && !competencies.some((item) => item.id === competencyId)) {\n      setCompetencyId("none");\n      setCompetencyLevel(null);\n    }\n  }, [competencies, competencyId]);\n\n  useEffect(() => {\n    if (!context.subjects.some((item) => item.id === subjectId)) {\n      setSubjectId(context.subjects[0]?.id ?? "");\n    }\n  }, [context.subjects, subjectId]);\n\n  const loadStudent''',
+              'subject refresh invariant',
+          )
+
+          replace_once(
+              '''  }, [studentId]);\n\n  useEffect(() => {\n    void loadStudent();''',
+              '''  }, [online, studentId]);\n\n  useEffect(() => {\n    void loadStudent();''',
+              'student detail online dependency',
+          )
+
+          replace_once(
+              '''  }, [loadStudent, offlineScope, refreshQueueCount]);\n\n  useEffect(() => {\n    void refreshQueueCount();\n    void flushQueue();\n    window.addEventListener("online", flushQueue);\n    return () => window.removeEventListener("online", flushQueue);\n  }, [flushQueue, refreshQueueCount]);''',
+              '''  }, [loadStudent, offlineScope, online, refreshQueueCount]);\n\n  useEffect(() => {\n    void refreshQueueCount();\n    void flushQueue();\n  }, [flushQueue, refreshQueueCount]);''',
+              'offline queue reactivity',
+          )
+
+          replace_once(
+              '''  const saveAttendance = async () => {\n    if (!selectedStudent) return;\n    setBusy(true);''',
+              '''  const saveAttendance = async () => {\n    if (!selectedStudent) {\n      setError("Nejdříve vyberte žáka.");\n      return;\n    }\n    if (attendanceStatus === "LATE" && minutesLate) {\n      const parsedMinutes = Number(minutesLate);\n      if (!Number.isInteger(parsedMinutes) || parsedMinutes < 1 || parsedMinutes > 1440) {\n        setError("Zadejte počet minut zpoždění jako celé číslo od 1 do 1440.");\n        return;\n      }\n    }\n    setBusy(true);''',
+              'attendance validation',
+          )
+
+          replace_once(
+              '''                    type="number"\n                    min={0}\n                    value={minutesLate}''',
+              '''                    type="number"\n                    min={1}\n                    max={1440}\n                    step={1}\n                    inputMode="numeric"\n                    value={minutesLate}''',
+              'attendance numeric input',
+          )
+
+          replace_once(
+              '''              <Button size="lg" className="h-16 w-full text-lg font-black sm:max-w-md" disabled={busy} onClick={() => void saveAttendance()}>''',
+              '''              <Button size="lg" className="h-16 w-full text-lg font-black sm:max-w-md" disabled={busy || !selectedStudent} onClick={() => void saveAttendance()}>''',
+              'attendance button disabled state',
+          )
+
+          replace_once(
+              '''              <Button size="lg" className="h-16 w-full text-lg font-black sm:max-w-md" disabled={busy} onClick={() => void saveIntervention()}>''',
+              '''              <Button size="lg" className="h-16 w-full text-lg font-black sm:max-w-md" disabled={busy || !selectedStudent || !interventionTitle.trim()} onClick={() => void saveIntervention()}>''',
+              'support button disabled state',
+          )
+
+          # Leadership mobile cards + desktop table.
+          replace_once(
+              '''        <CardContent>\n          <div className="overflow-x-auto rounded-xl border border-line">\n            <table className="min-w-full text-left text-sm">''',
+              '''        <CardContent>\n          <div className="grid gap-3 md:hidden" aria-label="Srovnání tříd">\n            {dashboard.classes.map((item) => (\n              <article key={item.classSectionId} className="rounded-xl border border-line bg-canvas p-4">\n                <div className="flex items-center justify-between gap-3">\n                  <h3 className="text-lg font-black text-ink">{item.classLabel}</h3>\n                  <span className="rounded-full bg-canvas-alt px-3 py-1 text-sm font-bold text-ink-muted">\n                    {item.studentCount} žáků\n                  </span>\n                </div>\n                <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">\n                  <div><dt className="font-bold text-ink-muted">Známka</dt><dd className="mt-1 text-base font-black text-ink">{item.averageGrade?.toFixed(2) ?? "—"}</dd></div>\n                  <div><dt className="font-bold text-ink-muted">Kompetence</dt><dd className="mt-1 text-base font-black text-ink">{item.averageCompetency?.toFixed(2) ?? "—"}</dd></div>\n                  <div><dt className="font-bold text-ink-muted">Docházka</dt><dd className="mt-1 text-base font-black text-ink">{item.attendanceRate !== null ? `${item.attendanceRate} %` : "—"}</dd></div>\n                  <div><dt className="font-bold text-ink-muted">Podpora</dt><dd className="mt-1 text-base font-black text-ink">{item.openInterventions}</dd></div>\n                </dl>\n              </article>\n            ))}\n          </div>\n          <div className="hidden overflow-x-auto rounded-xl border border-line md:block">\n            <table className="min-w-full text-left text-sm">''',
+              'mobile leadership class cards',
+          )
+
+          text = text.replace(
+              'className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5"',
+              'className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5"',
+              1,
+          )
+          text = text.replace(
+              'className="grid gap-3 md:grid-cols-[220px_minmax(0,1fr)_minmax(0,1.4fr)_auto]"',
+              'className="grid gap-3 lg:grid-cols-[220px_minmax(0,1fr)_minmax(0,1.4fr)_auto]"',
+              1,
+          )
+
+          replace_once(
+              '''            <div className="flex gap-2">\n              <Button variant="outline" onClick={() => downloadProgressDashboardPdf({ dashboard, academicYear: context.academicYear.label })}>''',
+              '''            <div className="flex w-full flex-wrap gap-2 sm:w-auto">\n              <Button className="w-full sm:w-auto" variant="outline" onClick={() => downloadProgressDashboardPdf({ dashboard, academicYear: context.academicYear.label })}>''',
+              'dashboard action group',
+          )
+          replace_once(
+              '''              <Button variant="ghost" onClick={() => void onDashboardRefresh()}>''',
+              '''              <Button className="w-full sm:w-auto" variant="ghost" onClick={() => void onDashboardRefresh()}>''',
+              'dashboard refresh responsive',
+          )
+
+          replace_once(
+              '''  const router = useRouter();\n  const { hasRole } = usePermissions();\n  const authUserId''',
+              '''  const router = useRouter();\n  const { hasRole } = usePermissions();\n  const online = useOnlineStatus();\n  const authUserId''',
+              'page online hook',
+          )
+
+          replace_once(
+              '''  const [dashboard, setDashboard] = useState<ProgressDashboard | null>(null);\n  const [loading, setLoading] = useState(true);''',
+              '''  const [dashboard, setDashboard] = useState<ProgressDashboard | null>(null);\n  const [dashboardError, setDashboardError] = useState<string | null>(null);\n  const [loading, setLoading] = useState(true);\n  const [loadError, setLoadError] = useState<string | null>(null);''',
+              'explicit load errors',
+          )
+
+          replace_once(
+              '''  const loadDashboard = useCallback(async () => {\n    if (!isLeadership || !online) return;\n    try {\n      setDashboard(await progressApi.dashboard());\n    } catch {\n      setDashboard(null);\n    }\n  }, [isLeadership]);''',
+              '''  const loadDashboard = useCallback(async () => {\n    if (!isLeadership) return;\n    if (!online) {\n      setDashboardError(null);\n      return;\n    }\n    try {\n      setDashboard(await progressApi.dashboard());\n      setDashboardError(null);\n    } catch {\n      setDashboard(null);\n      setDashboardError("Přehled školy se nepodařilo načíst. Zkuste obnovení.");\n    }\n  }, [isLeadership, online]);''',
+              'dashboard error handling',
+          )
+
+          replace_once(
+              '''  useEffect(() => {\n    if (!isStaff) return;\n    let active = true;\n    setLoading(true);\n    Promise.all([loadContext(), loadDashboard()])\n      .catch(() => undefined)\n      .finally(() => {\n        if (active) setLoading(false);\n      });\n    return () => {\n      active = false;\n    };\n  }, [isStaff, loadContext, loadDashboard]);\n\n  if (!isStaff) return null;\n  if (!offlineScope || loading || !context) {\n    return <div className="flex justify-center py-24"><LoadingSpinner /></div>;\n  }''',
+              '''  const loadPageData = useCallback(async () => {\n    setLoading(true);\n    setLoadError(null);\n    try {\n      await Promise.all([loadContext(), loadDashboard()]);\n    } catch {\n      setLoadError("Pokrok se nepodařilo načíst ani z bezpečně uložených offline dat.");\n    } finally {\n      setLoading(false);\n    }\n  }, [loadContext, loadDashboard]);\n\n  useEffect(() => {\n    if (!isStaff || !offlineScope) return;\n    void loadPageData();\n  }, [isStaff, loadPageData, offlineScope]);\n\n  if (!isStaff) return null;\n  if (!offlineScope || loading) {\n    return <div className="flex justify-center py-24"><LoadingSpinner /></div>;\n  }\n  if (!context) {\n    return (\n      <Card className="mx-auto max-w-xl">\n        <CardContent className="space-y-4 p-6 text-center sm:p-8">\n          <AlertTriangle className="mx-auto h-10 w-10 text-warning-strong" />\n          <h1 className="text-2xl font-black text-ink">Pokrok teď nejde načíst</h1>\n          <p className="text-ink-muted">\n            {loadError ?? "Zkontrolujte připojení a zkuste to znovu."}\n          </p>\n          <Button size="lg" className="min-h-[52px] w-full sm:w-auto" onClick={() => void loadPageData()}>\n            <RefreshCw className="mr-2 h-5 w-5" /> Zkusit znovu\n          </Button>\n        </CardContent>\n      </Card>\n    );\n  }''',
+              'finite load failure state',
+          )
+
+          replace_once(
+              '''        <div className="flex flex-wrap gap-2">\n          {isLeadership && (\n            <div className="flex rounded-xl border border-line bg-canvas-alt p-1">\n              <Button variant={leadershipView === "DASHBOARD" ? "default" : "ghost"} onClick={() => setLeadershipView("DASHBOARD")}>\n                <School className="mr-2 h-4 w-4" /> Přehled\n              </Button>\n              <Button variant={leadershipView === "WRITE" ? "default" : "ghost"} onClick={() => setLeadershipView("WRITE")}>\n                <UserRound className="mr-2 h-4 w-4" /> Zapsat hodnocení\n              </Button>\n            </div>\n          )}\n          <Button variant={largeText ? "default" : "outline"} onClick={() => setLargeText((value) => !value)} aria-pressed={largeText}>\n            A+ Velké písmo\n          </Button>\n          <Button variant={highContrast ? "default" : "outline"} onClick={() => setHighContrast((value) => !value)} aria-pressed={highContrast}>\n            Kontrast\n          </Button>\n        </div>''',
+              '''        <div className="flex w-full flex-wrap gap-2 sm:w-auto">\n          {isLeadership && (\n            <div className="grid w-full grid-cols-2 rounded-xl border border-line bg-canvas-alt p-1 sm:w-auto">\n              <Button className="min-h-[48px] min-w-0 px-3 sm:px-4" variant={leadershipView === "DASHBOARD" ? "default" : "ghost"} onClick={() => setLeadershipView("DASHBOARD")}>\n                <School className="mr-2 h-4 w-4" /> Přehled\n              </Button>\n              <Button className="min-h-[48px] min-w-0 px-3 sm:px-4" variant={leadershipView === "WRITE" ? "default" : "ghost"} onClick={() => setLeadershipView("WRITE")}>\n                <UserRound className="mr-2 h-4 w-4" /> Zapsat hodnocení\n              </Button>\n            </div>\n          )}\n          <Button className="min-h-[48px] flex-1 sm:flex-none" variant={largeText ? "default" : "outline"} onClick={() => setLargeText((value) => !value)} aria-pressed={largeText}>\n            A+ Velké písmo\n          </Button>\n          <Button className="min-h-[48px] flex-1 sm:flex-none" variant={highContrast ? "default" : "outline"} onClick={() => setHighContrast((value) => !value)} aria-pressed={highContrast}>\n            Kontrast\n          </Button>\n        </div>''',
+              'responsive accessibility controls',
+          )
+
+          text = text.replace('{offline && (', '{(offline || !online) && (', 1)
+
+          replace_once(
+              '''        ) : (\n          <Card><CardContent className="p-8 text-center text-ink-muted">Dashboard se načte po připojení k internetu.</CardContent></Card>\n        )''',
+              '''        ) : (\n          <Card>\n            <CardContent className="space-y-4 p-6 text-center sm:p-8">\n              <p className="text-ink-muted">\n                {!online\n                  ? "Dashboard se načte po připojení k internetu."\n                  : dashboardError ?? "Dashboard zatím nemá data k zobrazení."}\n              </p>\n              {online && dashboardError && (\n                <Button variant="outline" className="min-h-[48px] w-full sm:w-auto" onClick={() => void loadDashboard()}>\n                  <RefreshCw className="mr-2 h-4 w-4" /> Obnovit přehled\n                </Button>\n              )}\n            </CardContent>\n          </Card>\n        )''',
+              'dashboard retry state',
+          )
+
+          progress.write_text(text)
+
+          family = Path('client/src/app/(school)/app/family/page.tsx')
+          f = family.read_text()
+          f = f.replace('className="space-y-4 p-8 text-center"', 'className="space-y-4 p-6 text-center sm:p-8"', 1)
+          f = f.replace('className="space-y-6 p-8 text-center"', 'className="space-y-6 p-6 text-center sm:p-8"', 1)
+          f = f.replace('className="flex items-center justify-between gap-3"', 'className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between"', 1)
+          f = f.replace('variant="outline"\n                        className="h-11 shrink-0"', 'variant="outline"\n                        className="h-11 w-full shrink-0 sm:w-auto"', 1)
+          f = f.replace('className="flex flex-wrap gap-2"', 'className="grid gap-2 sm:flex sm:flex-wrap"', 1)
+          f = f.replace('className="h-12"\n          disabled={busy || (needsPin && pin.length < 4)}', 'className="h-12 w-full sm:w-auto"\n          disabled={busy || (needsPin && pin.length < 4)}', 1)
+          f = f.replace('className="h-12" onClick={onClose}', 'className="h-12 w-full sm:w-auto" onClick={onClose}', 1)
+          family.write_text(f)
+
+          guardian = Path('client/src/components/guardian/guardian-school-progress.tsx')
+          g = guardian.read_text()
+          g = g.replace(
+              'className="flex items-start justify-between gap-3"',
+              'className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-3"',
+              1,
+          )
+          guardian.write_text(g)
+
+          test_path = Path('client/src/tests/progress-responsive-contract.spec.ts')
+          test_path.write_text(r'''import { readFileSync } from "node:fs";
+          import { join } from "node:path";
+          import { describe, expect, it } from "vitest";
+
+          const ROOT = process.cwd().endsWith("/client") ? process.cwd() : join(process.cwd(), "client");
+          const read = (path: string) => readFileSync(join(ROOT, path), "utf8");
+
+          describe("progress release hardening contracts", () => {
+            it("never leaves progress context failure on an infinite spinner", () => {
+              const source = read("src/app/(school)/app/progress/page.tsx");
+              expect(source).toContain("Pokrok teď nejde načíst");
+              expect(source).toContain("Zkusit znovu");
+              expect(source).toContain("loadPageData");
+            });
+
+            it("uses reactive online/offline state and keeps sync scoped", () => {
+              const source = read("src/app/(school)/app/progress/page.tsx");
+              expect(source).toContain("function useOnlineStatus(): boolean");
+              expect(source).toContain('window.addEventListener("offline", sync)');
+              expect(source).toContain("listQueuedProgressEntries(offlineScope)");
+            });
+
+            it("does not render attendance or support save as a no-op without a student", () => {
+              const source = read("src/app/(school)/app/progress/page.tsx");
+              expect(source).toContain("disabled={busy || !selectedStudent} onClick={() => void saveAttendance()}");
+              expect(source).toContain("disabled={busy || !selectedStudent || !interventionTitle.trim()} onClick={() => void saveIntervention()}");
+              expect(source).toContain("Zadejte počet minut zpoždění jako celé číslo od 1 do 1440.");
+            });
+
+            it("renders leadership comparison as mobile cards and desktop table", () => {
+              const source = read("src/app/(school)/app/progress/page.tsx");
+              expect(source).toContain('className="grid gap-3 md:hidden" aria-label="Srovnání tříd"');
+              expect(source).toContain('className="hidden overflow-x-auto rounded-xl border border-line md:block"');
+            });
+
+            it("keeps parent primary actions full-width on narrow screens", () => {
+              const source = read("src/app/(school)/app/family/page.tsx");
+              expect(source).toContain('className="h-11 w-full shrink-0 sm:w-auto"');
+              expect(source).toContain('className="h-12 w-full sm:w-auto"');
+            });
+          });
+          '''.replace('          ', ''))
+
+          scenario = Path('client/tests/scenarios/progress.scenario.ts')
+          s = scenario.read_text()
+          marker = "\n});\n"
+          responsive_test = r'''
+
+            test('teacher, parent and leadership progress surfaces fit phone, tablet and desktop without page overflow', async ({
+              asRole,
+            }) => {
+              const assertNoPageOverflow = async (page: import('@playwright/test').Page) => {
+                await expect.poll(async () =>
+                  page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1),
+                ).toBe(true);
+              };
+
+              const { page: teacherPage } = await asRole('teacher');
+              for (const viewport of [
+                { width: 360, height: 800 },
+                { width: 768, height: 1024 },
+                { width: 1440, height: 900 },
+              ]) {
+                await teacherPage.setViewportSize(viewport);
+                await teacherPage.goto('/app/progress', { waitUntil: 'commit' });
+                await expect(teacherPage.getByRole('heading', { name: 'Zapsat pokrok žáka' })).toBeVisible();
+                await expect(teacherPage.getByRole('button', { name: 'Uložit hodnocení' })).toBeVisible();
+                await assertNoPageOverflow(teacherPage);
+                const box = await teacherPage.getByRole('button', { name: 'Uložit hodnocení' }).boundingBox();
+                expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
+              }
+
+              const { page: parentPage } = await asRole('parent');
+              for (const viewport of [
+                { width: 360, height: 800 },
+                { width: 768, height: 1024 },
+              ]) {
+                await parentPage.setViewportSize(viewport);
+                await parentPage.goto('/app/family', { waitUntil: 'commit' });
+                await expect(parentPage.getByText('Přehled ze školy')).toBeVisible();
+                await assertNoPageOverflow(parentPage);
+              }
+
+              const { page: directorPage } = await asRole('director');
+              for (const viewport of [
+                { width: 360, height: 800 },
+                { width: 768, height: 1024 },
+                { width: 1440, height: 900 },
+              ]) {
+                await directorPage.setViewportSize(viewport);
+                await directorPage.goto('/app/progress', { waitUntil: 'commit' });
+                await expect(directorPage.getByRole('heading', { name: 'Pokrok školy' })).toBeVisible();
+                await expect(directorPage.getByText('Srovnání tříd')).toBeVisible();
+                await assertNoPageOverflow(directorPage);
+              }
+            });
+          '''
+          if "progress surfaces fit phone, tablet and desktop" not in s:
+              head, sep, tail = s.rpartition(marker)
+              if not sep:
+                  raise SystemExit('progress scenario final marker not found')
+              s = head + responsive_test + marker + tail
+              scenario.write_text(s)
+          PY
+
+      - name: Validate targeted frontend contracts
+        working-directory: client
+        run: |
+          npm ci
+          npx vitest run src/tests/progress-responsive-contract.spec.ts src/tests/ux-action-integrity.spec.ts
+          npm run typecheck
+
+      - name: Commit hardening
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            client/src/app/'(school)'/app/progress/page.tsx \
+            client/src/app/'(school)'/app/family/page.tsx \
+            client/src/components/guardian/guardian-school-progress.tsx \
+            client/src/tests/progress-responsive-contract.spec.ts \
+            client/tests/scenarios/progress.scenario.ts
+          if git diff --cached --quiet; then
+            echo "Release hardening already applied"
+            exit 0
+          fi
+          git commit -m "fix(progress): harden responsive school workflows"
+          git pull --rebase origin fix/school-readiness-rbac-contracts
+          git push origin HEAD:fix/school-readiness-rbac-contracts
