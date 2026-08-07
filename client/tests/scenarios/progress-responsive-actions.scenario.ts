@@ -49,9 +49,13 @@ async function expectVisibleButtonsTouchSafe(
     if (!(await button.isVisible())) continue;
 
     const box = await button.boundingBox();
+    const label =
+      (await button.getAttribute('aria-label')) ??
+      (await button.innerText()).trim() ??
+      `button ${index}`;
     expect(
       box?.height ?? 0,
-      `visible button ${index} should have at least a 44px touch height`,
+      `visible button "${label || index}" should have at least a 44px touch height`,
     ).toBeGreaterThanOrEqual(44);
   }
 }
@@ -107,6 +111,7 @@ test.describe('school progress — responsive runtime release gate', () => {
         classWithStudent!.students[0]!.name,
       );
       await chooseSelectOption(page, 'Vyberte předmět', subject!.name);
+      await page.getByRole('button', { name: '2', exact: true }).click();
 
       const comment = `Responsive release gate — ${viewport.label} — ${Date.now()}`;
       await page
@@ -124,7 +129,7 @@ test.describe('school progress — responsive runtime release gate', () => {
       const saveResponse = await saveResponsePromise;
       expect(
         saveResponse.ok(),
-        `${viewport.label} assessment save must reach backend successfully`,
+        `${viewport.label} assessment save must reach backend successfully (status ${saveResponse.status()})`,
       ).toBeTruthy();
       await expect(
         page.getByText(`Hodnocení pro ${classWithStudent!.students[0]!.name} je uložené.`),
