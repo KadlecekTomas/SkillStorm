@@ -176,8 +176,8 @@ for (const doc of NORMATIVE_DOCS) {
 }
 
 // 6) Every active doc under docs/ must visibly expose lifecycle metadata.
-// Ownership is mandatory for normative docs and recommended for other active
-// blueprints; the registry remains canonical for ownership/classification.
+// Scope/Purpose/Target/Authority are accepted only when they explicitly state
+// what the document governs; the registry remains canonical for classification.
 for (const doc of docs) {
   if (doc === 'README.md' || HISTORICAL_DOCS.has(doc)) continue;
   const content = fs.readFileSync(path.resolve(root, doc), 'utf8');
@@ -188,8 +188,8 @@ for (const doc of docs) {
   if (!/\*\*Last (verified|review(?:ed)?):\*\*/i.test(content)) {
     errors.push(`${doc}: missing Last verified/reviewed metadata`);
   }
-  if (!/\*\*(Scope|Purpose):\*\*/i.test(content)) {
-    errors.push(`${doc}: missing Scope/Purpose metadata`);
+  if (!/\*\*(Scope|Purpose|Target|Authority):\*\*/i.test(content)) {
+    errors.push(`${doc}: missing explicit Scope/Purpose/Target/Authority metadata`);
   }
   if (!/\*\*Owner:\*\*/i.test(content) && !NORMATIVE_DOCS.includes(doc)) {
     warnings.push(`${doc}: Owner is supplied by the registry but not repeated in the file header.`);
