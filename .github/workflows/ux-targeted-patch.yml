@@ -1,0 +1,152 @@
+name: Temporary targeted UX patch
+
+on:
+  push:
+    branches: [fix/school-readiness-rbac-contracts]
+    paths: [.github/workflows/ux-targeted-patch.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/school-readiness-rbac-contracts
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - name: Apply exact UX patches
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected exactly one match, got {count}")
+              p.write_text(text.replace(old, new, 1))
+
+          # Classrooms: active role is the source of truth, never infer teacher
+          # mode from the absence of unrelated permissions/roles.
+          path = "client/src/components/pages/classrooms/classrooms-page.tsx"
+          replace_once(
+              path,
+              '  const { org, syncProfile, isLoading: authLoading, isAuthenticated, roles } = useAuth();\n  const canViewStudentDetail = !roles.includes("STUDENT");',
+              '  const { org, syncProfile, isLoading: authLoading, isAuthenticated, roles, activeRole } = useAuth();\n  const effectiveRole = activeRole ?? roles[0] ?? null;\n  const canViewStudentDetail =\n    effectiveRole === "OWNER" ||\n    effectiveRole === "DIRECTOR" ||\n    effectiveRole === "TEACHER";',
+          )
+          replace_once(
+              path,
+              '  const isTeacherView = !canManageClasses && !roles.includes("STUDENT");',
+              '  const isTeacherView = effectiveRole === "TEACHER";',
+          )
+
+          p = Path(path)
+          text = p.read_text()
+          fake_request = re.compile(
+              r'''      \{yearUiState === "empty" && !canCreateYear && \(\n'''
+              r'''        <div className="rounded-3xl border border-slate-200 bg-white px-5 py-4">\n'''
+              r'''          <p className="text-sm text-slate-600">\n'''
+              r'''            Pro práci s třídami potřebujete školní rok\.\n'''
+              r'''          </p>\n'''
+              r'''          <Button\n'''
+              r'''            className="mt-3"\n'''
+              r'''            onClick=\{\(\) =>\n'''
+              r'''              showToastOnce\("Požádej správce o vytvoření školního roku\.", \{\n'''
+              r'''                type: "info",\n'''
+              r'''              \}\)\n'''
+              r'''            \}\n'''
+              r'''          >\n'''
+              r'''            Požádat správce o vytvoření školního roku\n'''
+              r'''          </Button>\n'''
+              r'''        </div>\n'''
+              r'''      \)\}'''
+          )
+          replacement = '''      {yearUiState === "empty" && !canCreateYear && (\n        <div className="rounded-3xl border border-slate-200 bg-white px-5 py-4">\n          <p className="text-sm text-slate-600">\n            Pro práci s třídami potřebujete školní rok.\n          </p>\n          <p className="mt-2 text-sm font-medium text-slate-700">\n            Školní rok musí nastavit ředitel nebo vlastník školy. Jakmile ho vedení nastaví, stránku znovu načtěte.\n          </p>\n        </div>\n      )}'''
+          text, n = fake_request.subn(replacement, text, count=1)
+          if n != 1:
+              raise SystemExit(f"{path}: fake admin request block match count {n}")
+          p.write_text(text)
+
+          # Family: highlighted next step must either expose a real guardian
+          # launch flow or look informational. Never render a decorative CTA arrow.
+          path = "client/src/app/(school)/app/family/page.tsx"
+          replace_once(
+              path,
+              'import { CalendarClock, ChevronRight, Mail, Sparkles } from "lucide-react";',
+              'import { CalendarClock, Mail, Sparkles } from "lucide-react";',
+          )
+          replace_once(
+              path,
+              '  const firstName = data.student.name.split(" ")[0];',
+              '  const firstName = data.student.name.split(" ")[0];\n  const nextStepItem = data.nextStep\n    ? data.todo.find((item) => item.assignmentId === data.nextStep?.assignmentId) ?? null\n    : null;',
+          )
+          p = Path(path)
+          text = p.read_text()
+          next_step = re.compile(
+              r'''      \{/\* Doporučený další krok — jedna dominantní akce nahoře \*/\}\n'''
+              r'''      \{data\.nextStep && \(\n'''
+              r'''        <Card className="border-accent bg-accent-soft">.*?'''
+              r'''      \)\}\n\n'''
+              r'''      \{/\* Co je potřeba udělat \*/\}''',
+              re.S,
+          )
+          next_replacement = '''      {/* Doporučený další krok — skutečná akce jen pokud ji backend dovoluje */}\n      {data.nextStep && (\n        <Card className="border-accent bg-accent-soft">\n          <CardContent className="space-y-4 p-5">\n            <div className="min-w-0 space-y-0.5">\n              <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-accent-deep">\n                <Sparkles className="h-3.5 w-3.5" /> Doporučený další krok\n              </p>\n              <p className="truncate text-[17px] font-extrabold text-ink">\n                {data.nextStep.title}\n              </p>\n              <p className="text-sm font-semibold text-ink-muted">\n                {humanDue(data.nextStep.dueAt)}\n              </p>\n            </div>\n            {nextStepItem && nextStepItem.guardianLaunchPolicy !== "DISABLED" && (\n              <Button\n                size="lg"\n                className="h-12 w-full sm:w-auto"\n                onClick={() =>\n                  setLaunching((current) =>\n                    current === nextStepItem.assignmentId\n                      ? null\n                      : nextStepItem.assignmentId,\n                  )\n                }\n              >\n                {launching === nextStepItem.assignmentId\n                  ? "Zavřít spuštění"\n                  : "Spustit doma"}\n              </Button>\n            )}\n            {nextStepItem && launching === nextStepItem.assignmentId && (\n              <LaunchActivity\n                child={child}\n                item={nextStepItem}\n                onClose={() => setLaunching(null)}\n              />\n            )}\n          </CardContent>\n        </Card>\n      )}\n\n      {/* Co je potřeba udělat */}'''
+          text, n = next_step.subn(next_replacement, text, count=1)
+          if n != 1:
+              raise SystemExit(f"{path}: recommended next-step block match count {n}")
+          p.write_text(text)
+
+          # Student detail: human labels instead of internal diagnostic enums.
+          path = "client/src/app/(school)/app/students/[studentId]/page.tsx"
+          replace_once(path, '    WEAK: "WEAK",', '    WEAK: "Slabé místo",')
+          replace_once(path, '    WARNING: "WARNING",', '    WARNING: "Pozor",')
+          replace_once(path, '    GOOD: "GOOD",', '    GOOD: "V pořádku",')
+          replace_once(
+              path,
+              '    INSUFFICIENT_DATA: "INSUFFICIENT_DATA",',
+              '    INSUFFICIENT_DATA: "Málo dat",',
+          )
+
+          # Browser print is functional, but calling it an export is misleading.
+          path = "client/src/app/(school)/app/results/page.tsx"
+          p = Path(path)
+          text = p.read_text()
+          if text.count("Export PDF") < 1:
+              raise SystemExit(f"{path}: expected Export PDF label")
+          p.write_text(text.replace("Export PDF", "Tisk / uložit PDF"))
+          PY
+
+      - name: Install frontend dependencies
+        working-directory: client
+        run: npm ci
+
+      - name: Frontend typecheck
+        working-directory: client
+        run: npm run typecheck
+
+      - name: Commit verified UX patch and remove helper
+        shell: bash
+        run: |
+          rm .github/workflows/ux-targeted-patch.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add client/src/components/pages/classrooms/classrooms-page.tsx \
+                  client/src/app/\(school\)/app/family/page.tsx \
+                  client/src/app/\(school\)/app/students/\[studentId\]/page.tsx \
+                  client/src/app/\(school\)/app/results/page.tsx \
+                  .github/workflows/ux-targeted-patch.yml
+          git commit -m "fix(ux): remove misleading school action affordances"
+          git push origin HEAD:fix/school-readiness-rbac-contracts
