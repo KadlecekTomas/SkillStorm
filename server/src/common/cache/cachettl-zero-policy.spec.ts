@@ -43,11 +43,12 @@ describe('HTTP cache policy — @CacheTTL(0)', () => {
       }
     }
 
-    expect(
-      offenders,
-      offenders.length
-        ? `@CacheTTL(0) nevypíná SmartCacheInterceptor. Přidej @NoHttpCache(): ${offenders.join(', ')}`
-        : '',
-    ).toEqual([]);
+    if (offenders.length > 0) {
+      throw new Error(
+        `@CacheTTL(0) nevypíná SmartCacheInterceptor. Přidej @NoHttpCache(): ${offenders.join(', ')}`,
+      );
+    }
+
+    expect(offenders).toEqual([]);
   });
 });
