@@ -29,6 +29,7 @@ import { QueryTopicsDto } from './dto/query-topics.dto';
 import { AssignMaterialsDto } from './dto/assign-materials.dto';
 import { AssignTestsDto } from './dto/assign-tests.dto';
 import { InvalidateScopes } from '@/common/cache/invalidate.decorator';
+import { NoHttpCache } from '@/common/cache/no-http-cache.decorator';
 import {
   OrgOperation,
   OrgOperationType,
@@ -47,6 +48,7 @@ export class TopicsController {
   @Get('/catalog/subjects')
   @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'CatalogSubject list (pro picker)' })
+  @NoHttpCache()
   @CacheTTL(0)
   listCatalogSubjects() {
     return this.service.listCatalogSubjects();
@@ -55,6 +57,7 @@ export class TopicsController {
   @Get('/catalog/subjects/:id/topics')
   @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'CatalogTopic list by CatalogSubject (pro picker)' })
+  @NoHttpCache()
   @CacheTTL(0)
   listCatalogTopics(
     @Param('id', new ParseUUIDPipe()) catalogSubjectId: string,
@@ -69,6 +72,7 @@ export class TopicsController {
   @Get('/by-subject/:subjectId')
   @Permission(PermissionKey.CREATE_TEST)
   @ApiOperation({ summary: 'TopicLevel podle Subject ID' })
+  @NoHttpCache()
   @CacheTTL(0)
   getBySubject(
     @Param('subjectId', new ParseUUIDPipe()) subjectId: string,
@@ -90,6 +94,7 @@ export class TopicsController {
   @ApiQuery({ name: 'search', required: false, type: String })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
+  @NoHttpCache()
   @CacheTTL(0)
   findAll(@Req() req: RequestWithUser, @Query() q: QueryTopicsDto) {
     return this.service.findAll(req.user, q);
@@ -114,6 +119,7 @@ export class TopicsController {
   @Get(':id')
   @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'Detail TopicLevel' })
+  @NoHttpCache()
   @CacheTTL(0)
   findOne(
     @Param('id', new ParseUUIDPipe()) id: string,
