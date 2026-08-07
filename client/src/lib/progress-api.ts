@@ -1,0 +1,174 @@
+import { fetchWithAuth } from '@/lib/http/client';
+
+export type ProgressEntryType = 'ASSESSMENT' | 'COMMENT' | 'PRAISE';
+export type AttendanceStatus = 'PRESENT' | 'ABSENT' | 'EXCUSED' | 'LATE';
+export type InterventionStatus = 'OPEN' | 'IN_PROGRESS' | 'RESOLVED';
+
+export type ProgressContext = {
+  academicYear: { id: string; label: string };
+  classes: Array<{
+    id: string;
+    label: string;
+    grade: string;
+    students: Array<{ id: string; name: string }>;
+  }>;
+  subjects: Array<{ id: string; name: string }>;
+  competencies: Array<{
+    id: string;
+    subjectId: string | null;
+    name: string;
+    description: string | null;
+    scaleMin: number;
+    scaleMax: number;
+  }>;
+};
+
+export type CreateProgressEntryInput = {
+  studentId: string;
+  subjectId?: string;
+  competencyId?: string;
+  type?: ProgressEntryType;
+  gradeValue?: number;
+  competencyLevel?: number;
+  comment?: string;
+  clientMutationId?: string;
+  occurredAt?: string;
+};
+
+export type StudentProgressDetail = {
+  student: {
+    id: string;
+    name: string;
+    classSectionId: string;
+    classLabel: string;
+  };
+  summary: {
+    averageGrade: number | null;
+    competencyMasteryPercent: number | null;
+    attendanceRate: number | null;
+    openInterventions?: number;
+  };
+  competencyMap: Array<{
+    id: string;
+    name: string;
+    subjectName: string | null;
+    level: number;
+    scaleMin: number;
+    scaleMax: number;
+    updatedAt: string;
+  }>;
+  timeline: Array<{
+    id: string;
+    kind: 'GRADE' | 'COMPETENCY' | 'COMMENT' | 'PRAISE' | 'TEST' | 'ATTENDANCE' | 'INTERVENTION';
+    occurredAt: string;
+    title: string;
+    detail: string | null;
+    subjectName: string | null;
+    authorName: string | null;
+  }>;
+  attendance: {
+    total: number;
+    present: number;
+    late: number;
+    absent: number;
+    excused: number;
+  };
+  interventions?: Array<{
+    id: string;
+    title: string;
+    note: string | null;
+    status: InterventionStatus;
+    subjectName: string | null;
+    startedAt: string;
+    resolvedAt: string | null;
+  }>;
+};
+
+export type ProgressDashboard = {
+  summary: {
+    studentCount: number;
+    averageGrade: number | null;
+    averageCompetency: number | null;
+    attendanceRate: number | null;
+    openInterventions: number;
+    progressEntries: number;
+  };
+  classes: Array<{
+    classSectionId: string;
+    classLabel: string;
+    studentCount: number;
+    averageGrade: number | null;
+    averageCompetency: number | null;
+    attendanceRate: number | null;
+    openInterventions: number;
+    progressEntries: number;
+  }>;
+};
+
+export const progressApi = {
+  context: () => fetchWithAuth<ProgressContext>('GET', '/progress/context'),
+
+  createEntry: (body: CreateProgressEntryInput) =>
+    fetchWithAuth<unknown>('POST', '/progress/entries', { body }),
+
+  syncEntries: (entries: CreateProgressEntryInput[]) =>
+    fetchWithAuth<{
+      results: Array<{
+        clientMutationId: string | null;
+        status: 'SYNCED' | 'FAILED';
+        error?: string;
+      }>;
+    }>('POST', '/progress/sync', { body: { entries } }),
+
+  student: (studentId: string) =>
+    fetchWithAuth<StudentProgressDetail>('GET', `/progress/students/${studentId}`),
+
+  guardianStudent: (studentId: string) =>
+    fetchWithAuth<StudentProgressDetail>(
+      'GET',
+      `/progress/guardian/students/${studentId}`,
+    ),
+
+  dashboard: () => fetchWithAuth<ProgressDashboard>('GET', '/progress/dashboard'),
+
+  classDashboard: (classSectionId: string) =>
+    fetchWithAuth<ProgressDashboard['classes'][number]>(
+      'GET',
+      `/progress/dashboard/classes/${classSectionId}`,
+    ),
+
+  createAttendance: (body: {
+    studentId: string;
+    subjectId?: string;
+    status: AttendanceStatus;
+    minutesLate?: number;
+    note?: string;
+    occurredAt?: string;
+  }) => fetchWithAuth<unknown>('POST', '/progress/attendance', { body }),
+
+  createIntervention: (body: {
+    studentId: string;
+    subjectId?: string;
+    title: string;
+    note?: string;
+  }) => fetchWithAuth<unknown>('POST', '/progress/interventions', { body }),
+
+  resolveIntervention: (interventionId: string) =>
+    fetchWithAuth<unknown>(
+      'PATCH',
+      `/progress/interventions/${interventionId}/resolve`,
+    ),
+
+  createCompetency: (body: {
+    subjectId?: string;
+    name: string;
+    description?: string;
+    scaleMin?: number;
+    scaleMax?: number;
+  }) =>
+    fetchWithAuth<ProgressContext['competencies'][number]>(
+      'POST',
+      '/progress/competencies',
+      { body },
+    ),
+};
