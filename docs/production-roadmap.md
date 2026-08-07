@@ -1,45 +1,31 @@
-# Eduto Production Readiness Roadmap
+# SkillStorm — Production Roadmap (Archive)
 
-Datum aktualizace: 2026-06-10
+> **Status:** `HISTORICAL / SNAPSHOT`  
+> **Original role:** starší produkční roadmapa  
+> **Archived:** 2026-08-07  
+> **Current roadmap:** [`roadmap/master.md`](./roadmap/master.md)  
+> **Current documentation authority:** [`README.md`](./README.md)
 
-Aktuální verdikt: READY FOR PRE-PROD
+---
 
-## 1. Tenant isolation / RBAC testy
+## Archive notice
 
-Stav 2026-06-10: zahájeno. Přidána backend test matrix v `docs/tenant-rbac-test-matrix.md` a rozšířená Jest e2e sada `tenant-scope-fortress` pro cross-tenant testy, assignment/submission izolaci, student/admin deny scénáře a org-scoped RBAC deny.
+Tento soubor představoval starší pořadí production-readiness kroků. Po zavedení jednoho Master Roadmap a nových normativních security/curriculum/production kontraktů by původní checklist vytvářel druhý konkurenční backlog.
 
-* Endpoint-by-endpoint IDOR testy pro organizace, třídy, studenty, testy, assignmenty, submissions, audit, import/export.
-* Role matrix testy pro platform role i organization role.
-* Negativní testy pro cross-tenant přístup.
-* Zbývající P0 mezery: `PATCH /students/:id`, enrollment mutation cross-tenant testy a submission mutation cross-tenant testy.
+Proto je aktivní obsah archivován. Úplná původní verze zůstává v Git historii tohoto souboru.
 
-## 2. Lint cleanup po kategoriích
+---
 
-* Nejprve mechanický Prettier cleanup backendu.
-* Poté unused imports/vars.
-* Poté frontend explicit return type pravidla a hook dependency warnings.
-* Nakonec zapnout lint jako blocking CI gate.
+## Co platí dnes
 
-## 3. E2E workflow testy
+Pořadí práce určuje pouze:
 
-* School happy path: owner/director setup -> teacher creates test -> assignment -> student submission -> result -> analytics.
-* Auth refresh/logout/regression flow.
-* Import studentů včetně chybových CSV řádků.
-* Subscription/suspended organization gating.
+- [`roadmap/master.md`](./roadmap/master.md);
+- [`interactive-curriculum/PRODUCTION-CONTRACT.md`](./interactive-curriculum/PRODUCTION-CONTRACT.md);
+- [`interactive-curriculum/CURRICULUM-DATA-CONTRACT.md`](./interactive-curriculum/CURRICULUM-DATA-CONTRACT.md);
+- [`tenant-rbac-test-matrix.md`](./tenant-rbac-test-matrix.md) pro security release gate;
+- current runbooky a executable CI/test contracts.
 
-## 4. Monitoring, backup, release checklist
+Staré položky z Git historie se nepovažují za otevřený backlog, dokud nejsou znovu výslovně povýšeny do Master Roadmap nebo current issue/spec.
 
-* Sentry nebo ekvivalent pro backend/frontend chyby.
-* Health/metrics provozní dashboard.
-* PostgreSQL backup a restore smoke test.
-* Migration runbook a rollback postup.
-* Release checklist pro secrets, env, Docker image tags, migrations, seed policy a smoke test.
-* Follow-up mimo aktuální CI parity fix: vyřešit `npm audit` dependency backlog a přesunout Prisma konfiguraci z deprecated `package.json#prisma` do `prisma.config.ts`.
-
-## 5. P1 datové invarianty
-
-* Sjednotit auth/token model: hash semantics pro refresh token storage a jasná access-token revokace.
-* DB nebo aplikační invariant pro uživatele s alespoň jedním login identifikátorem.
-* Enum/invarianty pro assignment `targetType` a `showExplain`.
-* Audit coverage pro assignment, submission, import/export, invite, subscription a academic year.
-* Content scope/subscription compatibility invarianty a regresní testy.
+> **Archive invariant:** SkillStorm má jednu aktivní roadmapu; historická pořadí práce slouží pouze k traceability.
