@@ -10,6 +10,12 @@ function source(relativePath: string): string {
   return readFileSync(join(CLIENT_ROOT, relativePath), "utf8");
 }
 
+function expectNoNestedLinkButton(relativePath: string): void {
+  const text = source(relativePath);
+  const nestedInteractive = /<Link\b[^>]*>[\s\S]*?<Button\b[\s\S]*?<\/Link>/;
+  expect(nestedInteractive.test(text), relativePath).toBe(false);
+}
+
 describe("school UX action integrity", () => {
   it("nezobrazuje ve Třídách falešné tlačítko, které jen předstírá žádost správci", () => {
     const text = source("src/components/pages/classrooms/classrooms-page.tsx");
@@ -67,9 +73,12 @@ describe("school UX action integrity", () => {
     expect(text).toContain('INSUFFICIENT_DATA: "Málo dat"');
   });
 
-  it("detail žáka a staff výsledky mají frontend role boundary před API requesty", () => {
+  it("detail žáka, staff výsledky a guardian kódy mají frontend RBAC před API requesty", () => {
     const studentLayout = source("src/app/(school)/app/students/[studentId]/layout.tsx");
     const testResults = source("src/app/(school)/app/tests/[testId]/results/page.tsx");
+    const guardianLayout = source(
+      "src/app/(school)/app/classrooms/[classSectionId]/guardian-codes/layout.tsx",
+    );
 
     expect(studentLayout).toContain('"OWNER"');
     expect(studentLayout).toContain('"DIRECTOR"');
@@ -79,6 +88,65 @@ describe("school UX action integrity", () => {
 
     expect(testResults).toContain("requireRoles: STAFF_ROLES");
     expect(testResults).toContain("PermissionKey.VIEW_RESULTS");
+
+    expect(guardianLayout).toContain("PermissionKey.INVITE_STUDENTS");
+    expect(guardianLayout).toContain('"TEACHER"');
+    expect(guardianLayout).not.toContain('"STUDENT"');
+    expect(guardianLayout).not.toContain('"PARENT"');
+  });
+
+  it("vytvoření testu neposílá běžného učitele do zakázaného nastavení", () => {
+    const text = source("src/app/(school)/app/tests/create/page.tsx");
+
+    expect(text).toContain("canManageSubjects");
+    expect(text).toContain("Předměty musí nejdříve připravit ředitel nebo vlastník školy.");
+    expect(text).toContain("Otevřít nastavení předmětů");
+    expect(text).toContain("requireSchoolWorkspace: true");
+    expectNoNestedLinkButton("src/app/(school)/app/tests/create/page.tsx");
+  });
+
+  it("detail a editor testu nepoužívají neplatné Link+Button ani interní typy jako učitelský text", () => {
+    const detail = source("src/app/(school)/app/tests/[testId]/page.tsx");
+    const editor = source("src/app/(school)/app/tests/[testId]/edit/page.tsx");
+
+    expect(detail).not.toContain('console.log("assignment.openAt raw:"');
+    expect(detail).toContain("Test bude dostupný od");
+    expect(editor).toContain('TRUE_FALSE: "Pravda / nepravda"');
+    expect(editor).toContain('MULTIPLE_CHOICE: "Výběr z možností"');
+    expect(editor).not.toContain("{index + 1} · {question.type}");
+    expectNoNestedLinkButton("src/app/(school)/app/tests/[testId]/page.tsx");
+    expectNoNestedLinkButton("src/app/(school)/app/tests/[testId]/edit/page.tsx");
+  });
+
+  it("žákovské historické test URL nevedou na 404 a neukazují technické assignmentId", () => {
+    const legacyTest = source("src/app/(school)/app/student/tests/[testId]/page.tsx");
+    const legacySubmission = source(
+      "src/app/(school)/app/tests/[testId]/submission/page.tsx",
+    );
+
+    expect(legacyTest).toContain("/app/assignments/${encodeURIComponent(assignmentId)}");
+    expect(legacyTest).not.toContain('router.replace(`/assignments/');
+    expect(legacyTest).not.toContain("Chybí assignmentId");
+    expect(legacyTest).not.toContain("Přejít na assignments");
+    expect(legacySubmission).toContain('redirect("/app/assignments")');
+  });
+
+  it("support stránka nepředkládá učiteli raw API statusy a priority", () => {
+    const text = source("src/app/(school)/app/support/page.tsx");
+
+    expect(text).toContain('OPEN: "Nové"');
+    expect(text).toContain('IN_REVIEW: "Řeší se"');
+    expect(text).toContain('RESOLVED: "Vyřešeno"');
+    expect(text).toContain('HIGH: "Vysoká priorita"');
+    expect(text).not.toContain("platform support inboxu");
+  });
+
+  it("osobní režim nepoužívá permanentně disabled tlačítka jako popis nedostupných funkcí", () => {
+    const text = source("src/app/(school)/app/personal/page.tsx");
+
+    expect(text).not.toContain("<Button disabled");
+    expect(text).toContain("Pozvání členů · dostupné po připojení ke škole");
+    expect(text).toContain("Správa tříd · dostupná po připojení ke škole");
   });
 
   it("staré školní URL už neudržují druhou, zastaralou UX implementaci", () => {
