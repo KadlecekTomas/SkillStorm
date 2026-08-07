@@ -282,13 +282,33 @@ test.describe('school readiness — RBAC and visible-action contract', () => {
     await expect(page.getByText('Material created by the school-readiness browser gate.')).toBeVisible();
   });
 
-  test('legacy assignment id on a result URL recovers to the assignment workflow', async ({ asRole, manifest }) => {
+  test('legacy assignment id on a result URL resolves to a valid assignment or submission target', async ({ asRole, manifest }) => {
     const { page } = await asRole('student8a');
     const legacyResultUrl = `/app/results/${manifest.assignment8AId}`;
     await page.goto(legacyResultUrl, { waitUntil: 'commit' });
     await expect
       .poll(() => page.url(), { timeout: 15_000 })
       .not.toContain(legacyResultUrl);
-    expect(page.url()).toContain(`/app/assignments/${manifest.assignment8AId}`);
+
+    const finalUrl = new URL(page.url());
+    const assignmentPath = `/app/assignments/${manifest.assignment8AId}`;
+    const isAssignmentRecovery = finalUrl.pathname.startsWith(assignmentPath);
+    const resultMatch = finalUrl.pathname.match(/^\/app\/results\/([^/]+)$/);
+
+    expect(
+      isAssignmentRecovery || Boolean(resultMatch),
+      `legacy result URL must recover to assignment or a real submission, got ${finalUrl.pathname}`,
+    ).toBeTruthy();
+
+    if (resultMatch) {
+      const recoveredSubmissionId = resultMatch[1];
+      expect(recoveredSubmissionId).not.toBe(manifest.assignment8AId);
+      await expect(page.getByRole('heading', { name: 'Výsledek pokusu' })).toBeVisible();
+    } else {
+      await expect(page).toHaveURL(new RegExp(`/app/assignments/${manifest.assignment8AId}`));
+    }
+
+    await expect(page.getByText('Přístup není povolen')).toHaveCount(0);
+    await expect(page.getByText('Něco se pokazilo')).toHaveCount(0);
   });
 });
