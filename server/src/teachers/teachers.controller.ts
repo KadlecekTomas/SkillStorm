@@ -64,7 +64,8 @@ export class TeachersController {
   @Get(':id')
   @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'Get teacher detail' })
-  @CacheTTL(0) // čtecí endpoint: viz výše
+  @NoHttpCache()
+  @CacheTTL(0)
   findOne(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Req() req: RequestWithUser,
