@@ -12,6 +12,7 @@ import {
   Header,
   ParseUUIDPipe,
   ForbiddenException,
+  NotFoundException,
   UseGuards,
 } from '@nestjs/common';
 import { RequestWithUser } from '@/types/request-with-user';
@@ -22,7 +23,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { Permission } from '@/modules/rbac/permission.decorator';
-import { OrganizationRole, PermissionKey } from '@prisma/client';
+import { OrganizationRole, PermissionKey, PublishStatus } from '@prisma/client';
 import { InvalidateScopes } from '@/common/cache/invalidate.decorator';
 import { NoHttpCache } from '@/common/cache/no-http-cache.decorator';
 
@@ -114,11 +115,20 @@ export class TestsController {
   @ApiOperation({ summary: 'Get read-only test detail' })
   @NoHttpCache()
   @Header('Cache-Control', 'no-store')
-  viewOne(
+  async viewOne(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Req() req: RequestWithUser,
   ) {
-    return ok(this.service.findOne(id, req.user));
+    const detail = await this.service.findOne(id, req.user);
+    const teacherDetail = detail as { editMode?: unknown; status?: unknown } | null;
+    if (
+      req.user.organizationRole === OrganizationRole.TEACHER &&
+      teacherDetail?.editMode === 'NONE' &&
+      teacherDetail.status !== PublishStatus.PUBLISHED
+    ) {
+      throw new NotFoundException('Test nenalezen');
+    }
+    return ok(detail);
   }
 
   @Get(':id')

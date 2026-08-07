@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarClock, Sparkles } from "lucide-react";
+import { AlertTriangle, CalendarClock, RefreshCw, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
@@ -105,12 +105,16 @@ function ConfirmChildScreen({
   onResolved: (confirmed: boolean) => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const answer = async (confirmed: boolean) => {
     setBusy(true);
+    setError(null);
     try {
       await resolveGuardianRelation(child.relationId, confirmed);
       onResolved(confirmed);
+    } catch {
+      setError("Potvrzení se nepodařilo uložit. Zkontrolujte připojení a zkuste to znovu.");
     } finally {
       setBusy(false);
     }
@@ -132,6 +136,11 @@ function ConfirmChildScreen({
             <p className="text-[15px] text-ink-muted">třída {child.classLabel}</p>
           )}
         </div>
+        {error && (
+          <p role="alert" className="rounded-xl border border-danger/30 bg-danger-soft p-3 text-sm font-semibold text-danger">
+            {error}
+          </p>
+        )}
         <div className="space-y-3">
           <Button
             size="lg"
@@ -279,15 +288,29 @@ function LaunchActivity({
 }
 
 function FamilyOverview({ child }: { child: GuardianChild }) {
-  const { data, isLoading } = useChildOverview(child.studentId);
+  const { data, error, isLoading, refetch } = useChildOverview(child.studentId);
   const [showDetail, setShowDetail] = useState(false);
   const [launching, setLaunching] = useState<string | null>(null);
 
-  if (isLoading || !data) {
+  if (isLoading) {
     return (
       <div className="flex justify-center py-16">
         <LoadingSpinner />
       </div>
+    );
+  }
+  if (error || !data) {
+    return (
+      <Card>
+        <CardContent className="space-y-4 p-6 text-center">
+          <AlertTriangle className="mx-auto h-9 w-9 text-warning-strong" />
+          <h2 className="text-lg font-extrabold text-ink">Údaje dítěte se nepodařilo načíst</h2>
+          <p className="text-sm text-ink-muted">Zkontrolujte připojení a zkuste načtení znovu.</p>
+          <Button className="min-h-[48px] w-full sm:w-auto" onClick={() => void refetch()}>
+            <RefreshCw className="mr-2 h-4 w-4" /> Zkusit znovu
+          </Button>
+        </CardContent>
+      </Card>
     );
   }
 
@@ -441,7 +464,7 @@ export default function FamilyPage(): React.JSX.Element | null {
   const router = useRouter();
   const { hasRole } = usePermissions();
   const isParent = hasRole("PARENT");
-  const { data, isLoading, refetch } = useGuardianChildren(isParent);
+  const { data, error, isLoading, refetch } = useGuardianChildren(isParent);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [justDisputed, setJustDisputed] = useState(false);
 
@@ -454,11 +477,25 @@ export default function FamilyPage(): React.JSX.Element | null {
     children.find((c) => c.studentId === selectedId) ?? children[0] ?? null;
 
   if (!isParent) return null;
-  if (isLoading || !data) {
+  if (isLoading) {
     return (
       <div className="flex justify-center py-24">
         <LoadingSpinner />
       </div>
+    );
+  }
+  if (error || !data) {
+    return (
+      <Card className="mx-auto mt-8 max-w-md">
+        <CardContent className="space-y-4 p-6 text-center sm:p-8">
+          <AlertTriangle className="mx-auto h-10 w-10 text-warning-strong" />
+          <h1 className="text-xl font-extrabold text-ink">Rodinný přehled se nepodařilo načíst</h1>
+          <p className="text-[15px] leading-relaxed text-ink-muted">Zkontrolujte připojení k internetu a zkuste to prosím znovu.</p>
+          <Button size="lg" className="min-h-[52px] w-full" onClick={() => void refetch()}>
+            <RefreshCw className="mr-2 h-5 w-5" /> Zkusit znovu
+          </Button>
+        </CardContent>
+      </Card>
     );
   }
 
