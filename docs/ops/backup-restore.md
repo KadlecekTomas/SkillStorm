@@ -1,174 +1,410 @@
-# Zálohy a obnova databáze — runbook
+# SkillStorm — Database Backup & Restore Runbook
 
-> Psáno pro čtení ve stresu. Postupuj shora dolů, nic nepřeskakuj.
-> Všechny příkazy se spouštějí z kořene repozitáře.
+> **Status:** `CURRENT / RUNBOOK`  
+> **Owner:** Engineering + Operations  
+> **Last verified:** 2026-08-07  
+> **Scope:** logical PostgreSQL backups created by `scripts/ops/backup-db.sh`, safe restore through `scripts/ops/restore-db.sh`, and restore drills  
+> **Executable authority:** the scripts referenced below are the operational source of truth. If a command or safety invariant changes in a script, update this runbook in the same PR.
 
-## TL;DR obnova (disaster recovery)
+---
 
-```bash
-# 1. Najdi nejnovější zálohu
-ls -lt backups/daily/ | head
+## 0. Non-negotiable rules
 
-# 2. Obnov ji do NOVÉ databáze (nikdy nepřepisuj původní, dokud si nejsi jistý)
-scripts/ops/restore-db.sh \
-  --file backups/daily/eduto_YYYYMMDD_HHMMSS.dump \
-  --target-db eduto_restore_test --recreate
+1. **A backup that has never been restored is not a proven backup.**
+2. **Never test a restore by overwriting the only production database.** Restore into a separate `*_test` database first.
+3. **Logical dumps must exist outside the database host/provider.** A dump stored only beside the source database does not protect against account, host or provider loss.
+4. **Managed-provider PITR is supplemental.** Verify current provider retention and recovery terms directly before relying on them; do not encode volatile pricing/retention assumptions in this runbook.
+5. **Production restore is a controlled incident operation.** Stop or isolate application writers before destructive recovery and record the decision/audit trail.
+6. **Never put production credentials or secrets into shell history, Markdown, tickets or screenshots.** Prefer a protected environment/secret manager.
 
-# 3. Ověř obnovená data smoke testem (sekce „Smoke test" níže)
+---
 
-# 4. Teprve po úspěšném smoke testu přepni aplikaci na obnovenou DB,
-#    NEBO obnov do produkčního názvu (vyžádá si interaktivní potvrzení):
-scripts/ops/restore-db.sh --file <dump> --target-db eduto --recreate
+# 1. Tooling
+
+Repository scripts:
+
+```text
+scripts/ops/backup-db.sh
+scripts/ops/restore-db.sh
+scripts/ops/restore-drill.sh
 ```
 
-## Co dělá Render a co si musíš zařídit sám
+Required PostgreSQL client tools depend on the operation:
 
-Ověřeno v dokumentaci Renderu 27. 7. 2026 — před spuštěním produkce si to
-potvrď v jejich UI, ceníky a limity se mění.
-
-| | Free | Hobby (placený) | Pro a výš |
-|---|---|---|---|
-| Point-in-time recovery | **není** | posledních **3 dny** | posledních **7 dní** |
-| Logické zálohy (export) | **nevytváří se** | ruční export z dashboardu | ruční export z dashboardu |
-| Retence logických záloh | — | 7 dní od vytvoření | 7 dní od vytvoření |
-| Automatická denní záloha | **ne** | **ne** | **ne** |
-
-Tři věci, které z toho plynou a které se snadno přehlédnou:
-
-1. **Render nedělá automatické logické zálohy na žádném plánu.** PITR je
-   něco jiného — obnovuje instanci do bodu v čase, ale je vázaný na běžící
-   instanci. Když ti někdo smaže instanci nebo vyprší platba, PITR ti
-   nepomůže. Vlastní dumpy přes `backup-db.sh` jsou proto povinné, ne
-   doplňkové.
-2. **Free Postgres vyprší 30 dní po vytvoření** a po dalších 14 dnech
-   Render databázi i s daty smaže. Limit 1 GB, žádné zálohy. Pro data žáků
-   je Free instance vyloučená.
-3. **Retence 7 dní u logických záloh je krátká.** Chyba, kterou nikdo
-   nezpozoruje do týdne (například tichý mazací skript), přežije celé
-   Render okno. Vlastní dumpy s rotací 7 denních + 4 týdenní jsou to,
-   co takový případ pokrývá.
-
-**Dělitelnost odpovědnosti:**
-
-- *Render:* PITR na placeném plánu, dostupnost instance, ruční export z UI.
-- *Ty:* denní `backup-db.sh` z cronu, odvoz dumpů mimo Render (S3/rsync),
-  měsíční cvičení obnovy, hlídání, že cron opravdu běží.
-
-## Nanečisto obnova (restore drill)
-
-Záloha, kterou jsi nikdy neobnovil, není záloha. Skript
-`scripts/ops/restore-drill.sh` vezme poslední dump, obnoví ho do dočasné
-databáze, ověří ho a po sobě uklidí. Nic produkčního nesahá.
-
-```bash
-PGHOST=localhost PGPORT=5433 PGUSER=postgres PGPASSWORD=postgres \
-  scripts/ops/restore-drill.sh
+```text
+pg_dump
+pg_restore
+psql
+createdb / dropdb    # restore drill
 ```
 
-Co kontroluje:
+Use a client version compatible with the target PostgreSQL server. A restore drill is the final compatibility proof.
 
-- SHA-256 checksum dumpu (poškozený dump budí falešný klid),
-- že záloha není starší než 2 dny — tím se pozná, že cron přestal běhat,
-- že `pg_restore` neskončil skutečnou chybou (verzní šum se ignoruje),
-- že schéma má přes 20 tabulek a `users`, `organizations`, `memberships`
-  nejsou prázdné — prázdná databáze by „obnovou" prošla taky,
-- že nejsou osiřelá členství (obnova, která rozbije tenanty, je k ničemu),
-- že v `_prisma_migrations` nezůstala nedokončená migrace.
+---
 
-Vrací nenulový kód při selhání, takže se dá pověsit do cronu jako měsíční
-cvičení. `--keep` nechá obnovenou databázi k ručnímu prohlédnutí,
-`--file` vybere konkrétní zálohu.
+# 2. Backup creation
 
-**Doporučená kadence:** jednou měsíčně a vždy po změně schématu, která
-mění migrace.
+`backup-db.sh` requires `DATABASE_URL` and refuses to guess the source database.
 
-## Jak fungují zálohy
-
-- Skript: `scripts/ops/backup-db.sh`
-- Formát: `pg_dump --format=custom` (komprimovaný, obnovitelný přes `pg_restore`)
-- Umístění: `$BACKUP_DIR/daily/` a `$BACKUP_DIR/weekly/` (výchozí `./backups`)
-- Název: `<dbname>_YYYYMMDD_HHMMSS.dump` + `.sha256` checksum
-- Rotace: **7 denních + 4 týdenní** (týdenní se pořizuje v neděli, nebo když
-  je nejnovější týdenní starší než 6 dní)
-
-Ruční spuštění zálohy:
+Example for a local/non-production environment:
 
 ```bash
-DATABASE_URL='postgresql://postgres:postgres@localhost:5433/eduto' \
+DATABASE_URL='postgresql://postgres:postgres@localhost:5432/skillstorm' \
   scripts/ops/backup-db.sh
 ```
 
-Doporučený cron (denně ve 2:00, viz `crontab -e` na serveru):
+Do not copy this local example into production unchanged.
 
-```cron
-0 2 * * * cd /path/to/Eduto && DATABASE_URL='<produkční URL>' BACKUP_DIR=/var/backups/skillstorm scripts/ops/backup-db.sh >> /var/log/skillstorm-backup.log 2>&1
+## Output contract
+
+The script derives the database name from `DATABASE_URL` and creates:
+
+```text
+$BACKUP_DIR/daily/<dbname>_YYYYMMDD_HHMMSS.dump
+$BACKUP_DIR/daily/<dbname>_YYYYMMDD_HHMMSS.dump.sha256
 ```
 
-> Zálohy ukládej mimo stroj s databází (rsync/S3 sync adresáře
-> `$BACKUP_DIR`) — lokální disk není záloha.
+Default `BACKUP_DIR`:
 
-## Obnova krok za krokem
+```text
+./backups
+```
 
-1. **Zjisti, kterou zálohu chceš.** Denní pro běžnou havárii, týdenní pokud
-   se problém (např. poškozená data) táhne déle.
+The dump uses PostgreSQL custom format and is restored with `pg_restore`.
 
-   ```bash
-   ls -lt backups/daily/ backups/weekly/
-   ```
+Current script retention:
 
-2. **Ověř checksum** (restore skript to dělá automaticky, ručně):
+- last **7 daily** dumps;
+- last **4 weekly** dumps;
+- weekly copy on Sunday or when the newest weekly backup is older than the script's threshold.
 
-   ```bash
-   cd backups/daily && shasum -a 256 -c <soubor>.dump.sha256
-   ```
+Retention in this script is a local operational baseline, not a legal/data-retention policy. Production retention must also satisfy the project's privacy, incident-recovery and contractual requirements.
 
-3. **Obnov do zkušební databáze** (`*_test` název → bez potvrzování):
+---
 
-   ```bash
-   scripts/ops/restore-db.sh --file <dump> --target-db eduto_restore_test --recreate
-   ```
+# 3. Off-host copy
 
-   Connection na admin úrovni řídí standardní proměnné `PGHOST`, `PGPORT`,
-   `PGUSER`, `PGPASSWORD` (výchozí `localhost:5432`, user `postgres`).
+After a successful local dump, copy encrypted backup material to storage independent of the database host/provider.
 
-4. **Smoke test proti obnovené DB** (viz níže). Bez něj obnovu nepovažuj
-   za úspěšnou — úspěšný `pg_restore` ověřuje jen formát, ne použitelnost.
+Acceptable production patterns include an appropriately secured object store or a separate controlled backup host.
 
-5. **Přepnutí aplikace.** Buď uprav `DATABASE_URL` na obnovenou DB, nebo
-   obnov do produkčního názvu — skript si vyžádá přepsání přesného názvu
-   databáze (ochrana proti překlepu; nejde obejít flagem ani env).
+Minimum requirements:
 
-## Smoke test obnovené databáze
+- encryption in transit;
+- encryption at rest;
+- access limited to the recovery role/team;
+- deletion/retention controls;
+- integrity metadata preserved (`.sha256` beside the dump);
+- restore credentials not embedded inside the dump filename or documentation;
+- periodic proof that the off-host copy is actually retrievable.
+
+A successful `pg_dump` alone does not prove the external copy exists.
+
+---
+
+# 4. Scheduled backups
+
+A production scheduler may invoke the backup script daily, for example:
+
+```cron
+0 2 * * * cd /srv/skillstorm && DATABASE_URL='<from protected runtime environment>' BACKUP_DIR=/var/backups/skillstorm scripts/ops/backup-db.sh >> /var/log/skillstorm-backup.log 2>&1
+```
+
+The exact path, scheduler and credential injection mechanism are deployment-specific.
+
+### Required monitoring
+
+The scheduler must produce an observable failure signal. At minimum monitor:
+
+- last successful backup timestamp;
+- dump file age;
+- non-zero script exit;
+- off-host-copy success;
+- available backup storage capacity.
+
+A cron entry with no alerting is not a sufficient production backup system.
+
+---
+
+# 5. Restore — safest path
+
+## Step 1 — identify the intended dump
+
+```bash
+ls -lt backups/daily/ backups/weekly/
+```
+
+Choose the recovery point based on the incident. Do not automatically assume the newest backup is clean if the incident may have corrupted data earlier.
+
+## Step 2 — verify integrity
+
+`restore-db.sh` automatically checks a neighboring `.sha256` file when present.
+
+Manual verification:
+
+```bash
+cd backups/daily
+shasum -a 256 -c <dbname>_YYYYMMDD_HHMMSS.dump.sha256
+```
+
+If the checksum fails, do not restore that dump.
+
+If the checksum file is missing, `restore-db.sh` currently warns and continues. For production recovery, treat a missing checksum as a degraded-confidence backup and prefer a verified copy when available.
+
+## Step 3 — restore into a disposable database
+
+Example:
+
+```bash
+scripts/ops/restore-db.sh \
+  --file backups/daily/skillstorm_YYYYMMDD_HHMMSS.dump \
+  --target-db skillstorm_restore_test \
+  --recreate
+```
+
+Admin connection uses standard libpq environment variables:
+
+```text
+PGHOST       default localhost
+PGPORT       default 5432
+PGUSER       default postgres
+PGPASSWORD   if required
+```
+
+### Safety behavior
+
+A target whose name ends in `_test` can be restored non-interactively.
+
+A target that does **not** end in `_test` requires an interactive confirmation where the operator retypes the exact target database name. The current script intentionally provides no bypass flag.
+
+Do not weaken this control merely for automation convenience.
+
+---
+
+# 6. Validate the restored database
+
+A successful `pg_restore` proves that PostgreSQL accepted the dump. It does not prove the application is healthy or that the data represents the intended recovery point.
+
+Validate at least:
+
+### Database integrity
+
+- expected schema/tables exist;
+- Prisma migration history is internally consistent;
+- core tenant data is present;
+- no obvious orphan relationships exist;
+- expected recent records match the chosen recovery point.
+
+### Application smoke test
+
+Run the application against the **restored test database** using the normal local/test environment contract from `.env.example` and override only the recovery database URL/port as needed.
+
+Conceptual example:
 
 ```bash
 cd server
-# aplikaci spusť proti obnovené DB na vedlejším portu
-DATABASE_URL='postgresql://postgres:postgres@localhost:5432/eduto_restore_test' \
-  PORT=4250 JWT_SECRET=dev DISABLE_CSRF=1 npm run start &
-
-# počkej na health
-npx wait-on -t 60000 http://localhost:4250/health
-
-# 1) login (uprav e-mail/heslo podle reálného účtu v záloze)
-curl -sf -X POST http://localhost:4250/auth/login \
-  -H 'Content-Type: application/json' \
-  -d '{"email":"<účet>","password":"<heslo>"}' | head -c 300
-
-# 2) autentizovaný dotaz (načtení testů) — použij accessToken z předchozí odpovědi
-curl -sf http://localhost:4250/tests -H "Authorization: Bearer <token>" | head -c 300
+DATABASE_URL='postgresql://postgres:postgres@localhost:5432/skillstorm_restore_test' \
+PORT=4250 \
+npm run start
 ```
 
-Kritérium úspěchu: login vrátí token, autentizované čtení vrátí data
-odpovídající době pořízení zálohy.
+The rest of the required local environment must already be configured safely; this runbook deliberately does not publish reusable secret values.
 
-## Časté problémy
+Then verify, using an account known to exist at the selected recovery point:
 
-- **`pg_restore: error: could not execute query`** — obnovuješ do neprázdné
-  DB se starým schématem. Použij `--recreate`.
-- **`FATAL: database ... is being accessed by other users`** při
-  `--recreate` — zastav aplikaci/klienty připojené k cílové DB (skript
-  používá `DROP ... WITH (FORCE)`, ale superuser práva jsou potřeba).
-- **Checksum nesedí** — záloha je poškozená; vezmi předchozí a eskaluj
-  (zkontroluj disk / přenos).
-- **Obnovená DB je za migracemi** (starší záloha, novější kód) — spusť
-  `cd server && npx prisma migrate deploy` proti obnovené DB.
+- `/health` responds successfully;
+- authentication works;
+- an authenticated tenant-scoped read returns expected data;
+- critical school/class/content data can be read without server errors.
+
+For an incident involving a specific feature, add a feature-specific smoke check before accepting the restore.
+
+---
+
+# 7. Restore drill
+
+Run periodic recovery exercises with:
+
+```bash
+PGHOST=localhost \
+PGPORT=5432 \
+PGUSER=postgres \
+PGPASSWORD='<local/admin password if required>' \
+scripts/ops/restore-drill.sh
+```
+
+Optional arguments supported by the current script:
+
+```text
+--file <path.dump>   use a specific dump
+--keep               leave the temporary drill DB for manual inspection
+```
+
+The drill currently checks, among other things:
+
+- checksum when present;
+- backup age;
+- `pg_restore` errors;
+- presence of a non-trivial schema;
+- presence of core data;
+- orphan membership integrity;
+- unfinished Prisma migrations.
+
+### Cadence
+
+Minimum operational baseline:
+
+- monthly restore drill;
+- after material changes to backup/restore scripts;
+- after PostgreSQL major-version or hosting changes;
+- after schema/migration changes that materially affect recovery behavior.
+
+A failed restore drill is an operational blocker until the recovery path is understood and corrected.
+
+---
+
+# 8. Production recovery procedure
+
+Do not jump directly from “database incident” to destructive restore.
+
+Recommended sequence:
+
+```text
+1. Declare/record incident and owner
+2. Stop or isolate application writers if data may still be changing
+3. Preserve current database/state where possible for forensics
+4. Identify incident start and candidate recovery point
+5. Retrieve independent backup copy
+6. Verify checksum
+7. Restore to *_test
+8. Run DB + application smoke tests
+9. Decide recovery method
+10. Create/verify a final pre-change snapshot if safe
+11. Perform controlled production restore/switchover
+12. Run production smoke tests
+13. Re-enable traffic/writers deliberately
+14. Monitor errors, data integrity and queues/jobs
+15. Record recovery point, commands, actors and outcome
+16. Conduct post-incident review
+```
+
+If a managed database provider offers point-in-time recovery, compare PITR and logical-dump options for the specific incident. Neither is universally better.
+
+---
+
+# 9. Restoring into a non-test target
+
+Only after a verified test restore and an explicit incident decision should an operator target a non-`*_test` database.
+
+Example shape:
+
+```bash
+scripts/ops/restore-db.sh \
+  --file <verified-dump> \
+  --target-db <production-database-name> \
+  --recreate
+```
+
+The script requires interactive retyping of the target database name.
+
+Before executing:
+
+```text
+[ ] exact target environment confirmed
+[ ] writers/traffic strategy decided
+[ ] selected dump checksum verified
+[ ] test restore passed
+[ ] application smoke test passed against test restore
+[ ] current-state preservation considered/performed
+[ ] incident owner authorizes destructive step
+[ ] rollback/fallback documented
+```
+
+---
+
+# 10. Migration compatibility after recovery
+
+A historical backup can be older than the currently deployed application schema.
+
+Do not point new application code at the restored database and assume compatibility.
+
+If the recovery strategy keeps the current application release, determine whether forward migrations are required:
+
+```bash
+cd server
+DATABASE_URL='<restored target URL>' npx prisma migrate deploy
+```
+
+Run migrations only after verifying the intended recovery strategy and preserving the raw restored state where appropriate.
+
+If forward migration changes data irreversibly, keep the untouched restored copy until validation is complete.
+
+---
+
+# 11. Common failure cases
+
+## `pg_restore` fails against a non-empty schema
+
+Use the tested `restore-db.sh` path and `--recreate` only for the intended disposable/authorized target.
+
+## Database cannot be dropped because sessions are active
+
+Stop clients/application connections. The restore script uses PostgreSQL forced drop behavior where supported, but permissions and server version still matter.
+
+## Checksum mismatch
+
+Treat the dump as corrupted. Retrieve another independent copy/recovery point and investigate storage or transfer integrity.
+
+## Restored application cannot start
+
+Check, in order:
+
+- application logs;
+- environment contract;
+- schema/migration level;
+- target database URL;
+- required external dependencies;
+- whether the restored backup predates a breaking migration/application change.
+
+## Backup is older than expected
+
+Treat this as a monitoring/scheduler failure, not merely an old file. Determine why scheduled backup/off-host copy stopped succeeding.
+
+---
+
+# 12. Backup evidence
+
+Production operations should be able to answer:
+
+```text
+When was the last successful backup?
+Where is the independent copy?
+What is its checksum?
+When was that backup path last restored successfully?
+Which schema/application version was used in the drill?
+Who can perform a production recovery?
+```
+
+If these answers require guesswork, backup readiness is incomplete.
+
+---
+
+# 13. Runbook change gate
+
+Any change to backup/restore behavior must update and verify together:
+
+```text
+[ ] scripts/ops/backup-db.sh
+[ ] scripts/ops/restore-db.sh
+[ ] scripts/ops/restore-drill.sh where relevant
+[ ] this runbook
+[ ] monitoring/scheduler configuration where relevant
+[ ] at least one fresh backup
+[ ] at least one successful restore drill
+```
+
+---
+
+## Final invariant
+
+> **A SkillStorm backup is considered operationally trustworthy only when it is independently stored, integrity-verifiable, monitored for freshness, and periodically restored into a clean environment with application-level validation.**
