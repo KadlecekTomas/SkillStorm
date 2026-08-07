@@ -233,7 +233,7 @@ If a future feature adds pupil-owned collectibles, its tests must be separate fr
 
 # 11. Boundary with Parťák 2.0 vision
 
-[`roadmap/partak-2.o.md`](./roadmap/partak-2.o.md) is a future product concept, not current behavior.
+[`roadmap/partak-2.0.md`](./roadmap/partak-2.0.md) is a future product concept, not current behavior.
 
 Potential future ideas such as:
 
