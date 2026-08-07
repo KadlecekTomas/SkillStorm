@@ -71,6 +71,9 @@ const dateTime = new Intl.DateTimeFormat("cs-CZ", {
   minute: "2-digit",
 });
 
+const isBrowserOnline = (): boolean =>
+  typeof navigator === "undefined" ? true : isBrowserOnline();
+
 function MetricCard({
   label,
   value,
@@ -147,7 +150,7 @@ function TeacherWorkspace({
   }, [competencies, competencyId]);
 
   const loadStudent = useCallback(async () => {
-    if (!studentId || !navigator.onLine) {
+    if (!studentId || !isBrowserOnline()) {
       setStudentDetail(null);
       return;
     }
@@ -171,7 +174,7 @@ function TeacherWorkspace({
   }, []);
 
   const flushQueue = useCallback(async () => {
-    if (!navigator.onLine) return;
+    if (!isBrowserOnline()) return;
     const queue = await listQueuedProgressEntries();
     if (!queue.length) {
       setQueuedCount(0);
@@ -230,7 +233,7 @@ function TeacherWorkspace({
     setError(null);
     setMessage(null);
     try {
-      if (!navigator.onLine) {
+      if (!isBrowserOnline()) {
         await queueProgressEntry(input);
         setMessage("Uloženo do tohoto zařízení. Po připojení se záznam automaticky odešle.");
         resetAssessment();
@@ -242,7 +245,7 @@ function TeacherWorkspace({
       resetAssessment();
       await loadStudent();
     } catch {
-      if (!navigator.onLine) {
+      if (!isBrowserOnline()) {
         await queueProgressEntry(input);
         setMessage("Připojení vypadlo. Záznam je bezpečně ve frontě k odeslání.");
         resetAssessment();
@@ -276,7 +279,7 @@ function TeacherWorkspace({
       await loadStudent();
     } catch {
       setError(
-        navigator.onLine
+        isBrowserOnline()
           ? "Docházku se nepodařilo uložit. Zkuste to znovu."
           : "Docházku lze v této verzi uložit po připojení k internetu.",
       );
@@ -306,7 +309,7 @@ function TeacherWorkspace({
       await loadStudent();
     } catch {
       setError(
-        navigator.onLine
+        isBrowserOnline()
           ? "Podpůrné opatření se nepodařilo uložit."
           : "Podpůrné opatření lze v této verzi uložit po připojení k internetu.",
       );
@@ -624,13 +627,13 @@ function TeacherWorkspace({
               <p className="text-sm font-bold text-ink-muted">Rychlá kontrola</p>
               <CardTitle className="mt-1">{selectedStudent?.name ?? "Žák"}</CardTitle>
             </div>
-            <Button variant="outline" onClick={() => void loadStudent()} disabled={detailBusy || !navigator.onLine}>
+            <Button variant="outline" onClick={() => void loadStudent()} disabled={detailBusy || !isBrowserOnline()}>
               <RefreshCw className={cn("mr-2 h-4 w-4", detailBusy && "animate-spin")} /> Aktualizovat
             </Button>
           </div>
         </CardHeader>
         <CardContent>
-          {!navigator.onLine ? (
+          {!isBrowserOnline() ? (
             <p className="text-ink-muted">Detail se načte po připojení. Nové hodnocení můžete dál zapisovat offline.</p>
           ) : detailBusy ? (
             <div className="flex justify-center py-8"><LoadingSpinner /></div>
@@ -829,7 +832,7 @@ function LeadershipDashboard({
   );
 }
 
-export default function ProgressPage() {
+export default function ProgressPage(): React.JSX.Element | null {
   const router = useRouter();
   const { hasRole } = usePermissions();
   const isTeacher = hasRole("TEACHER");
@@ -867,7 +870,7 @@ export default function ProgressPage() {
   }, []);
 
   const loadDashboard = useCallback(async () => {
-    if (!isLeadership || !navigator.onLine) return;
+    if (!isLeadership || !isBrowserOnline()) return;
     try {
       setDashboard(await progressApi.dashboard());
     } catch {

@@ -18,6 +18,7 @@ import {
 } from "@/hooks/use-guardian";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/utils/cn";
+import { GuardianSchoolProgress } from "@/components/guardian/guardian-school-progress";
 
 /**
  * Rodinný prostor (guardian Etapa B) — první UI pro netechnické dospělé.
@@ -431,17 +432,7 @@ function FamilyOverview({ child }: { child: GuardianChild }) {
         </CardContent>
       </Card>
 
-      {/* Zprávy */}
-      <Card>
-        <CardContent className="space-y-3 p-5">
-          <h2 className="flex items-center gap-2 text-base font-extrabold text-ink">
-            <Mail className="h-4.5 w-4.5 text-ink-dim" /> Zprávy ze školy
-          </h2>
-          <p className="py-2 text-[15px] text-ink-muted">
-            Zatím žádné zprávy. Až škola něco pošle, najdete to tady.
-          </p>
-        </CardContent>
-      </Card>
+      <GuardianSchoolProgress data={data} />
     </div>
   );
 }
