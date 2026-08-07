@@ -15,6 +15,7 @@ import {
   OrgOperation,
   OrgOperationType,
 } from '@/common/decorators/org-operation.decorator';
+import { NoHttpCache } from '@/common/cache/no-http-cache.decorator';
 import { ProgressService } from './progress.service';
 import {
   CreateProgressEntryDto,
@@ -29,9 +30,14 @@ import { CreateCompetencyDto } from './dto/create-competency.dto';
  * aktuálního enrollmentu a teacher-class vztahu; klient tyto autorizační
  * atributy neposílá. Guardian route úmyslně nemá @Permission — přístup je
  * relationship-scoped a ověřuje se v ProgressService stejně jako guardian API.
+ *
+ * Progress obsahuje citlivá a rychle se měnící školní data. Celý controller je
+ * proto HTTP no-store: nová kompetence/hodnocení jsou okamžitě viditelné a
+ * odpovědi se neukládají do sdílené server/browser cache.
  */
 @Controller('progress')
 @OrgOperation(OrgOperationType.EXECUTION)
+@NoHttpCache()
 export class ProgressController {
   constructor(private readonly progress: ProgressService) {}
 
