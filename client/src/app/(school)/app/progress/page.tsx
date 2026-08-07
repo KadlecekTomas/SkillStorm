@@ -72,7 +72,7 @@ const dateTime = new Intl.DateTimeFormat("cs-CZ", {
 });
 
 const isBrowserOnline = (): boolean =>
-  typeof navigator === "undefined" ? true : isBrowserOnline();
+  typeof navigator === "undefined" ? true : navigator.onLine;
 
 function MetricCard({
   label,
