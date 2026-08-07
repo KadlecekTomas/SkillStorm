@@ -21,7 +21,7 @@
     "test:unit:light": "jest --config ./jest.unit.config.js --runInBand",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
-    "test:debug": "node --inspect-brk -r tsconfig-paths/register ts-node/register node_modules/.bin/jest --runInBand",
+    "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:gamification": "jest gamification",
     "test:policy": "vitest run tests/policy/policy.summary.test.ts --reporter=dot",
     "prisma:seed": "ts-node -r tsconfig-paths/register prisma/seed/e2e-seed.ts",
