@@ -1,0 +1,134 @@
+name: Temporary query and school throttling hardening
+
+on:
+  push:
+    branches:
+      - fix/school-readiness-rbac-contracts
+    paths:
+      - '.github/workflows/temporary-query-throttle-hardening.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  harden:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/school-readiness-rbac-contracts
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Patch query notifications and throttle tracker
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          query = Path('client/src/lib/query-client.ts')
+          q = query.read_text()
+          q = q.replace(
+            'type QueryEntry<T = unknown> = {\n  data?: T;\n  error?: unknown;\n  updatedAt: number;\n  promise: Promise<T> | null;\n  listeners: Set<() => void>;\n};',
+            'type QueryNotificationReason = "state" | "invalidate";\n\ntype QueryEntry<T = unknown> = {\n  data?: T;\n  error?: unknown;\n  updatedAt: number;\n  promise: Promise<T> | null;\n  listeners: Set<(reason: QueryNotificationReason) => void>;\n};',
+            1,
+          )
+          q = q.replace(
+            'function notify(queryKey: QueryKey) {\n  const entry = ensureEntry(queryKey);\n  entry.listeners.forEach((listener) => listener());\n}',
+            'function notify(\n  queryKey: QueryKey,\n  reason: QueryNotificationReason = "state",\n) {\n  const entry = ensureEntry(queryKey);\n  entry.listeners.forEach((listener) => listener(reason));\n}',
+            1,
+          )
+          q = q.replace('        notify(queryKey);\n      }\n    }\n  },', '        notify(queryKey, "invalidate");\n      }\n    }\n  },', 1)
+          q = q.replace(
+            '  subscribe(queryKey: QueryKey, listener: () => void): () => void {',
+            '  subscribe(\n    queryKey: QueryKey,\n    listener: (reason: QueryNotificationReason) => void,\n  ): () => void {',
+            1,
+          )
+          old = '''    const unsubscribe = queryClient.subscribe(key, () => {
+      syncFromCache();
+      if (!queryClient.isFresh(key, staleTime)) {
+        void load(true);
+      }
+    });'''
+          new = '''    const unsubscribe = queryClient.subscribe(key, (reason) => {
+      syncFromCache();
+      // State notifications are emitted by the request that is already in
+      // flight (success/error) and by local cache writes. Re-fetching here
+      // would turn every failed query into an unbounded request loop.
+      if (reason === "invalidate" && !queryClient.isFresh(key, staleTime)) {
+        void load(true);
+      }
+    });'''
+          if old not in q and new not in q:
+              raise SystemExit('query subscription marker not found')
+          q = q.replace(old, new, 1)
+          query.write_text(q)
+
+          tracker = Path('server/src/common/throttling/request-tracker.ts')
+          tracker.parent.mkdir(parents=True, exist_ok=True)
+          tracker.write_text('''import { createHash } from 'crypto';\nimport type { Request } from 'express';\n\nimport { ACCESS_TOKEN_COOKIE } from '@/auth/token-cookies';\n\ntype ThrottleRequest = Request & {\n  cookies?: Record<string, string | undefined>;\n};\n\nconst IP_SCOPED_AUTH_PATHS = new Set([\n  '/auth/login',\n  '/auth/register',\n  '/auth/sso/google',\n  '/auth/refresh',\n  '/auth/forgot-password',\n  '/auth/reset-password',\n]);\n\nfunction normalizedPath(req: ThrottleRequest): string {\n  const raw = req.originalUrl || req.url || '';\n  const pathname = raw.split('?')[0] ?? '';\n  return pathname.replace(/^\\/api(?=\\/)/, '');\n}\n\nfunction bearerToken(req: ThrottleRequest): string | null {\n  const authorization = req.headers?.authorization;\n  if (!authorization?.startsWith('Bearer ')) return null;\n  const token = authorization.slice('Bearer '.length).trim();\n  return token || null;\n}\n\n/**\n * School networks commonly put many teachers/tablets behind one public IP.\n * A pure IP tracker would therefore let one busy classroom throttle another.\n * Sensitive public auth routes remain IP-scoped, while normal authenticated\n * traffic is isolated per access-token session. The token is never stored in\n * the throttle key; only a one-way SHA-256 digest is used.\n */\nexport function resolveThrottleTracker(req: ThrottleRequest): string {\n  const ip = req.ip || 'unknown';\n  if (IP_SCOPED_AUTH_PATHS.has(normalizedPath(req))) {\n    return `ip:${ip}`;\n  }\n\n  const token = req.cookies?.[ACCESS_TOKEN_COOKIE] ?? bearerToken(req);\n  if (!token) {\n    return `ip:${ip}`;\n  }\n\n  const digest = createHash('sha256').update(token).digest('hex');\n  return `session:${digest}`;\n}\n''')
+
+          app = Path('server/src/app.module.ts')
+          a = app.read_text()
+          a = a.replace(
+            "import { ProgressModule } from './progress/progress.module';",
+            "import { ProgressModule } from './progress/progress.module';\nimport { resolveThrottleTracker } from './common/throttling/request-tracker';",
+            1,
+          )
+          marker = '''    ThrottlerModule.forRoot({
+      // Route-level @Throttle() overrides the default limits, so the test
+      // toggle must disable the guard itself — otherwise e2e suites hit the
+      // hard login/register limits (tests share one IP: no trust proxy).
+      skipIf: () => process.env.DISABLE_THROTTLE === '1','''
+          replacement = '''    ThrottlerModule.forRoot({
+      // Route-level @Throttle() overrides the default limits, so the test
+      // toggle must disable the guard itself — otherwise e2e suites hit the
+      // hard login/register limits (tests share one IP: no trust proxy).
+      // Normal authenticated traffic is tracked per session instead of per
+      // public IP so a school NAT cannot make unrelated users throttle each
+      // other. Login/register/reset routes stay IP-scoped.
+      getTracker: async (req) => resolveThrottleTracker(req as never),
+      skipIf: () => process.env.DISABLE_THROTTLE === '1','''
+          if marker not in a and replacement not in a:
+              raise SystemExit('throttler config marker not found')
+          a = a.replace(marker, replacement, 1)
+          app.write_text(a)
+
+          qtest = Path('client/src/tests/query-client-resilience.spec.tsx')
+          qtest.write_text('''/** @vitest-environment jsdom */\n\nimport { act, render, screen, waitFor } from "@testing-library/react";\nimport { beforeEach, describe, expect, it, vi } from "vitest";\n\nimport { queryClient, useQuery } from "@/lib/query-client";\n\nfunction Probe({ queryFn }: { queryFn: () => Promise<string> }) {\n  const { data, error } = useQuery({\n    queryKey: ["query-resilience"],\n    queryFn,\n    staleTime: 60_000,\n  });\n  return (\n    <div>\n      <span data-testid="data">{data ?? "none"}</span>\n      <span data-testid="error">{error instanceof Error ? error.message : "none"}</span>\n    </div>\n  );\n}\n\ndescribe("query client resilience", () => {\n  beforeEach(() => {\n    queryClient.clear();\n  });\n\n  it("does not turn a failed request into an automatic retry storm", async () => {\n    const queryFn = vi.fn().mockRejectedValue(new Error("offline"));\n    render(<Probe queryFn={queryFn} />);\n\n    await waitFor(() => expect(screen.getByTestId("error")).toHaveTextContent("offline"));\n    await new Promise((resolve) => setTimeout(resolve, 50));\n\n    expect(queryFn).toHaveBeenCalledTimes(1);\n  });\n\n  it("still refetches once when the query is explicitly invalidated", async () => {\n    const queryFn = vi.fn()\n      .mockResolvedValueOnce("first")\n      .mockResolvedValueOnce("second");\n    render(<Probe queryFn={queryFn} />);\n\n    await waitFor(() => expect(screen.getByTestId("data")).toHaveTextContent("first"));\n    act(() => queryClient.invalidateQueries(["query-resilience"]));\n    await waitFor(() => expect(screen.getByTestId("data")).toHaveTextContent("second"));\n\n    expect(queryFn).toHaveBeenCalledTimes(2);\n  });\n});\n''')
+
+          stest = Path('server/src/common/throttling/request-tracker.spec.ts')
+          stest.write_text('''import type { Request } from 'express';\n\nimport { resolveThrottleTracker } from './request-tracker';\n\nfunction request(input: { path: string; ip?: string; token?: string }): Request {\n  return {\n    originalUrl: input.path,\n    url: input.path,\n    ip: input.ip ?? '203.0.113.10',\n    cookies: input.token ? { ss_at: input.token } : {},\n    headers: {},\n  } as unknown as Request;\n}\n\ndescribe('resolveThrottleTracker', () => {\n  it('keeps sensitive authentication routes scoped by IP', () => {\n    const a = resolveThrottleTracker(request({ path: '/auth/login', token: 'session-a' }));\n    const b = resolveThrottleTracker(request({ path: '/api/auth/login', token: 'session-b' }));\n    expect(a).toBe('ip:203.0.113.10');\n    expect(b).toBe('ip:203.0.113.10');\n  });\n\n  it('isolates authenticated school traffic by session behind the same NAT', () => {\n    const a = resolveThrottleTracker(request({ path: '/guardian/children', token: 'session-a' }));\n    const b = resolveThrottleTracker(request({ path: '/guardian/children', token: 'session-b' }));\n    expect(a).toMatch(/^session:[a-f0-9]{64}$/);\n    expect(b).toMatch(/^session:[a-f0-9]{64}$/);\n    expect(a).not.toBe(b);\n  });\n\n  it('falls back to IP for anonymous traffic without exposing tokens', () => {\n    const anonymous = resolveThrottleTracker(request({ path: '/health' }));\n    const authenticated = resolveThrottleTracker(request({ path: '/app/data', token: 'secret-token' }));\n    expect(anonymous).toBe('ip:203.0.113.10');\n    expect(authenticated).not.toContain('secret-token');\n  });\n});\n''')
+          PY
+
+      - name: Verify client query resilience
+        working-directory: client
+        run: |
+          npm ci
+          npx vitest run src/tests/query-client-resilience.spec.tsx src/tests/family-resilience-contract.spec.ts src/tests/progress-responsive-contract.spec.ts src/tests/ux-action-integrity.spec.ts
+          npm run typecheck
+
+      - name: Verify server tracker and build contract
+        working-directory: server
+        run: |
+          npm ci
+          npm run prisma:generate
+          npx jest src/common/throttling/request-tracker.spec.ts --runInBand
+          npm run typecheck
+          npm run build
+
+      - name: Commit verified hardening
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add client/src/lib/query-client.ts client/src/tests/query-client-resilience.spec.tsx server/src/app.module.ts server/src/common/throttling/request-tracker.ts server/src/common/throttling/request-tracker.spec.ts
+          if git diff --cached --quiet; then
+            echo "Query/throttle hardening already applied"
+            exit 0
+          fi
+          git commit -m "fix: prevent query storms and school NAT throttling"
+          git pull --rebase origin fix/school-readiness-rbac-contracts
+          git push origin HEAD:fix/school-readiness-rbac-contracts
