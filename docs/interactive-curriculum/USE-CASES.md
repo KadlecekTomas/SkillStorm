@@ -6,6 +6,8 @@
 > **Last review:** 2026-08-07  
 > **Rule #1:** SkillStorm nemá převádět učebnici na obrazovku. Má převádět učivo na **činnost, rozhodování, experiment, tvorbu, manipulaci, komunikaci nebo řešení problému**.
 
+> **Coverage note:** Tento dokument pokrývá produktové a pedagogické scénáře napříč celou ZŠ. Neprohlašuje tím automaticky 100% shodu s každým jednotlivým OVU. Produkční „RVP complete“ stav smí vzniknout až po samostatném strojově i pedagogicky kontrolovaném OVU coverage auditu.
+
 ---
 
 ## 0. Proč tento dokument existuje
