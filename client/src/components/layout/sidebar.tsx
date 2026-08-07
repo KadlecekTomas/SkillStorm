@@ -40,7 +40,7 @@ function SidebarItem({ label, icon, href, active, collapsed }: SidebarItemProps)
       href={href}
       title={collapsed ? label : undefined}
       className={cn(
-        "flex items-center gap-3 rounded-lg px-3.5 py-2.5 text-[15px] font-semibold transition-colors",
+        "flex min-h-11 items-center gap-3 rounded-lg px-3.5 py-2.5 text-[15px] font-semibold transition-colors",
         collapsed ? "justify-center px-0" : "",
         active
           ? "bg-accent-soft text-accent-deep"
@@ -78,13 +78,13 @@ export const Sidebar = (): React.JSX.Element => {
       <div className="space-y-6">
         <div className={cn("flex items-center", collapsed ? "justify-center" : "justify-between px-1")}>
           {!collapsed && (
-            <Link href="/app" className="flex items-center gap-2.5 text-ink">
+            <Link href="/app" className="flex min-h-11 items-center gap-2.5 text-ink">
               <PartakEmblem size={30} />
               <span className="text-lg font-extrabold tracking-[-.01em]">Eduto</span>
             </Link>
           )}
           {collapsed && (
-            <Link href="/app" title="Přehled">
+            <Link href="/app" title="Přehled" className="flex min-h-11 min-w-11 items-center justify-center">
               <PartakEmblem size={30} />
             </Link>
           )}
@@ -92,7 +92,7 @@ export const Sidebar = (): React.JSX.Element => {
             type="button"
             onClick={() => setCollapsed((c) => !c)}
             className={cn(
-              "flex h-7 w-7 items-center justify-center rounded-lg text-ink-dim hover:bg-surface hover:text-ink",
+              "flex h-11 w-11 items-center justify-center rounded-lg text-ink-dim hover:bg-surface hover:text-ink",
               collapsed ? "hidden" : "",
             )}
             aria-label={collapsed ? "Rozbalit postranní panel" : "Sbalit postranní panel"}
@@ -105,7 +105,7 @@ export const Sidebar = (): React.JSX.Element => {
           <button
             type="button"
             onClick={() => setCollapsed(false)}
-            className="flex w-full items-center justify-center rounded-lg py-1 text-ink-dim hover:bg-surface hover:text-ink"
+            className="flex min-h-11 w-full items-center justify-center rounded-lg text-ink-dim hover:bg-surface hover:text-ink"
             aria-label="Rozbalit postranní panel"
           >
             <PanelLeftOpen className="h-4 w-4" />
@@ -140,7 +140,7 @@ export const Sidebar = (): React.JSX.Element => {
                   .slice(0, 2)
                   .toUpperCase() ?? "SS"}
               </AvatarFallback>
-            )}
+            ) : null}
           </Avatar>
           {!collapsed && (
             <div className="min-w-0 space-y-0.5">
