@@ -3,7 +3,8 @@
 > **Status:** product & architecture vision  
 > **Target:** dlouhodobý směr nad existujícími Live Sessions  
 > **Last review:** 2026-08-07  
-> **Princip:** tabule není hlavní zařízení. Tabule je společná scéna, žák pracuje na vlastním zařízení a učitel řídí celou třídu z jednoho dashboardu.
+> **Princip:** tabule není hlavní zařízení. Tabule je společná scéna, žák pracuje na vlastním zařízení a učitel řídí celou třídu z jednoho dashboardu.  
+> **Parent vision:** [SkillStorm Interactive Curriculum](../interactive-curriculum/README.md)
 
 ---
 
@@ -35,6 +36,7 @@ Nová vrstva navazuje na připravený budoucí režim `DEVICES` a rozšiřuje ho
 
 Související dokumentace:
 
+- [Interactive Curriculum](../interactive-curriculum/README.md)
 - [Live Sessions](../live-sessions.md)
 - [Live Sessions — interactive rounds](../live-sessions-interactions.md)
 
@@ -78,84 +80,50 @@ flowchart LR
 
 Hlavní hodnota není samotná hra. Hlavní hodnota je, že učitel **nemusí běhat naslepo mezi 30 monitory**.
 
-Učitel má během hodiny přehled například takto:
+### Cílový pohled
 
 ```text
-┌────────────────────────────────────────────────────────────────────────────┐
-│ 7.B · BUILD A PC                                      23:18 remaining      │
-│                                                                            │
-│ CLASS PROGRESS      63 %        ✅ 5 hotovo   🟢 16 pracuje   🔴 2 stojí   │
-├────────────────────────────────────────────────────────────────────────────┤
-│ Žák            Stav     Krok                    Chyby   Hinty   Neaktivní   │
-│ Adam           72 %     GPU power                   1       0       4 s     │
-│ Barbora        68 %     RAM                         0       1      12 s     │
-│ David          34 %     CPU                         4       2      18 s     │
-│ Eliška         21 %     Motherboard                 6       3    2:13 min   │
-│ Filip         100 %     Hotovo                      1       0        —      │
-├────────────────────────────────────────────────────────────────────────────┤
-│ CLASS BOTTLENECK                                                           │
-│ 11 žáků chybuje u RAM / dual-channel                                       │
-│                                                                            │
-│ [Vysvětlit celé třídě] [Pozastavit] [Poslat nápovědu] [Otevřít detail]     │
-└────────────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────┐
+│ 9.A · BUILD A PC                                  18:32 remaining  │
+├────────────────────────────────────────────────────────────────────┤
+│ CLASS PROGRESS  ████████████░░░░  67 %                            │
+│                                                                    │
+│ ✅ 6 hotovo    🟢 14 pracuje    🟠 6 problém    🔴 2 stojí         │
+│                                                                    │
+│ Největší problém třídy                                             │
+│ 11 žáků chybuje u RAM / dual-channel                              │
+│ [ Zastavit a vysvětlit ]                                           │
+├────────────────────────────────────────────────────────────────────┤
+│ Adam       72 %   GPU            1 chyba    0 hints     🟢          │
+│ Barbora    68 %   RAM            0 chyb     1 hint      🟢          │
+│ David      34 %   CPU            4 chyby    2 hints     🟠          │
+│ Eliška     21 %   Motherboard    6 chyb     3 hints     🔴 2:13     │
+│ Filip     100 %   DONE           1 chyba    0 hints     ✅          │
+└────────────────────────────────────────────────────────────────────┘
 ```
 
-### Dashboard musí odpovídat na čtyři otázky
+### Učitel potřebuje vědět
 
-1. **Kdo právě pracuje?**
-2. **Kdo se pravděpodobně zasekl?**
-3. **Na čem se zasekla větší část třídy?**
-4. **Komu mám jako učitel pomoct jako prvnímu?**
+- kdo pokračuje bez problému,
+- kdo se pravděpodobně zasekl,
+- na kterém checkpointu,
+- jaké typy chyb se opakují napříč třídou,
+- kdo opakovaně žádá o nápovědu,
+- kdo je hotový a může dostat challenge,
+- kdy má smysl přerušit práci celé třídy.
 
-To je vyšší priorita než žebříčky, XP nebo efektní animace.
+### Učitel nepotřebuje
 
-### Stav žáka
+- stream 30 obrazovek,
+- každý pohyb kurzoru,
+- detailní behaviorální dohled,
+- desítky dashboardových metrik bez pedagogické akce.
 
-Doporučená jednoduchá klasifikace:
-
-- `WORKING` — postupuje,
-- `STRUGGLING` — opakované chyby / více nápověd,
-- `IDLE` — dlouho bez významné akce,
-- `COMPLETED` — dokončeno,
-- `DISCONNECTED` — klient ztratil spojení.
-
-**Pozor:** `IDLE` nesmí vznikat ze sledování pohybu myši nebo klávesnice. Stačí čas od poslední významné aktivity.
+**Mission Control musí být intervention dashboard, ne surveillance dashboard.**
 
 ---
 
-## 5. Role interaktivní tabule
-
-Tabule nemá zobrazovat seznam nejslabších žáků ani osobní výsledky.
-
-Má být **společnou scénou**.
-
-```text
-┌─────────────────────────────────────────────────────────────┐
-│                    7.B · BUILD A PC                          │
-│                                                             │
-│                     CLASS PROGRESS                           │
-│                          67 %                                │
-│                                                             │
-│ CPU            ██████████████████  92 %                     │
-│ RAM            ███████████████░░░  78 %                     │
-│ GPU            ████████████░░░░░░  61 %                     │
-│ POWER          ████████░░░░░░░░░░  39 %                     │
-│                                                             │
-│ ⚡ BOSS CHALLENGE                                            │
-│ Dokáže třída správně zapojit ATX + CPU EPS + GPU power?     │
-└─────────────────────────────────────────────────────────────┘
-```
-
-Učitel musí být schopen jedním klikem použít:
-
-- `PAUSE_ALL`,
-- `RESUME_ALL`,
-- `SHOW_CLASS_EXPLANATION`,
-- `START_CLASS_CHALLENGE`,
-- `SEND_HINT_TO_SELECTED`,
-- `END_SESSION`.
-
-### Typický zásah
+## 5. Teacher intervention loop
 
 ```mermaid
 sequenceDiagram
@@ -164,108 +132,260 @@ sequenceDiagram
     participant T as Teacher
     participant B as Board
 
-    S->>API: repeated wrong attempts: RAM placement
-    API->>T: class bottleneck: RAM / dual-channel
+    S->>API: semantic progress events
+    API->>T: aggregate misconception detected
     T->>API: PAUSE_ALL
-    API-->>S: session paused
-    API-->>B: explanation mode
-    T->>B: krátké společné vysvětlení
+    API-->>S: pause
+    API-->>B: class explanation scene
+    T->>B: demonstrate RAM placement
     T->>API: RESUME_ALL
-    API-->>S: continue
+    API-->>S: resume
 ```
+
+### Příklad
+
+1. 12 z 28 žáků udělá podobnou chybu u RAM.
+2. SkillStorm zobrazí učiteli doporučení.
+3. Učitel stiskne **Pause all**.
+4. Žákovské activity playery se bezpečně zastaví.
+5. Tabule přepne na vysvětlující scénu.
+6. Učitel nebo žák problém ukáže.
+7. Učitel dá **Resume all**.
+8. Každý pokračuje ve svém stavu.
 
 ---
 
-## 6. Obtížnost není Easy / Medium / Hard
+## 6. Role interaktivní tabule
 
-Ročník je pouze **doporučený vstupní bod**. Není to důkaz skutečné úrovně konkrétního žáka.
+Tabule není administrátorský dashboard a nemá veřejně vystavovat pořadí nebo individuální chyby.
 
-V 7. třídě může jeden žák poprvé slyšet výraz CPU a druhý doma sestavovat vlastní počítač.
+### Board view
 
-Proto musí být obtížnost rozdělena minimálně do dvou nezávislých os:
+```text
+┌──────────────────────────────────────────────────────┐
+│ 9.A · BUILD A PC                                    │
+│                                                      │
+│                 SPOLEČNÝ POSTUP                      │
+│                       67 %                           │
+│                                                      │
+│ CPU          ██████████████████  92 %                │
+│ RAM          ███████████████░░░  78 %                │
+│ GPU          ████████████░░░░░░  61 %                │
+│ POWER        ████████░░░░░░░░░░  39 %                │
+│                                                      │
+│              6 sestav dokončeno                      │
+│                                                      │
+│ BOSS CHALLENGE                                       │
+│ Zapoj 24pin ATX + CPU EPS + GPU power.               │
+└──────────────────────────────────────────────────────┘
+```
 
-1. **náročnost kompetence**, kterou žák řeší,
-2. **míra scaffolding / pomoci**, kterou SkillStorm poskytuje.
+### Board může zobrazovat
 
-### Doporučené veřejné názvy úrovní
+- společný postup,
+- checkpoint hodiny,
+- anonymní agregované problémy,
+- společnou challenge,
+- demonstraci,
+- countdown,
+- společnou reflexi.
 
-| Úroveň | Interní význam | Příklad |
-| --- | --- | --- |
-| **Explorer** | úvod / BASIC | pozná CPU, RAM, SSD a jejich základní funkci |
-| **Builder** | základní aplikace | sestaví funkční PC podle připravených komponent |
-| **Technician** | INTERMEDIATE | řeší kompatibilitu, kabeláž a konfiguraci |
-| **Engineer** | ADVANCED | řeší diagnostiku, omezení a optimalizaci |
+### Board defaultně nezobrazuje
 
-Nepoužívat vůči dětem označení typu „slabý“, „easy“ nebo „low level“.
+- jména slabších žáků,
+- individuální počet chyb,
+- veřejný leaderboard žáků,
+- data, která nepotřebuje třída vidět.
 
-### Nezávislá míra pomoci
+---
 
-| Scaffolding | Chování |
-| --- | --- |
-| Guided | zvýrazněné cíle, vysvětlení komponent, postup krok za krokem |
-| Standard | základní instrukce, nápověda na vyžádání |
-| Minimal | žádné zvýraznění, obecné zadání, minimum rad |
+## 7. Obtížnost: ne Easy / Medium / Hard
 
-Dva žáci tak mohou řešit stejnou kompetenci, ale s jinou mírou podpory.
+Výuková obtížnost musí reflektovat skutečný stav znalostí.
 
-### Adaptivní režim
+### Úrovně
 
-Doporučený dlouhodobý default:
+#### Explorer
+
+Pro žáka, který se s tématem seznamuje.
+
+- komponenty pojmenované,
+- větší hit zones,
+- zvýrazněné oblasti,
+- krokování,
+- vysvětlení funkcí,
+- omezený počet distractorů.
+
+Příklad:
+
+> Najdi CPU.
+
+> Co CPU přibližně dělá?
+
+> Přetáhni CPU do zvýrazněného socketu.
+
+#### Builder
+
+Žák zná základní komponenty.
+
+- žádné zvýrazněné cíle,
+- komponenty pojmenované,
+- základní kompatibilita,
+- méně explicitní nápověda.
+
+> Sestav funkční kancelářský počítač.
+
+#### Technician
+
+Žák dostává problém místo návodu.
+
+- katalog komponent,
+- budget,
+- socket compatibility,
+- RAM type,
+- PSU sizing,
+- form factor.
+
+> Sestav herní počítač do 25 000 Kč.
+
+#### Engineer
+
+Diagnostický režim.
+
+> PC se zapne, ventilátory běží, ale monitor nemá obraz.
+
+Žák musí najít příčinu.
+
+---
+
+## 8. Obtížnost a scaffolding jsou dvě různé osy
+
+Toto nesmí být jeden parametr.
+
+### Difficulty
+
+Určuje **náročnost problému**.
+
+### Scaffolding
+
+Určuje **množství podpory**.
+
+Příklad stejného checkpointu:
+
+```text
+High scaffolding
+────────────────
+Vlož RAM do správného slotu.
+[ DIMM slot zvýrazněn ]
+
+Standard scaffolding
+────────────────────
+Vlož RAM do správného slotu.
+
+Low scaffolding
+───────────────
+Nakonfiguruj paměť pro dual-channel.
+```
+
+Tím lze podporovat:
+
+- heterogenní třídu,
+- SVP,
+- nadané žáky,
+- individuální intervenci,
+- adaptivní cestu.
+
+---
+
+## 9. Adaptivní režim
+
+`VISION`
+
+Učitel může zvolit:
+
+```text
+Úroveň
+● Adaptivní
+○ Explorer
+○ Builder
+○ Technician
+○ Engineer
+```
+
+V adaptivním režimu začne student krátkou diagnostickou sekvencí.
 
 ```mermaid
 flowchart LR
-    G[Ročník\nnapř. 7. třída] --> D[Krátká diagnostika]
-    D --> E[Explorer]
-    D --> B[Builder]
-    D --> T[Technician]
-    E -->|prokazuje mastery| B
-    B -->|prokazuje mastery| T
-    T -->|extension| X[Engineer]
+    A[Start] --> B[Diagnostic checkpoints]
+    B --> C{Evidence}
+    C -->|needs fundamentals| D[Explorer]
+    C -->|core knowledge| E[Builder]
+    C -->|strong| F[Technician]
+    D --> G[Continuous adaptation]
+    E --> G
+    F --> G
 ```
 
-Adaptace nesmí být neprůhledná. Učitel musí vždy vidět, proč systém doporučil konkrétní úroveň, a musí ji umět ručně změnit.
+Žák **nemá být veřejně označen jako slabý / basic**. Úrovně mají fungovat jako mise, ne stigma.
 
 ---
 
-## 7. SVP a accessibility nejsou pozdější addon
+## 10. Teacher override je autorita
 
-Stejný activity engine musí od první verze počítat s tím, že ne každý žák může nebo chce používat stejnou interakci.
+Adaptivní systém nesmí učiteli odebrat kontrolu.
 
-### Minimální požadavky
+Učitel musí být schopen:
 
-- ovládání myší, dotykem i klávesnicí,
-- viditelný focus,
-- žádná informace pouze barvou,
-- možnost vypnout / omezit pohybové efekty,
-- dostatečně velké touch targety,
-- textové alternativy k ikonám,
-- titulky / textová alternativa k audio feedbacku,
-- čitelné rozložení při zvětšení,
-- možnost prodlouženého času,
-- alternativní interaction mode tam, kde drag & drop není vhodný,
-- teacher override jednotlivých podpor.
+- nastavit jednu úroveň celé třídě,
+- nastavit úroveň skupině,
+- přepsat úroveň konkrétního žáka,
+- vypnout adaptivitu,
+- změnit scaffolding,
+- otevřít challenge.
 
-### Příklad stejného cíle ve třech variantách
-
-**Cíl:** osadit RAM.
-
-- Guided: DIMM slot je zvýrazněný a systém popisuje, co hledat.
-- Standard: žák dostane RAM a instrukci „osaď paměť“.
-- Minimal: žák má dokončit správnou dual-channel konfiguraci bez zvýraznění.
-
-Kompetence je stejná. Mění se cesta k ní.
+Pedagogický kontext může algoritmus neznat.
 
 ---
 
-## 8. První showcase: Build a PC
+## 11. SVP / accessibility
 
-První velká aktivita má být dost dobrá, aby sama vysvětlila směr produktu.
+Přístupnost nesmí být dodatečný skin.
+
+Activity Engine musí od začátku podporovat alternativní ovládání a prezentaci.
+
+### Input
+
+- pointer / mouse,
+- touch,
+- keyboard,
+- tap + tap jako alternativa drag & drop,
+- dostatečně velké targety.
+
+### Presentation
+
+- reduced motion,
+- high contrast,
+- škálování UI,
+- omezení distraktorů,
+- čitelnější instrukce,
+- postupné odkrývání kroků,
+- text-to-speech tam, kde dává smysl.
+
+### Assessment
+
+**Stejný learning objective nemusí znamenat stejný způsob interakce.**
+
+Žák, pro kterého je jemný drag & drop bariéra, nesmí dostat horší pedagogický výsledek jen kvůli motorickému omezení.
+
+---
+
+## 12. První showcase: Build a PC
 
 ### Vertical slice
 
-Do první verze patří pouze:
+První produkční simulace má pokrýt pouze:
 
-1. rozpoznání základních komponent,
+1. PC case,
 2. motherboard,
 3. CPU,
 4. cooler,
@@ -274,638 +394,1181 @@ Do první verze patří pouze:
 7. GPU,
 8. PSU,
 9. základní napájecí kabeláž,
-10. `POWER ON`,
-11. jednoduchý výsledek POST / diagnostiky.
+10. power-on / POST.
 
-### Co do první verze nepatří
+### Explicitní non-goals MVP
 
-- vodní chlazení,
-- šroubování každého jednotlivého šroubku,
-- thermal paste fyzika,
-- stovky reálných SKU,
-- RGB management,
-- přesná simulace BIOSu,
-- realistická elektrická simulace,
-- plné 3D prostředí.
+- šroubování každého šroubu,
+- thermal paste physics,
+- stovky komerčních SKU,
+- custom water cooling,
+- RGB konfigurátor,
+- fotorealistická fyzika kabelů,
+- simulace celého BIOSu.
 
-Tyto věci mají nízký poměr pedagogické hodnoty k nákladům vývoje.
+To jsou drahé detaily s nízkou počáteční pedagogickou návratností.
 
 ---
 
-## 9. Build a PC — progression podle úrovně
+## 13. Student player — grafický směr
 
-### Explorer — „Poznej počítač“
+Cílem není vizuál školního formuláře.
 
-Žák ještě nedostává plně otevřenou sestavu.
-
-Příklady:
-
-- najdi CPU mezi několika komponentami,
-- přiřaď komponentu k její funkci,
-- najdi správné místo na motherboardu,
-- vlož CPU do zvýrazněného socketu,
-- vlož RAM do doporučeného slotu.
-
-Chyba není trest. Je to další výukový krok.
-
-> „Tento procesor do dané patice nepasuje. Deska používá jiný typ socketu.“
-
-### Builder — „Sestav funkční počítač“
-
-Žák dostane komponenty, ale sloty nejsou explicitně zvýrazněné.
-
-Musí správně:
-
-- osadit CPU,
-- RAM,
-- SSD,
-- GPU,
-- PSU,
-- základní kabeláž.
-
-### Technician — „Vyber a sestav kompatibilní konfiguraci“
-
-Žák už komponenty **vybírá**.
-
-Engine kontroluje například:
+Cílem je **lehké výukové herní prostředí**.
 
 ```text
-CPU.socket == motherboard.socket
-RAM.type == motherboard.memoryType
-GPU.length <= case.maxGpuLength
-PSU.wattage >= estimatedSystemLoad
-motherboard.formFactor in case.supportedFormFactors
+╭─────────────────────────────────────────────────────╮
+│ SKILLSTORM · BUILD LAB                    BUILDER   │
+│ Mission 03 · Install memory                         │
+│                                                     │
+│        ╭─────────────────────────────╮              │
+│        │                             │              │
+│        │          PC CASE            │              │
+│        │                             │              │
+│        │    ┌────────────────┐       │              │
+│        │    │ MOTHERBOARD    │       │              │
+│        │    │ CPU            │       │              │
+│        │    │ [DIMM][DIMM]   │       │              │
+│        │    └────────────────┘       │              │
+│        │                             │              │
+│        ╰─────────────────────────────╯              │
+│                                                     │
+│ INVENTORY                                           │
+│ [ DDR5 ] [ SSD ] [ GPU ] [ PSU ]                    │
+│                                                     │
+│ Progress ███████████░░░░░ 64 %                      │
+╰─────────────────────────────────────────────────────╯
 ```
 
-Mise například:
+### Microinteraction quality bar
 
-> Sestav kancelářský počítač do 15 000 Kč.
+Při uchopení komponenty:
 
-> Sestav herní počítač do 25 000 Kč.
-
-> Sestav PC vhodné pro střih videa.
-
-### Engineer — „Najdi závadu“
-
-Počítač už je sestavený, ale nefunguje správně.
-
-Příklady:
-
-- `NO DISPLAY`,
-- chybí CPU EPS power,
-- GPU není napájená,
-- RAM je špatně usazená,
-- monitor je připojen do nesprávného výstupu,
-- systémový disk není nalezen.
-
-Žák se přesouvá od názvů komponent k **systémovému myšlení a diagnostice**.
+- mírný scale-up,
+- stín,
+- jemný tilt,
+- validní drop zóna reaguje,
+- invalidní umístění se nezesměšňuje agresivní červenou,
+- po validním položení magnetic snap,
+- jemný zvuk zacvaknutí,
+- krátká completion animace.
 
 ---
 
-## 10. Grafický směr: game-like, ne „školní formulář“
+## 14. 2.5D před plným 3D
 
-Aktivita musí působit jako lehká hra, ne jako test s přetahováním ikon.
+Výchozí strategie je **2.5D**.
 
-### Doporučený vizuální styl
-
-- čisté 2.5D,
-- realisticky stylizované komponenty,
-- výrazná pracovní plocha,
-- inventář komponent,
-- jemná hloubka / stíny,
-- magnetic snap,
-- krátké placement animace,
-- decentní zvuky,
-- jasný stav `pending / accepted / rejected`,
-- minimum textu během manipulace,
-- žádný vizuální chaos.
-
-```text
-┌────────────────────────────────────────────────────────────┐
-│ BUILD LAB                                       Explorer   │
-│                                                            │
-│      ┌────────────────────────────────────────┐            │
-│      │                                        │            │
-│      │              PC CASE                   │            │
-│      │                                        │            │
-│      │       ┌──────────────────────┐         │            │
-│      │       │     MOTHERBOARD      │         │            │
-│      │       │                      │         │            │
-│      │       │      [ CPU ]         │         │            │
-│      │       │                      │         │            │
-│      │       └──────────────────────┘         │            │
-│      └────────────────────────────────────────┘            │
-│                                                            │
-│ INVENTORY                                                  │
-│ [CPU] [RAM] [SSD] [GPU] [PSU] [COOLER]                     │
-│                                                            │
-│ Mission: Install memory                      64 %           │
-│ ███████████████████░░░░░░░░                                │
-└────────────────────────────────────────────────────────────┘
-```
-
-### 2.5D místo plného 3D
-
-První verze nemá platit cenu plného 3D enginu.
-
-Doporučený asset pipeline:
+### Asset pipeline
 
 ```mermaid
 flowchart LR
-    M[3D / vector source\nBlender / design tool] --> R[pre-rendered views]
-    R --> W[WebP / sprites]
-    W --> P[Activity Player]
-    P --> U[fast school browser UI]
+    A[Blender / licensed source asset] --> B[Normalize style]
+    B --> C[Render canonical views]
+    C --> D[WebP / AVIF sprites]
+    D --> E[Activity Player]
 ```
 
-Výhoda:
+### Proč
 
-- vizuál může působit téměř 3D,
-- výrazně menší vývojová složitost,
-- lepší výkon na starších školních zařízeních,
-- jednodušší touch interaction,
-- snazší accessibility.
+- výrazně nižší HW požadavky,
+- lepší kompatibilita starších školních PC,
+- snazší touch hit testing,
+- rychlejší tvorba obsahu,
+- konzistentní vizuální styl,
+- menší bundle/runtime complexity.
 
-Plné Three.js / WebGL / WebGPU 3D použít až tam, kde přinese jasnou vzdělávací hodnotu.
+### 3D použít když
+
+3D přináší **výukovou hodnotu**, kterou 2.5D nedokáže rozumně poskytnout.
+
+Ne proto, že působí technologicky impozantněji.
 
 ---
 
-## 11. Activity Engine
+## 15. Rendering stack
 
-`Build a PC` nesmí být jednorázový hardcoded projekt.
+Doporučený směr:
 
-Má být první aktivitou nad obecným **Activity Engine**.
-
-### Typy aktivit
-
-| Typ | Příklady |
+| Potřeba | Technologie |
 | --- | --- |
-| `MATCH` | komponenta ↔ funkce |
-| `SORT` | input / output / storage |
-| `ORDER` | pořadí kroků algoritmu |
-| `BUILD` | sestavení PC |
-| `CONNECT` | síťová topologie, kabeláž |
-| `HOTSPOT` | klikni na správnou část obrázku |
-| `DEBUG` | najdi chybu v systému / programu |
-| `SIMULATION` | komplexnější scénář s vlastním stavem |
-
-### Další využití stejného enginu
-
-```text
-HARDWARE        Build a PC
-NETWORKING      Build a Network
-ALGORITHMS      Build an Algorithm
-DATABASES       Build a Database
-CYBERSECURITY   Defend the School
-OPERATING SYS   Fix the Computer
-PROGRAMMING     Debug the Program
-```
-
----
-
-## 12. Technologie — doporučený směr
-
-Tento stack je cílové doporučení, ne závazek bez prototypu.
-
-| Potřeba | Doporučení |
-| --- | --- |
-| SkillStorm UI | Next.js + React + Tailwind |
-| komplexnější game-like 2D aktivity | Phaser |
-| jednoduchý drag & drop | dnd-kit / nativní pointer layer dle accessibility potřeb |
-| síťové topologie / diagramy | React Flow |
-| 2.5D asset pipeline | Blender / vlastní grafika → WebP sprites |
-| plné 3D jen tam, kde dává smysl | Three.js |
-| realtime classroom | NestJS WebSocket gateway |
+| standardní SkillStorm UI | React / Next.js / Tailwind |
+| jednoduché UI DnD | DOM / pointer events / případně dnd-kit |
+| herní 2D/2.5D scény | Phaser |
+| síťové a uzlové diagramy | React Flow nebo vlastní graph layer |
+| budoucí skutečné 3D | Three.js |
+| realtime | NestJS WebSocket gateway |
 | persistence | PostgreSQL + Prisma |
-| ephemeral realtime state | Redis pouze pokud bude skutečně potřeba |
 
-### Open asset knihovny
-
-Lze využít open-source / CC0 zdroje jako prototypovací základ, ale nikdy bez kontroly licence konkrétního assetu.
-
-Možné zdroje:
-
-- Kenney — UI / game utility assets,
-- Poly Haven — 3D / textures / HDRI,
-- vlastní generické PC komponenty.
-
-**Pravidlo:** žádný externí asset nesmí skončit v produkčním repu bez evidovaného zdroje a licence.
+Technologie jsou doporučení pro spike; před adopcí konkrétní externí knihovny se ověří aktuální licence, bundle size, accessibility a browser support.
 
 ---
 
-## 13. Real-time protocol: posílat význam, ne pixely
+## 16. Compatibility model
 
-Server nepotřebuje sledovat každý pohyb kurzoru.
+Aktivita nesmí znát pouze obrázky.
 
-### Nikdy neposílat
+Komponenty potřebují doménová metadata.
 
-```text
-pointerMove x=245 y=483
-pointerMove x=246 y=485
-pointerMove x=248 y=490
-...
+Konceptuálně:
+
+```ts
+type Cpu = {
+  socket: 'AM5' | 'LGA1700';
+  tdpW: number;
+};
+
+type Motherboard = {
+  socket: 'AM5' | 'LGA1700';
+  memoryType: 'DDR4' | 'DDR5';
+  formFactor: 'ATX' | 'mATX' | 'ITX';
+};
 ```
 
-To je zbytečné, drahé a z hlediska soukromí špatně.
-
-### Posílat sémantické eventy
+Validace potom vyhodnocuje pravidla:
 
 ```text
-ACTIVITY_STARTED
-CHECKPOINT_STARTED
-COMPONENT_SELECTED
-COMPONENT_PLACED
-PLACEMENT_REJECTED
-HINT_REQUESTED
-CHECKPOINT_COMPLETED
-ACTIVITY_COMPLETED
-HEARTBEAT
+CPU socket == motherboard socket
+RAM type == motherboard memory type
+motherboard form factor ∈ case supported formats
+GPU length <= case clearance
+PSU capacity >= required system power + policy reserve
 ```
+
+**Přesná pravidla musí být odborně verzovaná a testovaná.**
+
+---
+
+## 17. Virtual Tech Store
+
+Vyšší úrovně mohou pracovat s katalogem.
+
+```text
+SKILLSTORM TECH STORE
+────────────────────────────────
+Budget                         25 000 Kč
+
+CPU        Ryzen-class         4 500 Kč
+Board      B-series            3 300 Kč
+RAM        32 GB DDR5          2 100 Kč
+SSD        1 TB NVMe           1 800 Kč
+GPU        Mid-range           8 000 Kč
+PSU        650 W               1 700 Kč
+Case                            1 500 Kč
+────────────────────────────────
+Total                         22 900 Kč
+Remaining                      2 100 Kč
+```
+
+Mise mohou být:
+
+- kancelářské PC,
+- školní počítač,
+- herní sestava,
+- počítač pro střih videa,
+- budget build,
+- diagnostika nekompatibilního návrhu.
+
+Pro MVP preferovat **generické komponenty**, ne závislost na živých cenách reálných obchodů.
+
+---
+
+## 18. Power-on a diagnostika
+
+Po sestavení musí přijít důsledek.
+
+```text
+[ POWER ON ]
+
+POST SUCCESSFUL
+CPU ........ detected
+RAM ........ 32 GB
+SSD ........ detected
+GPU ........ detected
+```
+
+nebo:
+
+```text
+NO DISPLAY
+Fans spinning: YES
+POST: FAILED
+
+Diagnose the system.
+```
+
+Možné příčiny:
+
+- RAM není správně osazená,
+- chybí CPU power,
+- GPU power,
+- monitor je ve špatném výstupu,
+- komponenta je nekompatibilní.
+
+To propojuje deklarativní znalost s troubleshootingem.
+
+---
+
+## 19. Activity Engine
+
+Build a PC nesmí být hardcoded special case.
+
+Cílem je obecný model.
+
+### Navržené activity families
+
+```text
+QUIZ
+MATCH
+SORT
+ORDER
+HOTSPOT
+BUILD
+CONNECT
+CONFIGURE
+DIAGNOSE
+SIMULATE
+```
+
+### IT příklady
+
+| Family | Příklad |
+| --- | --- |
+| `HOTSPOT` | označ CPU socket |
+| `SORT` | input vs output devices |
+| `ORDER` | boot sequence / algoritmus |
+| `BUILD` | sestav PC |
+| `CONNECT` | vytvoř LAN |
+| `CONFIGURE` | nastav síť / BIOS-lite |
+| `DIAGNOSE` | PC nemá obraz |
+| `SIMULATE` | phishing / security incident |
+
+---
+
+## 20. Další budoucí IT laboratoře
+
+### Network Lab
+
+```text
+[PC1] ─────┐
+           │
+        [SWITCH] ─── [ROUTER] ─── INTERNET
+           │
+[PC2] ─────┘
+           │
+        [SERVER]
+```
+
+Mise:
+
+> Propoj učebnu tak, aby klienti viděli server i internet.
+
+### Cybersecurity Lab
+
+Simulace:
+
+- phishing,
+- password hygiene,
+- permissions,
+- ransomware incident,
+- suspicious USB,
+- social engineering.
+
+### Algorithm Lab
+
+```text
+[ INPUT x ]
+     ↓
+[ x > 10 ? ]
+  ↙      ↘
+YES      NO
+```
+
+### Database Lab
+
+Žák vizuálně skládá:
+
+- tabulky,
+- klíče,
+- vazby,
+- queries.
+
+### Operating System Lab
+
+- process / memory model,
+- files and permissions,
+- storage,
+- troubleshooting.
+
+---
+
+## 21. Runtime architektura
+
+```mermaid
+flowchart TB
+    subgraph Browser
+        UI[Next.js / React]
+        AP[Activity Player]
+        ENG[Interaction Engine]
+        UI --> AP
+        AP --> ENG
+    end
+
+    ENG -->|semantic events| WS[WebSocket Gateway]
+    UI -->|REST| API[NestJS API]
+    WS --> LS[Live Session Service]
+    API --> LS
+    LS --> DB[(PostgreSQL)]
+    LS --> BUS[Realtime state / event fanout]
+    BUS --> TD[Teacher Dashboard]
+    BUS --> BOARD[Board projection]
+```
+
+### Důležitá hranice
+
+Rendering hry je převážně **client-local**.
+
+Server není remote graphics engine.
+
+---
+
+## 22. Semantic event protocol
+
+Přes realtime kanál neposílat:
+
+```text
+POINTER_MOVE x=254 y=481
+POINTER_MOVE x=255 y=483
+POINTER_MOVE x=257 y=488
+```
+
+Posílat pouze významné události.
 
 Příklad:
 
 ```json
 {
   "type": "COMPONENT_PLACED",
-  "activityRunId": "...",
-  "checkpoint": "INSTALL_MEMORY",
-  "component": "DDR5_RAM",
+  "component": "RAM_DDR5_1",
   "target": "DIMM_A2",
-  "clientEventId": "...",
-  "occurredAt": "2026-08-07T18:00:00.000Z"
+  "checkpoint": "MEMORY_INSTALL"
 }
 ```
 
-### Teacher commands
-
-```text
-PAUSE_ALL
-RESUME_ALL
-SEND_HINT
-OPEN_EXPLANATION
-CHANGE_STAGE
-END_SESSION
+```json
+{
+  "type": "PLACEMENT_REJECTED",
+  "reason": "INVALID_TARGET",
+  "checkpoint": "MEMORY_INSTALL"
+}
 ```
 
-### Požadavky
+```json
+{
+  "type": "HINT_REQUESTED",
+  "checkpoint": "MEMORY_INSTALL",
+  "hintLevel": 1
+}
+```
 
-- idempotentní `clientEventId`,
-- reconnect bez ztráty postupu,
-- server jako autorita pro důležité checkpointy,
-- lokální optimistic UI tam, kde je bezpečné,
-- žádné correct solution leakage před vyhodnocením,
-- rate limiting,
-- tenant isolation.
+```json
+{
+  "type": "CHECKPOINT_COMPLETED",
+  "checkpoint": "MEMORY_INSTALL"
+}
+```
+
+Výhody:
+
+- nízký network traffic,
+- jednoduchá agregace,
+- lepší privacy,
+- server dostává pedagogicky smysluplná data,
+- hra zůstává responsive i při krátkém network jitteru.
 
 ---
 
-## 14. Doménový model — cílový směr
+## 23. Event reliability
 
-Komplexní simulace se nemají násilně nacpat do současného `Test -> Question -> Response` modelu.
+Student klient musí být odolný proti přechodným problémům Wi-Fi.
 
-Testování a Activity Engine jsou příbuzné, ale odlišné domény.
+`VISION` pravidla:
 
-### Doporučené entity
+- event má client-generated ID,
+- odeslání je idempotentní,
+- klient drží krátkou lokální queue,
+- reconnect obnoví session a server checkpoint,
+- server nepočítá duplicate event dvakrát,
+- kritické checkpointy se potvrzují.
+
+Nesnažit se držet server a klient pixel-perfect synchronizované.
+
+---
+
+## 24. Cílový doménový model
+
+Nesnažit se vtlačit simulace do současného `Question` / `Response` modelu.
+
+Testování a komplexní interaktivní aktivity mají jinou životnost a telemetry.
+
+Konceptuální cílové entity:
 
 ```mermaid
 erDiagram
-    Activity ||--o{ ActivityVersion : has
-    ActivityVersion ||--o{ ActivityCheckpoint : defines
-    LiveSession ||--o{ LiveSessionParticipant : contains
-    LiveSessionParticipant ||--o{ ActivityRun : performs
-    ActivityRun ||--o{ ActivityEvent : emits
-    ActivityRun ||--o{ CheckpointResult : produces
-    ActivityVersion ||--o{ ActivityRun : instantiates
-
-    Activity {
-      uuid id
-      string title
-      string type
-      string status
-    }
-
-    ActivityVersion {
-      uuid id
-      uuid activityId
-      int version
-      json definition
-      json requirements
-    }
-
-    ActivityRun {
-      uuid id
-      uuid participantId
-      uuid activityVersionId
-      string status
-      int progress
-    }
-
-    ActivityEvent {
-      uuid id
-      uuid runId
-      string type
-      json payload
-      datetime occurredAt
-    }
-
-    CheckpointResult {
-      uuid id
-      uuid runId
-      string checkpointKey
-      string state
-      int attempts
-      int hintsUsed
-    }
+    ACTIVITY ||--o{ ACTIVITY_VERSION : versions
+    ACTIVITY_VERSION ||--o{ ACTIVITY_CHECKPOINT : contains
+    LIVE_SESSION }o--|| ACTIVITY_VERSION : runs
+    LIVE_SESSION ||--o{ LIVE_PARTICIPANT : includes
+    LIVE_PARTICIPANT ||--o{ ACTIVITY_EVENT : emits
+    LIVE_PARTICIPANT ||--o{ CHECKPOINT_RESULT : produces
+    LIVE_SESSION ||--o{ SESSION_COMMAND : receives
 ```
 
-### Migrační princip
+### `Activity`
 
-Současné Live Sessions zachovat kompatibilní.
+Identita aktivity.
 
-Doporučená evoluce:
+- title,
+- type,
+- subject/topic mapping,
+- scope,
+- author.
 
-1. `BOARD_ONLY` dál používá dnešní `Test` / rounds model.
-2. `DEVICES` nejprve dostane participant realtime vrstvu.
-3. Activity Engine vznikne vedle `Test` domény.
-4. `LiveSession` dostane bezpečný způsob odkazovat na activity source.
-5. Teprve po ověření vertical slice se zobecní další typy aktivit.
+### `ActivityVersion`
 
-**Nepřepisovat fungující Bleskovky jen proto, aby nový model vypadal čistěji.**
+Immutable publikovaná definice.
+
+Live session vždy běží proti konkrétní verzi.
+
+### `ActivityCheckpoint`
+
+Pedagogické kroky / kompetence.
+
+Např.:
+
+- identify_cpu,
+- install_cpu,
+- install_memory,
+- connect_power,
+- diagnose_post.
+
+### `LiveSession`
+
+Jedna reálná hodina / spuštění.
+
+### `LiveParticipant`
+
+Student + session-local stav.
+
+### `ActivityEvent`
+
+Append-oriented významné eventy.
+
+### `CheckpointResult`
+
+Kompaktní pedagogický výsledek checkpointu.
+
+### `SessionCommand`
+
+Např.:
+
+- pause,
+- resume,
+- show_explanation,
+- change_stage,
+- assign_challenge.
 
 ---
 
-## 15. Výuková data: evidence mastery
+## 25. Vztah ke stávajícímu SkillStorm modelu
 
-Výstup aktivity nemá být pouze:
+Současné entity zůstávají důležité:
 
-> 72 bodů.
+- organizace,
+- membership,
+- class section,
+- subject,
+- topic level,
+- difficulty,
+- objectives,
+- prerequisites,
+- assignments,
+- students / teachers.
 
-SkillStorm má umět říct:
+Activity Engine má být další obsahová/exekuční vrstva nad tímto školním modelem.
+
+### Topic mapping
+
+Aktivita může být navázaná například na:
 
 ```text
-7.B · Hardware
+CatalogSubject: INFORMATIKA
+TopicLevel: Hardware / INTRO
+Difficulty: BASIC
+Activity: Build a PC — Explorer
+```
 
-CPU identification           93 %
-Memory installation          86 %
-Storage                      89 %
-Power delivery               54 %
-Component compatibility      61 %
+---
+
+## 26. Test a Activity jsou rozdílné produkty
+
+### Test
+
+Odpovídá hlavně na:
+
+> Co student dokáže zodpovědět?
+
+### Activity
+
+Odpovídá na:
+
+> Co student dokáže provést / vyřešit / diagnostikovat?
+
+Někdy se překrývají, ale nesmí být modelovány jako totéž jen kvůli úspoře jedné databázové tabulky.
+
+---
+
+## 27. Authoring
+
+Dlouhodobá hodnota Activity Engine vznikne až ve chvíli, kdy nový obsah nebude vyžadovat vývojáře.
+
+### V1
+
+Aktivity mohou být definované vývojářsky / seedem.
+
+### V2
+
+Interní editor pro centrální content tým.
+
+### V3
+
+Bezpečný teacher builder pro podporované activity family.
+
+Neotevírat generický scripting engine učitelům v MVP.
+
+---
+
+## 28. Bezpečnost
+
+### Server-side autorita
+
+Klient nesmí rozhodovat o:
+
+- finálním hodnocení,
+- odemknutí chráněného obsahu,
+- oprávnění,
+- kompatibilitě, která vstupuje do výsledku,
+- session control commands.
+
+### Hidden solution contract
+
+Stejný princip jako dnešní Live Sessions:
+
+**správné řešení se klientovi neposílá před chvílí, kdy jej skutečně smí znát.**
+
+U komplexních activity je potřeba navrhnout challenge data tak, aby klient nepotřeboval celý solution graph jen kvůli renderingu.
+
+---
+
+## 29. Privacy
+
+Teacher Mission Control nemá být spyware.
+
+### Ukládat
+
+- pedagogicky významné eventy,
+- checkpoint progress,
+- attempts relevantní pro diagnostiku,
+- hint usage,
+- completion.
+
+### Neukládat jako default
+
+- každou souřadnici pointeru,
+- screenshoty obrazovky,
+- keylogging,
+- neomezenou raw telemetry bez vzdělávacího účelu.
+
+Data retention musí být explicitní součást návrhu před produkčním `DEVICES` režimem.
+
+---
+
+## 30. Veřejná tabule a osobní data
+
+Projection endpoint/view musí být samostatná bezpečná projekce.
+
+Board dostává například:
+
+```json
+{
+  "classProgress": 0.67,
+  "completedCount": 6,
+  "activeCount": 14,
+  "needsHelpCount": 8,
+  "misconceptions": [
+    {
+      "checkpoint": "MEMORY_INSTALL",
+      "affected": 11
+    }
+  ]
+}
+```
+
+Ne:
+
+```json
+{
+  "student": "Jan Novak",
+  "wrongAttempts": 9
+}
+```
+
+---
+
+## 31. Performance budget
+
+První verze musí být testovaná i na slabším školním hardware.
+
+Cíl není demonstrace na high-end MacBooku.
+
+### Performance principles
+
+- lazy-load activity engine,
+- code splitting,
+- komprimované assets,
+- preload pouze aktuální / nejbližší stage,
+- žádné obří 3D bundle v core SkillStorm app,
+- respektovat reduced motion,
+- držet teacher dashboard rychlý i při 30–35 aktivních studentech.
+
+Konkrétní numerické budgety definovat až po performance spike na reprezentativních školních strojích.
+
+---
+
+## 32. Offline a špatná Wi-Fi
+
+Cílem není úplný offline multiplayer v první verzi.
+
+MVP však musí tolerovat:
+
+- krátký výpadek Wi-Fi,
+- reconnect,
+- opakované odeslání eventu,
+- refresh stránky,
+- dočasně pomalý backend.
+
+Student nesmí přijít o 20 minut práce při jednom reconnectu.
+
+---
+
+## 33. PWA
+
+Activity Player je dobrý kandidát pro postupné PWA schopnosti:
+
+- asset caching,
+- rychlé spuštění,
+- fullscreen-like experience,
+- resilience.
+
+Instalace PWA nesmí být podmínkou používání ve škole.
+
+Browser-first zůstává default.
+
+---
+
+## 34. Dotyková tabule
+
+UI musí být explicitně navržené pro:
+
+- velké obrazovky,
+- touch,
+- nepřesný dotyk,
+- případný multi-touch,
+- práci před třídou,
+- fullscreen,
+- rozdílné poměry stran.
+
+### Board UI pravidla
+
+- velké targety,
+- nulová závislost na hover,
+- důležité ovládání dosažitelné,
+- výrazný stav aktivní interakce,
+- možnost teacher lock / unlock interaction.
+
+---
+
+## 35. Teacher-led vs student-led
+
+Stejný Activity Engine musí podporovat dva režimy.
+
+### Student-led
+
+Každý pracuje na vlastním zařízení.
+
+### Teacher-led
+
+Aktivita běží na tabuli a třída ji řeší společně.
+
+Build a PC tedy může být:
+
+> každý si skládá vlastní sestavu
+
+nebo:
+
+> jeden společný počítač na tabuli a třída hlasuje / vysílá žáky k řešení.
+
+Student-led je hlavní cílový showcase; teacher-led poskytuje využití i školám bez 1:1 zařízení.
+
+---
+
+## 36. Classroom without accounts
+
+`VISION`
+
+Pro některé guest/live scénáře může být užitečný join kód.
+
+Ale pro standardní školní hodinu preferovat existující autentizovaný kontext třídy, pokud jsou studenti přihlášení.
+
+Join flow nesmí oslabovat tenant isolation ani identity/RBAC pravidla.
+
+---
+
+## 37. Teams
+
+Ne každá hodina potřebuje individuální režim.
+
+Budoucí session může umožnit:
+
+- jednotlivce,
+- dvojice,
+- malé týmy.
+
+Například Network Lab může být vhodnější ve dvojicích.
+
+Teacher dashboard potom sleduje team progress a individuální evidence jen tam, kde ji skutečně máme.
+
+---
+
+## 38. Gamifikace
+
+Gamifikace má podporovat chuť pokračovat, ne měnit hodinu na veřejný výkonový ranking.
+
+Preferovat:
+
+- mission progress,
+- unlock challenge,
+- mastery feedback,
+- class co-op target,
+- třídního parťáka.
+
+Nepreferovat jako default:
+
+- veřejný žebříček nejslabší → nejlepší,
+- penalizaci pomalých studentů,
+- XP pouze za správnost,
+- streak pressure.
+
+---
+
+## 39. Co má být „cool“
+
+Cool není synonymum pro více částic nebo 3D.
+
+Cool je:
+
+- komponenta se chová přesvědčivě,
+- PC po správném sestavení opravdu nabootuje,
+- špatné zapojení má logický důsledek,
+- celá třída vidí společnou misi,
+- učitel může zastavit scénu a něco ukázat,
+- žák má pocit, že něco **dělá**, ne že vyplňuje test.
+
+---
+
+## 40. Ukázková 45min hodina
+
+### 0–5 min — briefing
+
+Board:
+
+> **MISSION: Sestav funkční PC.**
+
+Učitel vysvětlí cíl.
+
+### 5–10 min — diagnostika
+
+Krátké checkpointy pomohou určit vhodný scaffolding.
+
+### 10–25 min — build
+
+Žáci staví.
+
+Teacher dashboard identifikuje problémy.
+
+### 25 min — společná intervence
+
+SkillStorm:
+
+> 43 % třídy chybuje u power delivery.
+
+Učitel dá Pause all a vysvětlí problém na tabuli.
+
+### 28–37 min — pokračování
+
+Studenti pokračují.
+
+Rychlí dostanou compatibility challenge.
+
+### 37–42 min — boss challenge
+
+Společný diagnostický problém.
+
+### 42–45 min — reflexe
+
+Teacher report:
+
+```text
+CPU identification       93 %
+Memory installation      86 %
+Storage                   89 %
+Power delivery            54 %
+Compatibility reasoning   61 %
+```
 
 Doporučení:
-Příští hodinu zopakovat napájení a kompatibilitu.
-```
 
-U jednotlivého žáka může být uložené například:
-
-- checkpoint completed,
-- počet pokusů,
-- použití nápovědy,
-- časová náročnost v hrubých intervalech,
-- úroveň scaffolding,
-- dosažená úroveň kompetence.
-
-Neukládat zbytečnou behaviorální telemetrii jen proto, že je technicky možné ji sbírat.
+> příští hodinu začít napájením a kompatibilitou.
 
 ---
 
-## 16. Ukázková 45minutová hodina
+## 41. Teacher report nesmí předstírat přesnost
 
-### 0–5 min
+Pokud systém nemá dost evidence, nesmí tvrdit:
 
-Učitel otevře:
+> Student ovládá kompetenci na 73 %.
 
-> Informatika → Hardware → Build a PC → Spustit živou hodinu
+Preferovat interpretovatelné údaje:
 
-Tabule zobrazí misi.
+- checkpoint zvládnut bez pomoci,
+- zvládnut po nápovědě,
+- opakovaná miskoncepce,
+- nedokončeno,
+- evidence insufficient.
 
-### 5–20 min
-
-Každý žák pracuje na vlastním zařízení.
-
-Teacher dashboard prioritizuje žáky a bottlenecky.
-
-### ~20 min
-
-SkillStorm upozorní:
-
-> 43 % třídy opakovaně chybuje u napájení CPU.
-
-Učitel použije `PAUSE_ALL`, udělá krátké společné vysvětlení na tabuli a pokračuje.
-
-### 23–35 min
-
-Žáci pokračují.
-
-Rychlejší mohou dostat extension challenge. Žáci, kteří se zasekávají, dostanou více scaffolding.
-
-### 35–40 min
-
-Společná boss challenge.
-
-### 40–45 min
-
-SkillStorm vytvoří učiteli souhrn zvládnutých a problémových kompetencí.
+Mastery model lze zavést později na základě dostatečných dat a validace.
 
 ---
 
-## 17. UX spuštění hodiny
+## 42. AI role
 
-Učitel nesmí před každou hodinou konfigurovat dvacet přepínačů.
+AI je pozdější vrstva.
 
-Doporučený launch flow:
+Dobré budoucí použití:
+
+- vysvětlit konkrétní chybu přiměřeně úrovni,
+- generovat varianty mise z validovaných komponent,
+- shrnout učiteli opakující se problémy,
+- doporučit navazující aktivitu.
+
+AI nesmí být v první verzi autoritou pro technickou kompatibilitu.
+
+Compatibility musí rozhodovat deterministický, testovatelný rules engine.
+
+---
+
+## 43. Localization
+
+Activity data musí být od začátku připravená na lokalizaci.
+
+Nemíchat české texty přímo do interaction logic.
+
+Cíl:
 
 ```text
-Sestav počítač
-
-Třída: 7.B
-
-Úroveň
-● Adaptivní
-○ Explorer
-○ Builder
-○ Technician
-○ Engineer
-
-Podpora
-● Automatická
-○ Guided
-○ Standard
-○ Minimal
-
-Délka
-○ 20 min
-● 30 min
-○ celá hodina
-
-[ Spustit hodinu ]
+logic
+  ↓
+semantic content keys
+  ↓
+cs / en / de / pl / ...
 ```
 
-Advanced settings jsou schované pod sekundární akcí.
+To je důležité pro budoucí mezinárodní směr.
 
 ---
 
-## 18. Výkonnostní a provozní cíle
+## 44. Open assets a licence
 
-Pro školní prostředí je stabilita důležitější než maximální grafický efekt.
+Externí open-source / free assets mohou dramaticky snížit cenu prototypu.
 
-Vertical slice má být ověřen minimálně na:
+Pravidla:
 
-- 30 studentských klientech v jedné session,
-- 1 teacher dashboardu,
-- 1 projekci / tabuli,
-- Chrome / Edge,
-- běžném školním Full HD monitoru,
-- touch zařízení,
-- slabším školním notebooku / desktopu,
-- reconnect scénáři,
-- krátkém výpadku školní Wi-Fi.
+- každá asset source má evidovanou licenci,
+- žádné náhodné obrázky z Google Images,
+- komerční použití musí být explicitně kompatibilní,
+- attribution requirements musí být evidované,
+- pokud asset vizuálně nesedí, raději vlastní stylizovaný model.
 
-### Produktové SLO cíle pro MVP
-
-- učitel spustí hodinu bez technického nastavování,
-- meaningful progress se na dashboardu objeví přibližně realtime,
-- reconnect nesmí resetovat aktivitu,
-- běžná interakce nesmí čekat na server round-trip,
-- server nesmí dostávat raw pointer stream,
-- aktivita musí být použitelná i při snížených animacích,
-- případný výpadek realtime vrstvy nesmí poškodit uložený výsledek.
+Asset registry má být součást content pipeline před větším rozšiřováním.
 
 ---
 
-## 19. Bezpečnost a privacy
+## 45. Testovací strategie
 
-### Nikdy nedělat
+### Unit
 
-- screen mirroring všech žáků do teacher dashboardu jako default,
-- kontinuální ukládání kurzoru / klávesnice,
-- skryté behaviorální profilování,
-- veřejné leaderboardy slabších a silnějších žáků,
-- posílání solution snapshotu klientovi před správným okamžikem,
-- org-agnostic session lookup.
+- compatibility rules,
+- checkpoint transitions,
+- difficulty rules,
+- event reducers,
+- teacher aggregation.
 
-### Zachovat
+### Integration
 
-- organization isolation,
-- host / teacher authorization,
-- bezpečný join token,
-- krátkou životnost session tokenů,
-- minimalizaci osobních dat,
-- audit administrativních zásahů,
-- server-side validation významných výsledků.
-
----
-
-## 20. Gamifikace: podporuje práci, nenahrazuje ji
-
-Gamifikace může obsahovat:
-
-- progress,
-- mission completion,
-- class boss challenge,
-- kosmetické odměny,
-- kolektivní ClassPartak progress.
-
-Nemá obsahovat:
-
-- veřejné pořadí žáků od nejlepšího po nejhoršího,
-- penalizaci za použití accessibility support,
-- tlak na rychlost tam, kde měříme porozumění,
-- XP jako hlavní důvod dokončení aktivity.
-
----
-
-## 21. Doporučený roadmap slice
-
-### Phase 0 — Specification
-
-- finalizovat Activity schema,
-- finalizovat event protocol,
-- definovat teacher dashboard state machine,
-- definovat accessibility contract,
-- připravit Build-a-PC content spec.
-
-### Phase 1 — Live DEVICES foundation
-
-- studentský join / authenticated participant,
-- WebSocket gateway,
+- session lifecycle,
+- websocket auth,
+- tenant isolation,
 - reconnect,
-- participant state,
-- teacher dashboard skeleton,
-- `PAUSE_ALL / RESUME_ALL`.
+- idempotence.
 
-### Phase 2 — Build-a-PC vertical slice
+### Browser / Playwright
 
-- 2.5D workspace,
-- CPU / RAM / SSD / GPU / PSU,
-- drag / snap interaction,
-- checkpoint engine,
+- mouse interaction,
+- touch PointerEvents,
+- keyboard alternative,
+- teacher pause/resume,
+- 30 simulated participants,
+- projection privacy.
+
+### Visual
+
+- reprezentativní rozlišení tabulí,
+- notebook,
+- tablet,
+- reduced motion,
+- large text.
+
+### Manual classroom pilot
+
+Automatické testy nestačí.
+
+Vertical slice musí projít skutečnou hodinou.
+
+---
+
+## 46. Observability
+
+Potřebujeme rozlišit dvě kategorie.
+
+### Product telemetry
+
+Pouze agregované informace potřebné pro zlepšování produktu, podle privacy policy.
+
+### Operational telemetry
+
+- session disconnects,
+- websocket error rate,
+- activity load failures,
+- asset failures,
+- latency,
+- crash reporting.
+
+Nezaměňovat operational observability s monitoringem chování dítěte.
+
+---
+
+## 47. Rollout
+
+### Phase 0 — architecture spike
+
+- Phaser / alternative performance spike,
+- touch board spike,
+- websocket 30-client spike,
+- asset pipeline spike,
+- accessibility spike.
+
+### Phase 1 — LiveSession DEVICES foundation
+
+- authenticated participants,
+- lobby / session connect,
+- realtime events,
+- reconnect,
+- teacher participant grid,
+- board projection.
+
+### Phase 2 — generic Activity skeleton
+
+- Activity + immutable ActivityVersion,
+- checkpoints,
+- semantic events,
+- command protocol,
+- Activity Player host.
+
+### Phase 3 — Build a PC vertical slice
+
 - Explorer + Builder,
-- teacher progress telemetry,
-- závěrečný report.
+- core components,
+- placement validation,
+- power-on,
+- teacher progress.
 
-### Phase 3 — Adaptivity
+### Phase 4 — classroom intervention
+
+- misconception aggregation,
+- pause/resume,
+- board explain mode,
+- challenge assignment.
+
+### Phase 5 — advanced PC simulation
 
 - Technician,
-- Engineer,
-- diagnostic entry,
-- scaffolding profiles,
-- teacher override,
-- class bottleneck detection.
+- compatibility/catalog,
+- Engineer diagnostics.
 
-### Phase 4 — General Activity Engine
+### Phase 6 — second Activity family
 
-- authoring model,
-- `CONNECT`, `HOTSPOT`, `DEBUG`,
-- networking showcase,
-- cybersecurity showcase,
-- reusable activity library.
+Například Network Lab.
+
+**Tato fáze je zásadní.** Teprve druhá komplexní aktivita ověří, zda opravdu vznikl obecný Activity Engine a ne jen elegantně zabalený PC simulator.
 
 ---
 
-## 22. MVP acceptance criteria
+## 48. MVP acceptance criteria
 
-První vertical slice je úspěšný pouze pokud v reálné třídě platí:
+Build-a-PC MVP není hotový jen proto, že se komponenty dají přetahovat.
 
-1. nejméně 25–30 žáků může pracovat současně,
-2. učitel během několika sekund pozná, kdo se zasekl,
-3. učitel může celou aktivitu pozastavit a pokračovat,
-4. žák po reconnectu nepřijde o postup,
-5. 7. třída zvládne Explorer bez předchozí znalosti názvů komponent,
-6. pokročilý žák není nucen čekat na zbytek třídy,
-7. tabule zobrazuje společný kontext, ne osobní výsledky,
-8. aktivita je použitelná dotykem, myší i alternativním ovládáním,
-9. učitel po hodině dostane použitelný přehled kompetencí,
-10. pedagog po pilotu řekne, že dashboard skutečně snížil potřebu běhat naslepo po učebně.
+Musí projít minimálně:
 
-Poslední bod je důležitější než počet animací nebo počet podporovaných komponent.
+### Classroom
+
+- učitel spustí session pro existující třídu,
+- 30 student klientů se připojí,
+- každý má vlastní progress,
+- učitel vidí stav všech bez refreshování,
+- pause/resume funguje,
+- board zobrazuje pouze bezpečnou agregaci.
+
+### Activity
+
+- CPU / RAM / SSD / GPU / PSU lze správně umístit,
+- invalidní kroky mají didaktickou odpověď,
+- checkpointy jsou persistované,
+- refresh/reconnect nezničí práci,
+- power-on reaguje podle sestavy.
+
+### Difficulty
+
+- minimálně Explorer + Builder,
+- scaffolding lze měnit nezávisle,
+- učitel může override.
+
+### Accessibility
+
+- základní flow lze dokončit touch,
+- mouse,
+- keyboard alternativou nebo ekvivalentním accessible interaction path,
+- reduced motion.
+
+### Performance
+
+- ověřeno na reprezentativním slabším školním PC,
+- ověřena školní tabule,
+- 30 paralelních klientů.
+
+### Security
+
+- tenant isolation,
+- student nemůže ovládat session,
+- hidden solution leak test,
+- projection PII leak test.
 
 ---
 
-## 23. Co bude moat
+## 49. Pilot success criteria
 
-Samotný drag & drop moat není. Ani hezká 3D základní deska není moat.
+Po skutečné hodině se ptáme hlavně:
 
-Silná kombinace je:
+### Teacher
 
-> **kvalitní kurikulum + praktické simulace + adaptivní obtížnost + live teacher intelligence + evidence mastery + školní provozní spolehlivost.**
+- Viděl učitel rychleji, kdo potřebuje pomoc?
+- Ušetřil mu dashboard chození naslepo?
+- Bylo pause/explain/resume přirozené?
+- Použil by aktivitu znovu bez vývojáře?
 
-Pokud SkillStorm zvládne tuto kombinaci kvalitně, přestává soutěžit pouze s testovacími platformami a dostává se blíž k **digitální praktické laboratoři pro informatiku**.
+### Students
+
+- Pracovala větší část třídy většinu času?
+- Dokázali vysvětlit chyby po aktivitě?
+- Nebyl interaction model překážkou učivu?
+
+### Technical
+
+- fungovala školní Wi-Fi,
+- fungovala tabule,
+- neztratily se session states,
+- běžel player plynule na školních strojích.
 
 ---
 
-## 24. Rozhodovací pravidla pro další vývoj
+## 50. Klíčová produktová metrika
 
-Při každém návrhu nové funkce položit čtyři otázky:
+Nejdůležitější metrika není „kolik minut děti hrály“.
 
-1. Pomůže to žákovi skutečně něco pochopit nebo procvičit?
-2. Pomůže to učiteli lépe vést celou třídu?
-3. Je pedagogická hodnota úměrná implementační složitosti?
-4. Lze stejnou technologii znovu použít v dalších IT tématech?
+Je:
 
-Pokud je odpověď převážně „ne“, funkce do Activity Engine nepatří.
+> **Pomohl SkillStorm učiteli rychleji odhalit, co konkrétně jeho třída nechápe, a umožnil mu během stejné hodiny zasáhnout?**
+
+To je rozdíl mezi hrou a vzdělávacím produktem.
 
 ---
 
-## 25. Jedna věta pro tým
+## 51. Co nedělat
 
-> **Nestavíme hru na interaktivní tabuli. Stavíme SkillStorm Interactive IT Lab: celá třída pracuje současně, každý na své úrovni, učitel má živý přehled a tabule drží společnou výuku pohromadě.**
+1. **Nezačít plným 3D.**
+2. **Nevytvářet Build-a-PC jako izolovanou route s hardcoded logikou.**
+3. **Nepřepisovat současné testování na Activity model.**
+4. **Neposílat raw pointer telemetry serveru.**
+5. **Nedělat veřejné leaderboardy studentů.**
+6. **Nepřidávat AI před deterministickým rules enginem.**
+7. **Nevytvářet 50 komponent před ověřením classroom loopu.**
+8. **Neoptimalizovat grafiku jen na výkonná zařízení vývojářů.**
+9. **Nezaměnit XP za learning design.**
+10. **Neimplementovat další komplexní simulaci, dokud první vertical slice neprojde pilotem.**
+
+---
+
+## 52. Co je skutečný moat
+
+Samotná hra „sestav PC“ se dá okopírovat.
+
+Obtížněji se kopíruje celý systém:
+
+```text
+Curriculum mapping
+       +
+Activity Engine
+       +
+Adaptive scaffolding
+       +
+Live classroom orchestration
+       +
+Teacher intervention intelligence
+       +
+Reusable content authoring
+       +
+School identity / classes / RBAC
+       +
+Longitudinal learning evidence
+```
+
+**Moat není Phaser. Moat je integrovaný pedagogický systém.**
+
+---
+
+## 53. Severka
+
+Pokud máme rozhodovat mezi dvěma implementacemi, preferovat tu, která nás přibližuje k této hodině:
+
+> Učitel jedním kliknutím spustí praktickou misi. Každý žák začne na úrovni, kterou zvládne. SkillStorm v reálném čase rozpozná, kde se třída láme. Učitel to vidí, zastaví práci, problém ukáže na tabuli a všichni pokračují. Na konci učitel nevidí jen skóre, ale ví, co má příští hodinu zopakovat.
+
+Pokud feature tomuto cíli nepomáhá, nemá automaticky prioritu jen proto, že je vizuálně atraktivní.
