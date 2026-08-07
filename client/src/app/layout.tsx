@@ -5,6 +5,7 @@ import { Suspense } from "react";
 import { AppErrorBoundary } from "@/components/layout/app-error-boundary";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { ServiceWorkerRegistration } from "@/components/pwa/service-worker-registration";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
@@ -51,6 +52,7 @@ export default async function RootLayout({
   return (
     <html lang="cs" className={`${inter.variable} ${plexMono.variable}`}>
       <body className="bg-canvas text-ink">
+        <ServiceWorkerRegistration />
         <AppErrorBoundary>
           <TooltipProvider>
             {MswLoader ? <MswLoader /> : null}
