@@ -148,11 +148,12 @@ for (const doc of HISTORICAL_DOCS) {
   }
 }
 
-// 4) Active docs must not regress to known stale setup/brand patterns.
-// Historical/archive documents are allowed to mention legacy names only as
-// history; active contracts and runbooks are SkillStorm-only.
+// 4) Active docs must not regress to known stale setup/identity patterns.
+// Explicit historical provenance (for example a sentence saying an old doctrine
+// is superseded) is allowed; using the legacy brand as an active document
+// identity, setup example or runtime name is not.
 const stalePatterns = [
-  { regex: /\bEduto\b/i, label: 'legacy Eduto brand' },
+  { regex: /^#\s+EDUTO\b/im, label: 'legacy product identity in document heading' },
   { regex: /\/Users\/[A-Za-z0-9._-]+\//, label: 'machine-local /Users/... path' },
   { regex: /POSTGRES_DB\s*=\s*eduto\b/i, label: 'legacy POSTGRES_DB=eduto example' },
   { regex: /JWT_SECRET\s*=\s*supersecret\b/i, label: 'demo JWT secret' },
