@@ -189,7 +189,7 @@ function PeoplePageContent(): React.JSX.Element {
 
       <section className="grid gap-3 md:grid-cols-3" aria-label="Přidat člověka">
         <Link
-          href="/app/classrooms?action=add-students"
+          href="/app/classrooms"
           className="group flex min-h-28 items-center gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-blue-200 hover:bg-blue-50/40"
         >
           <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
@@ -321,7 +321,7 @@ function PeoplePageContent(): React.JSX.Element {
 
       <BaseModal
         title="Upravit údaje"
-        description={editing ? ROLE_LABEL[editing.role] : undefined}
+        {...(editing ? { description: ROLE_LABEL[editing.role] } : {})}
         open={editing !== null}
         onOpenChange={(open) => { if (!open) setEditing(null); }}
       >
