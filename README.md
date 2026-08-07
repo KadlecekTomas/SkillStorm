@@ -5,6 +5,7 @@ Webová vzdělávací platforma pro školy.
 ## Product vision
 
 - [SkillStorm Interactive Curriculum](./docs/interactive-curriculum/README.md) — nadřazená vize interaktivní výuky napříč předměty: `BOARD_ONLY`, `SHARED_DEVICES`, `DEVICES`, `HYBRID`, předmětové enginy, Teacher Orchestration a realistické fungování i ve škole s jedinou interaktivní tabulí.
+- [Interactive Curriculum — Master Use Cases](./docs/interactive-curriculum/USE-CASES.md) — detailní překlad vize do reálných hodin 1.–9. ročníku: předmětové use cases, hero lessons, teacher workflows, learning evidence, SVP/accessibility, coverage gates a rollout.
 - [SkillStorm Interactive IT Lab](./docs/interactive-it-lab/README.md) — první subject blueprint: cílová vize interaktivní výuky informatiky pro celou třídu, Activity Engine, Build-a-PC showcase, adaptivní obtížnost, Teacher Mission Control a práce s interaktivní tabulí.
 - [Live Sessions](./docs/live-sessions.md) — současný koncept a implementační kontrakty Bleskovek.
 - [Live Sessions — interactive rounds](./docs/live-sessions-interactions.md) — současné drag & drop interakce na tabuli.
