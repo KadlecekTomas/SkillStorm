@@ -12,7 +12,7 @@ function source(relativePath: string): string {
 
 function expectNoNestedLinkButton(relativePath: string): void {
   const text = source(relativePath);
-  const nestedInteractive = /<Link\b[^>]*>[\s\S]*?<Button\b[\s\S]*?<\/Link>/;
+  const nestedInteractive = /<Link\b[^>]*>(?:(?!<\/Link>)[\s\S])*?<Button\b(?:(?!<\/Link>)[\s\S])*?<\/Link>/;
   expect(nestedInteractive.test(text), relativePath).toBe(false);
 }
 

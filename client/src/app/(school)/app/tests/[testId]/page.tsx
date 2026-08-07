@@ -369,9 +369,9 @@ function TestPageWrapper(): React.JSX.Element {
     return (
       <div className="space-y-4">
         <WarningAlert title="Chyba" description="Chybí ID testu." />
-        <Link href="/app/tests">
-          <Button variant="outline">Zpět na testy</Button>
-        </Link>
+        <Button asChild variant="outline">
+          <Link href="/app/tests">Zpět na testy</Link>
+        </Button>
       </div>
     );
   }
