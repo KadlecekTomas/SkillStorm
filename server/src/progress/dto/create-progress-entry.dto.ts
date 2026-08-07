@@ -1,4 +1,7 @@
+import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  IsArray,
   IsDateString,
   IsEnum,
   IsInt,
@@ -8,8 +11,9 @@ import {
   Max,
   MaxLength,
   Min,
+  ValidateNested,
 } from 'class-validator';
-import { ProgressEntryType } from '@prisma/client';
+import { ProgressEntryType } from '../progress.types';
 
 export class CreateProgressEntryDto {
   @IsUUID()
@@ -55,5 +59,9 @@ export class CreateProgressEntryDto {
 }
 
 export class SyncProgressEntriesDto {
+  @IsArray()
+  @ArrayMaxSize(100)
+  @ValidateNested({ each: true })
+  @Type(() => CreateProgressEntryDto)
   entries!: CreateProgressEntryDto[];
 }
