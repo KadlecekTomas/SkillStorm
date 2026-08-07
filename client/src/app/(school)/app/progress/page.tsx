@@ -289,9 +289,9 @@ function TeacherWorkspace({
       setError("Nejdříve vyberte žáka.");
       return;
     }
-    if (attendanceStatus === "LATE" && minutesLate) {
+    if (attendanceStatus === "LATE") {
       const parsedMinutes = Number(minutesLate);
-      if (!Number.isInteger(parsedMinutes) || parsedMinutes < 1 || parsedMinutes > 1440) {
+      if (!minutesLate || !Number.isInteger(parsedMinutes) || parsedMinutes < 1 || parsedMinutes > 1440) {
         setError("Zadejte počet minut zpoždění jako celé číslo od 1 do 1440.");
         return;
       }
@@ -465,6 +465,12 @@ function TeacherWorkspace({
             </label>
           </div>
 
+          {selectedClass && selectedClass.students.length === 0 && (
+            <div role="status" className="rounded-xl border border-warning/40 bg-warning-soft p-4 font-semibold text-ink">
+              V této třídě zatím nejsou žádní aktivní žáci. Vyberte jinou třídu, nebo požádejte vedení o kontrolu zařazení žáků.
+            </div>
+          )}
+
           {mode === "ASSESSMENT" && (
             <div className="space-y-6">
               <section aria-labelledby="grade-heading" className="space-y-3">
@@ -569,6 +575,12 @@ function TeacherWorkspace({
 
           {mode === "ATTENDANCE" && (
             <div className="space-y-5">
+              {!online && (
+                <div role="status" className="flex items-start gap-3 rounded-xl border border-warning/40 bg-warning-soft p-4 font-semibold text-ink">
+                  <CloudOff className="mt-0.5 h-5 w-5 shrink-0" />
+                  Docházka se ukládá přímo do školního systému a vyžaduje připojení k internetu. Hodnocení můžete dál zapisovat offline.
+                </div>
+              )}
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 {attendanceOptions.map((option) => (
                   <button
@@ -611,7 +623,7 @@ function TeacherWorkspace({
                   className="min-h-[110px] text-base"
                 />
               </label>
-              <Button size="lg" className="h-16 w-full text-lg font-black sm:max-w-md" disabled={busy || !selectedStudent} onClick={() => void saveAttendance()}>
+              <Button size="lg" className="h-16 w-full text-lg font-black sm:max-w-md" disabled={busy || !selectedStudent || !online} onClick={() => void saveAttendance()}>
                 <Check className="mr-2 h-5 w-5" /> Uložit docházku
               </Button>
             </div>
@@ -619,6 +631,12 @@ function TeacherWorkspace({
 
           {mode === "SUPPORT" && (
             <div className="space-y-5">
+              {!online && (
+                <div role="status" className="flex items-start gap-3 rounded-xl border border-warning/40 bg-warning-soft p-4 font-semibold text-ink">
+                  <CloudOff className="mt-0.5 h-5 w-5 shrink-0" />
+                  Podpůrná opatření vyžadují připojení k internetu. Rozpracovaný text na této obrazovce nemažte, po připojení ho můžete uložit.
+                </div>
+              )}
               <div className="rounded-xl border border-warning/40 bg-warning-soft p-4 text-sm leading-relaxed text-ink">
                 Podpůrné opatření je interní školní záznam. Rodič ho automaticky neuvidí; v rodičovském prostoru se zobrazují jen běžné výsledky a komentáře určené ke sdílení.
               </div>
@@ -640,7 +658,7 @@ function TeacherWorkspace({
                   className="min-h-[140px] text-base"
                 />
               </label>
-              <Button size="lg" className="h-16 w-full text-lg font-black sm:max-w-md" disabled={busy || !selectedStudent || !interventionTitle.trim()} onClick={() => void saveIntervention()}>
+              <Button size="lg" className="h-16 w-full text-lg font-black sm:max-w-md" disabled={busy || !selectedStudent || !interventionTitle.trim() || !online} onClick={() => void saveIntervention()}>
                 <HeartHandshake className="mr-2 h-5 w-5" /> Uložit podporu žáka
               </Button>
             </div>

@@ -22,9 +22,12 @@ describe("progress release hardening contracts", () => {
 
   it("does not render attendance or support save as a no-op without a student", () => {
     const source = read("src/app/(school)/app/progress/page.tsx");
-    expect(source).toContain("disabled={busy || !selectedStudent} onClick={() => void saveAttendance()}");
-    expect(source).toContain("disabled={busy || !selectedStudent || !interventionTitle.trim()} onClick={() => void saveIntervention()}");
+    expect(source).toContain("disabled={busy || !selectedStudent || !online} onClick={() => void saveAttendance()}");
+    expect(source).toContain("disabled={busy || !selectedStudent || !interventionTitle.trim() || !online} onClick={() => void saveIntervention()}");
     expect(source).toContain("Zadejte počet minut zpoždění jako celé číslo od 1 do 1440.");
+      expect(source).toContain("Docházka se ukládá přímo do školního systému");
+      expect(source).toContain("Podpůrná opatření vyžadují připojení k internetu");
+      expect(source).toContain("V této třídě zatím nejsou žádní aktivní žáci");
   });
 
   it("renders leadership comparison as mobile cards and desktop table", () => {
