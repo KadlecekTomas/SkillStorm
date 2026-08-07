@@ -7,7 +7,7 @@ import {
   OrgOperation,
   OrgOperationType,
 } from '@/common/decorators/org-operation.decorator';
-import { UpdateStudentDto } from './dto/update-student.dto';
+import { AdminUpdateStudentDto } from './dto/admin-update-student.dto';
 import { StudentAdminService } from './student-admin.service';
 
 @Controller('students')
@@ -20,7 +20,7 @@ export class StudentAdminController {
   @Permission(PermissionKey.MANAGE_STUDENTS)
   updateProfile(
     @Param('id', new ParseUUIDPipe()) id: string,
-    @Body() dto: UpdateStudentDto,
+    @Body() dto: AdminUpdateStudentDto,
     @Req() req: RequestWithUser,
   ) {
     return this.studentAdmin.updateProfile(id, dto, req.user);
