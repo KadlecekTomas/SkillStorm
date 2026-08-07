@@ -44,6 +44,8 @@ jobs:
 
       - name: Production build
         working-directory: client
+        env:
+          API_PROXY_TARGET: http://backend:4200
         run: npm run build
 
       - name: Commit verified lockfile
