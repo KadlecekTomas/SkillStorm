@@ -30,77 +30,28 @@ jobs:
 
           hook = Path('client/src/hooks/use-guardian.ts')
           h = hook.read_text()
-          old = '    attendanceRate: number | null;\n    competencyMap: StudentProgressDetail["competencyMap"];\n  } | null;'
-          new = '    attendanceRate: number | null;\n    competencyMap: StudentProgressDetail["competencyMap"];\n    timeline: StudentProgressDetail["timeline"];\n  } | null;'
-          if old in h:
-              h = h.replace(old, new, 1)
-          elif new not in h:
+          old_type = '    attendanceRate: number | null;\n    competencyMap: StudentProgressDetail["competencyMap"];\n  } | null;'
+          new_type = '    attendanceRate: number | null;\n    competencyMap: StudentProgressDetail["competencyMap"];\n    timeline: StudentProgressDetail["timeline"];\n  } | null;'
+          if old_type in h:
+              h = h.replace(old_type, new_type, 1)
+          elif new_type not in h:
               raise SystemExit('schoolProgress type marker not found')
-          old = '      attendanceRate: school.summary.attendanceRate,\n      competencyMap: school.competencyMap,\n    },'
-          new = '      attendanceRate: school.summary.attendanceRate,\n      competencyMap: school.competencyMap,\n      timeline: school.timeline,\n    },'
-          if old in h:
-              h = h.replace(old, new, 1)
-          elif new not in h:
+
+          old_map = '      attendanceRate: school.summary.attendanceRate,\n      competencyMap: school.competencyMap,\n    },'
+          new_map = '      attendanceRate: school.summary.attendanceRate,\n      competencyMap: school.competencyMap,\n      timeline: school.timeline,\n    },'
+          if old_map in h:
+              h = h.replace(old_map, new_map, 1)
+          elif new_map not in h:
               raise SystemExit('schoolProgress mapping marker not found')
           hook.write_text(h)
 
           component = Path('client/src/components/guardian/guardian-school-progress.tsx')
           c = component.read_text()
-          old = '''          {progress && progress.competencyMap.length > 0 && (
-            <div className="space-y-2">
-              <h3 className="text-sm font-extrabold text-ink">Co už se daří</h3>'''
-          new = '''          {progress && progress.competencyMap.length > 0 && (
-            <div className="space-y-2">
-              <h3 className="text-sm font-extrabold text-ink">Co už se daří</h3>'''
-          if old not in c and new not in c:
-              raise SystemExit('competency section marker not found')
-
-          insert_after = '''          {progress && progress.competencyMap.length > 0 && (
-            <div className="space-y-2">
-              <h3 className="text-sm font-extrabold text-ink">Co už se daří</h3>
-              {progress.competencyMap.slice(0, 6).map((item) => {
-                const denominator = Math.max(1, item.scaleMax - item.scaleMin);
-                const percent = Math.max(
-                  0,
-                  Math.min(100, ((item.level - item.scaleMin) / denominator) * 100),
-                );
-                return (
-                  <div key={item.id} className="rounded-xl border border-line p-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-[15px] font-bold text-ink">{item.name}</p>
-                        {item.subjectName && (
-                          <p className="text-xs text-ink-muted">{item.subjectName}</p>
-                        )}
-                      </div>
-                      <span className="shrink-0 text-sm font-black text-accent-deep">
-                        {item.level}/{item.scaleMax}
-                      </span>
-                    </div>
-                    <div
-                      className="mt-2 h-2 overflow-hidden rounded-full bg-canvas-alt"
-                      role="progressbar"
-                      aria-valuemin={item.scaleMin}
-                      aria-valuemax={item.scaleMax}
-                      aria-valuenow={item.level}
-                      aria-label={`${item.name}: úroveň ${item.level} z ${item.scaleMax}`}
-                    >
-                      <div
-                        className="h-full rounded-full bg-accent"
-                        style={{ width: `${Math.max(4, percent)}%` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}'''
-          timeline_block = insert_after + '''
-
-          {progress &&
-            progress.timeline.filter((item) =>
+          marker = '        </CardContent>\n      </Card>\n\n      <Card>\n        <CardContent className="space-y-3 p-5">'
+          timeline = '''          {progress &&
+            progress.timeline.some((item) =>
               item.kind === "GRADE" || item.kind === "COMPETENCY" || item.kind === "TEST",
-            ).length > 0 && (
+            ) && (
               <div className="space-y-2">
                 <h3 className="text-sm font-extrabold text-ink">Poslední hodnocení</h3>
                 <ul className="divide-y divide-line rounded-xl border border-line px-4">
@@ -130,11 +81,13 @@ jobs:
                     ))}
                 </ul>
               </div>
-            )}'''
+            )}
+
+'''
           if 'Poslední hodnocení' not in c:
-              if insert_after not in c:
-                  raise SystemExit('full competency block marker not found')
-              c = c.replace(insert_after, timeline_block, 1)
+              if marker not in c:
+                  raise SystemExit('first card closing marker not found')
+              c = c.replace(marker, timeline + marker, 1)
           component.write_text(c)
 
           contract = Path('client/src/tests/guardian-progress-timeline-contract.spec.ts')
