@@ -1,0 +1,106 @@
+name: Temporary UX copy polish
+
+on:
+  push:
+    branches: [fix/school-readiness-rbac-contracts]
+    paths: [.github/workflows/ux-copy-polish.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/school-readiness-rbac-contracts
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - name: Apply exact school UX fixes
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one match, got {count}: {old[:80]!r}")
+              p.write_text(text.replace(old, new, 1))
+
+          family = "client/src/app/(school)/app/family/page.tsx"
+          replace_once(
+              family,
+              '''function ChildSwitcher({\n  children,\n  selectedId,\n  onSelect,\n}: {\n  children: GuardianChild[];\n  selectedId: string | null;\n  onSelect: (studentId: string) => void;\n}) {\n  if (children.length <= 1) return null;\n  return (\n    <div className="flex gap-2 overflow-x-auto pb-1">\n      {children.map((child) => (''',
+              '''function ChildSwitcher({\n  items,\n  selectedId,\n  onSelect,\n}: {\n  items: GuardianChild[];\n  selectedId: string | null;\n  onSelect: (studentId: string) => void;\n}): React.JSX.Element | null {\n  if (items.length <= 1) return null;\n  return (\n    <div className="flex gap-2 overflow-x-auto pb-1">\n      {items.map((child) => (''',
+          )
+          replace_once(
+              family,
+              'export default function FamilyPage() {',
+              'export default function FamilyPage(): React.JSX.Element | null {',
+          )
+          replace_once(
+              family,
+              '''        <ChildSwitcher\n          children={children}\n          selectedId={selected?.studentId ?? null}\n          onSelect={setSelectedId}\n        />''',
+              '''        <ChildSwitcher\n          items={children}\n          selectedId={selected?.studentId ?? null}\n          onSelect={setSelectedId}\n        />''',
+          )
+
+          join = "client/src/app/(auth)/join/page.tsx"
+          replace_once(
+              join,
+              '''};\n\n/** Fetch preview via token-based API (production). */''',
+              '''};\n\nconst JOIN_ROLE_LABELS: Record<string, string> = {\n  OWNER: "Vlastník",\n  DIRECTOR: "Ředitel",\n  TEACHER: "Učitel",\n  STUDENT: "Žák",\n  PARENT: "Rodič",\n};\n\n/** Fetch preview via token-based API (production). */''',
+          )
+          replace_once(
+              join,
+              '                Your role will be assigned automatically based on the invitation.',
+              '                Role se nastaví automaticky podle pozvánky.',
+          )
+          replace_once(
+              join,
+              '''                  <span className="font-medium text-slate-800 capitalize">\n                    {preview.role.toLowerCase()}\n                  </span>''',
+              '''                  <span className="font-medium text-slate-800">\n                    {JOIN_ROLE_LABELS[preview.role] ?? "Člen organizace"}\n                  </span>''',
+          )
+
+          access = "client/src/components/pages/settings/teachers/teacher-access-manager.tsx"
+          replace_once(
+              access,
+              '                      Učitel zatím nemá žádný scoped access.',
+              '                      Učitel zatím nemá přístup k žádné třídě.',
+          )
+          PY
+
+      - name: Install frontend dependencies
+        working-directory: client
+        run: npm ci
+
+      - name: Lint school UX changes
+        working-directory: client
+        run: npm run lint
+
+      - name: Typecheck school UX changes
+        working-directory: client
+        run: npm run typecheck
+
+      - name: Commit verified fixes and remove helper
+        shell: bash
+        run: |
+          rm .github/workflows/ux-copy-polish.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add client/src/app/\(school\)/app/family/page.tsx \
+                  client/src/app/\(auth\)/join/page.tsx \
+                  client/src/components/pages/settings/teachers/teacher-access-manager.tsx \
+                  .github/workflows/ux-copy-polish.yml
+          git commit -m "fix(ux): remove technical copy from school flows"
+          git push origin HEAD:fix/school-readiness-rbac-contracts
