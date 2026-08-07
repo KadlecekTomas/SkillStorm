@@ -1,6 +1,7 @@
 "use client";
 
 import { fetchWithAuth } from "@/lib/http/client";
+import { progressApi, type StudentProgressDetail } from "@/lib/progress-api";
 import { useQuery, type UseQueryResult } from "@/lib/query-client";
 
 /**
@@ -33,7 +34,20 @@ export type ChildOverview = {
     guardianLaunchPolicy: "DISABLED" | "ALLOWED" | "REQUIRE_CHILD_PIN";
   }[];
   progress: { title: string; submittedAt: string; score: number | null }[];
-  messages: never[];
+  messages: Array<{
+    id: string;
+    kind: "COMMENT" | "PRAISE";
+    title: string;
+    body: string | null;
+    occurredAt: string;
+    authorName: string | null;
+  }>;
+  schoolProgress: {
+    averageGrade: number | null;
+    competencyMasteryPercent: number | null;
+    attendanceRate: number | null;
+    competencyMap: StudentProgressDetail["competencyMap"];
+  } | null;
   nextStep: {
     type: "ASSIGNMENT_DUE";
     assignmentId: string;
@@ -66,16 +80,51 @@ export function useGuardianChildren(
   });
 }
 
+async function loadChildOverview(studentId: string): Promise<ChildOverview> {
+  const [base, school] = await Promise.all([
+    fetchWithAuth<Omit<ChildOverview, "messages" | "schoolProgress"> & { messages?: never[] }>(
+      "GET",
+      `/guardian/children/${studentId}/overview`,
+    ),
+    progressApi.guardianStudent(studentId),
+  ]);
+
+  const messages = school.timeline
+    .filter(
+      (item): item is StudentProgressDetail["timeline"][number] & {
+        kind: "COMMENT" | "PRAISE";
+      } => item.kind === "COMMENT" || item.kind === "PRAISE",
+    )
+    .map((item) => ({
+      id: item.id,
+      kind: item.kind,
+      title: item.kind === "PRAISE" ? "Pochvala" : "Poznámka učitele",
+      body: item.detail,
+      occurredAt: item.occurredAt,
+      authorName: item.authorName,
+    }));
+
+  return {
+    ...base,
+    messages,
+    schoolProgress: {
+      averageGrade: school.summary.averageGrade,
+      competencyMasteryPercent: school.summary.competencyMasteryPercent,
+      attendanceRate: school.summary.attendanceRate,
+      competencyMap: school.competencyMap,
+    },
+  };
+}
+
 export function useChildOverview(
   studentId: string | null,
 ): UseQueryResult<ChildOverview> {
   return useQuery<ChildOverview>({
     queryKey: ["guardian", "overview", studentId],
-    queryFn: () =>
-      fetchWithAuth<ChildOverview>(
-        "GET",
-        `/guardian/children/${studentId}/overview`,
-      ),
+    queryFn: () => {
+      if (!studentId) throw new Error("STUDENT_ID_REQUIRED");
+      return loadChildOverview(studentId);
+    },
     enabled: Boolean(studentId),
   });
 }
