@@ -54,6 +54,7 @@ import { SupportModule } from './support/support.module';
 import { TestingModule } from './testing/testing.module';
 import { TeacherAccessModule } from './teacher-access/teacher-access.module';
 import { ImportsModule } from './imports/imports.module';
+import { ProgressModule } from './progress/progress.module';
 
 @Module({
   imports: [
@@ -133,6 +134,7 @@ import { ImportsModule } from './imports/imports.module';
     TestingModule,
     TeacherAccessModule,
     ImportsModule,
+    ProgressModule,
   ],
   providers: [
     { provide: APP_INTERCEPTOR, useClass: ResponseEnvelopeInterceptor },
