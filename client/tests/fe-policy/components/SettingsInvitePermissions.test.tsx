@@ -42,12 +42,16 @@ describe("SettingsPage invite permissions", () => {
 
   it("renders invite section only when user has invite permission", () => {
     render(<SettingsPage />);
-    expect(screen.getByText(/invite members/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Pozvat členy" }),
+    ).toBeInTheDocument();
   });
 
   it("hides invite section when user lacks invite permission", () => {
     permissionsState.can = (_key: PermissionKey) => false;
     render(<SettingsPage />);
-    expect(screen.queryByText(/invite members/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Pozvat členy" }),
+    ).not.toBeInTheDocument();
   });
 });
