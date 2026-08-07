@@ -1,70 +1,259 @@
-# Guardian — bezpečnostní invarianty rodičovské role
+# SkillStorm Guardian — Security & Identity Contract
 
-Tento dokument shrnuje závazné bezpečnostní invarianty role `PARENT`.
-Navazuje na [guardian-spec.md](./guardian-spec.md) (§9 Oprávnění rodiče) a
-[guardian/etapa-a-analyza.md](./guardian/etapa-a-analyza.md).
+> **Status:** `CURRENT / IMPLEMENTED`  
+> **Owner:** Engineering + Security  
+> **Last verified:** 2026-08-07  
+> **Scope:** bezpečnostní invarianty aktivní role `PARENT`, vztahu rodič–dítě a rodičem spuštěných žákovských relací  
+> **Historical design:** původní etapové návrhy v `docs/guardian/` a `guardian-project.md` jsou zachované jako snapshoty; tento dokument popisuje současné bezpečnostní invarianty, které musí nový vývoj zachovat.
 
-## INV4 — PARENT nezískává generická RBAC oprávnění
+---
 
-**Invariant.** Uživatel s aktivní membership rolí `PARENT` **nesmí** získat žádné
-generické RBAC oprávnění (`PermissionKey`) — a to **ani** přes `RolePermission`,
-**ani** přes `UserPermission`, ani přes výchozí (default) sadu role. Při aktivní
-roli `PARENT` jsou všechny generické role/user granty **ignorovány** (resolver)
-nebo **zakázány** (write path).
+## 1. Hlavní invariant
 
-Rodičovský přístup se vyhodnocuje **výhradně samostatnou vztahovou cestou** vůči
-konkrétnímu dítěti (`GuardianStudentRelation` / `GuardianPermissionKey`), nikdy ne
-přes obecnou roli `PARENT` a generický `PermissionKey`. To odpovídá požadavku
-guardian-spec.md §9: *„Neomezuj rodičovský přístup pouze obecnou rolí PARENT.
-Oprávnění musí být vyhodnocováno vůči konkrétnímu dítěti."*
+> **PARENT není generická autorizační role pro přístup ke školním datům. Rodičovský přístup je relationship-scoped vůči konkrétnímu dítěti.**
 
-> Stav implementace: relační vrstva (`GuardianStudentRelation`,
-> `GuardianPermissionKey`, `/guardian/*`) je předmětem Etapy B a v době zavedení
-> INV4 ještě není v kódu. INV4 do té doby garantuje, že rodič nemá **žádný**
-> generický přístup — což je bezpečná výchozí pozice (deny-by-default).
+SkillStorm odděluje:
 
-### Vynucení (authoritative)
+1. generický organization RBAC (`PermissionKey`, `RolePermission`, `UserPermission`),
+2. guardian vztah (`GuardianStudentRelation`),
+3. guardian oprávnění vůči konkrétnímu dítěti (`GuardianPermissionKey`),
+4. rodičem spuštěnou žákovskou relaci / provenance (`LearningSession`).
 
-1. **Resolver — `RbacService.canUser`** (`server/src/modules/rbac/rbac.service.ts`).
-   Jakmile je efektivní role requestu `PARENT`
-   (`activeRole ?? membership.role`), vrací pro **libovolný** `PermissionKey`
-   `false`, a to **před** vyhodnocením `UserPermission` i `RolePermission`. Tím je
-   `UserPermission` prokazatelně **není obchvat** — user grant se nikdy neuplatní.
-   Přes tento resolver prochází jak `RbacGuard`, tak výpočet pole `permissions`
-   v `/auth/me`, takže PARENT kontext dostává vždy prázdnou generickou množinu.
+Tyto vrstvy se nesmějí sloučit do pravidla typu:
 
-2. **Defaults** (`rbac.defaults.ts`). `PARENT: []` — boot-sync ani seed nevytvoří
-   žádné generické `role_permissions` pro PARENT.
+```text
+role == PARENT => může číst všechny výsledky organizace
+```
 
-### Write path (defense-in-depth)
+---
 
-`RbacPolicyService.grantUserPermission`
-(`server/src/modules/rbac/rbac-policy.service.ts`):
+# 2. INV4 — PARENT nezískává generická RBAC oprávnění
 
-- **Org-scoped grant** cílený na membership, jehož role v dané organizaci je
-  **PARENT-only** (nemá žádnou non-PARENT roli), je **odmítnut 403**
-  (`PARENT_GENERIC_PERMISSION_FORBIDDEN`). Multi-role uživatel (např.
-  učitel-rodič) není blokován — jeho PARENT kontext jistí resolver.
-- **Globální grant** se u zápisu **neblokuje** záměrně: multi-org učitel-rodič by
-  jinak přišel o legitimní non-PARENT kontext v jiné organizaci. Jeho
-  **neúčinnost pod aktivní PARENT rolí garantuje resolver** (bod 1). Globální
-  `UserPermission` tedy může v DB existovat, ale v PARENT kontextu se nikdy
-  nepromítne do efektivních oprávnění.
+Při aktivní organization roli `PARENT` nesmí uživatel získat generické `PermissionKey` oprávnění:
 
-### Co invariant NEmění
+- přes role defaults,
+- přes `RolePermission`,
+- přes org-scoped `UserPermission`,
+- přes global `UserPermission`.
 
-- Legitimní `UserPermission` override pro **non-PARENT** role (TEACHER, DIRECTOR,
-  …) funguje beze změny — resolver ho pro tyto role dál respektuje.
-- `SUPERADMIN` / `DEVOPS` (systémové role) a `OWNER` (org) mají svoje bypass cesty
-  beze změny.
+Resolver musí deny provést **před** aplikací generických grantů.
 
-### Regresní pokrytí
+To chrání i multi-role uživatele. Učitel-rodič může mít legitimní oprávnění jako `TEACHER`; po přepnutí aktivního kontextu na `PARENT` se tato generická teacher oprávnění nesmějí přenést do rodičovského kontextu.
 
-- Unit: `server/src/modules/rbac/tests/rbac.service.spec.ts` — PARENT odepřen i s
-  org-scoped i globálním `UserPermission`; `canUserMultiple(PARENT)` = samé
-  `false`; TEACHER override zachován.
-- E2E: `server/test/e2e/guardian-permission-hardening.e2e-spec.ts` — INV4 body
-  1, 2, 3, 5, 6. (Bod 4 „`/guardian/*` s VERIFIED vztahem" je vázán na Etapu B a
-  bude doplněn spolu s relační vrstvou.)
-- E2E: `server/test/e2e/auth.policy.e2e-spec.ts` — PARENT má prázdnou sadu
-  `role_permissions`.
+Aktuální implementační body zahrnují zejména:
+
+- `server/src/modules/rbac/rbac.service.ts`,
+- `server/src/modules/rbac/rbac.defaults.ts`,
+- `server/src/modules/rbac/rbac-policy.service.ts`,
+- příslušné RBAC/guardian regresní testy.
+
+Změna RBAC resolveru nebo active-role semantics musí tento invariant explicitně retestovat.
+
+---
+
+# 3. Relationship-scoped guardian access
+
+Současná platforma obsahuje guardian relační vrstvu včetně:
+
+- `GuardianStudentRelation` v Prisma schématu,
+- `GuardianPermissionKey`,
+- `server/src/guardian/guardian-access.guard.ts`,
+- `server/src/guardian/guardian.service.ts`,
+- `server/src/guardian/guardian.controller.ts`.
+
+Rodičovský request vůči dítěti musí vždy ověřit alespoň:
+
+```text
+aktivní tenant / organization
+        ↓
+aktivní PARENT context
+        ↓
+GuardianStudentRelation pro konkrétní dítě
+        ↓
+stav vztahu + platnost
+        ↓
+požadovaný GuardianPermissionKey
+        ↓
+resource patří stejnému dítěti a tenantovi
+```
+
+`studentId` z klienta není autorizační důkaz.
+
+---
+
+# 4. Tenant isolation
+
+Guardian vztah je organization-scoped.
+
+Bezpečnostní kontrakt:
+
+- cizí organizace nesmí získat guardian data,
+- vztah z organizace A nesmí autorizovat dítě v organizaci B,
+- server musí kontrolovat organization consistency vztahu/resource,
+- tam, kde současný security model skrývá existenci cross-tenant objektu, zůstává odpověď `404` místo existence-leaking detailu.
+
+Client routing nebo skrytí tlačítka není ochrana.
+
+---
+
+# 5. Stav a revokace vztahu
+
+Přístup existuje jen přes aktuálně platný guardian vztah.
+
+Revokace/expirace vztahu musí ukončit možnost dalšího relationship-scoped přístupu bez čekání na dlouhodobě cachovaný permission snapshot.
+
+Do JWT se proto nesmí vložit kompletní guardian relationship authorization tak, aby po revokaci zůstala platná až do běžné expirace tokenu.
+
+---
+
+# 6. Rodičem spuštěná žákovská relace
+
+Současná platforma obsahuje parent-initiated student session flow, včetně:
+
+- `server/src/guardian/guardian-sessions.controller.ts`,
+- `server/src/guardian/guardian-sessions.service.ts`,
+- `LearningSession`/provenance dat v Prisma schématu,
+- e2e coverage pro guardian sessions.
+
+Základní invariant:
+
+> **Rodič a dítě nikdy nesdílejí současně jednu autorizační identitu.**
+
+Při přechodu do žákovské relace je request autorizován jako dítě/žák v explicitně omezeném learning-session kontextu. Rodičovské capability se v tomto kontextu nesmějí „vézt s sebou“.
+
+Návrat z dítěte do rodiče nesmí být pouhá client-side změna URL nebo React state.
+
+---
+
+# 7. Provenance výsledku
+
+Výsledek patří dítěti.
+
+Pokud vznikl v rodičem spuštěné relaci, provenance musí umožnit učiteli rozlišit relevantní kontext, například:
+
+- dítě pracovalo v relaci spuštěné guardianem,
+- jaká verification policy byla použita,
+- zda byla zaznamenána deklarace pomoci, pokud ji daný flow podporuje.
+
+Provenance nesmí být interpretována jako automatický důkaz podvádění nebo jako diagnostické skóre.
+
+`LearningSession`/provenance data jsou auditní kontext, ne druhý vlastník submission.
+
+---
+
+# 8. Klasifikované testy
+
+Parent-launched flow musí mít konzervativní default pro situace, kde škola očekává samostatný klasifikovaný výkon.
+
+Učitel/school policy rozhoduje, zda a za jakých podmínek lze konkrétní zadání z guardian flow spustit.
+
+SkillStorm nesmí rodičem spuštěný výkon prezentovat jako „ověřeně samostatný“ jen proto, že submission technicky dokončil student membership.
+
+---
+
+# 9. Multi-role uživatel
+
+Jeden uživatel může mít více organization rolí.
+
+Autorizační rozhodnutí se řídí **aktivním role contextem**, ne unionem všech uživatelových rolí.
+
+Zakázané:
+
+```text
+TEACHER + PARENT => permissions(TEACHER) ∪ permissions(PARENT)
+```
+
+Správně:
+
+```text
+activeRole == TEACHER -> teacher authorization
+activeRole == PARENT  -> guardian relationship authorization
+```
+
+To je kritické zejména pro učitele, který má ve stejné organizaci vlastní dítě.
+
+---
+
+# 10. UI invarianty
+
+Guardian UI nesmí vytvářet dojem širšího oprávnění, než jaké backend skutečně poskytuje.
+
+Minimální pravidla:
+
+- dítě se zobrazí pouze přes platný ověřený vztah,
+- parent context nezobrazuje interní student-only prvky jako prostředek k obcházení identity,
+- family UI používá lidský jazyk a nesmí leakovat interní enumy,
+- přepnutí role musí být viditelné a jednoznačné,
+- sourozenci na sdíleném zařízení nesmějí sdílet cached student state.
+
+---
+
+# 11. Audit
+
+Bezpečnostně významné guardian akce musí být auditovatelné v rozsahu implementovaného workflow, zejména:
+
+- vytvoření/ověření/revokace vztahu,
+- změna relationship permissions,
+- parent-initiated learning session start/end/revocation,
+- relevantní verification/reset/security události,
+- odmítnuté privilegované změny.
+
+Audit log nenahrazuje doménový stav vztahu.
+
+---
+
+# 12. Privacy invarianty
+
+- sbírat pouze data potřebná pro guardian funkci,
+- parent-facing analytics nesmí bezdůvodně odhalovat dětská data nad rámec relationship permission/purpose,
+- žádný třetí tracking pouze kvůli family space,
+- child/session provenance se nesmí používat k automatickému psychologickému nebo podvodovému profilování,
+- nové guardian telemetry typy podléhají hlavnímu [`interactive-curriculum/PRODUCTION-CONTRACT.md`](./interactive-curriculum/PRODUCTION-CONTRACT.md), pokud souvisejí s Lesson Experiences.
+
+---
+
+# 13. Testovací minimum při změně Guardian/RBAC
+
+Změna se nepovažuje za bezpečnou bez regresního ověření minimálně těchto tříd scénářů:
+
+```text
+PARENT generic permission deny
+PARENT + UserPermission deny
+multi-role TEACHER/PARENT active-context isolation
+own child allowed
+foreign child denied
+cross-tenant concealed/denied
+revoked relation immediately denied
+guardian permission missing denied
+parent-launched student session identity separation
+expired/revoked learning session denied
+sibling shared-device state isolation
+submission provenance preserved
+```
+
+Konkrétní současné test files v repozitáři jsou autoritativnější než historické počty testů v návrhových dokumentech.
+
+---
+
+# 14. Historické návrhy
+
+Následující dokumenty jsou návrhové/auditní snapshoty z etap vývoje a mohou obsahovat branch názvy, tehdejší line numbers, neimplementované varianty nebo již změněné priority:
+
+- `guardian-project.md`,
+- `guardian-spec.md`,
+- `guardian/etapa-a-analyza.md`,
+- `guardian/etapa-b-stop2-navrh.md`,
+- `guardian/etapa-c-stop3-navrh.md`.
+
+Jejich technické rationale je hodnotné pro historii, ale nový vývoj se řídí:
+
+1. aktuálním kódem a testy,
+2. tímto security contractem,
+3. [`docs/README.md`](./README.md) a Master Roadmapem,
+4. vyššími security/privacy production invarianty.
+
+---
+
+## Final invariant
+
+> **Guardian je relationship-scoped, deny-by-default a identity-separated. Žádná nová classroom, curriculum, analytics ani AI feature nesmí z role `PARENT` znovu udělat generický backdoor k dětským datům.**
