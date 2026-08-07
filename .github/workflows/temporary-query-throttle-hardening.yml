@@ -13,6 +13,19 @@ permissions:
 jobs:
   harden:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: skillstorm_test
+        ports:
+          - 5432:5432
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/skillstorm_test
+      DATABASE_URL_TEST: postgresql://postgres:postgres@localhost:5432/skillstorm_test
+      NODE_ENV: test
     steps:
       - uses: actions/checkout@v4
         with:
@@ -107,6 +120,7 @@ jobs:
         run: |
           npm ci
           npm run prisma:generate
+          npx prisma migrate deploy
           npx jest src/common/throttling/request-tracker.spec.ts --runInBand
           npm run typecheck
           npm run build
