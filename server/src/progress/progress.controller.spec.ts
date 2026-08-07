@@ -17,7 +17,7 @@ type PermissionedMethod =
   | 'guardianStudentDetail';
 
 function requiredRoles(method: PermissionedMethod): OrganizationRole[] {
-  const handler = ProgressController.prototype[method] as unknown as Function;
+  const handler = ProgressController.prototype[method] as object;
   return (Reflect.getMetadata(PERMISSION_KEY, handler) ?? []) as OrganizationRole[];
 }
 
