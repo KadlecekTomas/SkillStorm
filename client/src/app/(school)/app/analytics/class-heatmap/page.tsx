@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { ErrorAlert } from "@/components/ui/alert";
 import { httpClient } from "@/lib/http/client";
 import { withGuard } from "@/lib/guard/withGuard";
 import { useAcademicYears } from "@/hooks/use-academic-years";
@@ -13,7 +15,6 @@ type HeatmapItem = {
   section: string;
   assignmentId: string;
   testTitle: string;
-  /** Backend returns a percentage in the 0..100 range. */
   avgScore: number | null;
   submissionCount: number;
   totalStudents: number;
@@ -21,26 +22,38 @@ type HeatmapItem = {
 
 const LEADERSHIP_ROLES: OrganizationRole[] = ["OWNER", "DIRECTOR"];
 
-function ClassHeatmapPage() {
+function ClassHeatmapPage(): React.JSX.Element {
   const { selectedYearId } = useAcademicYears();
   const [items, setItems] = useState<HeatmapItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const load = useCallback(async () => {
     if (!selectedYearId) {
       setLoading(false);
       setItems([]);
+      setError(null);
       return;
     }
+
     setLoading(true);
-    httpClient
-      .get<{ items: HeatmapItem[] }>(
+    setError(null);
+    try {
+      const data = await httpClient.get<{ items: HeatmapItem[] }>(
         `/analytics/class-heatmap?yearId=${encodeURIComponent(selectedYearId)}`,
-      )
-      .then((data) => setItems(data.items ?? []))
-      .catch(() => setItems([]))
-      .finally(() => setLoading(false));
+      );
+      setItems(data.items ?? []);
+    } catch {
+      setItems([]);
+      setError("Přehled výsledků tříd se nepodařilo načíst.");
+    } finally {
+      setLoading(false);
+    }
   }, [selectedYearId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   const gradeLabels: Record<string, string> = {
     GRADE_1: "1.",
@@ -75,11 +88,20 @@ function ClassHeatmapPage() {
 
       {selectedYearId && loading && (
         <Card className="rounded-3xl border border-slate-200 p-6">
-          <p className="text-sm text-slate-600">Načítám…</p>
+          <p className="text-sm text-slate-600">Načítám přehled tříd…</p>
         </Card>
       )}
 
-      {selectedYearId && !loading && (
+      {selectedYearId && !loading && error && (
+        <div className="space-y-3">
+          <ErrorAlert title="Přehled nelze načíst" description={error} />
+          <Button variant="outline" onClick={() => void load()}>
+            Zkusit znovu
+          </Button>
+        </div>
+      )}
+
+      {selectedYearId && !loading && !error && (
         <Card className="rounded-3xl border border-slate-200 bg-white p-6">
           <p className="mb-4 text-sm font-medium text-slate-700">
             Průměrné skóre a počet odevzdání
@@ -106,20 +128,24 @@ function ClassHeatmapPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {items.map((i) => (
-                  <tr key={`${i.classSectionId}-${i.assignmentId}`}>
+                {items.map((item) => (
+                  <tr key={`${item.classSectionId}-${item.assignmentId}`}>
                     <td className="px-4 py-2 font-medium text-slate-700">
-                      {gradeLabels[i.grade] ?? i.grade} {i.section}
+                      {gradeLabels[item.grade] ?? item.grade} {item.section}
                     </td>
-                    <td className="px-4 py-2 text-slate-600">{i.testTitle}</td>
+                    <td className="px-4 py-2 text-slate-600">
+                      {item.testTitle}
+                    </td>
                     <td className="px-4 py-2 text-right">
-                      {i.avgScore != null
-                        ? `${Math.round(i.avgScore)} %`
+                      {item.avgScore != null
+                        ? `${Math.round(item.avgScore)} %`
                         : "—"}
                     </td>
-                    <td className="px-4 py-2 text-right">{i.submissionCount}</td>
                     <td className="px-4 py-2 text-right">
-                      {i.totalStudents}
+                      {item.submissionCount}
+                    </td>
+                    <td className="px-4 py-2 text-right">
+                      {item.totalStudents}
                     </td>
                   </tr>
                 ))}
