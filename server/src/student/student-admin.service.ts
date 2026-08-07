@@ -1,24 +1,36 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import type { Cache } from 'cache-manager';
 import {
   AuditEntityType,
   EnrollmentStatus,
   Prisma,
   SystemRole,
 } from '@prisma/client';
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { PrismaService } from '@/prisma/prisma.service';
 import type { JwtPayload } from '@/auth/types/jwt-payload';
-import type { UpdateStudentDto } from './dto/update-student.dto';
+import type { AdminUpdateStudentDto } from './dto/admin-update-student.dto';
+import {
+  cacheScopeForUser,
+  invalidateResourcesFailSafe,
+} from '@/shared/cache/org-cache.utils';
 
 @Injectable()
 export class StudentAdminService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(CACHE_MANAGER) private readonly cache: Cache,
+  ) {}
 
-  async updateProfile(id: string, dto: UpdateStudentDto, user: JwtPayload) {
+  async updateProfile(id: string, dto: AdminUpdateStudentDto, user: JwtPayload) {
     const student = await this.prisma.student.findUnique({
       where: { id },
       include: {
@@ -139,11 +151,17 @@ export class StudentAdminService {
         });
       });
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        throw new BadRequestException('Tento e-mail už používá jiný účet.');
+      if (error instanceof PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ConflictException('Tento e-mail už používá jiný účet.');
       }
       throw error;
     }
+
+    await invalidateResourcesFailSafe(this.cache, {
+      scopeId: cacheScopeForUser(user.systemRole, student.orgId),
+      resources: ['students', 'classrooms', 'dashboard'],
+      mutation: 'students.admin.update',
+    });
 
     return this.prisma.student.findUnique({
       where: { id },
