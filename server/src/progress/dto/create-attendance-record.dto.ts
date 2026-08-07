@@ -8,7 +8,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { AttendanceStatus } from '@prisma/client';
+import { AttendanceStatus } from '../progress.types';
 
 export class CreateAttendanceRecordDto {
   @IsUUID()
