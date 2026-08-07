@@ -30,6 +30,7 @@ import { SchoolAccessGuard } from '@/auth/guards/school-access.guard';
 import { QueryOrganizationsDto } from './dto/query-organizations.dto';
 import { CacheTTL } from '@nestjs/cache-manager';
 import { InvalidateScopes } from '@/common/cache/invalidate.decorator';
+import { NoHttpCache } from '@/common/cache/no-http-cache.decorator';
 import { Permission } from '@/modules/rbac/permission.decorator';
 import { ok } from '@/common/http/envelope';
 import { AllowAnyOrgStatus } from '@/common/decorators/allow-any-org-status.decorator';
@@ -87,7 +88,8 @@ export class OrganizationsController {
   @ApiQuery({ name: 'type', required: false, enum: OrganizationType })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
-  @CacheTTL(0) // vypnout HTTP response cache – používáme verzovanou cache v service
+  @NoHttpCache()
+  @CacheTTL(0)
   findAll(@Query() q: QueryOrganizationsDto) {
     return ok(this.service.findAll(q));
   }
@@ -104,6 +106,7 @@ export class OrganizationsController {
   @ApiOperation({
     summary: 'Get organization detail (director/teacher/student/superadmin)',
   })
+  @NoHttpCache()
   @CacheTTL(0)
   findOne(@Param('id', new ParseUUIDPipe()) id: string) {
     return ok(this.service.findOne(id));
