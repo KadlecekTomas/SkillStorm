@@ -165,7 +165,7 @@ test.describe('school progress — simplified ZŠ workflow', () => {
 
     await expect(page.getByText('Přehled ze školy')).toBeVisible();
     await expect(page.getByText('Průměrná známka')).toBeVisible();
-    await expect(page.getByText(competencyName)).toBeVisible();
+    await expect(page.getByText(competencyName, { exact: true })).toBeVisible();
     await expect(page.getByText(onlineComment)).toBeVisible();
     await expect(page.getByText('Zprávy ze školy')).toBeVisible();
 
