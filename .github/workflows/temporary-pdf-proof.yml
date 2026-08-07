@@ -1,0 +1,127 @@
+name: Temporary PDF proof
+
+on:
+  push:
+    branches:
+      - fix/school-readiness-rbac-contracts
+
+permissions:
+  contents: write
+
+jobs:
+  pdf-proof:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: skillstorm_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d skillstorm_test"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      DATABASE_URL_TEST: postgresql://postgres:postgres@127.0.0.1:5432/skillstorm_test?schema=public
+      JWT_SECRET: pdf-proof-secret
+      API_PROXY_TARGET: http://127.0.0.1:4200
+      CI: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/school-readiness-rbac-contracts
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            client/package-lock.json
+            server/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: server
+        run: npm ci
+
+      - name: Prisma generate and migrate test database
+        working-directory: server
+        run: |
+          npx prisma generate
+          DATABASE_URL="$DATABASE_URL_TEST" npx prisma migrate deploy
+
+      - name: Install frontend dependencies
+        working-directory: client
+        run: npm ci
+
+      - name: Install Chromium
+        working-directory: client
+        run: npx playwright install --with-deps chromium
+
+      - name: Add focused PDF download proof
+        working-directory: client
+        shell: bash
+        run: |
+          cat > tests/scenarios/pdf-artifact.scenario.ts <<'EOF'
+          import { test, expect } from './fixtures';
+          import { mkdir, readFile } from 'node:fs/promises';
+          import { join } from 'node:path';
+
+          test('teacher downloads the real SkillStorm PDF report', async ({ asRole }) => {
+            const { page } = await asRole('teacher');
+            const outDir = join(process.cwd(), 'artifacts', 'pdf-proof');
+            await mkdir(outDir, { recursive: true });
+
+            const forbidden: string[] = [];
+            page.on('response', (response) => {
+              if (response.status() === 403) forbidden.push(response.url());
+            });
+
+            await page.goto('/app/results', { waitUntil: 'commit' });
+            await expect(page.getByRole('heading', { name: 'Diagnostika výsledků' })).toBeVisible();
+            await expect(page.getByText('Přehled žáků')).toBeVisible();
+
+            const button = page.getByRole('button', { name: 'Stáhnout PDF' });
+            await expect(button).toBeEnabled();
+            const downloadPromise = page.waitForEvent('download');
+            await button.click();
+            const download = await downloadPromise;
+
+            const filename = download.suggestedFilename();
+            expect(filename).toMatch(/^SkillStorm-.*\.pdf$/i);
+            const target = join(outDir, filename);
+            await download.saveAs(target);
+
+            const bytes = await readFile(target);
+            expect(bytes.subarray(0, 4).toString('ascii')).toBe('%PDF');
+            expect(bytes.length).toBeGreaterThan(5_000);
+            await expect(page.getByText('PDF report byl stažen.')).toBeVisible();
+            expect(forbidden).toEqual([]);
+          });
+          EOF
+
+      - name: Capture real PDF through Chromium
+        working-directory: client
+        run: npx playwright test tests/scenarios/pdf-artifact.scenario.ts --config=playwright.scenarios.config.ts --project=desktop
+
+      - name: Upload real PDF proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: skillstorm-real-pdf-report
+          path: client/artifacts/pdf-proof/*.pdf
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Remove temporary proof workflow
+        if: success()
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/temporary-pdf-proof.yml
+          git commit -m "chore(reports): remove temporary PDF proof workflow"
+          git push origin HEAD:fix/school-readiness-rbac-contracts
