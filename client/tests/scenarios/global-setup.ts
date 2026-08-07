@@ -12,8 +12,7 @@ const { assertTestDatabaseUrl } = require('../../../server/scripts/db-safety.js'
  * 2. Brings the schema up to date (migrate deploy) and runs the deterministic
  *    scenario seed (server/prisma/seed/scenarios-e2e.seed.ts), whose own wipe
  *    resets the scenario data idempotently.
- * 3. Adds a verified PARENT relationship fixture without inflating the main
- *    scenario seed.
+ * 3. Adds verified PARENT and progress/RBAC fixtures.
  * 4. Captures the combined manifest (accounts, ids) to
  *    tests/scenarios/.manifest.json for auth.setup + specs.
  *
@@ -56,10 +55,6 @@ export default async function globalSetup() {
   }
   const manifest = JSON.parse(line.replace('SCENARIO_MANIFEST=', ''));
 
-  // Parent coverage is intentionally an extension: the main seed remains the
-  // deterministic teacher/student world used by existing scenarios, while
-  // school-readiness adds one verified guardian relationship for real browser
-  // RBAC coverage.
   const parentOut = execSync(
     'npx ts-node --transpile-only prisma/seed/scenarios-parent-extension.ts',
     { cwd: serverDir, env: { ...process.env, DATABASE_URL_TEST: dbUrl } },
@@ -78,9 +73,26 @@ export default async function globalSetup() {
   manifest.parentUserId = parent.parentUserId;
   manifest.parentRelationId = parent.parentRelationId;
 
+  const progressOut = execSync(
+    'npx ts-node --transpile-only prisma/seed/scenarios-progress-extension.ts',
+    { cwd: serverDir, env: { ...process.env, DATABASE_URL_TEST: dbUrl } },
+  ).toString();
+  const progressLine = progressOut
+    .split('\n')
+    .find((l) => l.startsWith('SCENARIO_PROGRESS_EXTENSION='));
+  if (!progressLine) {
+    throw new Error('progress scenario extension did not emit SCENARIO_PROGRESS_EXTENSION');
+  }
+  const progress = JSON.parse(
+    progressLine.replace('SCENARIO_PROGRESS_EXTENSION=', ''),
+  );
+  manifest.teacherSubjectId = progress.teacherSubjectId;
+  manifest.untaughtClassId = progress.untaughtClassId;
+  manifest.unrelatedStudentId = progress.unrelatedStudentId;
+
   writeFileSync(MANIFEST_PATH, JSON.stringify(manifest, null, 2));
   // eslint-disable-next-line no-console
   console.log(
-    `[scenarios] seeded org=${manifest.orgId} (8.A ${manifest.students8A.length}, 2.A ${manifest.students2A.length}, parent=1)`,
+    `[scenarios] seeded org=${manifest.orgId} (8.A ${manifest.students8A.length}, 2.A ${manifest.students2A.length}, parent=1, progress-scope=1)`,
   );
 }
