@@ -196,7 +196,7 @@ test.describe('school progress — simplified ZŠ workflow', () => {
     await page.goto('/app/progress', { waitUntil: 'commit' });
     await expect(page.getByRole('heading', { name: 'Pokrok školy' })).toBeVisible();
     await expect(page.getByText('Srovnání tříd')).toBeVisible();
-    await expect(page.getByText('9.Z — RBAC')).toBeVisible();
+    await expect(page.getByRole('heading', { name: '9.Z — RBAC', exact: true })).toBeVisible();
 
     const downloadPromise = page.waitForEvent('download');
     await page.getByRole('button', { name: 'Stáhnout PDF' }).click();
