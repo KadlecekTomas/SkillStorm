@@ -7,19 +7,33 @@ const DB_NAME = 'skillstorm-offline';
 const DB_VERSION = 1;
 const QUEUE_STORE = 'progress-queue';
 const CACHE_STORE = 'progress-cache';
-const CONTEXT_KEY = 'progress-context';
 const CONTEXT_TTL_MS = 12 * 60 * 60 * 1000;
+
+export type ProgressOfflineScope = string;
 
 type QueuedProgressEntry = CreateProgressEntryInput & {
   clientMutationId: string;
   queuedAt: number;
+  scopeKey: ProgressOfflineScope;
 };
 
 type CachedContext = {
-  key: typeof CONTEXT_KEY;
+  key: string;
+  scopeKey: ProgressOfflineScope;
   value: ProgressContext;
   expiresAt: number;
 };
+
+export function buildProgressOfflineScope(
+  userId: string | null | undefined,
+  organizationId: string | null | undefined,
+): ProgressOfflineScope | null {
+  if (!userId || !organizationId) return null;
+  return `progress:${userId}:${organizationId}`;
+}
+
+const contextKey = (scopeKey: ProgressOfflineScope): string =>
+  `${scopeKey}:context`;
 
 function openDb(): Promise<IDBDatabase | null> {
   if (typeof window === 'undefined' || !('indexedDB' in window)) {
@@ -60,34 +74,47 @@ async function withStore<T>(
   }
 }
 
-export async function cacheProgressContext(value: ProgressContext): Promise<void> {
+export async function cacheProgressContext(
+  scopeKey: ProgressOfflineScope,
+  value: ProgressContext,
+): Promise<void> {
   const record: CachedContext = {
-    key: CONTEXT_KEY,
+    key: contextKey(scopeKey),
+    scopeKey,
     value,
     expiresAt: Date.now() + CONTEXT_TTL_MS,
   };
-  await withStore<IDBValidKey>(CACHE_STORE, 'readwrite', (store) => store.put(record));
+  await withStore<IDBValidKey>(CACHE_STORE, 'readwrite', (store) =>
+    store.put(record),
+  );
 }
 
-export async function readCachedProgressContext(): Promise<ProgressContext | null> {
+export async function readCachedProgressContext(
+  scopeKey: ProgressOfflineScope,
+): Promise<ProgressContext | null> {
+  const key = contextKey(scopeKey);
   const record = await withStore<CachedContext>(CACHE_STORE, 'readonly', (store) =>
-    store.get(CONTEXT_KEY),
+    store.get(key),
   );
-  if (!record) return null;
+  if (!record || record.scopeKey !== scopeKey) return null;
   if (record.expiresAt <= Date.now()) {
-    await withStore<undefined>(CACHE_STORE, 'readwrite', (store) => store.delete(CONTEXT_KEY));
+    await withStore<undefined>(CACHE_STORE, 'readwrite', (store) =>
+      store.delete(key),
+    );
     return null;
   }
   return record.value;
 }
 
 export async function queueProgressEntry(
+  scopeKey: ProgressOfflineScope,
   input: CreateProgressEntryInput,
 ): Promise<QueuedProgressEntry> {
   const queued: QueuedProgressEntry = {
     ...input,
     clientMutationId: input.clientMutationId ?? crypto.randomUUID(),
     queuedAt: Date.now(),
+    scopeKey,
   };
   const result = await withStore<IDBValidKey>(QUEUE_STORE, 'readwrite', (store) =>
     store.put(queued),
@@ -98,14 +125,23 @@ export async function queueProgressEntry(
   return queued;
 }
 
-export async function listQueuedProgressEntries(): Promise<QueuedProgressEntry[]> {
-  const rows = await withStore<QueuedProgressEntry[]>(QUEUE_STORE, 'readonly', (store) =>
-    store.getAll(),
+export async function listQueuedProgressEntries(
+  scopeKey: ProgressOfflineScope,
+): Promise<QueuedProgressEntry[]> {
+  const rows = await withStore<QueuedProgressEntry[]>(
+    QUEUE_STORE,
+    'readonly',
+    (store) => store.getAll(),
   );
-  return (rows ?? []).sort((a, b) => a.queuedAt - b.queuedAt);
+  return (rows ?? [])
+    .filter((row) => row.scopeKey === scopeKey)
+    .sort((a, b) => a.queuedAt - b.queuedAt);
 }
 
-export async function removeQueuedProgressEntries(ids: string[]): Promise<void> {
+export async function removeQueuedProgressEntries(
+  scopeKey: ProgressOfflineScope,
+  ids: string[],
+): Promise<void> {
   if (!ids.length) return;
   const db = await openDb();
   if (!db) return;
@@ -113,7 +149,38 @@ export async function removeQueuedProgressEntries(ids: string[]): Promise<void> 
     await new Promise<void>((resolve, reject) => {
       const tx = db.transaction(QUEUE_STORE, 'readwrite');
       const store = tx.objectStore(QUEUE_STORE);
-      for (const id of ids) store.delete(id);
+      for (const id of ids) {
+        const request = store.get(id);
+        request.onsuccess = () => {
+          const row = request.result as QueuedProgressEntry | undefined;
+          if (row?.scopeKey === scopeKey) store.delete(id);
+        };
+      }
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } finally {
+    db.close();
+  }
+}
+
+export async function clearProgressOfflineScope(
+  scopeKey: ProgressOfflineScope,
+): Promise<void> {
+  const db = await openDb();
+  if (!db) return;
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction([QUEUE_STORE, CACHE_STORE], 'readwrite');
+      const queue = tx.objectStore(QUEUE_STORE);
+      const cache = tx.objectStore(CACHE_STORE);
+      const queueRequest = queue.getAll();
+      queueRequest.onsuccess = () => {
+        for (const row of queueRequest.result as QueuedProgressEntry[]) {
+          if (row.scopeKey === scopeKey) queue.delete(row.clientMutationId);
+        }
+      };
+      cache.delete(contextKey(scopeKey));
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
     });
@@ -123,8 +190,8 @@ export async function removeQueuedProgressEntries(ids: string[]): Promise<void> 
 }
 
 /**
- * Maže lokální školní data při odhlášení / výměně účtu. Volající může tuto
- * funkci připojit k existujícímu logout flow; bezpečně funguje i bez IndexedDB.
+ * Hard privacy boundary for logout/shared devices. This removes every local
+ * progress scope, including legacy unscoped records from older app versions.
  */
 export async function clearProgressOfflineData(): Promise<void> {
   if (typeof window === 'undefined' || !('indexedDB' in window)) return;
