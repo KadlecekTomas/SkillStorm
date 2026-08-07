@@ -327,7 +327,7 @@ function ResultsPage(): React.JSX.Element {
         <div className="flex justify-end">
           <Button variant="secondary" size="sm" disabled title="Vyžaduje školu">
             <Download className="h-4 w-4" />
-            Export PDF
+            Tisk / uložit PDF
           </Button>
         </div>
         <InfoAlert
@@ -351,7 +351,7 @@ function ResultsPage(): React.JSX.Element {
         <div className="flex justify-end">
           <Button variant="secondary" size="sm" disabled>
             <Download className="h-4 w-4" />
-            Export PDF
+            Tisk / uložit PDF
           </Button>
         </div>
         <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-6 py-12 text-center">
@@ -410,7 +410,7 @@ function ResultsPage(): React.JSX.Element {
           title="Otevřít tiskový dialog a uložit jako PDF"
         >
           <Download className="h-4 w-4" />
-          Export PDF
+          Tisk / uložit PDF
         </Button>
       </div>
 

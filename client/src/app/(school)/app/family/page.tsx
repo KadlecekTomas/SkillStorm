@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarClock, ChevronRight, Mail, Sparkles } from "lucide-react";
+import { CalendarClock, Mail, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
@@ -291,13 +291,16 @@ function FamilyOverview({ child }: { child: GuardianChild }) {
   }
 
   const firstName = data.student.name.split(" ")[0];
+  const nextStepItem = data.nextStep
+    ? data.todo.find((item) => item.assignmentId === data.nextStep?.assignmentId) ?? null
+    : null;
 
   return (
     <div className="space-y-5">
-      {/* Doporučený další krok — jedna dominantní akce nahoře */}
+      {/* Doporučený další krok — skutečná akce jen pokud ji backend dovoluje */}
       {data.nextStep && (
         <Card className="border-accent bg-accent-soft">
-          <CardContent className="flex items-center justify-between gap-4 p-5">
+          <CardContent className="space-y-4 p-5">
             <div className="min-w-0 space-y-0.5">
               <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-accent-deep">
                 <Sparkles className="h-3.5 w-3.5" /> Doporučený další krok
@@ -309,7 +312,30 @@ function FamilyOverview({ child }: { child: GuardianChild }) {
                 {humanDue(data.nextStep.dueAt)}
               </p>
             </div>
-            <ChevronRight className="h-6 w-6 shrink-0 text-accent-deep" />
+            {nextStepItem && nextStepItem.guardianLaunchPolicy !== "DISABLED" && (
+              <Button
+                size="lg"
+                className="h-12 w-full sm:w-auto"
+                onClick={() =>
+                  setLaunching((current) =>
+                    current === nextStepItem.assignmentId
+                      ? null
+                      : nextStepItem.assignmentId,
+                  )
+                }
+              >
+                {launching === nextStepItem.assignmentId
+                  ? "Zavřít spuštění"
+                  : "Spustit doma"}
+              </Button>
+            )}
+            {nextStepItem && launching === nextStepItem.assignmentId && (
+              <LaunchActivity
+                child={child}
+                item={nextStepItem}
+                onClose={() => setLaunching(null)}
+              />
+            )}
           </CardContent>
         </Card>
       )}
