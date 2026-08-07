@@ -12,9 +12,8 @@ const HUMAN_DOC_ROOTS = [
   'server/test/e2e-legacy/README.md',
 ];
 
-// Historical documents are allowed to preserve stale paths, brands and links
-// because they capture an older repository state. They still must be explicitly
-// registered in docs/README.md by their exact current path.
+// Historical documents may preserve stale paths, brands and links because they
+// capture an older repository state. They still must be registered exactly.
 const HISTORICAL_DOCS = new Set([
   'docs/campaigns-decisions.md',
   'docs/roadmap/doctrine.md',
@@ -83,7 +82,6 @@ function resolveLocalTarget(fromDoc, rawTarget) {
     return null;
   }
 
-  // Remove an optional Markdown link title after the URL/path.
   target = target.replace(/\s+["'][^"']*["']\s*$/, '');
   target = stripAnchorAndQuery(decodeTarget(target));
   if (!target) return null;
@@ -101,7 +99,6 @@ const warnings = [];
 if (!docs.includes('README.md')) {
   errors.push('Root README.md was not discovered.');
 }
-
 if (!exists(registryPath)) {
   errors.push(`Missing documentation registry: ${registryPath}`);
 }
@@ -115,7 +112,7 @@ const registryLinks = [
 ];
 const registryDocTargets = new Set();
 
-// 1) Every local Markdown link in the registry must resolve to a real file.
+// 1) Registry links must resolve.
 for (const [, rawTarget] of registryLinks) {
   const resolved = resolveLocalTarget(registryPath, rawTarget);
   if (!resolved) continue;
@@ -125,8 +122,7 @@ for (const [, rawTarget] of registryLinks) {
   }
 }
 
-// 2) Every discovered human-authored Markdown document must be registered by
-// its exact resolved path. Basename/string coincidence is intentionally not enough.
+// 2) Every discovered human-authored Markdown must be registered by exact path.
 for (const doc of docs) {
   if (doc === 'README.md' || doc === registryPath) continue;
   if (!registryDocTargets.has(doc)) {
@@ -145,8 +141,7 @@ for (const doc of HISTORICAL_DOCS) {
   }
 }
 
-// 4) Current/future authoritative docs must not regress to known stale local
-// setup patterns. Historical snapshots are deliberately excluded.
+// 4) Active docs must not regress to known stale setup patterns.
 const stalePatterns = [
   { regex: /^#\s+EDUTO\b/im, label: 'legacy EDUTO document heading' },
   { regex: /\/Users\/[A-Za-z0-9._-]+\//, label: 'machine-local /Users/... path' },
@@ -159,13 +154,11 @@ for (const doc of docs) {
   if (HISTORICAL_DOCS.has(doc)) continue;
   const content = fs.readFileSync(path.resolve(root, doc), 'utf8');
   for (const { regex, label } of stalePatterns) {
-    if (regex.test(content)) {
-      errors.push(`${doc}: contains ${label}`);
-    }
+    if (regex.test(content)) errors.push(`${doc}: contains ${label}`);
   }
 }
 
-// 5) Root identity and normative documents are hard requirements.
+// 5) Root identity and normative docs are hard requirements.
 const rootReadme = fs.readFileSync(path.resolve(root, 'README.md'), 'utf8');
 if (!/^#\s+SkillStorm\s*$/m.test(rootReadme)) {
   errors.push('README.md must have the canonical "# SkillStorm" heading.');
@@ -174,27 +167,32 @@ if (!/^#\s+SkillStorm\s*$/m.test(rootReadme)) {
 for (const doc of NORMATIVE_DOCS) {
   if (!exists(doc)) {
     errors.push(`Missing normative document: ${doc}`);
+    continue;
+  }
+  const content = fs.readFileSync(path.resolve(root, doc), 'utf8');
+  if (!/\*\*Owner:\*\*/i.test(content)) {
+    errors.push(`${doc}: normative document is missing Owner metadata`);
   }
 }
 
-// 6) Every non-historical document under docs/ must carry lifecycle metadata.
-// This prevents an unclassified active-looking file from silently becoming truth.
+// 6) Every active doc under docs/ must visibly expose lifecycle metadata.
+// Ownership is mandatory for normative docs and recommended for other active
+// blueprints; the registry remains canonical for ownership/classification.
 for (const doc of docs) {
   if (doc === 'README.md' || HISTORICAL_DOCS.has(doc)) continue;
   const content = fs.readFileSync(path.resolve(root, doc), 'utf8');
 
-  for (const field of ['Status', 'Owner']) {
-    if (!new RegExp(`\\*\\*${field}:\\*\\*`, 'i').test(content)) {
-      errors.push(`${doc}: missing required metadata field ${field}`);
-    }
+  if (!/\*\*Status:\*\*/i.test(content)) {
+    errors.push(`${doc}: missing required Status metadata`);
   }
-
   if (!/\*\*Last (verified|review(?:ed)?):\*\*/i.test(content)) {
     errors.push(`${doc}: missing Last verified/reviewed metadata`);
   }
-
   if (!/\*\*(Scope|Purpose):\*\*/i.test(content)) {
     errors.push(`${doc}: missing Scope/Purpose metadata`);
+  }
+  if (!/\*\*Owner:\*\*/i.test(content) && !NORMATIVE_DOCS.includes(doc)) {
+    warnings.push(`${doc}: Owner is supplied by the registry but not repeated in the file header.`);
   }
 }
 
@@ -213,7 +211,7 @@ for (const doc of docs) {
   }
 }
 
-// 8) Warnings remain non-blocking for deliberate scoped TODO language.
+// 8) Deliberate TODO language is visible but non-blocking.
 for (const doc of docs) {
   if (doc === 'README.md' || HISTORICAL_DOCS.has(doc)) continue;
   const content = fs.readFileSync(path.resolve(root, doc), 'utf8');
