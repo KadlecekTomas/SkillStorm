@@ -140,7 +140,7 @@ export const Sidebar = (): React.JSX.Element => {
                   .slice(0, 2)
                   .toUpperCase() ?? "SS"}
               </AvatarFallback>
-            ) : null}
+            )}
           </Avatar>
           {!collapsed && (
             <div className="min-w-0 space-y-0.5">
