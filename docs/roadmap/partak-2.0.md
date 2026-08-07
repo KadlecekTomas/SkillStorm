@@ -3,6 +3,7 @@
 > **Status:** `VISION / PARKED — REQUIRES PILOT EVIDENCE`  
 > **Owner:** Product  
 > **Last verified:** 2026-08-07  
+> **Scope:** optional future pupil-owned companion, private collectible/evolution experience and adult-only memorabilia concept; not scheduled implementation scope  
 > **Priority:** after current Guardian work, Interactive Curriculum foundation and real-school pilot evidence  
 > **Current rules:** [`../partak-rules.md`](../partak-rules.md)  
 > **Authority rule:** this file describes optional future product exploration. It does not override current ClassParták rules, privacy/security contracts or the Master Roadmap.
