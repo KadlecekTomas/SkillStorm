@@ -48,11 +48,13 @@ async function expectVisibleButtonsTouchSafe(
     const button = buttons.nth(index);
     if (!(await button.isVisible())) continue;
 
-    const box = await button.boundingBox();
     const label =
       (await button.getAttribute('aria-label')) ??
       (await button.innerText()).trim() ??
       `button ${index}`;
+    if (label === 'Open Next.js Dev Tools') continue;
+
+    const box = await button.boundingBox();
     expect(
       box?.height ?? 0,
       `visible button "${label || index}" should have at least a 44px touch height`,
