@@ -33,10 +33,11 @@ export function OnboardingRouteGuard({
 }): ReactNode {
   const router = useRouter();
   const pathname = usePathname();
-  const { user, org, orgState, isLoading, hasOrganization } = useAuth();
+  const { user, org, orgState, isLoading, hasOrganization, activeRole } = useAuth();
   const [ready, setReady] = useState(false);
 
-  const isOwner = user?.organizationRole === "OWNER";
+  const effectiveRole = activeRole ?? user?.organizationRole ?? null;
+  const isOwner = effectiveRole === "OWNER";
   const orgType = org?.type;
   const isSchool = orgType === "SCHOOL";
 
@@ -52,7 +53,6 @@ export function OnboardingRouteGuard({
       return;
     }
 
-    // Uživatel bez organizace – smí pouze na create-organization
     if (!hasOrganization) {
       if (path !== CREATE_ORG_PATH) {
         router.replace(CREATE_ORG_PATH);
@@ -62,7 +62,6 @@ export function OnboardingRouteGuard({
       return;
     }
 
-    // SCHOOL organizace ve stavu PENDING – vždy na /onboarding/pending
     if (isSchool && orgState === "PENDING") {
       if (path !== PENDING_ORG_PATH) {
         router.replace(PENDING_ORG_PATH);
@@ -72,13 +71,11 @@ export function OnboardingRouteGuard({
       return;
     }
 
-    // create-organization: pokud už má organizaci, přepni na další krok
     if (path === CREATE_ORG_PATH) {
       router.replace(ACADEMIC_YEAR_PATH);
       return;
     }
 
-    // academic-year: pouze pro OWNER s organizací, ne pro členy
     if (path === ACADEMIC_YEAR_PATH) {
       if (!isOwner) {
         router.replace("/app");
@@ -88,13 +85,11 @@ export function OnboardingRouteGuard({
       return;
     }
 
-    // pending stránka pro jiné než PENDING SCHOOL nedává smysl → na dashboard
     if (path === PENDING_ORG_PATH && !(isSchool && orgState === "PENDING")) {
       router.replace("/app");
       return;
     }
 
-    // setup: redirect only for terminal state (READY). All NOT_READY states (including repair) stay on setup.
     if (path === SETUP_PATH) {
       if (org?.readiness === "READY") {
         router.replace("/app");
@@ -105,7 +100,17 @@ export function OnboardingRouteGuard({
     }
 
     setReady(true);
-  }, [pathname, hasOrganization, isOwner, isLoading, orgState, isSchool, org?.status, org?.readiness, router]);
+  }, [
+    pathname,
+    hasOrganization,
+    isOwner,
+    isLoading,
+    orgState,
+    isSchool,
+    org?.status,
+    org?.readiness,
+    router,
+  ]);
 
   if (isLoading || !ready) {
     return (
