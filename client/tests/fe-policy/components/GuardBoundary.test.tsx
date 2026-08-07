@@ -15,6 +15,8 @@ vi.mock("@/lib/guard/useAuth", () => ({
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn() }),
+  usePathname: () => "/app/results",
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 vi.mock("@/utils/rbac-telemetry", () => ({
