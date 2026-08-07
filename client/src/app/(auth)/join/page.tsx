@@ -25,6 +25,14 @@ type InvitePreview = {
   yearLabel?: string;
 };
 
+const JOIN_ROLE_LABELS: Record<string, string> = {
+  OWNER: "Vlastník",
+  DIRECTOR: "Ředitel",
+  TEACHER: "Učitel",
+  STUDENT: "Žák",
+  PARENT: "Rodič",
+};
+
 /** Fetch preview via token-based API (production). */
 async function fetchPreviewByToken(token: string): Promise<InvitePreview> {
   const res = await httpClient.get<InvitePreview>(
@@ -270,7 +278,7 @@ export default function JoinPage(): JSX.Element {
                 disabled={previewLoading}
               />
               <p className="text-xs text-slate-500">
-                Your role will be assigned automatically based on the invitation.
+                Role se nastaví automaticky podle pozvánky.
               </p>
             </div>
             {joinErrorMessage && (
@@ -331,8 +339,8 @@ export default function JoinPage(): JSX.Element {
                 <UserCheck className="h-4 w-4 text-slate-400" />
                 <span>
                   Budeš přidán jako{" "}
-                  <span className="font-medium text-slate-800 capitalize">
-                    {preview.role.toLowerCase()}
+                  <span className="font-medium text-slate-800">
+                    {JOIN_ROLE_LABELS[preview.role] ?? "Člen organizace"}
                   </span>
                 </span>
               </div>

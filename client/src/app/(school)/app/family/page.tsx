@@ -156,18 +156,18 @@ function ConfirmChildScreen({
 }
 
 function ChildSwitcher({
-  children,
+  items,
   selectedId,
   onSelect,
 }: {
-  children: GuardianChild[];
+  items: GuardianChild[];
   selectedId: string | null;
   onSelect: (studentId: string) => void;
-}) {
-  if (children.length <= 1) return null;
+}): React.JSX.Element | null {
+  if (items.length <= 1) return null;
   return (
     <div className="flex gap-2 overflow-x-auto pb-1">
-      {children.map((child) => (
+      {items.map((child) => (
         <button
           key={child.studentId}
           type="button"
@@ -446,7 +446,7 @@ function FamilyOverview({ child }: { child: GuardianChild }) {
   );
 }
 
-export default function FamilyPage() {
+export default function FamilyPage(): React.JSX.Element | null {
   const router = useRouter();
   const { hasRole } = usePermissions();
   const isParent = hasRole("PARENT");
@@ -525,7 +525,7 @@ export default function FamilyPage() {
             : "Moje děti"}
         </h1>
         <ChildSwitcher
-          children={children}
+          items={children}
           selectedId={selected?.studentId ?? null}
           onSelect={setSelectedId}
         />
