@@ -66,7 +66,7 @@ export async function cacheProgressContext(value: ProgressContext): Promise<void
     value,
     expiresAt: Date.now() + CONTEXT_TTL_MS,
   };
-  await withStore(CACHE_STORE, 'readwrite', (store) => store.put(record));
+  await withStore<IDBValidKey>(CACHE_STORE, 'readwrite', (store) => store.put(record));
 }
 
 export async function readCachedProgressContext(): Promise<ProgressContext | null> {
@@ -75,7 +75,7 @@ export async function readCachedProgressContext(): Promise<ProgressContext | nul
   );
   if (!record) return null;
   if (record.expiresAt <= Date.now()) {
-    await withStore(CACHE_STORE, 'readwrite', (store) => store.delete(CONTEXT_KEY));
+    await withStore<undefined>(CACHE_STORE, 'readwrite', (store) => store.delete(CONTEXT_KEY));
     return null;
   }
   return record.value;
@@ -89,7 +89,7 @@ export async function queueProgressEntry(
     clientMutationId: input.clientMutationId ?? crypto.randomUUID(),
     queuedAt: Date.now(),
   };
-  const result = await withStore<QueuedProgressEntry>(QUEUE_STORE, 'readwrite', (store) =>
+  const result = await withStore<IDBValidKey>(QUEUE_STORE, 'readwrite', (store) =>
     store.put(queued),
   );
   if (result === null) {
