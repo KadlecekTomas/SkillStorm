@@ -25,6 +25,9 @@ export interface ScenarioManifest {
   parentMembershipId: string;
   parentUserId: string;
   parentRelationId: string;
+  teacherSubjectId: string;
+  untaughtClassId: string;
+  unrelatedStudentId: string;
   foreignOrgId: string;
   foreignTestId: string;
   foreignAssignmentId: string;
