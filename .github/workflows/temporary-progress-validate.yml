@@ -8,11 +8,14 @@ on:
       - '.github/workflows/temporary-progress-validate.yml'
       - 'server/src/progress/**'
       - 'server/src/app.module.ts'
+      - 'server/prisma/schema.prisma'
       - 'server/prisma/migrations/20260807154500_add_school_progress_tracking/**'
       - 'client/src/app/(school)/app/progress/**'
       - 'client/src/lib/progress-**'
       - 'client/src/lib/reports/progress-dashboard-pdf.ts'
       - 'client/src/config/dashboard-navigation.tsx'
+      - 'client/src/app/manifest.ts'
+      - 'client/public/sw.js'
 
 permissions:
   contents: read
@@ -53,9 +56,11 @@ jobs:
         working-directory: server
         run: npm ci
 
-      - name: Generate Prisma client and apply migrations
+      - name: Validate Prisma and apply migrations
         working-directory: server
         run: |
+          npx prisma format --check
+          npx prisma validate
           npx prisma generate
           npx prisma migrate deploy
 
@@ -65,11 +70,15 @@ jobs:
 
       - name: Backend build
         working-directory: server
-        run: npm run build -- --skip-nx-cache
+        run: npm run build
 
       - name: Install frontend
         working-directory: client
         run: npm ci
+
+      - name: Frontend lint
+        working-directory: client
+        run: npm run lint
 
       - name: Frontend typecheck
         working-directory: client
