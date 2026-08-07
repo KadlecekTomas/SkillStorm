@@ -69,7 +69,7 @@ test.describe('school readiness — RBAC and visible-action contract', () => {
     });
 
     await page.goto('/app/family', { waitUntil: 'commit' });
-    await page.waitForLoadState('networkidle').catch(() => undefined);
+    await expect(page.getByRole('heading', { name: 'Moje děti' })).toBeVisible();
 
     const nav = page.getByRole('navigation', { name: 'Hlavní navigace' }).first();
     await expect(nav.locator('a[href="/app/family"]')).toBeVisible();
@@ -77,7 +77,7 @@ test.describe('school readiness — RBAC and visible-action contract', () => {
     await expect(nav.locator('a[href="/app/classrooms"]')).toHaveCount(0);
     await expect(nav.locator('a[href="/app/tests"]')).toHaveCount(0);
     await expect(nav.locator('a[href="/app/results"]')).toHaveCount(0);
-    await expect(page.getByText(/Žák 8A 1/i)).toBeVisible();
+    await expect(page.getByText(/Žák · 8\.A/i)).toBeVisible();
 
     await page.goto('/app/results', { waitUntil: 'commit' });
     await expect(page.getByText('Přístup není povolen')).toBeVisible();
@@ -108,7 +108,6 @@ test.describe('school readiness — RBAC and visible-action contract', () => {
         };
         page.on('response', listener);
         await page.goto(href, { waitUntil: 'commit' });
-        await page.waitForLoadState('networkidle').catch(() => undefined);
         await expect(page.locator('body')).toBeVisible();
         await expect(page.getByText('Přístup není povolen')).toHaveCount(0);
         await expect(page.getByText('Access denied')).toHaveCount(0);
@@ -264,6 +263,16 @@ test.describe('school readiness — RBAC and visible-action contract', () => {
     const createdBody = await createResponse.json();
     const created = createdBody.data ?? createdBody;
     expect(created.id).toBeTruthy();
+
+    const listResponse = await page.request.get('/api/learning-materials');
+    expect(listResponse.ok(), 'fresh material list after create').toBeTruthy();
+    const listBody = await listResponse.json();
+    const listData = listBody.data ?? listBody;
+    const items = listData.items ?? [];
+    expect(
+      items.some((item: { id?: string }) => item.id === created.id),
+      'created material must be visible immediately after mutation',
+    ).toBeTruthy();
 
     await page.goto('/app/library', { waitUntil: 'commit' });
     await expect(page.getByText(title)).toBeVisible();
