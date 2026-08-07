@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { useAcademicYears } from "@/hooks/use-academic-years";
 import { useAuth } from "@/hooks/use-auth";
+import { usePermissions } from "@/hooks/use-permissions";
 import { fetchWithAuth } from "@/lib/http/client";
 import {
   getPromotionStatus,
@@ -32,11 +33,12 @@ type PromotionEligibility = {
   toYearLabel: string;
 };
 
-const STAFF_ROLES: OrganizationRole[] = ["OWNER", "DIRECTOR", "TEACHER"];
+const MANAGEMENT_ROLES: OrganizationRole[] = ["OWNER", "DIRECTOR"];
 
 function AcademicYearsPage(): React.JSX.Element {
   const router = useRouter();
-  const { org, user } = useAuth();
+  const { org } = useAuth();
+  const { can } = usePermissions();
   const {
     years,
     selectedYearId,
@@ -56,13 +58,12 @@ function AcademicYearsPage(): React.JSX.Element {
   const [promoteSubmitting, setPromoteSubmitting] = useState(false);
   const [promoteError, setPromoteError] = useState<string | null>(null);
 
-  const canManage = user?.permissions?.includes(PermissionKey.MANAGE_TEACHERS) ?? false;
-  const canPromote =
-    user?.organizationRole === "DIRECTOR" || user?.organizationRole === "OWNER";
-  const hasNoActiveYear = (bootstrapState === "READY" && years.length === 0) || yearConfigError != null;
+  const canManage = can(PermissionKey.MANAGE_TEACHERS);
+  const hasNoActiveYear =
+    (bootstrapState === "READY" && years.length === 0) || yearConfigError != null;
 
   useEffect(() => {
-    if (!canPromote || years.length === 0 || !selectedYearId) {
+    if (!canManage || years.length === 0 || !selectedYearId) {
       setPromotionEligibility(null);
       return;
     }
@@ -89,7 +90,7 @@ function AcademicYearsPage(): React.JSX.Element {
           });
           break;
         } catch {
-          // ignore per-year errors
+          // Ne každý historický rok musí mít navazující rok; pokračujeme dál.
         }
       }
       if (!cancelled) setPromotionLoading(false);
@@ -98,10 +99,10 @@ function AcademicYearsPage(): React.JSX.Element {
     return () => {
       cancelled = true;
     };
-  }, [canPromote, years, selectedYearId]);
+  }, [canManage, years, selectedYearId]);
 
   const handleCreateYear = async () => {
-    if (!org?.id) return;
+    if (!org?.id || !canManage) return;
     setCreateError(null);
     setCreateSubmitting(true);
     try {
@@ -110,7 +111,9 @@ function AcademicYearsPage(): React.JSX.Element {
       const created = await fetchWithAuth<{ id: string }>("POST", "/academic-years", {
         body: { startYear, isActive: true },
       });
-      const id = created && typeof created === "object" && "id" in created ? (created as { id: string }).id : null;
+      const id = created && typeof created === "object" && "id" in created
+        ? (created as { id: string }).id
+        : null;
       if (id) {
         await refresh();
         setSelectedYearId(id);
@@ -118,14 +121,16 @@ function AcademicYearsPage(): React.JSX.Element {
         throw new Error("Nepodařilo se vytvořit školní rok.");
       }
     } catch (err) {
-      setCreateError(err instanceof Error ? err.message : "Nepodařilo se vytvořit školní rok.");
+      setCreateError(
+        err instanceof Error ? err.message : "Nepodařilo se vytvořit školní rok.",
+      );
     } finally {
       setCreateSubmitting(false);
     }
   };
 
   const handlePromoteConfirm = async () => {
-    if (!promotionEligibility) return;
+    if (!promotionEligibility || !canManage) return;
     setPromoteError(null);
     setPromoteSubmitting(true);
     try {
@@ -156,10 +161,12 @@ function AcademicYearsPage(): React.JSX.Element {
   if (!org?.id) {
     return (
       <div className="space-y-4">
-        <p className="text-sm text-slate-600">Pro nastavení školního roku zvol organizaci.</p>
-        <Link href="/app">
-          <Button variant="outline">Zpět na přehled</Button>
-        </Link>
+        <p className="text-sm text-slate-600">
+          Pro správu školních roků nejdřív zvolte organizaci.
+        </p>
+        <Button asChild variant="outline">
+          <Link href="/app">Zpět na přehled</Link>
+        </Button>
       </div>
     );
   }
@@ -174,31 +181,27 @@ function AcademicYearsPage(): React.JSX.Element {
         <Link href="/app/tests" className="text-sm text-slate-500 hover:text-slate-700">
           ← Zpět
         </Link>
-        <h1 className="mt-2 text-2xl font-semibold text-slate-900">Školní rok</h1>
+        <h1 className="mt-2 text-2xl font-semibold text-slate-900">Školní roky</h1>
         <p className="text-sm text-slate-500">
-          Nastavení aktivního školního roku pro třídy a přiřazování testů.
+          Správa školních roků a postup tříd. Změna roku pro zobrazení sama o sobě nemění aktivní školní rok školy.
         </p>
       </div>
 
       {(hasNoActiveYear || years.length === 0) && (
         <Card className="border-amber-200 bg-amber-50/50 p-6">
-          <h2 className="text-lg font-semibold text-amber-900">Není nastaven aktivní školní rok</h2>
+          <h2 className="text-lg font-semibold text-amber-900">
+            Není nastaven aktivní školní rok
+          </h2>
           <p className="mt-2 text-sm text-amber-800">
-            Pro přiřazování testů třídám a práci s třídami je potřeba mít zvolený aktivní školní rok.
+            Pro přiřazování testů třídám a práci s třídami je potřeba mít jeden aktivní školní rok.
           </p>
-          {canManage ? (
-            <Button
-              className="mt-4 bg-amber-700 hover:bg-amber-800"
-              onClick={handleCreateYear}
-              disabled={createSubmitting}
-            >
-              {createSubmitting ? "Vytvářím…" : "Nastavit školní rok"}
-            </Button>
-          ) : (
-            <p className="mt-4 text-sm text-amber-800">
-              Požádej ředitele nebo správce o vytvoření školního roku.
-            </p>
-          )}
+          <Button
+            className="mt-4 bg-amber-700 hover:bg-amber-800"
+            onClick={handleCreateYear}
+            disabled={createSubmitting || !canManage}
+          >
+            {createSubmitting ? "Vytvářím…" : "Vytvořit aktuální školní rok"}
+          </Button>
           {createError && (
             <ErrorAlert className="mt-4" title="Chyba" description={createError} />
           )}
@@ -207,9 +210,11 @@ function AcademicYearsPage(): React.JSX.Element {
 
       {years.length > 0 && (
         <Card className="p-6">
-          <h2 className="text-base font-semibold text-slate-900">Vyber školní rok</h2>
+          <h2 className="text-base font-semibold text-slate-900">
+            Rok pro zobrazení
+          </h2>
           <p className="mt-1 text-sm text-slate-500">
-            Aktivní rok se použije pro třídy a přiřazování testů.
+            Tímto pouze přepínáte data, která si prohlížíte. Aktivní školní rok školy se tím nemění.
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
             {years.map((y) => (
@@ -219,14 +224,14 @@ function AcademicYearsPage(): React.JSX.Element {
                 size="sm"
                 onClick={() => setSelectedYearId(y.id)}
               >
-                {y.name}
+                {y.name}{y.isActive ? " · aktivní" : ""}
               </Button>
             ))}
           </div>
         </Card>
       )}
 
-      {canPromote && !promotionLoading && promotionEligibility && (
+      {canManage && !promotionLoading && promotionEligibility && (
         <Card className="border-slate-200 bg-slate-50/50 p-6">
           <h2 className="text-base font-semibold text-slate-900">
             Postup do dalšího ročníku
@@ -276,7 +281,7 @@ function AcademicYearsPage(): React.JSX.Element {
             </Button>
             <Button
               onClick={handlePromoteConfirm}
-              disabled={promoteSubmitting}
+              disabled={promoteSubmitting || !canManage}
             >
               {promoteSubmitting ? "Probíhá…" : "Provést postup"}
             </Button>
@@ -285,11 +290,17 @@ function AcademicYearsPage(): React.JSX.Element {
       </Dialog>
 
       <p className="text-sm text-slate-500">
-        <Link href="/app/classrooms" className="font-medium text-slate-700 underline hover:text-slate-900">
+        <Link
+          href="/app/classrooms"
+          className="font-medium text-slate-700 underline hover:text-slate-900"
+        >
           Správa tříd
         </Link>
         {" · "}
-        <Link href="/app/tests" className="font-medium text-slate-700 underline hover:text-slate-900">
+        <Link
+          href="/app/tests"
+          className="font-medium text-slate-700 underline hover:text-slate-900"
+        >
           Testy
         </Link>
       </p>
@@ -298,6 +309,7 @@ function AcademicYearsPage(): React.JSX.Element {
 }
 
 export default withGuard({
-  requireRoles: STAFF_ROLES,
+  requireRoles: MANAGEMENT_ROLES,
+  requirePerms: [PermissionKey.MANAGE_TEACHERS],
   requireSchoolWorkspace: true,
 })(AcademicYearsPage);
