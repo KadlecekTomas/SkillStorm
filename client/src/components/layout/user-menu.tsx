@@ -37,7 +37,7 @@ export function UserMenu({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-2 rounded-full focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2"
+        className="flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-full focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2"
         aria-expanded={open}
         aria-haspopup="true"
         aria-label="Menu uživatele"
@@ -64,7 +64,7 @@ export function UserMenu({
         >
           <Link
             href="/app/settings"
-            className="block px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50"
+            className="flex min-h-11 items-center px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50"
             role="menuitem"
             onClick={() => setOpen(false)}
           >
@@ -72,7 +72,7 @@ export function UserMenu({
           </Link>
           <Link
             href="/account/security"
-            className="block px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50"
+            className="flex min-h-11 items-center px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50"
             role="menuitem"
             onClick={() => setOpen(false)}
           >
@@ -80,7 +80,7 @@ export function UserMenu({
           </Link>
           <button
             type="button"
-            className="w-full px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50"
+            className="min-h-11 w-full px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50"
             role="menuitem"
             onClick={() => {
               setOpen(false);
