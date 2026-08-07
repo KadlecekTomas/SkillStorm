@@ -56,12 +56,14 @@ describe("school UX action integrity", () => {
     expect(text).not.toContain("Zadání může odevzdat pouze žák");
   });
 
-  it("výsledky pravdivě popisují browser print místo falešného PDF exportu", () => {
+  it("výsledky stahují skutečný PDF report a nevracejí se k browser printu", () => {
     const text = source("src/app/(school)/app/results/page.tsx");
 
-    expect(text).toContain("Tisk / uložit PDF");
-    expect(text).not.toContain("Export PDF");
-    expect(text).toContain("window.print()");
+    expect(text).toContain("Stáhnout PDF");
+    expect(text).toContain("downloadClassResultsPdf");
+    expect(text).toContain("PDF report byl stažen.");
+    expect(text).not.toContain("window.print()");
+    expect(text).not.toContain("Tisk / uložit PDF");
   });
 
   it("detail žáka nepoužívá interní diagnostické enumy jako text pro učitele", () => {
