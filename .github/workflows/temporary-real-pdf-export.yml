@@ -1,0 +1,111 @@
+name: Temporary real PDF export
+
+on:
+  push:
+    branches:
+      - fix/school-readiness-rbac-contracts
+
+permissions:
+  contents: write
+
+jobs:
+  wire-pdf:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/school-readiness-rbac-contracts
+          fetch-depth: 2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - name: Install PDF runtime
+        working-directory: client
+        run: npm install pdfmake@0.2 --save
+
+      - name: Wire real download into Results page and browser gate
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          page_path = Path('client/src/app/(school)/app/results/page.tsx')
+          text = page_path.read_text()
+
+          old = 'import { formatClassName } from "@/lib/class-label";\n'
+          new = old + 'import { downloadClassResultsPdf } from "@/lib/reports/class-results-pdf";\nimport { showToastOnce } from "@/utils/toast";\n'
+          if old not in text:
+              raise SystemExit('results import anchor not found')
+          text = text.replace(old, new, 1)
+
+          old = '  const { selectedYearId, bootstrapState } = useAcademicYears();'
+          new = '  const { selectedYearId, selectedYear, bootstrapState } = useAcademicYears();'
+          if old not in text:
+              raise SystemExit('academic year destructure anchor not found')
+          text = text.replace(old, new, 1)
+
+          old = '  const [loading, setLoading] = useState(true);\n  const [error, setError] = useState<string | null>(null);'
+          new = '  const [loading, setLoading] = useState(true);\n  const [isExportingPdf, setIsExportingPdf] = useState(false);\n  const [error, setError] = useState<string | null>(null);'
+          if old not in text:
+              raise SystemExit('loading state anchor not found')
+          text = text.replace(old, new, 1)
+
+          old = '''  const handleExportPdf = useCallback(() => {\n    if (typeof window === "undefined") return;\n    const previousTitle = document.title;\n    const selectedClass = classrooms.find((item) => item.id === classId);\n    const classLabel = selectedClass ? formatClassName(selectedClass) : "trida";\n    document.title = `SkillStorm-vysledky-${classLabel.replace(/\\s+/g, "-")}`;\n    window.print();\n    window.setTimeout(() => {\n      document.title = previousTitle;\n    }, 0);\n  }, [classId, classrooms]);\n'''
+          new = '''  const handleExportPdf = useCallback(async () => {\n    if (!classId || !snapshot || !org) return;\n    const selectedClass = classrooms.find((item) => item.id === classId);\n    if (!selectedClass) return;\n\n    const reportAlerts: string[] = [];\n    const highRiskStudents = students.filter((student) => student.riskLevel === "HIGH");\n    if (highRiskStudents.length > 0) {\n      reportAlerts.push(\n        `${highRiskStudents.length} ${highRiskStudents.length === 1 ? "žák" : "žáci"} s vysokým rizikem: ${highRiskStudents\n          .slice(0, 3)\n          .map((student) => student.name)\n          .join(", ")}`,\n      );\n    }\n    errorTypes.forEach((item) => {\n      if (item.trendPercent != null && item.trendPercent > 10) {\n        reportAlerts.push(`Typ chyby „${item.label}" narůstá o ${Math.round(item.trendPercent)} %`);\n      }\n    });\n    if (snapshot.overallSuccessRate < 70) {\n      reportAlerts.push("Celková úspěšnost třídy je pod očekávanou úrovní.");\n    }\n\n    setIsExportingPdf(true);\n    try {\n      await downloadClassResultsPdf({\n        schoolName: org.name,\n        className: formatClassName(selectedClass),\n        academicYearName: selectedYear?.name ?? "Aktuální školní rok",\n        generatedAt: new Date(),\n        snapshot,\n        topics,\n        errorTypes,\n        students,\n        trendData,\n        priorityAlerts: reportAlerts,\n      });\n      showToastOnce("PDF report byl stažen.", { type: "success" });\n    } catch (exportError) {\n      showToastOnce(\n        exportError instanceof Error ? exportError.message : "PDF report se nepodařilo vytvořit.",\n        { type: "error" },\n      );\n    } finally {\n      setIsExportingPdf(false);\n    }\n  }, [classId, snapshot, org, classrooms, students, errorTypes, selectedYear?.name, topics, trendData]);\n'''
+          if old not in text:
+              raise SystemExit('old print export handler not found')
+          text = text.replace(old, new, 1)
+
+          text = text.replace('Tisk / uložit PDF', 'Stáhnout PDF')
+          text = text.replace('title="Otevřít tiskový dialog a uložit jako PDF"', 'title="Stáhnout samostatný PDF report"')
+          text = text.replace('disabled={!hasOrganization || !classId || loading}', 'disabled={!hasOrganization || !classId || !snapshot || loading || isExportingPdf}')
+          text = text.replace('          Stáhnout PDF\n        </Button>', '          {isExportingPdf ? "Připravuji PDF…" : "Stáhnout PDF"}\n        </Button>', 1)
+          page_path.write_text(text)
+
+          test_path = Path('client/tests/scenarios/school-readiness.scenario.ts')
+          scenario = test_path.read_text()
+          if "node:fs/promises" not in scenario:
+              scenario = scenario.replace(
+                  "import { test, expect } from './fixtures';\n",
+                  "import { test, expect } from './fixtures';\nimport { readFile } from 'node:fs/promises';\n",
+                  1,
+              )
+
+          start = scenario.index("  test('teacher diagnostics load without 403 and Tisk / uložit PDF invokes browser print'")
+          end = scenario.index("\n  test('teacher cannot assign a test", start)
+          replacement = '''  test('teacher diagnostics download a real PDF report without 403', async ({ asRole }) => {\n    const { page } = await asRole('teacher');\n    const forbidden: string[] = [];\n    page.on('response', (response) => {\n      if (response.status() === 403) forbidden.push(response.url());\n    });\n\n    await page.goto('/app/results', { waitUntil: 'commit' });\n    await expect(page.getByRole('heading', { name: 'Diagnostika výsledků' })).toBeVisible();\n    await expect(page.getByText('Přehled žáků')).toBeVisible();\n\n    const exportButton = page.getByRole('button', { name: 'Stáhnout PDF' });\n    await expect(exportButton).toBeEnabled();\n    const downloadPromise = page.waitForEvent('download');\n    await exportButton.click();\n    const download = await downloadPromise;\n    expect(download.suggestedFilename()).toMatch(/^SkillStorm-.*\\.pdf$/i);\n\n    const path = await download.path();\n    expect(path, 'browser should persist downloaded PDF').toBeTruthy();\n    const bytes = await readFile(path!);\n    expect(bytes.subarray(0, 4).toString('ascii')).toBe('%PDF');\n    expect(bytes.length, 'PDF report should contain real report content').toBeGreaterThan(5_000);\n    await expect(page.getByText('PDF report byl stažen.')).toBeVisible();\n\n    expect(forbidden, `teacher diagnostics returned 403: ${forbidden.join(', ')}`).toEqual([]);\n  });\n'''
+          scenario = scenario[:start] + replacement + scenario[end:]
+          test_path.write_text(scenario)
+          PY
+
+      - name: Verify frontend PDF implementation
+        working-directory: client
+        env:
+          API_PROXY_TARGET: http://127.0.0.1:4200
+          NEXT_PUBLIC_API_URL: /api
+          NEXT_PUBLIC_SENTRY_DSN: https://public@example.ingest.sentry.io/1
+          NEXT_PUBLIC_RELEASE: pdf-export-verification
+        run: |
+          npm run typecheck
+          npm run test:unit -- --run src/tests/reports/class-results-pdf.spec.ts src/tests/ux/school-readiness-ux.spec.ts
+          npm run build
+
+      - name: Commit implementation and remove helper workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/temporary-real-pdf-export.yml
+          git add client/package.json client/package-lock.json \
+            'client/src/app/(school)/app/results/page.tsx' \
+            client/tests/scenarios/school-readiness.scenario.ts \
+            client/src/lib/reports/class-results-pdf.ts \
+            client/src/types/pdfmake-build.d.ts \
+            client/src/tests/reports/class-results-pdf.spec.ts
+          git commit -m "feat(reports): download real school results PDF"
+          git push origin HEAD:fix/school-readiness-rbac-contracts
