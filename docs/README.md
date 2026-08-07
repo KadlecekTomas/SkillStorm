@@ -128,7 +128,7 @@ Tyto soubory se zachovávají kvůli traceability. Nesmějí být použity jako 
 | [`guardian/etapa-c-stop3-navrh.md`](./guardian/etapa-c-stop3-navrh.md) | `HISTORICAL / SNAPSHOT` |
 | [`../server/test/e2e-legacy/README.md`](../server/test/e2e-legacy/README.md) | `HISTORICAL / SNAPSHOT` |
 
-Historické soubory mohou obsahovat správné informace o minulém stavu, včetně starého brandu, cest, čísel či návrhů. Tyto údaje se nesmí přenášet do current implementace bez ověření.
+Historické soubory mohou obsahovat správné informace o minulém stavu, včetně starých názvů, cest, čísel či návrhů. Tyto údaje se nesmí přenášet do current implementace bez ověření.
 
 ---
 
@@ -150,7 +150,7 @@ Dokumentace je připravena jako vstup do vývoje pouze pokud:
 [ ] každý human-authored Markdown je registrován přes exact path
 [ ] registry neobsahuje neexistující Markdown link
 [ ] CURRENT / VISION / HISTORICAL je jednoznačné
-[ ] current docs nemají aktivní Eduto heading, machine-local paths nebo demo secrets
+[ ] current docs neobsahují legacy product branding, machine-local paths ani demo secrets
 [ ] normativní data/security termíny jsou konzistentní
 [ ] external normative claims mají authoritative source/provenance
 [ ] známé implementation/release gaps nejsou přepsané marketingovým tvrzením
