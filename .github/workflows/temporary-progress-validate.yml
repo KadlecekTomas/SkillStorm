@@ -1,0 +1,80 @@
+name: Temporary progress validation
+
+on:
+  push:
+    branches:
+      - fix/school-readiness-rbac-contracts
+    paths:
+      - '.github/workflows/temporary-progress-validate.yml'
+      - 'server/src/progress/**'
+      - 'server/src/app.module.ts'
+      - 'server/prisma/migrations/20260807154500_add_school_progress_tracking/**'
+      - 'client/src/app/(school)/app/progress/**'
+      - 'client/src/lib/progress-**'
+      - 'client/src/lib/reports/progress-dashboard-pdf.ts'
+      - 'client/src/config/dashboard-navigation.tsx'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: skillstorm_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d skillstorm_test"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/skillstorm_test?schema=public
+      DATABASE_URL_TEST: postgresql://postgres:postgres@127.0.0.1:5432/skillstorm_test?schema=public
+      JWT_SECRET: temporary-progress-validation-secret
+      CI: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            server/package-lock.json
+            client/package-lock.json
+
+      - name: Install backend
+        working-directory: server
+        run: npm ci
+
+      - name: Generate Prisma client and apply migrations
+        working-directory: server
+        run: |
+          npx prisma generate
+          npx prisma migrate deploy
+
+      - name: Backend typecheck
+        working-directory: server
+        run: npm run typecheck
+
+      - name: Backend build
+        working-directory: server
+        run: npm run build -- --skip-nx-cache
+
+      - name: Install frontend
+        working-directory: client
+        run: npm ci
+
+      - name: Frontend typecheck
+        working-directory: client
+        run: npm run typecheck
+
+      - name: Frontend build
+        working-directory: client
+        run: npm run build
