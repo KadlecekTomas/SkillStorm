@@ -15,14 +15,16 @@ function isActive(pathname: string, route: string): boolean {
 
 /**
  * Mobilní spodní navigace (design reference: .bottomtabs) — zobrazuje se
- * pod 768 px místo nav railu. Obsah stránky musí mít odpovídající
- * padding-bottom (řeší MainLayout).
+ * pod 768 px místo nav railu. Administrativní sekce Lidé se záměrně
+ * necpou do už tak husté denní lišty; vedení ji otevře z Nastavení.
  */
 export const BottomTabs = (): React.JSX.Element => {
   const pathname = usePathname();
   const { user, activeRole } = useAuth();
   const effectiveRole = activeRole ?? user?.organizationRole ?? null;
-  const navItems = getDashboardNavItems(effectiveRole);
+  const navItems = getDashboardNavItems(effectiveRole).filter(
+    (item) => item.route !== "/app/people",
+  );
 
   return (
     <nav
