@@ -19,33 +19,104 @@ jobs:
           ref: fix/school-readiness-rbac-contracts
           fetch-depth: 0
 
-      - name: Make deterministic scenario wipe progress-aware
+      - name: Scope progress offline queue to active user and organization
         shell: bash
         run: |
           python - <<'PY'
           from pathlib import Path
 
-          path = Path('server/prisma/seed/scenarios-e2e.seed.ts')
+          path = Path('client/src/app/(school)/app/progress/page.tsx')
           text = path.read_text()
-          marker = '  await prisma.enrollment.deleteMany({ where: { orgId: { in: orgIds } } });'
-          patch = '''  await prisma.studentIntervention.deleteMany({\n    where: { organizationId: { in: orgIds } },\n  });\n  await prisma.attendanceRecord.deleteMany({\n    where: { organizationId: { in: orgIds } },\n  });\n  await prisma.studentProgressEntry.deleteMany({\n    where: { organizationId: { in: orgIds } },\n  });\n  await prisma.competency.deleteMany({\n    where: { organizationId: { in: orgIds } },\n  });\n'''
-          if patch.strip() not in text:
+
+          if 'import { useAuthStore } from "@/store/use-auth-store";' not in text:
+              marker = 'import { usePermissions } from "@/hooks/use-permissions";\n'
               if marker not in text:
-                  raise SystemExit('scenario wipe marker not found')
-              text = text.replace(marker, patch + marker, 1)
+                  raise SystemExit('permissions import marker not found')
+              text = text.replace(
+                  marker,
+                  marker + 'import { useAuthStore } from "@/store/use-auth-store";\n',
+                  1,
+              )
+
+          if 'buildProgressOfflineScope,' not in text:
+              marker = 'import {\n  cacheProgressContext,\n'
+              if marker not in text:
+                  raise SystemExit('progress offline import marker not found')
+              text = text.replace(
+                  marker,
+                  'import {\n  buildProgressOfflineScope,\n  cacheProgressContext,\n',
+                  1,
+              )
+
+          old_props = '''function TeacherWorkspace({\n  context,\n  onContextRefresh,\n  largeText,\n}: {\n  context: ProgressContext;\n  onContextRefresh: () => Promise<void>;\n  largeText: boolean;\n}) {'''
+          new_props = '''function TeacherWorkspace({\n  context,\n  onContextRefresh,\n  largeText,\n  offlineScope,\n}: {\n  context: ProgressContext;\n  onContextRefresh: () => Promise<void>;\n  largeText: boolean;\n  offlineScope: string;\n}) {'''
+          if old_props in text:
+              text = text.replace(old_props, new_props, 1)
+          elif 'offlineScope: string;' not in text:
+              raise SystemExit('TeacherWorkspace props marker not found')
+
+          text = text.replace(
+              'const queue = await listQueuedProgressEntries();',
+              'const queue = await listQueuedProgressEntries(offlineScope);',
+          )
+          text = text.replace(
+              'await removeQueuedProgressEntries(synced);',
+              'await removeQueuedProgressEntries(offlineScope, synced);',
+          )
+          text = text.replace(
+              'await queueProgressEntry(input);',
+              'await queueProgressEntry(offlineScope, input);',
+          )
+          text = text.replace(
+              '  }, []);\n\n  const flushQueue = useCallback',
+              '  }, [offlineScope]);\n\n  const flushQueue = useCallback',
+              1,
+          )
+          text = text.replace(
+              '  }, [loadStudent, refreshQueueCount]);',
+              '  }, [loadStudent, offlineScope, refreshQueueCount]);',
+              1,
+          )
+
+          progress_page_marker = '''export default function ProgressPage(): React.JSX.Element | null {\n  const router = useRouter();\n  const { hasRole } = usePermissions();'''
+          progress_page_replacement = '''export default function ProgressPage(): React.JSX.Element | null {\n  const router = useRouter();\n  const { hasRole } = usePermissions();\n  const authUserId = useAuthStore((state) => state.user?.id ?? null);\n  const activeOrgId = useAuthStore((state) => state.org?.id ?? null);\n  const offlineScope = useMemo(\n    () => buildProgressOfflineScope(authUserId, activeOrgId),\n    [activeOrgId, authUserId],\n  );'''
+          if progress_page_marker in text:
+              text = text.replace(progress_page_marker, progress_page_replacement, 1)
+          elif 'const offlineScope = useMemo(' not in text:
+              raise SystemExit('ProgressPage marker not found')
+
+          old_context = '''  const loadContext = useCallback(async () => {\n    try {\n      const fresh = await progressApi.context();\n      setContext(fresh);\n      setOffline(false);\n      await cacheProgressContext(fresh);\n    } catch {\n      const cached = await readCachedProgressContext();\n      if (cached) {\n        setContext(cached);\n        setOffline(true);\n      } else {\n        throw new Error("PROGRESS_CONTEXT_UNAVAILABLE");\n      }\n    }\n  }, []);'''
+          new_context = '''  const loadContext = useCallback(async () => {\n    if (!offlineScope) throw new Error("PROGRESS_OFFLINE_SCOPE_REQUIRED");\n    try {\n      const fresh = await progressApi.context();\n      setContext(fresh);\n      setOffline(false);\n      await cacheProgressContext(offlineScope, fresh);\n    } catch {\n      const cached = await readCachedProgressContext(offlineScope);\n      if (cached) {\n        setContext(cached);\n        setOffline(true);\n      } else {\n        throw new Error("PROGRESS_CONTEXT_UNAVAILABLE");\n      }\n    }\n  }, [offlineScope]);'''
+          if old_context in text:
+              text = text.replace(old_context, new_context, 1)
+          elif 'cacheProgressContext(offlineScope, fresh)' not in text:
+              raise SystemExit('loadContext marker not found')
+
+          old_render = '<TeacherWorkspace context={context} onContextRefresh={loadContext} largeText={largeText} />'
+          new_render = '<TeacherWorkspace context={context} onContextRefresh={loadContext} largeText={largeText} offlineScope={offlineScope} />'
+          if old_render in text:
+              text = text.replace(old_render, new_render, 1)
+          elif 'offlineScope={offlineScope}' not in text:
+              raise SystemExit('TeacherWorkspace render marker not found')
+
+          old_guard = '''  if (!isStaff) return null;\n  if (loading || !context) {'''
+          new_guard = '''  if (!isStaff) return null;\n  if (!offlineScope || loading || !context) {'''
+          if old_guard in text:
+              text = text.replace(old_guard, new_guard, 1)
+
           path.write_text(text)
           PY
 
-      - name: Commit seed hardening
+      - name: Commit scoped offline integration
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add server/prisma/seed/scenarios-e2e.seed.ts
+          git add client/src/app/'(school)'/app/progress/page.tsx
           if git diff --cached --quiet; then
-            echo "Scenario wipe already patched"
+            echo "Offline scope already integrated"
             exit 0
           fi
-          git commit -m "test(progress): clean progress rows during scenario reseed"
+          git commit -m "fix(progress): isolate offline data per school context"
           git pull --rebase origin fix/school-readiness-rbac-contracts
           git push origin HEAD:fix/school-readiness-rbac-contracts
