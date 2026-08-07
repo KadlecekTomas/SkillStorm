@@ -4,6 +4,7 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { PrismaService } from '@/prisma/prisma.service';
 import { MembershipsController } from './memberships.controller';
 import { MembershipsService } from './memberships.service';
+import { MembershipRolesService } from './membership-roles.service';
 
 describe('MembershipsController', () => {
   let controller: MembershipsController;
@@ -13,6 +14,7 @@ describe('MembershipsController', () => {
       controllers: [MembershipsController],
       providers: [
         MembershipsService,
+        { provide: MembershipRolesService, useValue: {} },
         { provide: PrismaService, useValue: {} },
         { provide: CACHE_MANAGER, useValue: {} },
       ],
