@@ -1,0 +1,164 @@
+name: Temporary guardian timeline hardening
+
+on:
+  push:
+    branches:
+      - fix/school-readiness-rbac-contracts
+    paths:
+      - '.github/workflows/temporary-guardian-timeline-hardening.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  harden:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/school-readiness-rbac-contracts
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Render guardian assessment timeline
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          hook = Path('client/src/hooks/use-guardian.ts')
+          h = hook.read_text()
+          old = '    attendanceRate: number | null;\n    competencyMap: StudentProgressDetail["competencyMap"];\n  } | null;'
+          new = '    attendanceRate: number | null;\n    competencyMap: StudentProgressDetail["competencyMap"];\n    timeline: StudentProgressDetail["timeline"];\n  } | null;'
+          if old in h:
+              h = h.replace(old, new, 1)
+          elif new not in h:
+              raise SystemExit('schoolProgress type marker not found')
+          old = '      attendanceRate: school.summary.attendanceRate,\n      competencyMap: school.competencyMap,\n    },'
+          new = '      attendanceRate: school.summary.attendanceRate,\n      competencyMap: school.competencyMap,\n      timeline: school.timeline,\n    },'
+          if old in h:
+              h = h.replace(old, new, 1)
+          elif new not in h:
+              raise SystemExit('schoolProgress mapping marker not found')
+          hook.write_text(h)
+
+          component = Path('client/src/components/guardian/guardian-school-progress.tsx')
+          c = component.read_text()
+          old = '''          {progress && progress.competencyMap.length > 0 && (
+            <div className="space-y-2">
+              <h3 className="text-sm font-extrabold text-ink">Co už se daří</h3>'''
+          new = '''          {progress && progress.competencyMap.length > 0 && (
+            <div className="space-y-2">
+              <h3 className="text-sm font-extrabold text-ink">Co už se daří</h3>'''
+          if old not in c and new not in c:
+              raise SystemExit('competency section marker not found')
+
+          insert_after = '''          {progress && progress.competencyMap.length > 0 && (
+            <div className="space-y-2">
+              <h3 className="text-sm font-extrabold text-ink">Co už se daří</h3>
+              {progress.competencyMap.slice(0, 6).map((item) => {
+                const denominator = Math.max(1, item.scaleMax - item.scaleMin);
+                const percent = Math.max(
+                  0,
+                  Math.min(100, ((item.level - item.scaleMin) / denominator) * 100),
+                );
+                return (
+                  <div key={item.id} className="rounded-xl border border-line p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-[15px] font-bold text-ink">{item.name}</p>
+                        {item.subjectName && (
+                          <p className="text-xs text-ink-muted">{item.subjectName}</p>
+                        )}
+                      </div>
+                      <span className="shrink-0 text-sm font-black text-accent-deep">
+                        {item.level}/{item.scaleMax}
+                      </span>
+                    </div>
+                    <div
+                      className="mt-2 h-2 overflow-hidden rounded-full bg-canvas-alt"
+                      role="progressbar"
+                      aria-valuemin={item.scaleMin}
+                      aria-valuemax={item.scaleMax}
+                      aria-valuenow={item.level}
+                      aria-label={`${item.name}: úroveň ${item.level} z ${item.scaleMax}`}
+                    >
+                      <div
+                        className="h-full rounded-full bg-accent"
+                        style={{ width: `${Math.max(4, percent)}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}'''
+          timeline_block = insert_after + '''
+
+          {progress &&
+            progress.timeline.filter((item) =>
+              item.kind === "GRADE" || item.kind === "COMPETENCY" || item.kind === "TEST",
+            ).length > 0 && (
+              <div className="space-y-2">
+                <h3 className="text-sm font-extrabold text-ink">Poslední hodnocení</h3>
+                <ul className="divide-y divide-line rounded-xl border border-line px-4">
+                  {progress.timeline
+                    .filter((item) =>
+                      item.kind === "GRADE" || item.kind === "COMPETENCY" || item.kind === "TEST",
+                    )
+                    .slice(0, 6)
+                    .map((item) => (
+                      <li key={item.id} className="space-y-1 py-3">
+                        <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+                          <p className="font-bold text-ink">{item.title}</p>
+                          <time className="shrink-0 text-xs text-ink-dim">
+                            {dateFormatter.format(new Date(item.occurredAt))}
+                          </time>
+                        </div>
+                        {item.detail && (
+                          <p className="break-words text-[15px] leading-relaxed text-ink-muted">
+                            {item.detail}
+                          </p>
+                        )}
+                        <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs font-semibold text-ink-dim">
+                          {item.subjectName && <span>{item.subjectName}</span>}
+                          {item.authorName && <span>{item.authorName}</span>}
+                        </div>
+                      </li>
+                    ))}
+                </ul>
+              </div>
+            )}'''
+          if 'Poslední hodnocení' not in c:
+              if insert_after not in c:
+                  raise SystemExit('full competency block marker not found')
+              c = c.replace(insert_after, timeline_block, 1)
+          component.write_text(c)
+
+          contract = Path('client/src/tests/guardian-progress-timeline-contract.spec.ts')
+          contract.write_text('''import { readFileSync } from "node:fs";\nimport { join } from "node:path";\nimport { describe, expect, it } from "vitest";\n\nconst ROOT = process.cwd().endsWith("/client") ? process.cwd() : join(process.cwd(), "client");\nconst read = (path: string) => readFileSync(join(ROOT, path), "utf8");\n\ndescribe("guardian progress timeline contract", () => {\n  it("carries the authoritative progress timeline into the parent overview", () => {\n    const hook = read("src/hooks/use-guardian.ts");\n    expect(hook).toContain('timeline: StudentProgressDetail["timeline"]');\n    expect(hook).toContain("timeline: school.timeline");\n  });\n\n  it("renders assessment details and teacher comments instead of dropping grade timeline entries", () => {\n    const component = read("src/components/guardian/guardian-school-progress.tsx");\n    expect(component).toContain("Poslední hodnocení");\n    expect(component).toContain('item.kind === "GRADE"');\n    expect(component).toContain("{item.detail}");\n    expect(component).toContain("{item.authorName}");\n  });\n});\n''')
+          PY
+
+      - name: Verify guardian timeline and frontend contracts
+        working-directory: client
+        run: |
+          npm ci
+          npx vitest run src/tests/guardian-progress-timeline-contract.spec.ts src/tests/family-resilience-contract.spec.ts src/tests/progress-responsive-contract.spec.ts src/tests/query-client-resilience.spec.tsx src/tests/ux-action-integrity.spec.ts
+          npm run typecheck
+          npm run build
+
+      - name: Commit verified timeline rendering
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add client/src/hooks/use-guardian.ts client/src/components/guardian/guardian-school-progress.tsx client/src/tests/guardian-progress-timeline-contract.spec.ts
+          if git diff --cached --quiet; then
+            echo "Guardian timeline hardening already applied"
+            exit 0
+          fi
+          git commit -m "fix(parent): render latest school assessment timeline"
+          git pull --rebase origin fix/school-readiness-rbac-contracts
+          git push origin HEAD:fix/school-readiness-rbac-contracts
