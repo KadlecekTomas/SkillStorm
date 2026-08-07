@@ -25,9 +25,9 @@ describe("progress release hardening contracts", () => {
     expect(source).toContain("disabled={busy || !selectedStudent || !online} onClick={() => void saveAttendance()}");
     expect(source).toContain("disabled={busy || !selectedStudent || !interventionTitle.trim() || !online} onClick={() => void saveIntervention()}");
     expect(source).toContain("Zadejte počet minut zpoždění jako celé číslo od 1 do 1440.");
-      expect(source).toContain("Docházka se ukládá přímo do školního systému");
-      expect(source).toContain("Podpůrná opatření vyžadují připojení k internetu");
-      expect(source).toContain("V této třídě zatím nejsou žádní aktivní žáci");
+    expect(source).toContain("Docházka se ukládá přímo do školního systému");
+    expect(source).toContain("Podpůrná opatření vyžadují připojení k internetu");
+    expect(source).toContain("V této třídě zatím nejsou žádní aktivní žáci");
   });
 
   it("renders leadership comparison as mobile cards and desktop table", () => {
@@ -40,5 +40,12 @@ describe("progress release hardening contracts", () => {
     const source = read("src/app/(school)/app/family/page.tsx");
     expect(source).toContain('className="h-11 w-full shrink-0 sm:w-auto"');
     expect(source).toContain('className="h-12 w-full sm:w-auto"');
+  });
+
+  it("keeps long dialogs inside the viewport and scrollable", () => {
+    const source = read("src/components/ui/dialog.tsx");
+    expect(source).toContain("max-h-[calc(100dvh-2rem)]");
+    expect(source).toContain("overflow-y-auto");
+    expect(source).toContain("overscroll-contain");
   });
 });
