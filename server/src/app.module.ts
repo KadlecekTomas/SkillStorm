@@ -55,6 +55,7 @@ import { TestingModule } from './testing/testing.module';
 import { TeacherAccessModule } from './teacher-access/teacher-access.module';
 import { ImportsModule } from './imports/imports.module';
 import { ProgressModule } from './progress/progress.module';
+import { resolveThrottleTracker } from './common/throttling/request-tracker';
 
 @Module({
   imports: [
@@ -81,6 +82,10 @@ import { ProgressModule } from './progress/progress.module';
       // Route-level @Throttle() overrides the default limits, so the test
       // toggle must disable the guard itself — otherwise e2e suites hit the
       // hard login/register limits (tests share one IP: no trust proxy).
+      // Normal authenticated traffic is tracked per session instead of per
+      // public IP so a school NAT cannot make unrelated users throttle each
+      // other. Login/register/reset routes stay IP-scoped.
+      getTracker: async (req) => resolveThrottleTracker(req),
       skipIf: () => process.env.DISABLE_THROTTLE === '1',
       throttlers: [
         {
