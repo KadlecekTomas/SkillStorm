@@ -1,7 +1,7 @@
 "use client";
 
 import { fetchWithAuth } from "@/lib/http/client";
-import { useQuery } from "@/lib/query-client";
+import { useQuery, type UseQueryResult } from "@/lib/query-client";
 
 /**
  * Guardian Etapa B — rodičovská data + školní párování.
@@ -56,7 +56,9 @@ export type GuardianBulkResult = {
   slips: GuardianSlip[];
 };
 
-export function useGuardianChildren(enabled: boolean) {
+export function useGuardianChildren(
+  enabled: boolean,
+): UseQueryResult<GuardianChildrenData> {
   return useQuery<GuardianChildrenData>({
     queryKey: ["guardian", "children"],
     queryFn: () => fetchWithAuth<GuardianChildrenData>("GET", "/guardian/children"),
@@ -64,7 +66,9 @@ export function useGuardianChildren(enabled: boolean) {
   });
 }
 
-export function useChildOverview(studentId: string | null) {
+export function useChildOverview(
+  studentId: string | null,
+): UseQueryResult<ChildOverview> {
   return useQuery<ChildOverview>({
     queryKey: ["guardian", "overview", studentId],
     queryFn: () =>
