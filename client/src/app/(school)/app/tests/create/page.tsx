@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { ErrorAlert, InfoAlert } from "@/components/ui/alert";
 import { fetchWithAuth } from "@/lib/http/client";
 import { useSubjects, subjectLabel } from "@/hooks/use-subjects";
+import { usePermissions } from "@/hooks/use-permissions";
 import { withGuard } from "@/lib/guard/withGuard";
 import { ALL_SCHOOL_GRADES, gradeLabel, type SchoolGradeValue } from "@/lib/grades";
 import { PermissionKey } from "@/types";
@@ -17,7 +18,9 @@ type CatalogTopicOption = { catalogTopicId: string; name: string };
 
 function CreateTestPage(): React.JSX.Element {
   const router = useRouter();
+  const { can } = usePermissions();
   const { subjects, loading: subjectsLoading } = useSubjects();
+  const canManageSubjects = can(PermissionKey.MANAGE_TEACHERS);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [subjectId, setSubjectId] = useState<string>("");
@@ -111,10 +114,21 @@ function CreateTestPage(): React.JSX.Element {
         <p className="mt-1 text-sm text-ink-muted">Zadej název a popis. Po vytvoření můžeš přidat otázky a přiřadit třídě.</p>
       </div>
       {noSubjects && (
-        <InfoAlert
-          title="Nejsou vytvořeny žádné předměty"
-          description="Nejdříve vytvořte předmět v nastavení organizace. Test musí být přiřazen k předmětu."
-        />
+        <div className="space-y-3">
+          <InfoAlert
+            title="Škola zatím nemá připravené předměty"
+            description={
+              canManageSubjects
+                ? "Nejdříve v nastavení školy zapněte nebo vytvořte alespoň jeden předmět."
+                : "Předměty musí nejdříve připravit ředitel nebo vlastník školy. Jakmile budou dostupné, test půjde vytvořit bez dalšího nastavení."
+            }
+          />
+          {canManageSubjects && (
+            <Button asChild variant="outline">
+              <Link href="/app/settings">Otevřít nastavení předmětů</Link>
+            </Button>
+          )}
+        </div>
       )}
       <Card className="p-7">
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -221,9 +235,9 @@ function CreateTestPage(): React.JSX.Element {
             <Button type="submit" disabled={loading || noSubjects}>
               {loading ? "Vytvářím…" : "Vytvořit test"}
             </Button>
-            <Link href="/app/tests">
-              <Button type="button" variant="secondary">Zrušit</Button>
-            </Link>
+            <Button asChild variant="secondary">
+              <Link href="/app/tests">Zrušit</Link>
+            </Button>
           </div>
         </form>
       </Card>
@@ -233,4 +247,5 @@ function CreateTestPage(): React.JSX.Element {
 
 export default withGuard({
   requirePerms: [PermissionKey.CREATE_TEST],
+  requireSchoolWorkspace: true,
 })(CreateTestPage);
