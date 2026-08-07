@@ -1,6 +1,5 @@
-import { ConflictException, ForbiddenException } from '@nestjs/common';
-import { EnrollmentStatus, OrganizationRole } from '@prisma/client';
-import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
+import { ForbiddenException } from '@nestjs/common';
+import { OrganizationRole } from '@prisma/client';
 import { StudentAdminService } from './student-admin.service';
 
 describe('StudentAdminService', () => {
