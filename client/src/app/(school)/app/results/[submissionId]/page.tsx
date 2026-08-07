@@ -11,11 +11,13 @@ import { Button } from "@/components/ui/button";
 import { withGuard } from "@/lib/guard/withGuard";
 import type { OrganizationRole } from "@/types";
 
+type SubmissionStatus = "PENDING" | "APPROVED" | "REJECTED";
+
 type SubmissionResult = {
   id: string;
   assignmentId: string | null;
   testId: string;
-  status: "PENDING" | "APPROVED" | "REJECTED";
+  status: SubmissionStatus;
   score: number | null;
   earnedPoints: number | null;
   maxPoints: number | null;
@@ -41,7 +43,13 @@ type TestDetail = {
   title: string;
 };
 
-function SubmissionResultPage() {
+const STATUS_LABELS: Record<SubmissionStatus, string> = {
+  PENDING: "Čeká na vyhodnocení",
+  APPROVED: "Schváleno",
+  REJECTED: "Neschváleno",
+};
+
+function SubmissionResultPage(): React.JSX.Element {
   const { submissionId } = useParams<{ submissionId: string }>();
   const router = useRouter();
   const [submission, setSubmission] = useState<SubmissionResult | null>(null);
@@ -104,10 +112,15 @@ function SubmissionResultPage() {
 
   const scoreLabel = useMemo(() => {
     if (!submission) return null;
-    if (submission.earnedPoints != null && submission.maxPoints != null && submission.maxPoints > 0) {
+    if (
+      submission.earnedPoints != null &&
+      submission.maxPoints != null &&
+      submission.maxPoints > 0
+    ) {
       const percentage =
         submission.percentage ??
-        Math.round((submission.earnedPoints / submission.maxPoints) * 10000) / 100;
+        Math.round((submission.earnedPoints / submission.maxPoints) * 10000) /
+          100;
       return `${submission.earnedPoints} / ${submission.maxPoints} (${Math.round(percentage)} %)`;
     }
     if (submission.score == null) return "Skóre zatím není k dispozici";
@@ -121,10 +134,13 @@ function SubmissionResultPage() {
   if (error || !submission) {
     return (
       <div className="space-y-4">
-        <ErrorAlert title="Chyba" description={error ?? "Výsledek nebyl nalezen."} />
-        <Link href="/app/assignments">
-          <Button variant="outline">Zpět na zadání</Button>
-        </Link>
+        <ErrorAlert
+          title="Chyba"
+          description={error ?? "Výsledek nebyl nalezen."}
+        />
+        <Button asChild variant="outline">
+          <Link href="/app/assignments">Zpět na zadání</Link>
+        </Button>
       </div>
     );
   }
@@ -132,18 +148,23 @@ function SubmissionResultPage() {
   return (
     <div className="space-y-6">
       <div>
-        <Link href="/app/assignments" className="text-sm text-slate-500 hover:text-slate-700">
+        <Link
+          href="/app/assignments"
+          className="text-sm text-slate-500 hover:text-slate-700"
+        >
           ← Zpět na zadání
         </Link>
         <h1 className="mt-2 text-2xl font-semibold">Výsledek pokusu</h1>
-        {testTitle && <p className="mt-1 text-lg font-medium text-slate-800">{testTitle}</p>}
+        {testTitle && (
+          <p className="mt-1 text-lg font-medium text-slate-800">{testTitle}</p>
+        )}
       </div>
 
       <Card className="space-y-4 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-sm text-slate-500">Stav</p>
-            <p className="font-semibold">{submission.status}</p>
+            <p className="font-semibold">{STATUS_LABELS[submission.status]}</p>
           </div>
           <div className="text-right">
             <p className="text-sm text-slate-500">Skóre</p>
@@ -152,7 +173,10 @@ function SubmissionResultPage() {
         </div>
         <p className="text-sm text-slate-500">Pokus č. {submission.attemptNo}</p>
         <p className="text-sm text-slate-500">
-          Odevzdáno: {submission.submittedAt ? new Date(submission.submittedAt).toLocaleString("cs-CZ") : "zatím ne"}
+          Odevzdáno:{" "}
+          {submission.submittedAt
+            ? new Date(submission.submittedAt).toLocaleString("cs-CZ")
+            : "zatím ne"}
         </p>
         {submission.provenance && (
           <p
@@ -176,12 +200,23 @@ function SubmissionResultPage() {
 
       <div className="space-y-3">
         {submission.responses.map((response, index) => (
-          <Card key={`${response.questionId}-${index}`} className="space-y-2 p-4">
-            <p className="text-sm font-medium text-slate-900">Odpověď {index + 1}</p>
-            <p className="text-sm text-slate-600 break-words">{response.givenText || "—"}</p>
+          <Card
+            key={`${response.questionId}-${index}`}
+            className="space-y-2 p-4"
+          >
+            <p className="text-sm font-medium text-slate-900">
+              Odpověď {index + 1}
+            </p>
+            <p className="break-words text-sm text-slate-600">
+              {response.givenText || "—"}
+            </p>
             <p className="text-sm text-slate-500">
               Vyhodnocení:{" "}
-              {response.isCorrect === true ? "správně" : response.isCorrect === false ? "špatně" : "čeká na vyhodnocení"}
+              {response.isCorrect === true
+                ? "správně"
+                : response.isCorrect === false
+                  ? "špatně"
+                  : "čeká na vyhodnocení"}
             </p>
           </Card>
         ))}
