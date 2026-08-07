@@ -17,6 +17,20 @@ function controllerFiles(dir: string): string[] {
   });
 }
 
+/**
+ * Remove comments while preserving character/newline positions. The policy is
+ * interested in decorators that are executable TypeScript, not documentation
+ * such as "removed @CacheTTL(0)". Preserving positions keeps line reporting
+ * accurate.
+ */
+function stripCommentsPreservingPositions(source: string): string {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, (comment) =>
+      comment.replace(/[^\n\r]/g, ' '),
+    )
+    .replace(/\/\/[^\n\r]*/g, (comment) => ' '.repeat(comment.length));
+}
+
 describe('HTTP cache policy — @CacheTTL(0)', () => {
   it('requires @NoHttpCache() on every controller handler that uses CacheTTL(0)', () => {
     const srcDir = join(process.cwd(), 'src');
@@ -24,22 +38,23 @@ describe('HTTP cache policy — @CacheTTL(0)', () => {
 
     for (const file of controllerFiles(srcDir)) {
       const source = readFileSync(file, 'utf8');
+      const code = stripCommentsPreservingPositions(source);
       const marker = '@CacheTTL(0)';
-      let index = source.indexOf(marker);
+      let index = code.indexOf(marker);
 
       while (index !== -1) {
         // Decorators for one handler are adjacent. A small symmetric window
         // supports either decorator order without accidentally accepting a
         // distant class-level declaration.
-        const window = source.slice(
+        const window = code.slice(
           Math.max(0, index - 280),
-          Math.min(source.length, index + marker.length + 280),
+          Math.min(code.length, index + marker.length + 280),
         );
         if (!window.includes('@NoHttpCache()')) {
           const line = source.slice(0, index).split('\n').length;
           offenders.push(`${relative(process.cwd(), file)}:${line}`);
         }
-        index = source.indexOf(marker, index + marker.length);
+        index = code.indexOf(marker, index + marker.length);
       }
     }
 
