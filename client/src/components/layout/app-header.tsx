@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { Bell, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { getDashboardNavItems } from "@/config/dashboard-navigation";
 import { PermissionGate } from "@/components/access/permission-gate";
@@ -31,16 +31,6 @@ export const AppHeader = (): React.JSX.Element => {
         {activeItem?.label ?? "Přehled"}
       </h1>
       <div className="flex items-center gap-2">
-        <Button
-          variant="outline"
-          size="icon"
-          className="rounded-lg h-8 w-8"
-          disabled
-          title="Notifikace zatím nejsou aktivní"
-          aria-label="Notifikace zatím nejsou aktivní"
-        >
-          <Bell className="h-4 w-4" />
-        </Button>
         <PermissionGate permission={PermissionKey.CREATE_TEST} fallback={null}>
           <Button className="rounded-lg h-8" asChild>
             <Link href="/app/tests/create">
