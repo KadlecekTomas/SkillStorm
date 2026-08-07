@@ -1,0 +1,88 @@
+name: Temporary create-test UX polish
+
+on:
+  push:
+    branches: [fix/school-readiness-rbac-contracts]
+    paths: [.github/workflows/ux-create-test-polish.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/school-readiness-rbac-contracts
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - name: Apply exact create-test UX fixes
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("client/src/app/(school)/app/tests/create/page.tsx")
+          text = path.read_text()
+
+          def replace_once(old: str, new: str) -> None:
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"expected one match, got {count}: {old[:120]!r}")
+              text = text.replace(old, new, 1)
+
+          replace_once(
+              'import { useSubjects, subjectLabel } from "@/hooks/use-subjects";',
+              'import { useSubjects, subjectLabel } from "@/hooks/use-subjects";\nimport { usePermissions } from "@/hooks/use-permissions";',
+          )
+          replace_once(
+              '''  const router = useRouter();\n  const { subjects, loading: subjectsLoading } = useSubjects();''',
+              '''  const router = useRouter();\n  const { can } = usePermissions();\n  const { subjects, loading: subjectsLoading } = useSubjects();\n  const canManageSubjects = can(PermissionKey.MANAGE_TEACHERS);''',
+          )
+          replace_once(
+              '''      {noSubjects && (\n        <InfoAlert\n          title="Nejsou vytvořeny žádné předměty"\n          description="Nejdříve vytvořte předmět v nastavení organizace. Test musí být přiřazen k předmětu."\n        />\n      )}''',
+              '''      {noSubjects && (\n        <div className="space-y-3">\n          <InfoAlert\n            title="Škola zatím nemá připravené předměty"\n            description={\n              canManageSubjects\n                ? "Nejdříve v nastavení školy zapněte nebo vytvořte alespoň jeden předmět."\n                : "Předměty musí nejdříve připravit ředitel nebo vlastník školy. Jakmile budou dostupné, test půjde vytvořit bez dalšího nastavení."\n            }\n          />\n          {canManageSubjects && (\n            <Button asChild variant="outline">\n              <Link href="/app/settings">Otevřít nastavení předmětů</Link>\n            </Button>\n          )}\n        </div>\n      )}''',
+          )
+          replace_once(
+              '''            <Link href="/app/tests">\n              <Button type="button" variant="secondary">Zrušit</Button>\n            </Link>''',
+              '''            <Button asChild variant="secondary">\n              <Link href="/app/tests">Zrušit</Link>\n            </Button>''',
+          )
+          replace_once(
+              '''export default withGuard({\n  requirePerms: [PermissionKey.CREATE_TEST],\n})(CreateTestPage);''',
+              '''export default withGuard({\n  requirePerms: [PermissionKey.CREATE_TEST],\n  requireSchoolWorkspace: true,\n})(CreateTestPage);''',
+          )
+
+          path.write_text(text)
+          PY
+
+      - name: Install frontend dependencies
+        working-directory: client
+        run: npm ci
+
+      - name: Lint frontend
+        working-directory: client
+        run: npm run lint
+
+      - name: Typecheck frontend
+        working-directory: client
+        run: npm run typecheck
+
+      - name: Commit verified fix and remove helper
+        shell: bash
+        run: |
+          rm .github/workflows/ux-create-test-polish.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add client/src/app/\(school\)/app/tests/create/page.tsx \
+                  .github/workflows/ux-create-test-polish.yml
+          git commit -m "fix(ux): make test creation empty state role aware"
+          git push origin HEAD:fix/school-readiness-rbac-contracts
