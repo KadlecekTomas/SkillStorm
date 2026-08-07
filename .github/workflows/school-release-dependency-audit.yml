@@ -1,0 +1,86 @@
+name: School release dependency audit
+
+on:
+  push:
+    branches:
+      - audit/school-release-dependencies
+
+permissions:
+  contents: read
+
+jobs:
+  production-dependencies:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            server/package-lock.json
+            client/package-lock.json
+
+      - name: Audit backend runtime dependencies
+        shell: bash
+        run: |
+          set +e
+          cd server
+          npm audit --omit=dev --json > /tmp/server-audit.json
+          audit_exit=$?
+          set -e
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const report = JSON.parse(fs.readFileSync('/tmp/server-audit.json', 'utf8'));
+          const entries = Object.entries(report.vulnerabilities ?? {})
+            .filter(([, value]) => ['high', 'critical'].includes(value.severity))
+            .map(([name, value]) => ({
+              name,
+              severity: value.severity,
+              isDirect: value.isDirect,
+              range: value.range,
+              via: (value.via ?? []).map((item) =>
+                typeof item === 'string'
+                  ? item
+                  : { source: item.source, name: item.name, title: item.title, url: item.url, range: item.range },
+              ),
+              fixAvailable: value.fixAvailable,
+            }));
+          console.log('SERVER_RUNTIME_AUDIT_SUMMARY');
+          console.log(JSON.stringify(report.metadata?.vulnerabilities ?? {}, null, 2));
+          console.log('SERVER_RUNTIME_HIGH_CRITICAL');
+          console.log(JSON.stringify(entries, null, 2));
+          NODE
+          echo "npm_audit_exit=${audit_exit}"
+
+      - name: Audit frontend runtime dependencies
+        shell: bash
+        run: |
+          set +e
+          cd client
+          npm audit --omit=dev --json > /tmp/client-audit.json
+          audit_exit=$?
+          set -e
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const report = JSON.parse(fs.readFileSync('/tmp/client-audit.json', 'utf8'));
+          const entries = Object.entries(report.vulnerabilities ?? {})
+            .filter(([, value]) => ['high', 'critical'].includes(value.severity))
+            .map(([name, value]) => ({
+              name,
+              severity: value.severity,
+              isDirect: value.isDirect,
+              range: value.range,
+              via: (value.via ?? []).map((item) =>
+                typeof item === 'string'
+                  ? item
+                  : { source: item.source, name: item.name, title: item.title, url: item.url, range: item.range },
+              ),
+              fixAvailable: value.fixAvailable,
+            }));
+          console.log('CLIENT_RUNTIME_AUDIT_SUMMARY');
+          console.log(JSON.stringify(report.metadata?.vulnerabilities ?? {}, null, 2));
+          console.log('CLIENT_RUNTIME_HIGH_CRITICAL');
+          console.log(JSON.stringify(entries, null, 2));
+          NODE
+          echo "npm_audit_exit=${audit_exit}"
