@@ -30,6 +30,7 @@ import { MaterializeSubjectDto } from './dto/materialize-subject.dto';
 import { MaterializeTopicDto } from './dto/materialize-topic.dto';
 import { MaterializeTopicsBulkDto } from './dto/materialize-topics-bulk.dto';
 import { CatalogService } from './catalog.service';
+import { NoHttpCache } from '@/common/cache/no-http-cache.decorator';
 import {
   OrgOperation,
   OrgOperationType,
@@ -45,9 +46,10 @@ export class CatalogController {
   // ---------- READ (teacher/director/superadmin) ----------
   @Get('subjects')
   @Permission(PermissionKey.MANAGE_TEACHERS)
-  @CacheTTL(0) // vypnout HTTP response cache – používáme verzovanou cache v service
+  @NoHttpCache()
+  @CacheTTL(0)
   @ApiOperation({
-    summary: 'CatalogSubject list (search + pagination, cached)',
+    summary: 'CatalogSubject list (search + pagination, cached in service)',
   })
   @ApiQuery({ name: 'search', required: false, type: String })
   @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
@@ -58,16 +60,18 @@ export class CatalogController {
 
   @Get('subjects/:id')
   @Permission(PermissionKey.MANAGE_TEACHERS)
+  @NoHttpCache()
   @CacheTTL(0)
-  @ApiOperation({ summary: 'CatalogSubject detail (cached)' })
+  @ApiOperation({ summary: 'CatalogSubject detail (cached in service)' })
   getSubject(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.getSubject(id);
   }
 
   @Get('subjects/:id/topics')
   @Permission(PermissionKey.MANAGE_TEACHERS)
+  @NoHttpCache()
   @CacheTTL(0)
-  @ApiOperation({ summary: 'CatalogTopic list by CatalogSubject (cached)' })
+  @ApiOperation({ summary: 'CatalogTopic list by CatalogSubject (cached in service)' })
   @ApiQuery({ name: 'search', required: false, type: String })
   @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
   @ApiQuery({ name: 'limit', required: false, type: Number, example: 50 })
@@ -80,8 +84,9 @@ export class CatalogController {
 
   @Get('topics/:id')
   @Permission(PermissionKey.MANAGE_TEACHERS)
+  @NoHttpCache()
   @CacheTTL(0)
-  @ApiOperation({ summary: 'CatalogTopic detail (cached)' })
+  @ApiOperation({ summary: 'CatalogTopic detail (cached in service)' })
   getTopic(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.service.getTopic(id);
   }
