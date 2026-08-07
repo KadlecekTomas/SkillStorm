@@ -251,4 +251,54 @@ test.describe('school progress — simplified ZŠ workflow', () => {
       'idempotent offline mutation must exist exactly once',
     ).toHaveLength(1);
   });
+
+  test('teacher, parent and leadership progress surfaces fit phone, tablet and desktop without page overflow', async ({
+    asRole,
+  }) => {
+    const assertNoPageOverflow = async (page: import('@playwright/test').Page) => {
+      await expect.poll(async () =>
+        page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1),
+      ).toBe(true);
+    };
+
+    const { page: teacherPage } = await asRole('teacher');
+    for (const viewport of [
+      { width: 360, height: 800 },
+      { width: 768, height: 1024 },
+      { width: 1440, height: 900 },
+    ]) {
+      await teacherPage.setViewportSize(viewport);
+      await teacherPage.goto('/app/progress', { waitUntil: 'commit' });
+      await expect(teacherPage.getByRole('heading', { name: 'Zapsat pokrok žáka' })).toBeVisible();
+      await expect(teacherPage.getByRole('button', { name: 'Uložit hodnocení' })).toBeVisible();
+      await assertNoPageOverflow(teacherPage);
+      const box = await teacherPage.getByRole('button', { name: 'Uložit hodnocení' }).boundingBox();
+      expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
+    }
+
+    const { page: parentPage } = await asRole('parent');
+    for (const viewport of [
+      { width: 360, height: 800 },
+      { width: 768, height: 1024 },
+    ]) {
+      await parentPage.setViewportSize(viewport);
+      await parentPage.goto('/app/family', { waitUntil: 'commit' });
+      await expect(parentPage.getByText('Přehled ze školy')).toBeVisible();
+      await assertNoPageOverflow(parentPage);
+    }
+
+    const { page: directorPage } = await asRole('director');
+    for (const viewport of [
+      { width: 360, height: 800 },
+      { width: 768, height: 1024 },
+      { width: 1440, height: 900 },
+    ]) {
+      await directorPage.setViewportSize(viewport);
+      await directorPage.goto('/app/progress', { waitUntil: 'commit' });
+      await expect(directorPage.getByRole('heading', { name: 'Pokrok školy' })).toBeVisible();
+      await expect(directorPage.getByText('Srovnání tříd')).toBeVisible();
+      await assertNoPageOverflow(directorPage);
+    }
+  });
+
 });

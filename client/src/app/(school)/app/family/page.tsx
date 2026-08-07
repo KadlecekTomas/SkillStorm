@@ -81,7 +81,7 @@ function initials(name: string): string {
 function DisputeThanksScreen({ onDone }: { onDone: () => void }) {
   return (
     <Card className="mx-auto max-w-md">
-      <CardContent className="space-y-4 p-8 text-center">
+      <CardContent className="space-y-4 p-6 text-center sm:p-8">
         <p className="text-4xl">🙏</p>
         <h1 className="text-xl font-extrabold text-ink">Děkujeme za upozornění</h1>
         <p className="text-[15px] leading-relaxed text-ink-muted">
@@ -118,7 +118,7 @@ function ConfirmChildScreen({
 
   return (
     <Card className="mx-auto max-w-md">
-      <CardContent className="space-y-6 p-8 text-center">
+      <CardContent className="space-y-6 p-6 text-center sm:p-8">
         <Avatar className="mx-auto h-16 w-16">
           <AvatarFallback className="text-lg font-bold">
             {initials(child.name)}
@@ -261,16 +261,16 @@ function LaunchActivity({
         Budu u toho pomáhat (učitel to uvidí)
       </label>
       {error && <p className="text-sm font-semibold text-danger">{error}</p>}
-      <div className="flex flex-wrap gap-2">
+      <div className="grid gap-2 sm:flex sm:flex-wrap">
         <Button
           size="lg"
-          className="h-12"
+          className="h-12 w-full sm:w-auto"
           disabled={busy || (needsPin && pin.length < 4)}
           onClick={() => void start()}
         >
           {busy ? "Spouštím…" : `Předat zařízení a spustit`}
         </Button>
-        <Button variant="ghost" size="lg" className="h-12" onClick={onClose} disabled={busy}>
+        <Button variant="ghost" size="lg" className="h-12 w-full sm:w-auto" onClick={onClose} disabled={busy}>
           Zpět
         </Button>
       </div>
@@ -356,7 +356,7 @@ function FamilyOverview({ child }: { child: GuardianChild }) {
             <ul className="divide-y divide-line">
               {data.todo.map((item) => (
                 <li key={item.assignmentId} className="space-y-3 py-3">
-                  <div className="flex items-center justify-between gap-3">
+                  <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="min-w-0">
                       <p className="truncate text-[15px] font-bold text-ink">{item.title}</p>
                       <p className="text-sm text-ink-muted">
@@ -367,7 +367,7 @@ function FamilyOverview({ child }: { child: GuardianChild }) {
                     {item.guardianLaunchPolicy !== "DISABLED" && (
                       <Button
                         variant="outline"
-                        className="h-11 shrink-0"
+                        className="h-11 w-full shrink-0 sm:w-auto"
                         onClick={() =>
                           setLaunching((cur) =>
                             cur === item.assignmentId ? null : item.assignmentId,

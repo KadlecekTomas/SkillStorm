@@ -76,6 +76,23 @@ const dateTime = new Intl.DateTimeFormat("cs-CZ", {
 const isBrowserOnline = (): boolean =>
   typeof navigator === "undefined" ? true : navigator.onLine;
 
+function useOnlineStatus(): boolean {
+  const [online, setOnline] = useState(isBrowserOnline);
+
+  useEffect(() => {
+    const sync = () => setOnline(navigator.onLine);
+    window.addEventListener("online", sync);
+    window.addEventListener("offline", sync);
+    sync();
+    return () => {
+      window.removeEventListener("online", sync);
+      window.removeEventListener("offline", sync);
+    };
+  }, []);
+
+  return online;
+}
+
 function MetricCard({
   label,
   value,
@@ -111,6 +128,7 @@ function TeacherWorkspace({
   largeText: boolean;
   offlineScope: string;
 }) {
+  const online = useOnlineStatus();
   const [mode, setMode] = useState<WorkspaceMode>("ASSESSMENT");
   const [classId, setClassId] = useState(context.classes[0]?.id ?? "");
   const selectedClass = useMemo(
@@ -153,8 +171,14 @@ function TeacherWorkspace({
     }
   }, [competencies, competencyId]);
 
+  useEffect(() => {
+    if (!context.subjects.some((item) => item.id === subjectId)) {
+      setSubjectId(context.subjects[0]?.id ?? "");
+    }
+  }, [context.subjects, subjectId]);
+
   const loadStudent = useCallback(async () => {
-    if (!studentId || !isBrowserOnline()) {
+    if (!studentId || !online) {
       setStudentDetail(null);
       return;
     }
@@ -166,7 +190,7 @@ function TeacherWorkspace({
     } finally {
       setDetailBusy(false);
     }
-  }, [studentId]);
+  }, [online, studentId]);
 
   useEffect(() => {
     void loadStudent();
@@ -178,7 +202,7 @@ function TeacherWorkspace({
   }, [offlineScope]);
 
   const flushQueue = useCallback(async () => {
-    if (!isBrowserOnline()) return;
+    if (!online) return;
     const queue = await listQueuedProgressEntries(offlineScope);
     if (!queue.length) {
       setQueuedCount(0);
@@ -198,13 +222,11 @@ function TeacherWorkspace({
     } catch {
       // Fronta zůstává lokálně. Další pokus proběhne po novém online eventu.
     }
-  }, [loadStudent, offlineScope, refreshQueueCount]);
+  }, [loadStudent, offlineScope, online, refreshQueueCount]);
 
   useEffect(() => {
     void refreshQueueCount();
     void flushQueue();
-    window.addEventListener("online", flushQueue);
-    return () => window.removeEventListener("online", flushQueue);
   }, [flushQueue, refreshQueueCount]);
 
   const resetAssessment = () => {
@@ -237,7 +259,7 @@ function TeacherWorkspace({
     setError(null);
     setMessage(null);
     try {
-      if (!isBrowserOnline()) {
+      if (!online) {
         await queueProgressEntry(offlineScope, input);
         setMessage("Uloženo do tohoto zařízení. Po připojení se záznam automaticky odešle.");
         resetAssessment();
@@ -249,7 +271,7 @@ function TeacherWorkspace({
       resetAssessment();
       await loadStudent();
     } catch {
-      if (!isBrowserOnline()) {
+      if (!online) {
         await queueProgressEntry(offlineScope, input);
         setMessage("Připojení vypadlo. Záznam je bezpečně ve frontě k odeslání.");
         resetAssessment();
@@ -263,7 +285,17 @@ function TeacherWorkspace({
   };
 
   const saveAttendance = async () => {
-    if (!selectedStudent) return;
+    if (!selectedStudent) {
+      setError("Nejdříve vyberte žáka.");
+      return;
+    }
+    if (attendanceStatus === "LATE" && minutesLate) {
+      const parsedMinutes = Number(minutesLate);
+      if (!Number.isInteger(parsedMinutes) || parsedMinutes < 1 || parsedMinutes > 1440) {
+        setError("Zadejte počet minut zpoždění jako celé číslo od 1 do 1440.");
+        return;
+      }
+    }
     setBusy(true);
     setError(null);
     setMessage(null);
@@ -283,7 +315,7 @@ function TeacherWorkspace({
       await loadStudent();
     } catch {
       setError(
-        isBrowserOnline()
+        online
           ? "Docházku se nepodařilo uložit. Zkuste to znovu."
           : "Docházku lze v této verzi uložit po připojení k internetu.",
       );
@@ -313,7 +345,7 @@ function TeacherWorkspace({
       await loadStudent();
     } catch {
       setError(
-        isBrowserOnline()
+        online
           ? "Podpůrné opatření se nepodařilo uložit."
           : "Podpůrné opatření lze v této verzi uložit po připojení k internetu.",
       );
@@ -561,7 +593,10 @@ function TeacherWorkspace({
                   <span className="font-extrabold text-ink">Kolik minut?</span>
                   <Input
                     type="number"
-                    min={0}
+                    min={1}
+                    max={1440}
+                    step={1}
+                    inputMode="numeric"
                     value={minutesLate}
                     onChange={(event) => setMinutesLate(event.target.value)}
                     className="h-14 text-lg"
@@ -576,7 +611,7 @@ function TeacherWorkspace({
                   className="min-h-[110px] text-base"
                 />
               </label>
-              <Button size="lg" className="h-16 w-full text-lg font-black sm:max-w-md" disabled={busy} onClick={() => void saveAttendance()}>
+              <Button size="lg" className="h-16 w-full text-lg font-black sm:max-w-md" disabled={busy || !selectedStudent} onClick={() => void saveAttendance()}>
                 <Check className="mr-2 h-5 w-5" /> Uložit docházku
               </Button>
             </div>
@@ -605,7 +640,7 @@ function TeacherWorkspace({
                   className="min-h-[140px] text-base"
                 />
               </label>
-              <Button size="lg" className="h-16 w-full text-lg font-black sm:max-w-md" disabled={busy} onClick={() => void saveIntervention()}>
+              <Button size="lg" className="h-16 w-full text-lg font-black sm:max-w-md" disabled={busy || !selectedStudent || !interventionTitle.trim()} onClick={() => void saveIntervention()}>
                 <HeartHandshake className="mr-2 h-5 w-5" /> Uložit podporu žáka
               </Button>
             </div>
@@ -631,13 +666,13 @@ function TeacherWorkspace({
               <p className="text-sm font-bold text-ink-muted">Rychlá kontrola</p>
               <CardTitle className="mt-1">{selectedStudent?.name ?? "Žák"}</CardTitle>
             </div>
-            <Button variant="outline" onClick={() => void loadStudent()} disabled={detailBusy || !isBrowserOnline()}>
+            <Button variant="outline" onClick={() => void loadStudent()} disabled={detailBusy || !online}>
               <RefreshCw className={cn("mr-2 h-4 w-4", detailBusy && "animate-spin")} /> Aktualizovat
             </Button>
           </div>
         </CardHeader>
         <CardContent>
-          {!isBrowserOnline() ? (
+          {!online ? (
             <p className="text-ink-muted">Detail se načte po připojení. Nové hodnocení můžete dál zapisovat offline.</p>
           ) : detailBusy ? (
             <div className="flex justify-center py-8"><LoadingSpinner /></div>
@@ -746,7 +781,7 @@ function LeadershipDashboard({
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <MetricCard label="Žáků" value={String(dashboard.summary.studentCount)} hint="v aktuálním školním roce" />
         <MetricCard label="Průměrná známka" value={dashboard.summary.averageGrade?.toFixed(2) ?? "—"} hint="z ručních hodnocení" />
         <MetricCard label="Kompetence" value={dashboard.summary.averageCompetency?.toFixed(2) ?? "—"} hint="průměrná úroveň" />
@@ -761,18 +796,36 @@ function LeadershipDashboard({
               <p className="text-sm font-bold text-ink-muted">Od celku k detailu</p>
               <CardTitle className="mt-1">Srovnání tříd</CardTitle>
             </div>
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={() => downloadProgressDashboardPdf({ dashboard, academicYear: context.academicYear.label })}>
+            <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+              <Button className="w-full sm:w-auto" variant="outline" onClick={() => downloadProgressDashboardPdf({ dashboard, academicYear: context.academicYear.label })}>
                 <Download className="mr-2 h-4 w-4" /> Stáhnout PDF
               </Button>
-              <Button variant="ghost" onClick={() => void onDashboardRefresh()}>
+              <Button className="w-full sm:w-auto" variant="ghost" onClick={() => void onDashboardRefresh()}>
                 <RefreshCw className="mr-2 h-4 w-4" /> Obnovit
               </Button>
             </div>
           </div>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto rounded-xl border border-line">
+          <div className="grid gap-3 md:hidden" aria-label="Srovnání tříd">
+            {dashboard.classes.map((item) => (
+              <article key={item.classSectionId} className="rounded-xl border border-line bg-canvas p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-lg font-black text-ink">{item.classLabel}</h3>
+                  <span className="rounded-full bg-canvas-alt px-3 py-1 text-sm font-bold text-ink-muted">
+                    {item.studentCount} žáků
+                  </span>
+                </div>
+                <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+                  <div><dt className="font-bold text-ink-muted">Známka</dt><dd className="mt-1 text-base font-black text-ink">{item.averageGrade?.toFixed(2) ?? "—"}</dd></div>
+                  <div><dt className="font-bold text-ink-muted">Kompetence</dt><dd className="mt-1 text-base font-black text-ink">{item.averageCompetency?.toFixed(2) ?? "—"}</dd></div>
+                  <div><dt className="font-bold text-ink-muted">Docházka</dt><dd className="mt-1 text-base font-black text-ink">{item.attendanceRate !== null ? `${item.attendanceRate} %` : "—"}</dd></div>
+                  <div><dt className="font-bold text-ink-muted">Podpora</dt><dd className="mt-1 text-base font-black text-ink">{item.openInterventions}</dd></div>
+                </dl>
+              </article>
+            ))}
+          </div>
+          <div className="hidden overflow-x-auto rounded-xl border border-line md:block">
             <table className="min-w-full text-left text-sm">
               <thead className="bg-canvas-alt text-ink-muted">
                 <tr>
@@ -807,7 +860,7 @@ function LeadershipDashboard({
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-ink-muted">Kompetence se používají v jednoduchém učitelském zápisu. Standardní škála je 1–4.</p>
-          <div className="grid gap-3 md:grid-cols-[220px_minmax(0,1fr)_minmax(0,1.4fr)_auto]">
+          <div className="grid gap-3 lg:grid-cols-[220px_minmax(0,1fr)_minmax(0,1.4fr)_auto]">
             <Select value={subjectId} onValueChange={setSubjectId}>
               <SelectTrigger className="h-12"><SelectValue placeholder="Předmět" /></SelectTrigger>
               <SelectContent>
@@ -839,6 +892,7 @@ function LeadershipDashboard({
 export default function ProgressPage(): React.JSX.Element | null {
   const router = useRouter();
   const { hasRole } = usePermissions();
+  const online = useOnlineStatus();
   const authUserId = useAuthStore((state) => state.user?.id ?? null);
   const activeOrgId = useAuthStore((state) => state.org?.id ?? null);
   const offlineScope = useMemo(
@@ -850,7 +904,9 @@ export default function ProgressPage(): React.JSX.Element | null {
   const isStaff = isTeacher || isLeadership;
   const [context, setContext] = useState<ProgressContext | null>(null);
   const [dashboard, setDashboard] = useState<ProgressDashboard | null>(null);
+  const [dashboardError, setDashboardError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [offline, setOffline] = useState(false);
   const [largeText, setLargeText] = useState(false);
   const [highContrast, setHighContrast] = useState(false);
@@ -881,31 +937,56 @@ export default function ProgressPage(): React.JSX.Element | null {
   }, [offlineScope]);
 
   const loadDashboard = useCallback(async () => {
-    if (!isLeadership || !isBrowserOnline()) return;
+    if (!isLeadership) return;
+    if (!online) {
+      setDashboardError(null);
+      return;
+    }
     try {
       setDashboard(await progressApi.dashboard());
+      setDashboardError(null);
     } catch {
       setDashboard(null);
+      setDashboardError("Přehled školy se nepodařilo načíst. Zkuste obnovení.");
     }
-  }, [isLeadership]);
+  }, [isLeadership, online]);
+
+  const loadPageData = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      await Promise.all([loadContext(), loadDashboard()]);
+    } catch {
+      setLoadError("Pokrok se nepodařilo načíst ani z bezpečně uložených offline dat.");
+    } finally {
+      setLoading(false);
+    }
+  }, [loadContext, loadDashboard]);
 
   useEffect(() => {
-    if (!isStaff) return;
-    let active = true;
-    setLoading(true);
-    Promise.all([loadContext(), loadDashboard()])
-      .catch(() => undefined)
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [isStaff, loadContext, loadDashboard]);
+    if (!isStaff || !offlineScope) return;
+    void loadPageData();
+  }, [isStaff, loadPageData, offlineScope]);
 
   if (!isStaff) return null;
-  if (!offlineScope || loading || !context) {
+  if (!offlineScope || loading) {
     return <div className="flex justify-center py-24"><LoadingSpinner /></div>;
+  }
+  if (!context) {
+    return (
+      <Card className="mx-auto max-w-xl">
+        <CardContent className="space-y-4 p-6 text-center sm:p-8">
+          <AlertTriangle className="mx-auto h-10 w-10 text-warning-strong" />
+          <h1 className="text-2xl font-black text-ink">Pokrok teď nejde načíst</h1>
+          <p className="text-ink-muted">
+            {loadError ?? "Zkontrolujte připojení a zkuste to znovu."}
+          </p>
+          <Button size="lg" className="min-h-[52px] w-full sm:w-auto" onClick={() => void loadPageData()}>
+            <RefreshCw className="mr-2 h-5 w-5" /> Zkusit znovu
+          </Button>
+        </CardContent>
+      </Card>
+    );
   }
 
   return (
@@ -932,27 +1013,27 @@ export default function ProgressPage(): React.JSX.Element | null {
           </p>
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="flex w-full flex-wrap gap-2 sm:w-auto">
           {isLeadership && (
-            <div className="flex rounded-xl border border-line bg-canvas-alt p-1">
-              <Button variant={leadershipView === "DASHBOARD" ? "default" : "ghost"} onClick={() => setLeadershipView("DASHBOARD")}>
+            <div className="grid w-full grid-cols-2 rounded-xl border border-line bg-canvas-alt p-1 sm:w-auto">
+              <Button className="min-h-[48px] min-w-0 px-3 sm:px-4" variant={leadershipView === "DASHBOARD" ? "default" : "ghost"} onClick={() => setLeadershipView("DASHBOARD")}>
                 <School className="mr-2 h-4 w-4" /> Přehled
               </Button>
-              <Button variant={leadershipView === "WRITE" ? "default" : "ghost"} onClick={() => setLeadershipView("WRITE")}>
+              <Button className="min-h-[48px] min-w-0 px-3 sm:px-4" variant={leadershipView === "WRITE" ? "default" : "ghost"} onClick={() => setLeadershipView("WRITE")}>
                 <UserRound className="mr-2 h-4 w-4" /> Zapsat hodnocení
               </Button>
             </div>
           )}
-          <Button variant={largeText ? "default" : "outline"} onClick={() => setLargeText((value) => !value)} aria-pressed={largeText}>
+          <Button className="min-h-[48px] flex-1 sm:flex-none" variant={largeText ? "default" : "outline"} onClick={() => setLargeText((value) => !value)} aria-pressed={largeText}>
             A+ Velké písmo
           </Button>
-          <Button variant={highContrast ? "default" : "outline"} onClick={() => setHighContrast((value) => !value)} aria-pressed={highContrast}>
+          <Button className="min-h-[48px] flex-1 sm:flex-none" variant={highContrast ? "default" : "outline"} onClick={() => setHighContrast((value) => !value)} aria-pressed={highContrast}>
             Kontrast
           </Button>
         </div>
       </header>
 
-      {offline && (
+      {(offline || !online) && (
         <div className="flex items-start gap-3 rounded-xl border border-warning/40 bg-warning-soft p-4 font-semibold text-ink">
           <CloudOff className="mt-0.5 h-5 w-5 shrink-0" />
           Pracujete s posledním uloženým seznamem tříd a žáků. Hodnocení se uloží do zařízení a odešle po obnovení připojení.
@@ -963,7 +1044,20 @@ export default function ProgressPage(): React.JSX.Element | null {
         dashboard ? (
           <LeadershipDashboard dashboard={dashboard} context={context} onDashboardRefresh={loadDashboard} onContextRefresh={loadContext} />
         ) : (
-          <Card><CardContent className="p-8 text-center text-ink-muted">Dashboard se načte po připojení k internetu.</CardContent></Card>
+          <Card>
+            <CardContent className="space-y-4 p-6 text-center sm:p-8">
+              <p className="text-ink-muted">
+                {!online
+                  ? "Dashboard se načte po připojení k internetu."
+                  : dashboardError ?? "Dashboard zatím nemá data k zobrazení."}
+              </p>
+              {online && dashboardError && (
+                <Button variant="outline" className="min-h-[48px] w-full sm:w-auto" onClick={() => void loadDashboard()}>
+                  <RefreshCw className="mr-2 h-4 w-4" /> Obnovit přehled
+                </Button>
+              )}
+            </CardContent>
+          </Card>
         )
       ) : (
         <TeacherWorkspace context={context} onContextRefresh={loadContext} largeText={largeText} offlineScope={offlineScope} />
