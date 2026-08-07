@@ -1,0 +1,95 @@
+name: Temporary test editor UX polish
+
+on:
+  push:
+    branches: [fix/school-readiness-rbac-contracts]
+    paths: [.github/workflows/ux-test-editor-polish.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/school-readiness-rbac-contracts
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - name: Apply exact test UX fixes
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one match, got {count}: {old[:100]!r}")
+              p.write_text(text.replace(old, new, 1))
+
+          edit = "client/src/app/(school)/app/tests/[testId]/edit/page.tsx"
+          marker = '''type FetchErrorKind = "404" | "403" | "error";'''
+          # This type exists on the detail page, not editor; insert after TestDetail in editor instead.
+          p = Path(edit)
+          text = p.read_text()
+          insert_after = '''type TestDetail = {\n  id: string;\n  title: string;\n  description?: string | null;\n  subject?: { id: string; name: string; catalogSubject?: { code: string; name: string } | null } | null;\n  allowedGrades: string[];\n  status: "DRAFT" | "PUBLISHED" | "ARCHIVED";\n  editMode: TestEditMode;\n  submissionCount: number;\n  questions?: TestQuestion[];\n};'''
+          labels = insert_after + '''\n\nconst QUESTION_TYPE_LABELS: Record<string, string> = {\n  TRUE_FALSE: "Pravda / nepravda",\n  MULTIPLE_CHOICE: "Výběr z možností",\n  FILL_IN_THE_BLANK: "Doplňovací odpověď",\n  MATCH_PAIRS: "Spojování dvojic",\n  ORDER: "Seřazení",\n  SORT_BINS: "Třídění",\n};'''
+          if text.count(insert_after) != 1:
+              raise SystemExit(f"{edit}: TestDetail insertion marker count {text.count(insert_after)}")
+          text = text.replace(insert_after, labels, 1)
+
+          old_back = '''        <Link href="/app/tests">\n          <Button variant="outline">Zpět na testy</Button>\n        </Link>'''
+          new_back = '''        <Button asChild variant="outline">\n          <Link href="/app/tests">Zpět na testy</Link>\n        </Button>'''
+          if text.count(old_back) != 1:
+              raise SystemExit(f"{edit}: nested back action count {text.count(old_back)}")
+          text = text.replace(old_back, new_back, 1)
+
+          old_type = '''                      {index + 1} · {question.type}'''
+          new_type = '''                      {index + 1} · {QUESTION_TYPE_LABELS[question.type] ?? "Otázka"}'''
+          if text.count(old_type) != 1:
+              raise SystemExit(f"{edit}: raw question type display count {text.count(old_type)}")
+          text = text.replace(old_type, new_type, 1)
+          p.write_text(text)
+
+          detail = "client/src/app/(school)/app/tests/[testId]/page.tsx"
+          replace_once(
+              detail,
+              '''    case "UPCOMING":\n      return (\n        <Button disabled className="cursor-not-allowed opacity-60">\n          Dostupné od {formatDate(assignment.openAt)}\n        </Button>\n      );''',
+              '''    case "UPCOMING":\n      return (\n        <p className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-600">\n          Test bude dostupný od {formatDate(assignment.openAt)}\n        </p>\n      );''',
+          )
+          PY
+
+      - name: Install frontend dependencies
+        working-directory: client
+        run: npm ci
+
+      - name: Lint frontend
+        working-directory: client
+        run: npm run lint
+
+      - name: Typecheck frontend
+        working-directory: client
+        run: npm run typecheck
+
+      - name: Commit verified fixes and remove helper
+        shell: bash
+        run: |
+          rm .github/workflows/ux-test-editor-polish.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add client/src/app/\(school\)/app/tests/\[testId\]/edit/page.tsx \
+                  client/src/app/\(school\)/app/tests/\[testId\]/page.tsx \
+                  .github/workflows/ux-test-editor-polish.yml
+          git commit -m "fix(ux): simplify test editor interactions"
+          git push origin HEAD:fix/school-readiness-rbac-contracts
