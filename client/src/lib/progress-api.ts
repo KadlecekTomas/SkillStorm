@@ -105,67 +105,83 @@ export type ProgressDashboard = {
   }>;
 };
 
-export const progressApi = {
-  context: () => fetchWithAuth<ProgressContext>('GET', '/progress/context'),
+type SyncEntriesResponse = {
+  results: Array<{
+    clientMutationId: string | null;
+    status: 'SYNCED' | 'FAILED';
+    error?: string;
+  }>;
+};
 
-  createEntry: (body: CreateProgressEntryInput) =>
+type AttendanceInput = {
+  studentId: string;
+  subjectId?: string;
+  status: AttendanceStatus;
+  minutesLate?: number;
+  note?: string;
+  occurredAt?: string;
+};
+
+type InterventionInput = {
+  studentId: string;
+  subjectId?: string;
+  title: string;
+  note?: string;
+};
+
+type CompetencyInput = {
+  subjectId?: string;
+  name: string;
+  description?: string;
+  scaleMin?: number;
+  scaleMax?: number;
+};
+
+export const progressApi = {
+  context: (): Promise<ProgressContext> =>
+    fetchWithAuth<ProgressContext>('GET', '/progress/context'),
+
+  createEntry: (body: CreateProgressEntryInput): Promise<unknown> =>
     fetchWithAuth<unknown>('POST', '/progress/entries', { body }),
 
-  syncEntries: (entries: CreateProgressEntryInput[]) =>
-    fetchWithAuth<{
-      results: Array<{
-        clientMutationId: string | null;
-        status: 'SYNCED' | 'FAILED';
-        error?: string;
-      }>;
-    }>('POST', '/progress/sync', { body: { entries } }),
+  syncEntries: (entries: CreateProgressEntryInput[]): Promise<SyncEntriesResponse> =>
+    fetchWithAuth<SyncEntriesResponse>('POST', '/progress/sync', { body: { entries } }),
 
-  student: (studentId: string) =>
+  student: (studentId: string): Promise<StudentProgressDetail> =>
     fetchWithAuth<StudentProgressDetail>('GET', `/progress/students/${studentId}`),
 
-  guardianStudent: (studentId: string) =>
+  guardianStudent: (studentId: string): Promise<StudentProgressDetail> =>
     fetchWithAuth<StudentProgressDetail>(
       'GET',
       `/progress/guardian/students/${studentId}`,
     ),
 
-  dashboard: () => fetchWithAuth<ProgressDashboard>('GET', '/progress/dashboard'),
+  dashboard: (): Promise<ProgressDashboard> =>
+    fetchWithAuth<ProgressDashboard>('GET', '/progress/dashboard'),
 
-  classDashboard: (classSectionId: string) =>
+  classDashboard: (
+    classSectionId: string,
+  ): Promise<ProgressDashboard['classes'][number]> =>
     fetchWithAuth<ProgressDashboard['classes'][number]>(
       'GET',
       `/progress/dashboard/classes/${classSectionId}`,
     ),
 
-  createAttendance: (body: {
-    studentId: string;
-    subjectId?: string;
-    status: AttendanceStatus;
-    minutesLate?: number;
-    note?: string;
-    occurredAt?: string;
-  }) => fetchWithAuth<unknown>('POST', '/progress/attendance', { body }),
+  createAttendance: (body: AttendanceInput): Promise<unknown> =>
+    fetchWithAuth<unknown>('POST', '/progress/attendance', { body }),
 
-  createIntervention: (body: {
-    studentId: string;
-    subjectId?: string;
-    title: string;
-    note?: string;
-  }) => fetchWithAuth<unknown>('POST', '/progress/interventions', { body }),
+  createIntervention: (body: InterventionInput): Promise<unknown> =>
+    fetchWithAuth<unknown>('POST', '/progress/interventions', { body }),
 
-  resolveIntervention: (interventionId: string) =>
+  resolveIntervention: (interventionId: string): Promise<unknown> =>
     fetchWithAuth<unknown>(
       'PATCH',
       `/progress/interventions/${interventionId}/resolve`,
     ),
 
-  createCompetency: (body: {
-    subjectId?: string;
-    name: string;
-    description?: string;
-    scaleMin?: number;
-    scaleMax?: number;
-  }) =>
+  createCompetency: (
+    body: CompetencyInput,
+  ): Promise<ProgressContext['competencies'][number]> =>
     fetchWithAuth<ProgressContext['competencies'][number]>(
       'POST',
       '/progress/competencies',
