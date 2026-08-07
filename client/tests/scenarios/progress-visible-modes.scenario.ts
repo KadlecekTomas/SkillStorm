@@ -113,9 +113,12 @@ test.describe('school progress — every visible teacher mode is functional', ()
 
     expect(
       detail.timeline.some(
-        (item) => item.kind === 'ATTENDANCE' && item.detail?.includes('7'),
+        (item) =>
+          item.kind === 'ATTENDANCE' &&
+          item.title.includes('7 min') &&
+          item.detail === attendanceNote,
       ),
-      'saved late attendance appears in the student timeline',
+      'saved late attendance appears in the student timeline with minutes and note',
     ).toBeTruthy();
     expect(
       (detail.interventions ?? []).some(
