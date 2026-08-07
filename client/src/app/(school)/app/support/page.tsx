@@ -9,6 +9,27 @@ import type { SupportTicket } from "@/types";
 import { showHttpErrorToastOnce } from "@/utils/toast";
 import { withGuard } from "@/lib/guard/withGuard";
 
+const STATUS_LABELS: Record<SupportTicket["status"], string> = {
+  OPEN: "Nové",
+  IN_REVIEW: "Řeší se",
+  RESOLVED: "Vyřešeno",
+};
+
+const PRIORITY_LABELS: Record<SupportTicket["priority"], string> = {
+  LOW: "Nízká priorita",
+  MEDIUM: "Střední priorita",
+  HIGH: "Vysoká priorita",
+};
+
+const CATEGORY_LABELS: Record<string, string> = {
+  SUBJECT: "Předmět",
+  TEST: "Test",
+  STUDENT: "Žák",
+  ASSIGNMENT: "Zadání",
+  TEST_ASSIGNMENT: "Přiřazení testu",
+  OTHER: "Ostatní",
+};
+
 function formatDate(value: string): string {
   return new Date(value).toLocaleString("cs-CZ", {
     day: "2-digit",
@@ -55,7 +76,7 @@ function SupportMyTicketsPage(): React.JSX.Element {
           <div>
             <h1 className="text-xl font-semibold text-slate-900">Moje nahlášené problémy</h1>
             <p className="text-sm text-slate-500">
-              Stav ticketů, které jste poslali do platform support inboxu.
+              Stav hlášení, která jste poslali podpoře SkillStorm.
             </p>
           </div>
         </div>
@@ -81,15 +102,19 @@ function SupportMyTicketsPage(): React.JSX.Element {
           </div>
         ) : tickets.length === 0 ? (
           <div className="px-6 py-16 text-center text-sm text-slate-500">
-            Zatím jste neposlali žádné support hlášení.
+            Zatím jste neposlali žádné hlášení podpoře.
           </div>
         ) : (
           <div className="divide-y divide-slate-200">
             {tickets.map((ticket) => (
               <div key={ticket.id} className="grid gap-3 px-4 py-4 md:grid-cols-[160px_1fr_120px_180px]">
                 <div>
-                  <p className="font-medium text-slate-900">{ticket.category}</p>
-                  <p className="text-xs text-slate-500">{ticket.priority}</p>
+                  <p className="font-medium text-slate-900">
+                    {CATEGORY_LABELS[ticket.category] ?? "Ostatní"}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    {PRIORITY_LABELS[ticket.priority]}
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <p className="text-sm text-slate-700">{ticket.message}</p>
@@ -101,7 +126,7 @@ function SupportMyTicketsPage(): React.JSX.Element {
                 </div>
                 <div>
                   <span className={`rounded-full border px-2 py-1 text-xs font-medium ${statusBadgeClass(ticket.status)}`}>
-                    {ticket.status}
+                    {STATUS_LABELS[ticket.status]}
                   </span>
                 </div>
                 <div className="text-sm text-slate-500">
