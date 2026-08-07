@@ -89,16 +89,27 @@ async function loadChildOverview(studentId: string): Promise<ChildOverview> {
     progressApi.guardianStudent(studentId),
   ]);
 
+  // A teacher's pedagogical feedback can be a standalone COMMENT/PRAISE or
+  // attached directly to an assessment/competency timeline entry. The parent
+  // overview must not silently drop that feedback just because its container
+  // is a GRADE/COMPETENCY event.
   const messages = school.timeline
     .filter(
-      (item): item is StudentProgressDetail["timeline"][number] & {
-        kind: "COMMENT" | "PRAISE";
-      } => item.kind === "COMMENT" || item.kind === "PRAISE",
+      (item) =>
+        item.kind === "COMMENT" ||
+        item.kind === "PRAISE" ||
+        ((item.kind === "GRADE" || item.kind === "COMPETENCY") &&
+          Boolean(item.detail?.trim())),
     )
     .map((item) => ({
       id: item.id,
-      kind: item.kind,
-      title: item.kind === "PRAISE" ? "Pochvala" : "Poznámka učitele",
+      kind: item.kind === "PRAISE" ? ("PRAISE" as const) : ("COMMENT" as const),
+      title:
+        item.kind === "PRAISE"
+          ? "Pochvala"
+          : item.kind === "GRADE" || item.kind === "COMPETENCY"
+            ? item.title
+            : "Poznámka učitele",
       body: item.detail,
       occurredAt: item.occurredAt,
       authorName: item.authorName,
