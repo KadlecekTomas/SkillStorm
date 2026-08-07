@@ -46,6 +46,29 @@ jobs:
           )
           page_path.write_text(page)
 
+          family_path = Path('client/src/app/(school)/app/family/page.tsx')
+          family = family_path.read_text()
+          guardian_import = 'import { GuardianSchoolProgress } from "@/components/guardian/guardian-school-progress";\n'
+          if guardian_import not in family:
+              import_marker = 'import { cn } from "@/utils/cn";\n'
+              if import_marker not in family:
+                  raise SystemExit('family import marker not found')
+              family = family.replace(import_marker, import_marker + guardian_import, 1)
+          if '<GuardianSchoolProgress data={data} />' not in family:
+              start_marker = '      {/* Zprávy */}\n'
+              end_marker = '    </div>\n  );\n}\n\nexport default function FamilyPage'
+              if start_marker not in family or end_marker not in family:
+                  raise SystemExit('family message block marker not found')
+              prefix, rest = family.split(start_marker, 1)
+              _, suffix = rest.split(end_marker, 1)
+              family = (
+                  prefix
+                  + '      <GuardianSchoolProgress data={data} />\n'
+                  + end_marker
+                  + suffix
+              )
+          family_path.write_text(family)
+
           schema_path = Path('server/prisma/schema.prisma')
           schema = schema_path.read_text()
           if '  PROGRESS\n}' not in schema:
@@ -71,10 +94,14 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add server/prisma/schema.prisma client/src/app/'(school)'/app/progress/page.tsx
+          git add \
+            server/prisma/schema.prisma \
+            client/src/app/'(school)'/app/progress/page.tsx \
+            client/src/app/'(school)'/app/family/page.tsx
           if git diff --cached --quiet; then
             echo "No patch required"
             exit 0
           fi
-          git commit -m "fix(progress): align Prisma schema and SSR-safe offline state"
+          git commit -m "fix(progress): align schema, SSR and guardian view"
+          git pull --rebase origin fix/school-readiness-rbac-contracts
           git push origin HEAD:fix/school-readiness-rbac-contracts
