@@ -12,16 +12,29 @@ const HUMAN_DOC_ROOTS = [
   'server/test/e2e-legacy/README.md',
 ];
 
+// Historical documents are allowed to preserve stale paths, brands and links
+// because they capture an older repository state. They still must be explicitly
+// registered in docs/README.md by their exact current path.
 const HISTORICAL_DOCS = new Set([
+  'docs/campaigns-decisions.md',
   'docs/roadmap/doctrine.md',
   'docs/roadmap/2026-07-napadnik.md',
   'docs/production-roadmap.md',
   'docs/production-audit.md',
   'docs/production-sso-hardening-audit.md',
   'docs/ops/production-readiness.md',
+  'docs/ops/query-limits-audit.md',
   'docs/testing/e2e-baseline-audit.md',
   'docs/visual-qa-findings.md',
-  'docs/devlog/2026-07-13-heterogeneous-classrooms.md',
+  'docs/devlog/2026-06-17-focus-test.md',
+  'docs/analytics/student-progress-analysis.md',
+  'docs/analytics/student-progress-phase-2-plan.md',
+  'docs/analytics/student-progress-prisma-models.md',
+  'docs/guardian-project.md',
+  'docs/guardian-spec.md',
+  'docs/guardian/etapa-a-analyza.md',
+  'docs/guardian/etapa-b-stop2-navrh.md',
+  'docs/guardian/etapa-c-stop3-navrh.md',
   'server/test/e2e-legacy/README.md',
 ]);
 
@@ -30,13 +43,16 @@ const NORMATIVE_DOCS = [
   'docs/roadmap/master.md',
   'docs/interactive-curriculum/PRODUCTION-CONTRACT.md',
   'docs/interactive-curriculum/CURRICULUM-DATA-CONTRACT.md',
+  'docs/tenant-rbac-test-matrix.md',
 ];
 
 function walk(relativePath) {
   const absolutePath = path.resolve(root, relativePath);
   if (!fs.existsSync(absolutePath)) return [];
   const stat = fs.statSync(absolutePath);
-  if (stat.isFile()) return relativePath.endsWith('.md') ? [normalize(relativePath)] : [];
+  if (stat.isFile()) {
+    return relativePath.endsWith('.md') ? [normalize(relativePath)] : [];
+  }
 
   return fs.readdirSync(absolutePath, { withFileTypes: true }).flatMap((entry) => {
     const child = path.join(relativePath, entry.name);
@@ -61,9 +77,24 @@ function decodeTarget(target) {
   }
 }
 
+function resolveLocalTarget(fromDoc, rawTarget) {
+  let target = rawTarget.trim();
+  if (!target || target.startsWith('#') || /^(https?:|mailto:|tel:|data:)/i.test(target)) {
+    return null;
+  }
+
+  // Remove an optional Markdown link title after the URL/path.
+  target = target.replace(/\s+["'][^"']*["']\s*$/, '');
+  target = stripAnchorAndQuery(decodeTarget(target));
+  if (!target) return null;
+
+  return normalize(
+    path.relative(root, path.resolve(root, path.dirname(fromDoc), target)),
+  );
+}
+
 const docs = [...new Set(HUMAN_DOC_ROOTS.flatMap(walk))].sort();
 const registryPath = 'docs/README.md';
-const registry = fs.readFileSync(path.resolve(root, registryPath), 'utf8');
 const errors = [];
 const warnings = [];
 
@@ -75,50 +106,66 @@ if (!exists(registryPath)) {
   errors.push(`Missing documentation registry: ${registryPath}`);
 }
 
-// 1) Every human-authored Markdown document must be registered, except the
-// root README (entry point) and the registry itself.
+const registry = exists(registryPath)
+  ? fs.readFileSync(path.resolve(root, registryPath), 'utf8')
+  : '';
+const registryWithoutCode = stripCodeFences(registry);
+const registryLinks = [
+  ...registryWithoutCode.matchAll(/\[[^\]]*\]\(([^)]+\.md(?:#[^)]+)?)\)/g),
+];
+const registryDocTargets = new Set();
+
+// 1) Every local Markdown link in the registry must resolve to a real file.
+for (const [, rawTarget] of registryLinks) {
+  const resolved = resolveLocalTarget(registryPath, rawTarget);
+  if (!resolved) continue;
+  registryDocTargets.add(resolved);
+  if (!exists(resolved)) {
+    errors.push(`Registry link target does not exist: ${rawTarget} -> ${resolved}`);
+  }
+}
+
+// 2) Every discovered human-authored Markdown document must be registered by
+// its exact resolved path. Basename/string coincidence is intentionally not enough.
 for (const doc of docs) {
   if (doc === 'README.md' || doc === registryPath) continue;
-
-  const candidates = [
-    doc,
-    doc.startsWith('docs/') ? doc.slice('docs/'.length) : doc,
-    path.basename(doc),
-  ];
-
-  if (!candidates.some((candidate) => registry.includes(candidate))) {
+  if (!registryDocTargets.has(doc)) {
     errors.push(`Unregistered Markdown document: ${doc}`);
   }
 }
 
-// 2) Registry must not reference a classified local Markdown path that no
-// longer exists. This intentionally ignores external links and prose.
-const registryLinks = [...stripCodeFences(registry).matchAll(/\[[^\]]*\]\(([^)]+\.md(?:#[^)]+)?)\)/g)];
-for (const [, rawTarget] of registryLinks) {
-  const target = stripAnchorAndQuery(decodeTarget(rawTarget.trim()));
-  if (!target || /^(https?:|mailto:)/i.test(target)) continue;
-  const resolved = normalize(path.relative(root, path.resolve(root, path.dirname(registryPath), target)));
-  if (!exists(resolved)) errors.push(`Registry link target does not exist: ${rawTarget}`);
+// 3) Historical allowlist must contain only real, exactly registered files.
+for (const doc of HISTORICAL_DOCS) {
+  if (!exists(doc)) {
+    errors.push(`Historical allowlist references missing file: ${doc}`);
+    continue;
+  }
+  if (!registryDocTargets.has(doc)) {
+    errors.push(`Historical document is not exactly registered: ${doc}`);
+  }
 }
 
-// 3) Current documentation must not regress to known stale local setup
-// patterns. Historical snapshots are intentionally preserved verbatim.
+// 4) Current/future authoritative docs must not regress to known stale local
+// setup patterns. Historical snapshots are deliberately excluded.
 const stalePatterns = [
   { regex: /^#\s+EDUTO\b/im, label: 'legacy EDUTO document heading' },
   { regex: /\/Users\/[A-Za-z0-9._-]+\//, label: 'machine-local /Users/... path' },
   { regex: /POSTGRES_DB\s*=\s*eduto\b/i, label: 'legacy POSTGRES_DB=eduto example' },
   { regex: /JWT_SECRET\s*=\s*supersecret\b/i, label: 'demo JWT secret' },
+  { regex: /DATABASE_URL_TEST[^\n]*\/eduto_test\b/i, label: 'legacy eduto_test database' },
 ];
 
 for (const doc of docs) {
   if (HISTORICAL_DOCS.has(doc)) continue;
   const content = fs.readFileSync(path.resolve(root, doc), 'utf8');
   for (const { regex, label } of stalePatterns) {
-    if (regex.test(content)) errors.push(`${doc}: contains ${label}`);
+    if (regex.test(content)) {
+      errors.push(`${doc}: contains ${label}`);
+    }
   }
 }
 
-// 4) Root identity and normative metadata are hard requirements.
+// 5) Root identity and normative documents are hard requirements.
 const rootReadme = fs.readFileSync(path.resolve(root, 'README.md'), 'utf8');
 if (!/^#\s+SkillStorm\s*$/m.test(rootReadme)) {
   errors.push('README.md must have the canonical "# SkillStorm" heading.');
@@ -127,63 +174,58 @@ if (!/^#\s+SkillStorm\s*$/m.test(rootReadme)) {
 for (const doc of NORMATIVE_DOCS) {
   if (!exists(doc)) {
     errors.push(`Missing normative document: ${doc}`);
-    continue;
   }
+}
+
+// 6) Every non-historical document under docs/ must carry lifecycle metadata.
+// This prevents an unclassified active-looking file from silently becoming truth.
+for (const doc of docs) {
+  if (doc === 'README.md' || HISTORICAL_DOCS.has(doc)) continue;
   const content = fs.readFileSync(path.resolve(root, doc), 'utf8');
+
   for (const field of ['Status', 'Owner']) {
     if (!new RegExp(`\\*\\*${field}:\\*\\*`, 'i').test(content)) {
       errors.push(`${doc}: missing required metadata field ${field}`);
     }
   }
-  if (!/\*\*Last (verified|review):\*\*/i.test(content)) {
-    errors.push(`${doc}: missing Last verified/review metadata`);
+
+  if (!/\*\*Last (verified|review(?:ed)?):\*\*/i.test(content)) {
+    errors.push(`${doc}: missing Last verified/reviewed metadata`);
+  }
+
+  if (!/\*\*(Scope|Purpose):\*\*/i.test(content)) {
+    errors.push(`${doc}: missing Scope/Purpose metadata`);
   }
 }
 
-// 5) Validate relative Markdown links in non-historical human docs. Historical
-// snapshots may intentionally point at paths valid only at the captured time.
+// 7) Validate relative links in all non-historical human docs.
 for (const doc of docs) {
   if (HISTORICAL_DOCS.has(doc)) continue;
   const content = stripCodeFences(fs.readFileSync(path.resolve(root, doc), 'utf8'));
   const links = [...content.matchAll(/\[[^\]]*\]\(([^)]+)\)/g)];
 
   for (const [, rawTarget] of links) {
-    let target = rawTarget.trim();
-    if (!target || target.startsWith('#') || /^(https?:|mailto:|tel:|data:)/i.test(target)) continue;
-
-    // Markdown titles after a URL are out of scope for project-internal links.
-    target = target.replace(/\s+["'][^"']*["']\s*$/, '');
-    target = stripAnchorAndQuery(decodeTarget(target));
-    if (!target) continue;
-
-    const resolvedAbsolute = path.resolve(root, path.dirname(doc), target);
-    if (!fs.existsSync(resolvedAbsolute)) {
-      errors.push(`${doc}: broken relative link -> ${rawTarget}`);
+    const resolved = resolveLocalTarget(doc, rawTarget);
+    if (!resolved) continue;
+    if (!exists(resolved)) {
+      errors.push(`${doc}: broken relative link -> ${rawTarget} -> ${resolved}`);
     }
   }
 }
 
-// 6) Governance consistency: historical allowlist entries must exist and be
-// explicitly classified by the registry.
-for (const doc of HISTORICAL_DOCS) {
-  if (!exists(doc)) {
-    errors.push(`Historical allowlist references missing file: ${doc}`);
-    continue;
-  }
-  const candidates = [doc, doc.startsWith('docs/') ? doc.slice(5) : doc, path.basename(doc)];
-  if (!candidates.some((candidate) => registry.includes(candidate))) {
-    errors.push(`Historical document is not classified in docs/README.md: ${doc}`);
-  }
-}
-
-// Warnings are non-blocking but make incomplete governance visible.
+// 8) Warnings remain non-blocking for deliberate scoped TODO language.
 for (const doc of docs) {
   if (doc === 'README.md' || HISTORICAL_DOCS.has(doc)) continue;
   const content = fs.readFileSync(path.resolve(root, doc), 'utf8');
-  if (/\bTODO\b/i.test(content)) warnings.push(`${doc}: contains TODO; verify it is intentional and scoped.`);
+  if (/\bTODO\b/i.test(content)) {
+    warnings.push(`${doc}: contains TODO; verify it is intentional and scoped.`);
+  }
 }
 
 console.log(`Documentation integrity: ${docs.length} human Markdown files scanned.`);
+console.log(`Registry: ${registryDocTargets.size} local Markdown targets resolved.`);
+console.log(`Historical/superseded: ${HISTORICAL_DOCS.size} files classified.`);
+
 if (warnings.length > 0) {
   console.log(`Warnings (${warnings.length}):`);
   for (const warning of warnings) console.log(`  - ${warning}`);
