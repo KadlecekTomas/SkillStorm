@@ -13,6 +13,8 @@ permissions:
 jobs:
   patch:
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/skillstorm_schema_validation?schema=public
     steps:
       - uses: actions/checkout@v4
         with:
