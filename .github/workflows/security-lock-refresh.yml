@@ -1,4 +1,4 @@
-name: Temporary dependency security audit
+name: Temporary backend security verification
 
 on:
   push:
@@ -6,57 +6,51 @@ on:
       - chore/security-next-react-upgrade
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  audit-production-dependencies:
+  verify-backend-security-upgrade:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: Install frontend dependencies
-        working-directory: client
-        run: npm ci
+      - name: Refresh backend lockfile
+        working-directory: server
+        run: npm install --package-lock-only --ignore-scripts
 
-      - name: Frontend production audit details
-        working-directory: client
-        shell: bash
-        run: |
-          npm audit --omit=dev --json > /tmp/client-audit.json || true
-          node - <<'NODE'
-          const fs = require('fs');
-          const report = JSON.parse(fs.readFileSync('/tmp/client-audit.json', 'utf8'));
-          console.log('CLIENT_PROD_AUDIT_SUMMARY=' + JSON.stringify(report.metadata?.vulnerabilities ?? {}));
-          for (const [name, v] of Object.entries(report.vulnerabilities ?? {})) {
-            console.log('CLIENT_PROD_VULN=' + JSON.stringify({
-              name,
-              severity: v.severity,
-              isDirect: v.isDirect,
-              range: v.range,
-              nodes: v.nodes,
-              fixAvailable: v.fixAvailable,
-              via: (v.via ?? []).map((item) => typeof item === 'string' ? item : ({
-                source: item.source,
-                name: item.name,
-                severity: item.severity,
-                title: item.title,
-                url: item.url,
-                range: item.range,
-              })),
-            }));
-          }
-          NODE
-
-      - name: Install backend dependencies
+      - name: Clean install backend
         working-directory: server
         run: npm ci
+
+      - name: Prisma validate and generate
+        working-directory: server
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/skillstorm_test?schema=public
+        run: |
+          npx prisma validate
+          npx prisma generate
+
+      - name: Backend typecheck
+        working-directory: server
+        run: npm run typecheck
+
+      - name: Backend build
+        working-directory: server
+        run: npm run build
+
+      - name: Backend unit tests
+        working-directory: server
+        run: npm run test:unit:light
 
       - name: Backend production audit details
         working-directory: server
@@ -86,3 +80,15 @@ jobs:
             }));
           }
           NODE
+
+      - name: Commit verified backend lockfile
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add server/package-lock.json
+          if git diff --cached --quiet; then
+            echo "Expected server/package-lock.json to change, but it did not."
+            exit 1
+          fi
+          git commit -m "chore(security): refresh backend dependency lock"
+          git push origin HEAD:chore/security-next-react-upgrade
