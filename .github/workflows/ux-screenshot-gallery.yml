@@ -1,0 +1,128 @@
+name: Temporary UX screenshot gallery
+
+on:
+  push:
+    branches:
+      - fix/school-readiness-rbac-contracts
+
+permissions:
+  contents: write
+
+jobs:
+  screenshots:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: skillstorm_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d skillstorm_test"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      DATABASE_URL_TEST: postgresql://postgres:postgres@127.0.0.1:5432/skillstorm_test?schema=public
+      JWT_SECRET: screenshot-gallery-secret
+      API_PROXY_TARGET: http://127.0.0.1:4200
+      CI: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/school-readiness-rbac-contracts
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            client/package-lock.json
+            server/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: server
+        run: npm ci
+
+      - name: Prisma generate
+        working-directory: server
+        run: npx prisma generate
+
+      - name: Install frontend dependencies
+        working-directory: client
+        run: npm ci
+
+      - name: Install Chromium
+        working-directory: client
+        run: npx playwright install --with-deps chromium
+
+      - name: Add screenshot scenario
+        working-directory: client
+        shell: bash
+        run: |
+          cat > tests/scenarios/ux-screenshot-gallery.scenario.ts <<'EOF'
+          import { test, expect } from './fixtures';
+          import { mkdirSync } from 'node:fs';
+          import { join } from 'node:path';
+
+          const OUT = join(process.cwd(), 'artifacts', 'ux-screenshots');
+          mkdirSync(OUT, { recursive: true });
+
+          async function capture(page: import('@playwright/test').Page, name: string, url: string, marker?: RegExp | string) {
+            await page.goto(url, { waitUntil: 'commit' });
+            await page.waitForLoadState('domcontentloaded');
+            if (marker) {
+              const locator = typeof marker === 'string'
+                ? page.getByText(marker, { exact: false }).first()
+                : page.getByText(marker).first();
+              await expect(locator).toBeVisible({ timeout: 15000 });
+            }
+            await page.waitForTimeout(800);
+            await page.screenshot({ path: join(OUT, `${name}.png`), fullPage: true });
+          }
+
+          test('UX screenshot gallery', async ({ asRole }) => {
+            const teacher = await asRole('teacher');
+            await capture(teacher.page, '01-ucitel-dashboard', '/app');
+            await capture(teacher.page, '02-ucitel-zadani', '/app/assignments');
+            await capture(teacher.page, '03-ucitel-vysledky-pdf', '/app/results', /Tisk \/ uložit PDF/i);
+            await capture(teacher.page, '04-ucitel-knihovna', '/app/library');
+
+            const director = await asRole('director');
+            await capture(director.page, '05-reditel-dashboard', '/app');
+            await capture(director.page, '06-reditel-tridy', '/app/classrooms');
+            await capture(director.page, '07-reditel-ucitele', '/app/settings/teachers');
+
+            const student = await asRole('student8a');
+            await capture(student.page, '08-zak-zadani', '/app/assignments');
+            await capture(student.page, '09-zak-analytika', '/app/student/analytics');
+
+            const parent = await asRole('parent');
+            await capture(parent.page, '10-rodic-rodinny-prostor', '/app/family', /Moje děti/i);
+          });
+          EOF
+
+      - name: Run desktop scenarios and capture screenshots
+        working-directory: client
+        run: npx playwright test --config=playwright.scenarios.config.ts --project=desktop
+
+      - name: Upload screenshot gallery
+        uses: actions/upload-artifact@v4
+        with:
+          name: skillstorm-school-ui-screenshots
+          path: client/artifacts/ux-screenshots/*.png
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Remove temporary workflow
+        if: success()
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/ux-screenshot-gallery.yml
+          git commit -m "chore(ux): remove temporary screenshot gallery workflow"
+          git push origin HEAD:fix/school-readiness-rbac-contracts
