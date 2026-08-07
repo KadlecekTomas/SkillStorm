@@ -31,6 +31,10 @@ import { CreateCompetencyDto } from './dto/create-competency.dto';
  * atributy neposílá. Guardian route úmyslně nemá @Permission — přístup je
  * relationship-scoped a ověřuje se v ProgressService stejně jako guardian API.
  *
+ * V tomto modulu tvoří vedení školy role OWNER + DIRECTOR. Obě mají shodný
+ * přístup k celoškolnímu dashboardu, kompetencím a zápisu školního pokroku;
+ * TEACHER zůstává omezený na svůj relační třídní/předmětový scope.
+ *
  * Progress obsahuje citlivá a rychle se měnící školní data. Celý controller je
  * proto HTTP no-store: nová kompetence/hodnocení jsou okamžitě viditelné a
  * odpovědi se neukládají do sdílené server/browser cache.
@@ -42,14 +46,18 @@ export class ProgressController {
   constructor(private readonly progress: ProgressService) {}
 
   @Get('context')
-  @Permission(OrganizationRole.TEACHER, OrganizationRole.DIRECTOR)
+  @Permission(
+    OrganizationRole.TEACHER,
+    OrganizationRole.DIRECTOR,
+    OrganizationRole.OWNER,
+  )
   context(@Req() req: RequestWithUser) {
     return this.progress.getContext(req.user);
   }
 
   @Post('competencies')
   @OrgOperation(OrgOperationType.AUTHORING)
-  @Permission(OrganizationRole.DIRECTOR)
+  @Permission(OrganizationRole.DIRECTOR, OrganizationRole.OWNER)
   createCompetency(
     @Body() dto: CreateCompetencyDto,
     @Req() req: RequestWithUser,
@@ -59,7 +67,11 @@ export class ProgressController {
 
   @Post('entries')
   @OrgOperation(OrgOperationType.AUTHORING)
-  @Permission(OrganizationRole.TEACHER, OrganizationRole.DIRECTOR)
+  @Permission(
+    OrganizationRole.TEACHER,
+    OrganizationRole.DIRECTOR,
+    OrganizationRole.OWNER,
+  )
   createEntry(
     @Body() dto: CreateProgressEntryDto,
     @Req() req: RequestWithUser,
@@ -69,7 +81,11 @@ export class ProgressController {
 
   @Post('sync')
   @OrgOperation(OrgOperationType.AUTHORING)
-  @Permission(OrganizationRole.TEACHER, OrganizationRole.DIRECTOR)
+  @Permission(
+    OrganizationRole.TEACHER,
+    OrganizationRole.DIRECTOR,
+    OrganizationRole.OWNER,
+  )
   sync(
     @Body() dto: SyncProgressEntriesDto,
     @Req() req: RequestWithUser,
@@ -79,7 +95,11 @@ export class ProgressController {
 
   @Post('attendance')
   @OrgOperation(OrgOperationType.AUTHORING)
-  @Permission(OrganizationRole.TEACHER, OrganizationRole.DIRECTOR)
+  @Permission(
+    OrganizationRole.TEACHER,
+    OrganizationRole.DIRECTOR,
+    OrganizationRole.OWNER,
+  )
   createAttendance(
     @Body() dto: CreateAttendanceRecordDto,
     @Req() req: RequestWithUser,
@@ -89,7 +109,11 @@ export class ProgressController {
 
   @Post('interventions')
   @OrgOperation(OrgOperationType.AUTHORING)
-  @Permission(OrganizationRole.TEACHER, OrganizationRole.DIRECTOR)
+  @Permission(
+    OrganizationRole.TEACHER,
+    OrganizationRole.DIRECTOR,
+    OrganizationRole.OWNER,
+  )
   createIntervention(
     @Body() dto: CreateInterventionDto,
     @Req() req: RequestWithUser,
@@ -99,7 +123,11 @@ export class ProgressController {
 
   @Patch('interventions/:interventionId/resolve')
   @OrgOperation(OrgOperationType.AUTHORING)
-  @Permission(OrganizationRole.TEACHER, OrganizationRole.DIRECTOR)
+  @Permission(
+    OrganizationRole.TEACHER,
+    OrganizationRole.DIRECTOR,
+    OrganizationRole.OWNER,
+  )
   resolveIntervention(
     @Param('interventionId', new ParseUUIDPipe()) interventionId: string,
     @Req() req: RequestWithUser,
@@ -108,7 +136,11 @@ export class ProgressController {
   }
 
   @Get('students/:studentId')
-  @Permission(OrganizationRole.TEACHER, OrganizationRole.DIRECTOR)
+  @Permission(
+    OrganizationRole.TEACHER,
+    OrganizationRole.DIRECTOR,
+    OrganizationRole.OWNER,
+  )
   studentDetail(
     @Param('studentId', new ParseUUIDPipe()) studentId: string,
     @Req() req: RequestWithUser,
@@ -125,13 +157,17 @@ export class ProgressController {
   }
 
   @Get('dashboard')
-  @Permission(OrganizationRole.DIRECTOR)
+  @Permission(OrganizationRole.DIRECTOR, OrganizationRole.OWNER)
   schoolDashboard(@Req() req: RequestWithUser) {
     return this.progress.getSchoolDashboard(req.user);
   }
 
   @Get('dashboard/classes/:classSectionId')
-  @Permission(OrganizationRole.TEACHER, OrganizationRole.DIRECTOR)
+  @Permission(
+    OrganizationRole.TEACHER,
+    OrganizationRole.DIRECTOR,
+    OrganizationRole.OWNER,
+  )
   classDashboard(
     @Param('classSectionId', new ParseUUIDPipe()) classSectionId: string,
     @Req() req: RequestWithUser,
