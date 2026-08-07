@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/select";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { usePermissions } from "@/hooks/use-permissions";
+import { useAuthStore } from "@/store/use-auth-store";
 import { cn } from "@/utils/cn";
 import {
   progressApi,
@@ -41,6 +42,7 @@ import {
   type StudentProgressDetail,
 } from "@/lib/progress-api";
 import {
+  buildProgressOfflineScope,
   cacheProgressContext,
   listQueuedProgressEntries,
   queueProgressEntry,
@@ -102,10 +104,12 @@ function TeacherWorkspace({
   context,
   onContextRefresh,
   largeText,
+  offlineScope,
 }: {
   context: ProgressContext;
   onContextRefresh: () => Promise<void>;
   largeText: boolean;
+  offlineScope: string;
 }) {
   const [mode, setMode] = useState<WorkspaceMode>("ASSESSMENT");
   const [classId, setClassId] = useState(context.classes[0]?.id ?? "");
@@ -169,13 +173,13 @@ function TeacherWorkspace({
   }, [loadStudent]);
 
   const refreshQueueCount = useCallback(async () => {
-    const queue = await listQueuedProgressEntries();
+    const queue = await listQueuedProgressEntries(offlineScope);
     setQueuedCount(queue.length);
-  }, []);
+  }, [offlineScope]);
 
   const flushQueue = useCallback(async () => {
     if (!isBrowserOnline()) return;
-    const queue = await listQueuedProgressEntries();
+    const queue = await listQueuedProgressEntries(offlineScope);
     if (!queue.length) {
       setQueuedCount(0);
       return;
@@ -185,7 +189,7 @@ function TeacherWorkspace({
       const synced = result.results
         .filter((item) => item.status === "SYNCED" && item.clientMutationId)
         .map((item) => item.clientMutationId as string);
-      await removeQueuedProgressEntries(synced);
+      await removeQueuedProgressEntries(offlineScope, synced);
       await refreshQueueCount();
       if (synced.length) {
         setMessage(`${synced.length} offline záznamů bylo synchronizováno.`);
@@ -194,7 +198,7 @@ function TeacherWorkspace({
     } catch {
       // Fronta zůstává lokálně. Další pokus proběhne po novém online eventu.
     }
-  }, [loadStudent, refreshQueueCount]);
+  }, [loadStudent, offlineScope, refreshQueueCount]);
 
   useEffect(() => {
     void refreshQueueCount();
@@ -234,7 +238,7 @@ function TeacherWorkspace({
     setMessage(null);
     try {
       if (!isBrowserOnline()) {
-        await queueProgressEntry(input);
+        await queueProgressEntry(offlineScope, input);
         setMessage("Uloženo do tohoto zařízení. Po připojení se záznam automaticky odešle.");
         resetAssessment();
         await refreshQueueCount();
@@ -246,7 +250,7 @@ function TeacherWorkspace({
       await loadStudent();
     } catch {
       if (!isBrowserOnline()) {
-        await queueProgressEntry(input);
+        await queueProgressEntry(offlineScope, input);
         setMessage("Připojení vypadlo. Záznam je bezpečně ve frontě k odeslání.");
         resetAssessment();
         await refreshQueueCount();
@@ -835,6 +839,12 @@ function LeadershipDashboard({
 export default function ProgressPage(): React.JSX.Element | null {
   const router = useRouter();
   const { hasRole } = usePermissions();
+  const authUserId = useAuthStore((state) => state.user?.id ?? null);
+  const activeOrgId = useAuthStore((state) => state.org?.id ?? null);
+  const offlineScope = useMemo(
+    () => buildProgressOfflineScope(authUserId, activeOrgId),
+    [activeOrgId, authUserId],
+  );
   const isTeacher = hasRole("TEACHER");
   const isLeadership = hasRole("DIRECTOR") || hasRole("OWNER");
   const isStaff = isTeacher || isLeadership;
@@ -853,13 +863,14 @@ export default function ProgressPage(): React.JSX.Element | null {
   }, [isStaff, router]);
 
   const loadContext = useCallback(async () => {
+    if (!offlineScope) throw new Error("PROGRESS_OFFLINE_SCOPE_REQUIRED");
     try {
       const fresh = await progressApi.context();
       setContext(fresh);
       setOffline(false);
-      await cacheProgressContext(fresh);
+      await cacheProgressContext(offlineScope, fresh);
     } catch {
-      const cached = await readCachedProgressContext();
+      const cached = await readCachedProgressContext(offlineScope);
       if (cached) {
         setContext(cached);
         setOffline(true);
@@ -867,7 +878,7 @@ export default function ProgressPage(): React.JSX.Element | null {
         throw new Error("PROGRESS_CONTEXT_UNAVAILABLE");
       }
     }
-  }, []);
+  }, [offlineScope]);
 
   const loadDashboard = useCallback(async () => {
     if (!isLeadership || !isBrowserOnline()) return;
@@ -893,7 +904,7 @@ export default function ProgressPage(): React.JSX.Element | null {
   }, [isStaff, loadContext, loadDashboard]);
 
   if (!isStaff) return null;
-  if (loading || !context) {
+  if (!offlineScope || loading || !context) {
     return <div className="flex justify-center py-24"><LoadingSpinner /></div>;
   }
 
@@ -955,7 +966,7 @@ export default function ProgressPage(): React.JSX.Element | null {
           <Card><CardContent className="p-8 text-center text-ink-muted">Dashboard se načte po připojení k internetu.</CardContent></Card>
         )
       ) : (
-        <TeacherWorkspace context={context} onContextRefresh={loadContext} largeText={largeText} />
+        <TeacherWorkspace context={context} onContextRefresh={loadContext} largeText={largeText} offlineScope={offlineScope} />
       )}
     </div>
   );
