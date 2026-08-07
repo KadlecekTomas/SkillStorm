@@ -1,4 +1,5 @@
 import { test, expect } from './fixtures';
+import { readFile } from 'node:fs/promises';
 
 /**
  * School-readiness release gate.
@@ -121,7 +122,7 @@ test.describe('school readiness — RBAC and visible-action contract', () => {
     });
   }
 
-  test('teacher diagnostics load without 403 and Tisk / uložit PDF invokes browser print', async ({ asRole }) => {
+  test('teacher diagnostics download a real PDF report without 403', async ({ asRole }) => {
     const { page } = await asRole('teacher');
     const forbidden: string[] = [];
     page.on('response', (response) => {
@@ -132,24 +133,19 @@ test.describe('school readiness — RBAC and visible-action contract', () => {
     await expect(page.getByRole('heading', { name: 'Diagnostika výsledků' })).toBeVisible();
     await expect(page.getByText('Přehled žáků')).toBeVisible();
 
-    await page.evaluate(() => {
-      (window as Window & { __skillstormPrintCalled?: boolean }).__skillstormPrintCalled = false;
-      window.print = () => {
-        (window as Window & { __skillstormPrintCalled?: boolean }).__skillstormPrintCalled = true;
-      };
-    });
-    const exportButton = page.getByRole('button', { name: 'Tisk / uložit PDF' });
+    const exportButton = page.getByRole('button', { name: 'Stáhnout PDF' });
     await expect(exportButton).toBeEnabled();
+    const downloadPromise = page.waitForEvent('download');
     await exportButton.click();
-    await expect
-      .poll(() =>
-        page.evaluate(
-          () =>
-            (window as Window & { __skillstormPrintCalled?: boolean })
-              .__skillstormPrintCalled ?? false,
-        ),
-      )
-      .toBe(true);
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toMatch(/^SkillStorm-.*\.pdf$/i);
+
+    const path = await download.path();
+    expect(path, 'browser should persist downloaded PDF').toBeTruthy();
+    const bytes = await readFile(path!);
+    expect(bytes.subarray(0, 4).toString('ascii')).toBe('%PDF');
+    expect(bytes.length, 'PDF report should contain real report content').toBeGreaterThan(5_000);
+    await expect(page.getByText('PDF report byl stažen.')).toBeVisible();
 
     expect(forbidden, `teacher diagnostics returned 403: ${forbidden.join(', ')}`).toEqual([]);
   });

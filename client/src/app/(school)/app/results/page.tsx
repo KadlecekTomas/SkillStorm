@@ -10,6 +10,8 @@ import { useAcademicYears } from "@/hooks/use-academic-years";
 import { useClassrooms } from "@/hooks/use-classrooms";
 import type { ClassroomRiskOverview } from "@/hooks/use-classroom-risk-overview";
 import { formatClassName } from "@/lib/class-label";
+import { downloadClassResultsPdf } from "@/lib/reports/class-results-pdf";
+import { showToastOnce } from "@/utils/toast";
 import Link from "next/link";
 import type { OrganizationRole } from "@/types";
 import type {
@@ -62,7 +64,7 @@ function mapTrend(t: TrendLabel): "up" | "down" | "same" {
 
 function ResultsPage(): React.JSX.Element {
   const { hasOrganization, org, isLoading: isAuthLoading, isAuthenticated } = useAuth();
-  const { selectedYearId, bootstrapState } = useAcademicYears();
+  const { selectedYearId, selectedYear, bootstrapState } = useAcademicYears();
   const classroomsState = useClassrooms({
     isAuthLoading,
     isAuthenticated,
@@ -79,6 +81,7 @@ function ResultsPage(): React.JSX.Element {
   const [trendData, setTrendData] = useState<TrendDataPoint[]>([]);
   const [trendPeriod, setTrendPeriod] = useState<PeriodOption>("30d");
   const [loading, setLoading] = useState(true);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expandedTopicId, setExpandedTopicId] = useState<string | null>(null);
   const studentRadarRef = useRef<HTMLDivElement>(null);
@@ -251,17 +254,54 @@ function ResultsPage(): React.JSX.Element {
     studentRadarRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  const handleExportPdf = useCallback(() => {
-    if (typeof window === "undefined") return;
-    const previousTitle = document.title;
+  const handleExportPdf = useCallback(async () => {
+    if (!classId || !snapshot || !org) return;
     const selectedClass = classrooms.find((item) => item.id === classId);
-    const classLabel = selectedClass ? formatClassName(selectedClass) : "trida";
-    document.title = `SkillStorm-vysledky-${classLabel.replace(/\s+/g, "-")}`;
-    window.print();
-    window.setTimeout(() => {
-      document.title = previousTitle;
-    }, 0);
-  }, [classId, classrooms]);
+    if (!selectedClass) return;
+
+    const reportAlerts: string[] = [];
+    const highRiskStudents = students.filter((student) => student.riskLevel === "HIGH");
+    if (highRiskStudents.length > 0) {
+      reportAlerts.push(
+        `${highRiskStudents.length} ${highRiskStudents.length === 1 ? "žák" : "žáci"} s vysokým rizikem: ${highRiskStudents
+          .slice(0, 3)
+          .map((student) => student.name)
+          .join(", ")}`,
+      );
+    }
+    errorTypes.forEach((item) => {
+      if (item.trendPercent != null && item.trendPercent > 10) {
+        reportAlerts.push(`Typ chyby „${item.label}" narůstá o ${Math.round(item.trendPercent)} %`);
+      }
+    });
+    if (snapshot.overallSuccessRate < 70) {
+      reportAlerts.push("Celková úspěšnost třídy je pod očekávanou úrovní.");
+    }
+
+    setIsExportingPdf(true);
+    try {
+      await downloadClassResultsPdf({
+        schoolName: org.name,
+        className: formatClassName(selectedClass),
+        academicYearName: selectedYear?.name ?? "Aktuální školní rok",
+        generatedAt: new Date(),
+        snapshot,
+        topics,
+        errorTypes,
+        students,
+        trendData,
+        priorityAlerts: reportAlerts,
+      });
+      showToastOnce("PDF report byl stažen.", { type: "success" });
+    } catch (exportError) {
+      showToastOnce(
+        exportError instanceof Error ? exportError.message : "PDF report se nepodařilo vytvořit.",
+        { type: "error" },
+      );
+    } finally {
+      setIsExportingPdf(false);
+    }
+  }, [classId, snapshot, org, classrooms, students, errorTypes, selectedYear?.name, topics, trendData]);
 
   const priorityAlerts = useMemo((): PriorityAlertItem[] => {
     const out: PriorityAlertItem[] = [];
@@ -327,7 +367,7 @@ function ResultsPage(): React.JSX.Element {
         <div className="flex justify-end">
           <Button variant="secondary" size="sm" disabled title="Vyžaduje školu">
             <Download className="h-4 w-4" />
-            Tisk / uložit PDF
+            Stáhnout PDF
           </Button>
         </div>
         <InfoAlert
@@ -351,7 +391,7 @@ function ResultsPage(): React.JSX.Element {
         <div className="flex justify-end">
           <Button variant="secondary" size="sm" disabled>
             <Download className="h-4 w-4" />
-            Tisk / uložit PDF
+            Stáhnout PDF
           </Button>
         </div>
         <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-6 py-12 text-center">
@@ -406,11 +446,11 @@ function ResultsPage(): React.JSX.Element {
           size="sm"
           className="shrink-0 print:hidden"
           onClick={handleExportPdf}
-          disabled={!hasOrganization || !classId || loading}
-          title="Otevřít tiskový dialog a uložit jako PDF"
+          disabled={!hasOrganization || !classId || !snapshot || loading || isExportingPdf}
+          title="Stáhnout samostatný PDF report"
         >
           <Download className="h-4 w-4" />
-          Tisk / uložit PDF
+          {isExportingPdf ? "Připravuji PDF…" : "Stáhnout PDF"}
         </Button>
       </div>
 
