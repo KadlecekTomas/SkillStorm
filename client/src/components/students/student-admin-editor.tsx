@@ -197,7 +197,7 @@ export function StudentAdminEditor(): React.JSX.Element | null {
               value={form.classSectionId}
               onChange={(e) => setForm((prev) => ({ ...prev, classSectionId: e.target.value }))}
             >
-              <option value="">Bez zařazení</option>
+              <option value="" disabled>Vyberte třídu</option>
               {classes.map((item) => <option key={item.id} value={item.id}>{classLabel(item)}</option>)}
             </select>
           </label>
