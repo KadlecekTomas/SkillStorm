@@ -13,55 +13,39 @@ permissions:
 jobs:
   patch:
     runs-on: ubuntu-latest
-    env:
-      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/skillstorm_schema_validation?schema=public
     steps:
       - uses: actions/checkout@v4
         with:
           ref: fix/school-readiness-rbac-contracts
           fetch-depth: 0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
 
-      - name: Repair generated progress patches
+      - name: Make deterministic scenario wipe progress-aware
         shell: bash
         run: |
           python - <<'PY'
           from pathlib import Path
 
-          page_path = Path('client/src/app/(school)/app/progress/page.tsx')
-          page = page_path.read_text()
-          broken = 'const isBrowserOnline = (): boolean =>\n  typeof navigator === "undefined" ? true : isBrowserOnline();'
-          fixed = 'const isBrowserOnline = (): boolean =>\n  typeof navigator === "undefined" ? true : navigator.onLine;'
-          if broken not in page:
-              raise SystemExit('expected broken online helper not found')
-          page = page.replace(broken, fixed, 1)
-          page_path.write_text(page)
-
-          family_path = Path('client/src/app/(school)/app/family/page.tsx')
-          family = family_path.read_text()
-          family = family.replace(
-              'import { CalendarClock, Mail, Sparkles } from "lucide-react";',
-              'import { CalendarClock, Sparkles } from "lucide-react";',
-              1,
-          )
-          family_path.write_text(family)
+          path = Path('server/prisma/seed/scenarios-e2e.seed.ts')
+          text = path.read_text()
+          marker = '  await prisma.enrollment.deleteMany({ where: { orgId: { in: orgIds } } });'
+          patch = '''  await prisma.studentIntervention.deleteMany({\n    where: { organizationId: { in: orgIds } },\n  });\n  await prisma.attendanceRecord.deleteMany({\n    where: { organizationId: { in: orgIds } },\n  });\n  await prisma.studentProgressEntry.deleteMany({\n    where: { organizationId: { in: orgIds } },\n  });\n  await prisma.competency.deleteMany({\n    where: { organizationId: { in: orgIds } },\n  });\n'''
+          if patch.strip() not in text:
+              if marker not in text:
+                  raise SystemExit('scenario wipe marker not found')
+              text = text.replace(marker, patch + marker, 1)
+          path.write_text(text)
           PY
 
-      - name: Validate Prisma schema remains healthy
-        working-directory: server
-        run: |
-          npm ci
-          npx prisma format --check
-          npx prisma validate
-
-      - name: Commit repair
+      - name: Commit seed hardening
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add client/src/app/'(school)'/app/progress/page.tsx client/src/app/'(school)'/app/family/page.tsx
-          git commit -m "fix(progress): repair online detection and family imports"
+          git add server/prisma/seed/scenarios-e2e.seed.ts
+          if git diff --cached --quiet; then
+            echo "Scenario wipe already patched"
+            exit 0
+          fi
+          git commit -m "test(progress): clean progress rows during scenario reseed"
           git pull --rebase origin fix/school-readiness-rbac-contracts
           git push origin HEAD:fix/school-readiness-rbac-contracts
