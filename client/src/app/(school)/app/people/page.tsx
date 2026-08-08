@@ -276,10 +276,6 @@ function PeoplePageContent(): React.JSX.Element {
         ) : null}
       </Card>
 
-      <p className="text-sm text-slate-500">
-        Žáky držíme u tříd, aby nevznikal druhý paralelní seznam. Detail žáka obsahuje jeho osobní údaje i přesun do aktuální třídy.
-      </p>
-
       <BaseModal
         title={inviteRole === "DIRECTOR" ? "Pozvánka pro vedení" : "Pozvánka pro učitele"}
         description="Pošlete odkaz, nebo nadiktujte krátký kód."
