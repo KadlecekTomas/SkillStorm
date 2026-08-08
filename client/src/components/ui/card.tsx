@@ -6,6 +6,10 @@ import { cn } from "@/utils/cn";
 /*
  * Karty jsou ploché (design reference: .card) — teplý podklad, 1px linka,
  * radius 12 px, žádný stín. `hoverable` přidá ztmavení na surface.
+ * `min-w-0` is a layout invariant: cards may sit inside grid/flex tracks whose
+ * descendants have a large intrinsic width (tables, selects, long content).
+ * Without it, the card can expand the whole page instead of letting the inner
+ * responsive/scroll container handle that width.
  */
 export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
   hoverable?: boolean;
@@ -16,7 +20,7 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(
     <div
       ref={ref}
       className={cn(
-        "rounded-xl border border-line bg-canvas-alt p-6 transition-colors",
+        "min-w-0 rounded-xl border border-line bg-canvas-alt p-6 transition-colors",
         hoverable && "hover:border-line-strong hover:bg-surface",
         className,
       )}

@@ -32,7 +32,7 @@ jobs:
   scenarios:
     name: Playwright scenarios (real browser + backend)
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
 
     services:
       postgres:
@@ -99,6 +99,24 @@ jobs:
           path: client/test-results/people-*.png
           if-no-files-found: ignore
           retention-days: 7
+
+      - name: Upload whole-app release screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: skillstorm-release-screenshots
+          path: client/test-results/release-*.png
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Upload responsive visual matrix
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: skillstorm-visual-matrix
+          path: client/test-results/visual-matrix/**/*.png
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Upload report on failure
         if: failure()
