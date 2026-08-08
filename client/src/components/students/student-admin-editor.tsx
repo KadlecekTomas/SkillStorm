@@ -155,28 +155,30 @@ export function StudentAdminEditor(): React.JSX.Element | null {
   };
 
   return (
-    <Card className="mx-6 mt-6 rounded-2xl border border-blue-100 bg-blue-50/60 p-4 sm:p-5" data-testid="student-admin-editor">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="font-semibold text-slate-900">Správa žáka</p>
-          <p className="mt-1 text-sm text-slate-600">
-            {loading
-              ? "Načítám údaje…"
-              : `Účet, školní identifikátory a ${currentEnrollment ? "aktuální třída" : "zařazení do třídy"}.`}
-          </p>
+    <Card className="mx-4 mt-4 rounded-2xl border border-blue-100 bg-blue-50/60 p-4 sm:mx-6 sm:mt-6 sm:p-5" data-testid="student-admin-editor">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="font-semibold text-slate-900">Údaje žáka</p>
+          {!loading && currentEnrollment && (
+            <p className="mt-0.5 text-sm text-slate-500">
+              Třída {classLabel(currentEnrollment.classSection)}
+            </p>
+          )}
         </div>
         <Button
           type="button"
           variant={open ? "outline" : "default"}
-          className="min-h-11 w-full sm:w-auto"
+          size="sm"
+          className="min-h-10 shrink-0"
           onClick={() => setOpen((value) => !value)}
           disabled={loading || !student}
         >
-          {open ? <X className="mr-2 h-4 w-4" /> : <Pencil className="mr-2 h-4 w-4" />}
-          {open ? "Zavřít editaci" : "Upravit žáka"}
+          {open ? <X className="mr-1.5 h-4 w-4" /> : <Pencil className="mr-1.5 h-4 w-4" />}
+          {open ? "Zavřít" : "Upravit"}
         </Button>
       </div>
 
+      {loading && <p className="mt-3 text-sm text-slate-500">Načítám…</p>}
       {error && <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">{error}</p>}
 
       {open && student && (
@@ -190,7 +192,7 @@ export function StudentAdminEditor(): React.JSX.Element | null {
             <Input aria-label="E-mail žáka" type="email" value={form.email} onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))} />
           </label>
           <label className="space-y-1.5 sm:col-span-2">
-            <span className="text-sm font-medium text-slate-700">Aktuální třída</span>
+            <span className="text-sm font-medium text-slate-700">Třída</span>
             <select
               aria-label="Aktuální třída žáka"
               className="min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
@@ -201,18 +203,27 @@ export function StudentAdminEditor(): React.JSX.Element | null {
               {classes.map((item) => <option key={item.id} value={item.id}>{classLabel(item)}</option>)}
             </select>
           </label>
-          <label className="space-y-1.5">
-            <span className="text-sm font-medium text-slate-700">Číslo žáka</span>
-            <Input aria-label="Číslo žáka" value={form.studentNumber} onChange={(e) => setForm((prev) => ({ ...prev, studentNumber: e.target.value }))} placeholder="Volitelné" />
-          </label>
-          <label className="space-y-1.5">
-            <span className="text-sm font-medium text-slate-700">Externí ID</span>
-            <Input aria-label="Externí ID žáka" value={form.externalId} onChange={(e) => setForm((prev) => ({ ...prev, externalId: e.target.value }))} placeholder="Volitelné" />
-          </label>
+
+          <details className="sm:col-span-2">
+            <summary className="cursor-pointer text-sm font-medium text-slate-600">
+              Další údaje
+            </summary>
+            <div className="mt-3 grid gap-4 sm:grid-cols-2">
+              <label className="space-y-1.5">
+                <span className="text-sm font-medium text-slate-700">Číslo žáka</span>
+                <Input aria-label="Číslo žáka" value={form.studentNumber} onChange={(e) => setForm((prev) => ({ ...prev, studentNumber: e.target.value }))} placeholder="Volitelné" />
+              </label>
+              <label className="space-y-1.5">
+                <span className="text-sm font-medium text-slate-700">Externí ID</span>
+                <Input aria-label="Externí ID žáka" value={form.externalId} onChange={(e) => setForm((prev) => ({ ...prev, externalId: e.target.value }))} placeholder="Volitelné" />
+              </label>
+            </div>
+          </details>
+
           <div className="flex flex-col-reverse gap-2 sm:col-span-2 sm:flex-row sm:justify-end">
             <Button type="button" variant="outline" className="min-h-11" onClick={() => setOpen(false)} disabled={saving}>Zrušit</Button>
             <Button type="button" className="min-h-11" onClick={() => void save()} disabled={saving}>
-              {saving ? "Ukládám…" : "Uložit změny"}
+              {saving ? "Ukládám…" : "Uložit"}
             </Button>
           </div>
         </div>
