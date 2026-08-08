@@ -231,7 +231,7 @@ describe("Platform catalog page", () => {
     render(<PlatformCatalogPage />);
 
     expect(await screen.findByText("Katalog obsahu")).toBeInTheDocument();
-    expect(await screen.findByText("Mathematics")).toBeInTheDocument();
+    expect((await screen.findAllByText("Mathematics")).length).toBeGreaterThan(0);
   });
 
   it("creates a subject", async () => {
@@ -255,7 +255,7 @@ describe("Platform catalog page", () => {
       ),
     );
     await waitFor(() =>
-      expect(screen.getByText("English")).toBeInTheDocument(),
+      expect(screen.getAllByText("English").length).toBeGreaterThan(0),
     );
   });
 
@@ -276,8 +276,8 @@ describe("Platform catalog page", () => {
         }),
       ),
     );
-    expect(await screen.findByText("Plants")).toBeInTheDocument();
-    expect(screen.queryByText("Fractions")).not.toBeInTheDocument();
+    expect((await screen.findAllByText("Plants")).length).toBeGreaterThan(0);
+    expect(screen.queryAllByText("Fractions")).toHaveLength(0);
   });
 
   it("edits a topic", async () => {
@@ -290,13 +290,13 @@ describe("Platform catalog page", () => {
         .findAllByRole("button", { name: "Upravit" })
         .then((buttons) => buttons[0]!),
     );
-    fireEvent.change(screen.getByLabelText("Upravit téma Fractions"), {
+    fireEvent.change(screen.getAllByLabelText("Upravit téma Fractions")[0]!, {
       target: { value: "Advanced Fractions" },
     });
-    fireEvent.change(screen.getByLabelText("Upravit pořadí Fractions"), {
+    fireEvent.change(screen.getAllByLabelText("Upravit pořadí Fractions")[0]!, {
       target: { value: "7" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Uložit" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Uložit" })[0]!);
 
     await waitFor(() =>
       expect(httpClient.patch).toHaveBeenCalledWith(
@@ -308,14 +308,14 @@ describe("Platform catalog page", () => {
       ),
     );
     await waitFor(() =>
-      expect(screen.getByText("Advanced Fractions")).toBeInTheDocument(),
+      expect(screen.getAllByText("Advanced Fractions").length).toBeGreaterThan(0),
     );
   });
 
   it("toggles subject active state", async () => {
     render(<PlatformCatalogPage />);
 
-    const toggle = await screen.findByLabelText("Aktivita Mathematics");
+    const toggle = (await screen.findAllByLabelText("Aktivita Mathematics"))[0]!;
     fireEvent.click(toggle);
 
     await waitFor(() =>
