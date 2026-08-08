@@ -9,6 +9,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useAcademicYears } from "@/hooks/use-academic-years";
 import { usePermissions } from "@/hooks/use-permissions";
 import { AcademicYearExpiredModal } from "@/components/layout/AcademicYearExpiredModal";
+import { PermissionKey } from "@/types";
 
 type DashboardLayoutProps = {
   children: React.ReactNode;
@@ -23,7 +24,8 @@ export const DashboardLayout = ({ children }: DashboardLayoutProps): React.JSX.E
   const pathname = usePathname();
   const { user, org, switchOrganization, isOffline, context } = useAuth();
   const { can, hasRole } = usePermissions();
-  const canReadAcademicYears = can("VIEW_RESULTS") || can("MANAGE_STUDENTS");
+  const canReadAcademicYears =
+    can(PermissionKey.VIEW_RESULTS) || can(PermissionKey.MANAGE_STUDENTS);
   const memberships = user?.memberships ?? [];
   const currentMembershipId = memberships.find((m) => m.organizationId === org?.id)?.id ?? "";
   const { selectedYear, bootstrapState, activeYear, isAcademicYearExpired, refresh: refreshYears } = useAcademicYears({
