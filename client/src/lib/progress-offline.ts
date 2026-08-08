@@ -35,6 +35,13 @@ export function buildProgressOfflineScope(
 const contextKey = (scopeKey: ProgressOfflineScope): string =>
   `${scopeKey}:context`;
 
+function toSyncEntry(row: QueuedProgressEntry): CreateProgressEntryInput {
+  const { queuedAt, scopeKey, ...entry } = row;
+  void queuedAt;
+  void scopeKey;
+  return entry;
+}
+
 function openDb(): Promise<IDBDatabase | null> {
   if (typeof window === 'undefined' || !('indexedDB' in window)) {
     return Promise.resolve(null);
@@ -127,7 +134,7 @@ export async function queueProgressEntry(
 
 export async function listQueuedProgressEntries(
   scopeKey: ProgressOfflineScope,
-): Promise<QueuedProgressEntry[]> {
+): Promise<CreateProgressEntryInput[]> {
   const rows = await withStore<QueuedProgressEntry[]>(
     QUEUE_STORE,
     'readonly',
@@ -135,7 +142,8 @@ export async function listQueuedProgressEntries(
   );
   return (rows ?? [])
     .filter((row) => row.scopeKey === scopeKey)
-    .sort((a, b) => a.queuedAt - b.queuedAt);
+    .sort((a, b) => a.queuedAt - b.queuedAt)
+    .map(toSyncEntry);
 }
 
 export async function removeQueuedProgressEntries(
