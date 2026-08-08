@@ -365,6 +365,10 @@ export class ResolveCurriculumApplicabilityDto {
 
   @IsUUID()
   classSectionId!: string;
+
+  @IsOptional()
+  @IsISO8601()
+  asOf?: string;
 }
 
 export class ProposeSchoolOutcomeMappingDto {

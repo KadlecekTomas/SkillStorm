@@ -390,14 +390,38 @@ describe('Curriculum foundation D1 invariants (e2e)', () => {
       actorA,
     );
 
+    const academicYear = await prisma.academicYear.findUniqueOrThrow({
+      where: { id: yearId },
+      select: { startsAt: true, endsAt: true },
+    });
+    const midpoint = new Date(
+      (academicYear.startsAt.getTime() + academicYear.endsAt.getTime()) / 2,
+    ).toISOString();
+
     const classSelected = await curriculum.resolveApplicability(
-      { academicYearId: yearId, classSectionId: class6Id },
+      { academicYearId: yearId, classSectionId: class6Id, asOf: midpoint },
       actorA,
     );
     expect(classSelected.resolution.specificity).toBe('CLASS');
+    expect(classSelected.resolution.asOf).toBe(midpoint);
     expect(classSelected.applicability.schoolCurriculumVersionId).toBe(
       legacyVersionId,
     );
+
+    await expect(
+      curriculum.resolveApplicability(
+        {
+          academicYearId: yearId,
+          classSectionId: class6Id,
+          asOf: new Date(academicYear.endsAt.getTime() + 86_400_000).toISOString(),
+        },
+        actorA,
+      ),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: 'CURRICULUM_RESOLUTION_DATE_OUTSIDE_ACADEMIC_YEAR',
+      }),
+    });
 
     await curriculum.retireApplicability(classOverride.id, actorA);
     const gradeSelected = await curriculum.resolveApplicability(
@@ -502,5 +526,26 @@ describe('Curriculum foundation D1 invariants (e2e)', () => {
       where: { id: mapping.id },
     });
     expect(persisted.status).toBe(SchoolOutcomeMappingStatus.STALE);
+
+    await prisma.outcomeAspect.update({
+      where: { id: aspectId },
+      data: { status: 'RETIRED', reviewVersion: { increment: 1 } },
+    });
+    await expect(
+      curriculum.proposeSchoolOutcomeMapping(
+        {
+          schoolOutcomeId: newSchoolOutcomeId,
+          frameworkOutcomeId: frameworkOutcome.id,
+          outcomeAspectId: aspectId,
+          mappingType: SchoolOutcomeMappingType.SUPPORTING,
+          confidence: 0.5,
+          rationale: 'A retired aspect must never accept a new mapping.',
+          proposedByType: MappingProposerType.HUMAN,
+        },
+        actorA,
+      ),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: 'CURRICULUM_MAPPING_ASPECT_RETIRED' }),
+    });
   });
 });

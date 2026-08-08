@@ -11,6 +11,7 @@ import {
   CurriculumFrameworkReleaseStatus,
   MappingProposerType,
   OrganizationRole,
+  OutcomeAspectStatus,
   Prisma,
   SchoolCurriculumProfileStatus,
   SchoolCurriculumVersionStatus,
@@ -833,27 +834,56 @@ export class CurriculumService {
     actor: JwtPayload,
   ) {
     const organizationId = this.requireActorOrganization(actor);
-    const classSection = await this.prisma.classSection.findFirst({
-      where: {
-        id: query.classSectionId,
-        yearId: query.academicYearId,
-        orgId: organizationId,
-      },
-      select: { id: true, grade: true, yearId: true },
-    });
-    if (!classSection) {
+    const [academicYear, classSection] = await Promise.all([
+      this.prisma.academicYear.findFirst({
+        where: {
+          id: query.academicYearId,
+          orgId: organizationId,
+          deletedAt: null,
+        },
+        select: { id: true, startsAt: true, endsAt: true, isCurrent: true },
+      }),
+      this.prisma.classSection.findFirst({
+        where: {
+          id: query.classSectionId,
+          yearId: query.academicYearId,
+          orgId: organizationId,
+        },
+        select: { id: true, grade: true, yearId: true },
+      }),
+    ]);
+    if (!academicYear || !classSection) {
       throw new NotFoundException('Třída pro zvolený školní rok nenalezena.');
     }
 
     const now = new Date();
+    const requestedAsOf = query.asOf ? new Date(query.asOf) : null;
+    if (
+      requestedAsOf &&
+      (requestedAsOf < academicYear.startsAt || requestedAsOf > academicYear.endsAt)
+    ) {
+      throw new BadRequestException({
+        code: 'CURRICULUM_RESOLUTION_DATE_OUTSIDE_ACADEMIC_YEAR',
+        message: 'asOf musí ležet uvnitř zvoleného školního roku.',
+      });
+    }
+
+    const resolutionDate =
+      requestedAsOf ??
+      (now >= academicYear.startsAt && now <= academicYear.endsAt
+        ? now
+        : now < academicYear.startsAt
+          ? academicYear.startsAt
+          : academicYear.endsAt);
+
     const candidates = await this.prisma.curriculumApplicability.findMany({
       where: {
         organizationId,
         academicYearId: query.academicYearId,
         status: CurriculumApplicabilityStatus.ACTIVE,
         AND: [
-          { OR: [{ validFrom: null }, { validFrom: { lte: now } }] },
-          { OR: [{ validTo: null }, { validTo: { gte: now } }] },
+          { OR: [{ validFrom: null }, { validFrom: { lte: resolutionDate } }] },
+          { OR: [{ validTo: null }, { validTo: { gte: resolutionDate } }] },
           {
             OR: [
               { classSectionId: classSection.id },
@@ -891,6 +921,12 @@ export class CurriculumService {
               ? 'GRADE'
               : 'SCHOOL_DEFAULT',
           priority: selected.priority,
+          asOf: resolutionDate.toISOString(),
+          academicYear: {
+            startsAt: academicYear.startsAt.toISOString(),
+            endsAt: academicYear.endsAt.toISOString(),
+            isCurrent: academicYear.isCurrent,
+          },
         },
       };
     } catch (error) {
@@ -974,6 +1010,12 @@ export class CurriculumService {
       throw new BadRequestException({
         code: 'CURRICULUM_MAPPING_ASPECT_OUTCOME_MISMATCH',
         message: 'Outcome aspect nepatří ke zvolenému framework outcome.',
+      });
+    }
+    if (aspect && aspect.status !== OutcomeAspectStatus.ACTIVE) {
+      throw new ConflictException({
+        code: 'CURRICULUM_MAPPING_ASPECT_RETIRED',
+        message: 'Nový mapping nelze navrhnout proti RETIRED outcome aspect.',
       });
     }
 
