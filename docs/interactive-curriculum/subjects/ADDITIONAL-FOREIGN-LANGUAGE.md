@@ -29,6 +29,8 @@ CONTEXT
 
 Další cizí jazyk je samostatný obor oblasti `Jazyk a jazyková komunikace`. SkillStorm nesmí předpokládat konkrétní jazyk ani konkrétní učebnici.
 
+Každý produkční language pack a Lesson Experience se mapuje na konkrétní **RVP/OVU** vrstvu a současně na odpovídající **ŠVP školy** podle aktuální curriculum version; recommended progression v tomto blueprintu není závazná státní ročníková osnova.
+
 Produkční language pack musí mít:
 
 - `languageCode`;
