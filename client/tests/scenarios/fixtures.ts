@@ -63,8 +63,8 @@ export { expect };
 /** Perform a real UI login on the given (unauthenticated) page. */
 export async function uiLogin(page: Page, email: string, password: string) {
   await page.goto('/login', { waitUntil: 'commit' });
-  await page.getByPlaceholder(/you@school\.edu/i).fill(email);
-  await page.getByPlaceholder(/••••••••/i).fill(password);
+  await page.getByLabel(/e-?mail/i).fill(email);
+  await page.getByLabel(/heslo/i).fill(password);
   await page.getByRole('button', { name: /sign in|přihlásit/i }).click();
 }
 
