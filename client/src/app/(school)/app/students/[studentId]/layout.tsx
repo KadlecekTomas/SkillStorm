@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { StudentAdminEditor } from "@/components/students/student-admin-editor";
 import { GuardBoundary } from "@/lib/guard/GuardBoundary";
 import type { OrganizationRole } from "@/types";
 
@@ -20,6 +21,7 @@ export default function StudentDetailLayout({
       requireRoles={STUDENT_DETAIL_ROLES}
       requireSchoolWorkspace
     >
+      <StudentAdminEditor />
       {children}
     </GuardBoundary>
   );

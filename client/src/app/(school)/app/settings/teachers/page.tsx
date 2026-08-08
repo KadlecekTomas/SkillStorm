@@ -23,7 +23,7 @@ const MANAGEMENT_ROLES: OrganizationRole[] = ["OWNER", "DIRECTOR"];
 
 const ROLE_LABELS: Record<string, string> = {
   OWNER: "Vlastník",
-  DIRECTOR: "Ředitel",
+  DIRECTOR: "Vedení",
   TEACHER: "Učitel",
   STUDENT: "Žák",
   PARENT: "Rodič",
@@ -62,22 +62,25 @@ function TeacherManagerPage(): React.JSX.Element {
       <div>
         <p className="font-medium text-slate-800">Zatím tu nejsou žádní učitelé.</p>
         <p className="mt-1 text-sm text-slate-500">
-          Pozvěte prvního učitele a potom mu nastavte přístup ke třídám.
+          Nejdřív pozvěte učitele v sekci Lidé. Tady potom nastavíte jeho přístup ke třídám.
         </p>
       </div>
       <Button asChild variant="outline" size="sm">
-        <Link href="/app/settings">Pozvat učitele</Link>
+        <Link href="/app/people">Otevřít Lidi</Link>
       </Button>
     </div>
   );
 
   return (
     <div className="space-y-6 rounded-3xl border border-slate-100 bg-white p-6 text-sm text-slate-600 shadow-soft">
-      <div>
-        <h1 className="text-2xl font-semibold text-slate-900">Učitelé</h1>
-        <p className="mt-2">
-          Učitelé školy a jejich přístupy ke třídám.
-        </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold text-slate-900">Přístupy učitelů</h1>
+          <p className="mt-2">Nastavení toho, ke kterým třídám mají jednotliví učitelé přístup.</p>
+        </div>
+        <Button asChild variant="outline" className="min-h-11 w-full sm:w-auto">
+          <Link href="/app/people">Zpět na Lidi</Link>
+        </Button>
       </div>
 
       {error && (

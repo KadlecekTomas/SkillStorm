@@ -137,6 +137,34 @@ type CompetencyInput = {
   scaleMax?: number;
 };
 
+const syncEntriesInFlight = new Map<string, Promise<SyncEntriesResponse>>();
+
+function syncEntriesKey(entries: CreateProgressEntryInput[]): string {
+  return entries
+    .map((entry) => entry.clientMutationId ?? JSON.stringify(entry))
+    .sort()
+    .join('|');
+}
+
+function syncEntries(entries: CreateProgressEntryInput[]): Promise<SyncEntriesResponse> {
+  const key = syncEntriesKey(entries);
+  const existing = syncEntriesInFlight.get(key);
+  if (existing) return existing;
+
+  const request = fetchWithAuth<SyncEntriesResponse>('POST', '/progress/sync', {
+    body: { entries },
+  });
+  syncEntriesInFlight.set(key, request);
+  void request
+    .finally(() => {
+      if (syncEntriesInFlight.get(key) === request) {
+        syncEntriesInFlight.delete(key);
+      }
+    })
+    .catch(() => undefined);
+  return request;
+}
+
 export const progressApi = {
   context: (): Promise<ProgressContext> =>
     fetchWithAuth<ProgressContext>('GET', '/progress/context'),
@@ -144,8 +172,7 @@ export const progressApi = {
   createEntry: (body: CreateProgressEntryInput): Promise<unknown> =>
     fetchWithAuth<unknown>('POST', '/progress/entries', { body }),
 
-  syncEntries: (entries: CreateProgressEntryInput[]): Promise<SyncEntriesResponse> =>
-    fetchWithAuth<SyncEntriesResponse>('POST', '/progress/sync', { body: { entries } }),
+  syncEntries,
 
   student: (studentId: string): Promise<StudentProgressDetail> =>
     fetchWithAuth<StudentProgressDetail>('GET', `/progress/students/${studentId}`),

@@ -26,8 +26,10 @@ async function chooseSelectOption(
   label: string,
   option: string,
 ): Promise<void> {
-  await page.getByLabel(label).click();
+  const trigger = page.getByLabel(label);
+  await trigger.click();
   await page.getByRole('option', { name: option, exact: true }).click();
+  await expect(trigger).toContainText(option);
 }
 
 test.describe('school progress — simplified ZŠ workflow', () => {
@@ -35,6 +37,7 @@ test.describe('school progress — simplified ZŠ workflow', () => {
 
   let parentChildId = '';
   let parentChildName = '';
+  let parentChildClassLabel = '';
   let teacherSubjectId = '';
   let competencyName = '';
   const onlineComment = `Průběžná zpětná vazba ${Date.now()}`;
@@ -51,6 +54,8 @@ test.describe('school progress — simplified ZŠ workflow', () => {
     expect(children.children.length).toBeGreaterThan(0);
     parentChildId = children.children[0]!.studentId;
     parentChildName = children.children[0]!.name;
+    parentChildClassLabel = children.children[0]!.classLabel ?? '';
+    expect(parentChildClassLabel, 'guardian child must have an active class').toBeTruthy();
 
     const { page: teacherPage } = await asRole('teacher');
     const contextResponse = await teacherPage.request.get('/api/progress/context');
@@ -93,7 +98,7 @@ test.describe('school progress — simplified ZŠ workflow', () => {
     const nav = teacherPage.getByRole('navigation', { name: 'Hlavní navigace' }).first();
     await expect(nav.locator('a[href="/app/progress"]')).toBeVisible();
 
-    await chooseSelectOption(teacherPage, 'Vyberte třídu', '8.A');
+    await chooseSelectOption(teacherPage, 'Vyberte třídu', parentChildClassLabel);
     await chooseSelectOption(teacherPage, 'Vyberte žáka', parentChildName);
     await chooseSelectOption(teacherPage, 'Vyberte předmět', subject!.name);
     await chooseSelectOption(teacherPage, 'Vyberte kompetenci', competencyName);
@@ -213,6 +218,7 @@ test.describe('school progress — simplified ZŠ workflow', () => {
     asRole,
   }) => {
     expect(parentChildId).toBeTruthy();
+    expect(parentChildClassLabel).toBeTruthy();
     const { page } = await asRole('teacher');
     const contextResponse = await page.request.get('/api/progress/context');
     const context = unwrap<ProgressContextPayload>(await contextResponse.json());
@@ -221,7 +227,7 @@ test.describe('school progress — simplified ZŠ workflow', () => {
 
     await page.goto('/app/progress', { waitUntil: 'commit' });
     await expect(page.getByRole('heading', { name: 'Zapsat pokrok žáka' })).toBeVisible();
-    await chooseSelectOption(page, 'Vyberte třídu', '8.A');
+    await chooseSelectOption(page, 'Vyberte třídu', parentChildClassLabel);
     await chooseSelectOption(page, 'Vyberte žáka', parentChildName);
     await chooseSelectOption(page, 'Vyberte předmět', subject!.name);
 

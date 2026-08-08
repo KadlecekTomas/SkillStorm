@@ -159,6 +159,13 @@ function TeacherWorkspace({
     (item) => item.subjectId === null || item.subjectId === subjectId,
   );
 
+  const changeClass = (nextClassId: string) => {
+    const nextClass = context.classes.find((item) => item.id === nextClassId) ?? null;
+    setClassId(nextClassId);
+    setStudentId(nextClass?.students[0]?.id ?? "");
+    setStudentDetail(null);
+  };
+
   useEffect(() => {
     const next = selectedClass?.students[0]?.id ?? "";
     if (!selectedClass?.students.some((item) => item.id === studentId)) setStudentId(next);
@@ -418,7 +425,7 @@ function TeacherWorkspace({
           <div className="grid gap-4 md:grid-cols-3">
             <label className="space-y-2">
               <span className="text-base font-extrabold text-ink">1. Třída</span>
-              <Select value={selectedClass?.id ?? ""} onValueChange={setClassId}>
+              <Select value={selectedClass?.id ?? ""} onValueChange={changeClass}>
                 <SelectTrigger className="h-14 text-base" aria-label="Vyberte třídu">
                   <SelectValue placeholder="Vyberte třídu" />
                 </SelectTrigger>
@@ -956,7 +963,7 @@ export default function ProgressPage(): React.JSX.Element | null {
 
   const loadDashboard = useCallback(async () => {
     if (!isLeadership) return;
-    if (!online) {
+    if (!isBrowserOnline()) {
       setDashboardError(null);
       return;
     }
@@ -967,7 +974,7 @@ export default function ProgressPage(): React.JSX.Element | null {
       setDashboard(null);
       setDashboardError("Přehled školy se nepodařilo načíst. Zkuste obnovení.");
     }
-  }, [isLeadership, online]);
+  }, [isLeadership]);
 
   const loadPageData = useCallback(async () => {
     setLoading(true);
