@@ -45,7 +45,45 @@ export const DataTable = <T extends { id: string }>({
 
   return (
     <div className="space-y-4">
-      <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white">
+      <div className="sm:hidden">
+        {loading ? (
+          <div className="rounded-2xl border border-slate-100 bg-white p-4">
+            <div className="h-4 animate-pulse rounded-full bg-slate-100" />
+          </div>
+        ) : rows.length ? (
+          <div className="space-y-3">
+            {rows.map((row) => (
+              <article
+                key={row.id}
+                className={cn(
+                  "rounded-2xl border border-slate-100 bg-white p-4",
+                  onRowClick && "cursor-pointer active:bg-slate-50",
+                )}
+                onClick={onRowClick ? () => onRowClick(row) : undefined}
+              >
+                <dl className="space-y-3">
+                  {columns.map((column) => (
+                    <div key={String(column.key)} className="min-w-0">
+                      <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                        {column.label}
+                      </dt>
+                      <dd className={cn("mt-1 min-w-0 text-sm text-slate-700", column.className)}>
+                        {resolveValue(row, column)}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-slate-100 bg-white px-4 py-8 text-center text-slate-500">
+            {emptyState ?? "Zatím tu nejsou žádná data."}
+          </div>
+        )}
+      </div>
+
+      <div className="hidden overflow-hidden rounded-2xl border border-slate-100 bg-white sm:block">
         <table className="w-full min-w-full divide-y divide-slate-100">
           <thead>
             <tr className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -86,17 +124,18 @@ export const DataTable = <T extends { id: string }>({
                   colSpan={columns.length}
                   className="px-6 py-10 text-center text-slate-500"
                 >
-                  {emptyState ?? "No data yet"}
+                  {emptyState ?? "Zatím tu nejsou žádná data."}
                 </td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
+
       {totalPages > 1 && (
-        <div className="flex items-center justify-between rounded-2xl border border-slate-100 bg-white px-4 py-2 text-sm">
+        <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white px-4 py-2 text-sm">
           <span className="text-slate-500">
-            Page {page} of {totalPages}
+            Strana {page} z {totalPages}
           </span>
           <div className="flex gap-2">
             <Button
@@ -105,7 +144,7 @@ export const DataTable = <T extends { id: string }>({
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page === 1}
             >
-              Previous
+              Předchozí
             </Button>
             <Button
               variant="outline"
@@ -113,7 +152,7 @@ export const DataTable = <T extends { id: string }>({
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page === totalPages}
             >
-              Next
+              Další
             </Button>
           </div>
         </div>
