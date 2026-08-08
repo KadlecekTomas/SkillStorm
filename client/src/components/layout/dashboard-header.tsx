@@ -57,8 +57,6 @@ export function DashboardHeader(): React.JSX.Element {
   const activeMembershipId = activeMembership?.id ?? "";
   const role = activeRole ?? user?.organizationRole ?? "";
   const title = getDashboardTitle(context, role);
-  // Multi-role (guardian Etapa A): přepínač kontextu se ukáže jen členům
-  // s více přiřazenými rolemi v aktivní organizaci.
   const availableRoles = activeMembership?.roles ?? [];
   const showRoleSwitcher =
     context?.mode === "organization" && availableRoles.length > 1;
@@ -82,7 +80,7 @@ export function DashboardHeader(): React.JSX.Element {
         {showBetaBadge && (
           <span
             className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800"
-            aria-label="Closed beta"
+            aria-label="Beta verze"
           >
             BETA
           </span>
@@ -99,14 +97,16 @@ export function DashboardHeader(): React.JSX.Element {
             }}
             disabled={isLoading}
           >
-            <SelectTrigger className="w-52 rounded-2xl" aria-label="Organization">
+            <SelectTrigger className="w-52 rounded-2xl" aria-label="Aktivní škola">
               <SelectValue placeholder="Vyber školu" />
             </SelectTrigger>
             <SelectContent>
               {memberships.map((membership) => (
                 <SelectItem key={membership.id} value={membership.id}>
                   {membership.organization?.name ?? membership.organizationId}
-                  {membership.role ? ` (${membership.role.toLowerCase()})` : ""}
+                  {membership.role
+                    ? ` (${ROLE_LABELS[membership.role] ?? "Člen"})`
+                    : ""}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -128,7 +128,7 @@ export function DashboardHeader(): React.JSX.Element {
             <SelectContent>
               {availableRoles.map((availableRole) => (
                 <SelectItem key={availableRole} value={availableRole}>
-                  {ROLE_LABELS[availableRole] ?? availableRole.toLowerCase()}
+                  {ROLE_LABELS[availableRole] ?? "Člen"}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -136,7 +136,7 @@ export function DashboardHeader(): React.JSX.Element {
         ) : (
           role && (
             <Badge variant="secondary" className="capitalize">
-              {ROLE_LABELS[role] ?? role.toLowerCase()}
+              {ROLE_LABELS[role] ?? "Člen"}
             </Badge>
           )
         )}

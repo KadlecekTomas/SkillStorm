@@ -12,6 +12,7 @@ import {
   Header,
   ParseUUIDPipe,
   ForbiddenException,
+  NotFoundException,
   UseGuards,
 } from '@nestjs/common';
 import { RequestWithUser } from '@/types/request-with-user';
@@ -22,7 +23,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { Permission } from '@/modules/rbac/permission.decorator';
-import { PermissionKey } from '@prisma/client';
+import { OrganizationRole, PermissionKey, PublishStatus } from '@prisma/client';
 import { InvalidateScopes } from '@/common/cache/invalidate.decorator';
 import { NoHttpCache } from '@/common/cache/no-http-cache.decorator';
 
@@ -47,6 +48,7 @@ import {
   OrgOperationType,
 } from '@/common/decorators/org-operation.decorator';
 import { OrgContextService } from '@/common/org-context/org-context.service';
+import { TeacherAssignmentClassAccessGuard } from './guards/teacher-assignment-class-access.guard';
 
 @ApiTags('tests')
 @ApiStandardResponses()
@@ -103,16 +105,54 @@ export class TestsController {
     return ok(this.service.findAll(req.user, q, ctx));
   }
 
-  @Get(':id')
+  /**
+   * Explicit read-only detail used for published colleague tests. It preserves
+   * same-org visibility while keeping edit/publish/archive UI on the editable
+   * route reserved for an author or school leadership.
+   */
+  @Get(':id/view')
   @Permission(PermissionKey.VIEW_RESULTS)
-  @ApiOperation({ summary: 'Get test detail' })
+  @ApiOperation({ summary: 'Get read-only test detail' })
   @NoHttpCache()
   @Header('Cache-Control', 'no-store')
-  findOne(
+  async viewOne(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Req() req: RequestWithUser,
   ) {
-    return ok(this.service.findOne(id, req.user));
+    const detail = await this.service.findOne(id, req.user);
+    const teacherDetail = detail as { editMode?: unknown; status?: unknown } | null;
+    if (
+      req.user.organizationRole === OrganizationRole.TEACHER &&
+      teacherDetail?.editMode === 'NONE' &&
+      teacherDetail.status !== PublishStatus.PUBLISHED
+    ) {
+      throw new NotFoundException('Test nenalezen');
+    }
+    return ok(detail);
+  }
+
+  @Get(':id')
+  @Permission(PermissionKey.VIEW_RESULTS)
+  @ApiOperation({ summary: 'Get editable test detail' })
+  @NoHttpCache()
+  @Header('Cache-Control', 'no-store')
+  async findOne(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() req: RequestWithUser,
+  ) {
+    const detail = await this.service.findOne(id, req.user);
+    if (
+      req.user.organizationRole === OrganizationRole.TEACHER &&
+      typeof detail === 'object' &&
+      detail !== null &&
+      'editMode' in detail &&
+      (detail as { editMode?: unknown }).editMode === 'NONE'
+    ) {
+      throw new ForbiddenException(
+        'Tento test je dostupný pouze pro čtení. Použijte read-only detail.',
+      );
+    }
+    return ok(detail);
   }
 
   @Patch(':id')
@@ -144,6 +184,7 @@ export class TestsController {
 
   @Post(':id/assign')
   @OrgOperation(OrgOperationType.EXECUTION)
+  @UseGuards(TeacherAssignmentClassAccessGuard)
   @Permission(PermissionKey.ASSIGN_TESTS, PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'Assign test to class or students' })
   assignTest(
@@ -187,7 +228,6 @@ export class TestsController {
 
   // QUESTIONS -------------------------------------------
 
-  // Reorder MUSÍ být nad ':id/questions/:questionId'
   @Patch(':id/questions/reorder')
   @Permission(PermissionKey.EDIT_TEST)
   @ApiOperation({ summary: 'Reorder questions' })

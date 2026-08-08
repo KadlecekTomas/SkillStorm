@@ -103,7 +103,7 @@ export function CurrentAcademicYearRequiredScreen({
   }, [markAvailable, onRecovered, org?.id, pathname, router, syncProfile]);
 
   const handleCreate = useCallback(async () => {
-    if (!org?.id) return;
+    if (!org?.id || !canManageAcademicYears) return;
     setCreateSubmitting(true);
     setFormError(null);
     try {
@@ -137,9 +137,10 @@ export function CurrentAcademicYearRequiredScreen({
     } finally {
       setCreateSubmitting(false);
     }
-  }, [endsAt, handleRecovered, label, org?.id, startsAt]);
+  }, [canManageAcademicYears, endsAt, handleRecovered, label, org?.id, startsAt]);
 
   const handleActivate = useCallback(async () => {
+    if (!canManageAcademicYears) return;
     if (!selectedExistingYearId) {
       setActivationError("Vyberte školní rok, který chcete aktivovat.");
       return;
@@ -156,7 +157,7 @@ export function CurrentAcademicYearRequiredScreen({
     } finally {
       setActivateSubmitting(false);
     }
-  }, [handleRecovered, selectedExistingYearId]);
+  }, [canManageAcademicYears, handleRecovered, selectedExistingYearId]);
 
   return (
     <div className="flex min-h-[70vh] items-center justify-center px-4 py-12">
@@ -178,140 +179,144 @@ export function CurrentAcademicYearRequiredScreen({
 
           {!canManageAcademicYears && (
             <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-              Aktuální školní rok může nastavit pouze ředitel nebo vlastník školy.
+              Aktuální školní rok musí nastavit ředitel nebo vlastník školy. Jakmile ho vedení nastaví, stačí tuto stránku znovu načíst.
             </p>
           )}
 
-          <div className="flex flex-wrap gap-3">
-            <Button
-              className="rounded-xl"
-              size="lg"
-              onClick={() => setCreateOpen(true)}
-              disabled={!canManageAcademicYears}
-            >
-              Vytvořit školní rok
-            </Button>
-            {hasExistingYears && (
+          {canManageAcademicYears && (
+            <div className="flex flex-wrap gap-3">
               <Button
-                variant="outline"
                 className="rounded-xl"
                 size="lg"
-                onClick={() => setActivateOpen(true)}
-                disabled={!canManageAcademicYears}
+                onClick={() => setCreateOpen(true)}
               >
-                Vybrat existující rok
+                Vytvořit školní rok
               </Button>
-            )}
-          </div>
+              {hasExistingYears && (
+                <Button
+                  variant="outline"
+                  className="rounded-xl"
+                  size="lg"
+                  onClick={() => setActivateOpen(true)}
+                >
+                  Vybrat existující rok
+                </Button>
+              )}
+            </div>
+          )}
 
           {loadingYears ? (
             <LoadingSpinner label="Načítám dostupné školní roky…" />
-          ) : hasExistingYears ? (
+          ) : canManageAcademicYears && hasExistingYears ? (
             <p className="text-sm text-slate-500">
               V organizaci už existuje {years.length === 1 ? "1 školní rok" : `${years.length} školních roků`}.
             </p>
-          ) : (
+          ) : canManageAcademicYears ? (
             <p className="text-sm text-slate-500">
               V organizaci zatím není žádný školní rok. Vytvořte první a nastavte ho jako aktuální.
             </p>
-          )}
+          ) : null}
         </div>
       </Card>
 
-      <BaseModal
-        open={createOpen}
-        onOpenChange={(open) => {
-          setCreateOpen(open);
-          if (!open) setFormError(null);
-        }}
-        title="Vytvořit školní rok"
-        description="Vyplňte období školního roku. Nový rok bude po vytvoření aktivní."
-      >
-        <div className="space-y-4">
-          <label className="block text-sm font-medium text-slate-700">
-            Popisek
-            <Input
-              className="mt-2"
-              value={label}
-              onChange={(event) => setLabel(event.target.value)}
-              placeholder="2025/2026"
-            />
-          </label>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <label className="block text-sm font-medium text-slate-700">
-              Začátek
-              <Input
-                className="mt-2"
-                type="date"
-                value={startsAt}
-                onChange={(event) => setStartsAt(event.target.value)}
-              />
-            </label>
-            <label className="block text-sm font-medium text-slate-700">
-              Konec
-              <Input
-                className="mt-2"
-                type="date"
-                value={endsAt}
-                onChange={(event) => setEndsAt(event.target.value)}
-              />
-            </label>
-          </div>
-          {formError && (
-            <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
-              {formError}
-            </p>
-          )}
-          <div className="flex justify-end gap-3">
-            <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={createSubmitting}>
-              Zrušit
-            </Button>
-            <Button onClick={() => void handleCreate()} disabled={createSubmitting || !canManageAcademicYears}>
-              {createSubmitting ? "Vytvářím…" : "Vytvořit školní rok"}
-            </Button>
-          </div>
-        </div>
-      </BaseModal>
+      {canManageAcademicYears && (
+        <>
+          <BaseModal
+            open={createOpen}
+            onOpenChange={(open) => {
+              setCreateOpen(open);
+              if (!open) setFormError(null);
+            }}
+            title="Vytvořit školní rok"
+            description="Vyplňte období školního roku. Nový rok bude po vytvoření aktivní."
+          >
+            <div className="space-y-4">
+              <label className="block text-sm font-medium text-slate-700">
+                Popisek
+                <Input
+                  className="mt-2"
+                  value={label}
+                  onChange={(event) => setLabel(event.target.value)}
+                  placeholder="2025/2026"
+                />
+              </label>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="block text-sm font-medium text-slate-700">
+                  Začátek
+                  <Input
+                    className="mt-2"
+                    type="date"
+                    value={startsAt}
+                    onChange={(event) => setStartsAt(event.target.value)}
+                  />
+                </label>
+                <label className="block text-sm font-medium text-slate-700">
+                  Konec
+                  <Input
+                    className="mt-2"
+                    type="date"
+                    value={endsAt}
+                    onChange={(event) => setEndsAt(event.target.value)}
+                  />
+                </label>
+              </div>
+              {formError && (
+                <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+                  {formError}
+                </p>
+              )}
+              <div className="flex justify-end gap-3">
+                <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={createSubmitting}>
+                  Zrušit
+                </Button>
+                <Button onClick={() => void handleCreate()} disabled={createSubmitting}>
+                  {createSubmitting ? "Vytvářím…" : "Vytvořit školní rok"}
+                </Button>
+              </div>
+            </div>
+          </BaseModal>
 
-      <BaseModal
-        open={activateOpen}
-        onOpenChange={(open) => {
-          setActivateOpen(open);
-          if (!open) setActivationError(null);
-        }}
-        title="Vybrat existující rok"
-        description="Vyberte školní rok, který má být nastaven jako aktuální."
-      >
-        <div className="space-y-4">
-          <label className="block text-sm font-medium text-slate-700">
-            Školní rok
-            <select
-              className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-              value={selectedExistingYearId}
-              onChange={(event) => setSelectedExistingYearId(event.target.value)}
-            >
-              {years.map((year) => (
-                <option key={year.id} value={year.id}>
-                  {year.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          {activationError && (
-            <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
-              {activationError}
-            </p>
-          )}
-          <div className="flex justify-end gap-3">
-            <Button variant="outline" onClick={() => setActivateOpen(false)} disabled={activateSubmitting}>
-              Zrušit
-            </Button>
-            <Button onClick={() => void handleActivate()} disabled={activateSubmitting || !canManageAcademicYears}>
-              {activateSubmitting ? "Aktivuji…" : "Aktivovat rok"}
-            </Button>
-          </div>
-        </div>
-      </BaseModal>
+          <BaseModal
+            open={activateOpen}
+            onOpenChange={(open) => {
+              setActivateOpen(open);
+              if (!open) setActivationError(null);
+            }}
+            title="Vybrat existující rok"
+            description="Vyberte školní rok, který má být nastaven jako aktuální."
+          >
+            <div className="space-y-4">
+              <label className="block text-sm font-medium text-slate-700">
+                Školní rok
+                <select
+                  className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                  value={selectedExistingYearId}
+                  onChange={(event) => setSelectedExistingYearId(event.target.value)}
+                >
+                  {years.map((year) => (
+                    <option key={year.id} value={year.id}>
+                      {year.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {activationError && (
+                <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+                  {activationError}
+                </p>
+              )}
+              <div className="flex justify-end gap-3">
+                <Button variant="outline" onClick={() => setActivateOpen(false)} disabled={activateSubmitting}>
+                  Zrušit
+                </Button>
+                <Button onClick={() => void handleActivate()} disabled={activateSubmitting}>
+                  {activateSubmitting ? "Aktivuji…" : "Aktivovat rok"}
+                </Button>
+              </div>
+            </div>
+          </BaseModal>
+        </>
+      )}
     </div>
   );
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import type { ContentItem } from "@/types";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -26,10 +27,10 @@ export const ContentLibraryList = ({ items }: ContentLibraryListProps): React.JS
         <Card className="space-y-3 rounded-2xl border border-slate-100 p-5 shadow-soft">
           <div className="flex items-center justify-between text-xs text-slate-500">
             <span className="truncate">
-              {item.updatedAt ?? "Recently synced"}
+              {item.updatedAt ?? "Nedávno aktualizováno"}
             </span>
             <Badge variant="neutral">
-              {item.scope === "GLOBAL" ? "Global" : "Org"}
+              {item.scope === "GLOBAL" ? "Globální" : "Školní"}
             </Badge>
           </div>
           <div>
@@ -45,8 +46,8 @@ export const ContentLibraryList = ({ items }: ContentLibraryListProps): React.JS
           </div>
           <div className="flex items-center justify-between text-sm text-slate-500">
             <span className="capitalize">{item.contentType.toLowerCase()}</span>
-            <Button variant="outline" size="sm" className="rounded-full px-4">
-              Open
+            <Button variant="outline" size="sm" className="rounded-full px-4" asChild>
+              <Link href={`/app/library/${item.id}`}>Otevřít</Link>
             </Button>
           </div>
         </Card>

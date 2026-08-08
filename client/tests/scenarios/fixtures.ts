@@ -28,6 +28,7 @@ export type RoleKey =
   | 'student8a'
   | 'student2a'
   | 'studentHs'
+  | 'parent'
   | 'otherOrgStudent';
 
 export const test = base.extend<Fixtures>({

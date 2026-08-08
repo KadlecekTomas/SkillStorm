@@ -32,7 +32,7 @@ function Slip({
   studentName: string;
   code: string;
   expiresAt: string;
-}) {
+}): React.JSX.Element {
   return (
     <div className="flex flex-col gap-2 rounded-xl border border-dashed border-line-strong p-4 print:break-inside-avoid print:rounded-none print:border-slate-400">
       <p className="text-[15px] font-extrabold text-ink print:text-black">
@@ -54,7 +54,7 @@ function Slip({
   );
 }
 
-export default function GuardianCodesPage() {
+export default function GuardianCodesPage(): React.JSX.Element {
   const router = useRouter();
   const params = useParams<{ classSectionId: string }>();
   const classSectionId = params?.classSectionId ?? null;

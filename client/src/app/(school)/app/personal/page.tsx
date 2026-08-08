@@ -9,7 +9,7 @@ import { withGuard } from "@/lib/guard/withGuard";
  * Personal-mode dashboard: no organization context.
  * Separate from role-based dashboard; no mode branching in main /app tree.
  */
-function PersonalDashboardPage() {
+function PersonalDashboardPage(): React.JSX.Element {
   return (
     <div className="space-y-8">
       <Card className="space-y-4 rounded-3xl border border-emerald-200 bg-emerald-50/70 p-6">
@@ -29,12 +29,12 @@ function PersonalDashboardPage() {
           <Button asChild className="rounded-2xl">
             <Link href="/app/onboarding">Založit nebo se připojit</Link>
           </Button>
-          <Button disabled variant="outline" title="Vyžaduje školu" className="rounded-2xl">
-            Pozvat členy
-          </Button>
-          <Button disabled variant="outline" title="Vyžaduje školu" className="rounded-2xl">
-            Spravovat třídy
-          </Button>
+          <span className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-500">
+            Pozvání členů · dostupné po připojení ke škole
+          </span>
+          <span className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-500">
+            Správa tříd · dostupná po připojení ke škole
+          </span>
         </div>
       </Card>
     </div>

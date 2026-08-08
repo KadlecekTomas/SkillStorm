@@ -26,6 +26,7 @@ import { ToggleSubjectLevelDto } from './dto/toggle-subject-level.dto';
 import { SubjectsService } from './subject.service';
 
 import { InvalidateScopes } from '@/common/cache/invalidate.decorator';
+import { NoHttpCache } from '@/common/cache/no-http-cache.decorator';
 import {
   OrgOperation,
   OrgOperationType,
@@ -54,7 +55,8 @@ export class SubjectsController {
     example: false,
     description: 'Include inactive subjects',
   })
-  @CacheTTL(0) // čtecí endpointy necacheujeme na HTTP vrstvě – používáme verziovanou cache v service
+  @NoHttpCache()
+  @CacheTTL(0)
   findAll(@Req() req: RequestWithUser, @Query() q: QuerySubjectsDto) {
     return this.service.findAll(req.user, q);
   }
@@ -63,6 +65,7 @@ export class SubjectsController {
   @Get(':id')
   @Permission(PermissionKey.VIEW_TEST_OVERVIEW)
   @ApiOperation({ summary: 'Detail předmětu' })
+  @NoHttpCache()
   @CacheTTL(0)
   findOne(
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -75,6 +78,7 @@ export class SubjectsController {
   @Get(':id/levels')
   @Permission(PermissionKey.MANAGE_TEACHERS)
   @ApiOperation({ summary: 'Seznam SubjectLevel pro daný předmět' })
+  @NoHttpCache()
   @CacheTTL(0)
   findLevels(
     @Param('id', new ParseUUIDPipe()) subjectId: string,
@@ -108,6 +112,7 @@ export class SubjectsController {
   @ApiOperation({
     summary: 'Všechna TopicLevel pro daný předmět (přes SubjectLevel)',
   })
+  @NoHttpCache()
   @CacheTTL(0)
   findTopicsBySubject(
     @Param('id', new ParseUUIDPipe()) subjectId: string,

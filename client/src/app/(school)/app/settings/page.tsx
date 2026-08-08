@@ -7,7 +7,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { SuccessAlert } from "@/components/ui/alert";
 import { Switch } from "@/components/ui/switch";
 import { PermissionKey, type OrgSubjectOption, type Subject, type SubjectLevel } from "@/types";
 import { useAuth } from "@/hooks/use-auth";
@@ -19,18 +18,22 @@ import Link from "next/link";
 import { ReportIssueButton } from "@/components/support/report-issue-button";
 
 const profileSchema = z.object({
-  fullName: z.string().min(3),
-  email: z.string().email(),
+  fullName: z.string().trim().min(3, "Jméno musí mít alespoň 3 znaky."),
+  email: z.string().email("Zadejte platnou e-mailovou adresu."),
 });
 
 const passwordSchema = z
   .object({
-    current: z.string().min(6),
-    next: z.string().min(6),
-    confirm: z.string().min(6),
+    current: z.string().min(1, "Zadejte současné heslo."),
+    next: z
+      .string()
+      .min(8, "Nové heslo musí mít alespoň 8 znaků.")
+      .regex(/[A-Za-z]/, "Nové heslo musí obsahovat alespoň jedno písmeno.")
+      .regex(/\d/, "Nové heslo musí obsahovat alespoň jednu číslici."),
+    confirm: z.string().min(1, "Potvrďte nové heslo."),
   })
   .refine((data) => data.next === data.confirm, {
-    message: "Passwords must match",
+    message: "Nové heslo a potvrzení se neshodují.",
     path: ["confirm"],
   });
 
@@ -54,13 +57,13 @@ type CatalogTopicOption = {
 };
 
 export default function SettingsPage(): React.JSX.Element {
-  const { hasOrganization, org } = useAuth();
+  const { org, user, syncProfile, activeRole } = useAuth();
   const { can } = usePermissions();
   const profileForm = useForm<ProfileValues>({
     resolver: zodResolver(profileSchema),
     defaultValues: {
-      fullName: "Alex Novak",
-      email: "alex@skillstorm.dev",
+      fullName: "",
+      email: "",
     },
   });
   const passwordForm = useForm<PasswordValues>({
@@ -71,107 +74,64 @@ export default function SettingsPage(): React.JSX.Element {
       confirm: "",
     },
   });
-  const [submitted, setSubmitted] = useState(false);
-  const [origin, setOrigin] = useState("");
-  const [inviteRole, setInviteRole] = useState<"STUDENT" | "TEACHER" | null>(null);
-  const [inviteCode, setInviteCode] = useState("");
-  const [inviteToken, setInviteToken] = useState("");
-  const [inviteLoading, setInviteLoading] = useState(false);
-  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [passwordSaving, setPasswordSaving] = useState(false);
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      setOrigin(window.location.origin);
-    }
-  }, []);
+    if (!user) return;
+    profileForm.reset({
+      fullName: user.fullName ?? user.name ?? "",
+      email: user.email ?? "",
+    });
+  }, [profileForm, user]);
 
-  const canInviteStudents = useMemo(
-    () => can(PermissionKey.INVITE_STUDENTS),
-    [can],
-  );
-  const canInviteTeachers = useMemo(
-    () => can(PermissionKey.INVITE_TEACHERS),
-    [can],
-  );
-  const canInvite = hasOrganization && (canInviteStudents || canInviteTeachers);
-  const inviteRoleOptions = useMemo<Array<{ value: "STUDENT" | "TEACHER"; label: string }>>(() => {
-    const options: Array<{ value: "STUDENT" | "TEACHER"; label: string }> = [];
-    if (canInviteStudents) options.push({ value: "STUDENT", label: "Student" });
-    if (canInviteTeachers) options.push({ value: "TEACHER", label: "Teacher" });
-    return options;
-  }, [canInviteStudents, canInviteTeachers]);
+  const effectiveRole = activeRole ?? user?.organizationRole ?? null;
+  const canManagePeople = effectiveRole === "OWNER" || effectiveRole === "DIRECTOR";
 
-  // inviteRole is a user override only. Compute the effective role used for
-  // API calls/UI using the available options. This avoids storing derived
-  // state and prevents effects from mutating the user's choice.
-  const effectiveInviteRole = useMemo(() => {
-    if (!inviteRoleOptions.length) return null;
-    return inviteRole && inviteRoleOptions.some((opt) => opt.value === inviteRole)
-      ? inviteRole
-      : inviteRoleOptions[0]?.value ?? null;
-  }, [inviteRole, inviteRoleOptions]);
-
-  const inviteLink = inviteToken && origin
-    ? `${origin}/join?token=${encodeURIComponent(inviteToken)}`
-    : "";
-
-  const generateInvite = useCallback(async () => {
-    if (!effectiveInviteRole || !canInvite) {
-      setInviteCode("");
-      setInviteToken("");
-      setInviteError(null);
+  const onProfileSubmit = async (values: ProfileValues) => {
+    if (!user?.id) {
+      showToastOnce("Účet není načtený. Obnovte stránku a zkuste to znovu.", { type: "error" });
       return;
     }
-    setInviteLoading(true);
-    setInviteError(null);
+    setProfileSaving(true);
     try {
-      const invite = await fetchWithAuth<{
-        id: string;
-        inviteToken?: string;
-        code: string;
-        expiresAt: string;
-      }>("POST", "/invites", {
+      await fetchWithAuth("PATCH", `/users/${user.id}`, {
         body: {
-          type: "ORG_ONLY",
-          role: effectiveInviteRole,
+          name: values.fullName.trim(),
+          email: values.email.trim(),
         },
       });
-      setInviteCode(invite?.code ?? "");
-      setInviteToken(invite?.inviteToken ?? invite?.code ?? "");
-    } catch (e) {
-      setInviteCode("");
-      setInviteToken("");
-      setInviteError(
-        e instanceof Error ? e.message : "Pozvánku se nepodařilo vytvořit.",
+      await syncProfile({ force: true });
+      showToastOnce("Profil byl uložen.", { type: "success" });
+    } catch (error) {
+      showToastOnce(
+        error instanceof Error ? error.message : "Profil se nepodařilo uložit.",
+        { type: "error" },
       );
     } finally {
-      setInviteLoading(false);
+      setProfileSaving(false);
     }
-  }, [canInvite, effectiveInviteRole]);
+  };
 
-  useEffect(() => {
-    if (!canInvite || !effectiveInviteRole) return;
-    void generateInvite();
-  }, [canInvite, effectiveInviteRole, generateInvite]);
-
-  const copyToClipboard = async (value: string, message: string) => {
-    if (!value) {
-      showToastOnce("Nejdřív vyber školu.", { type: "error" });
-      return;
-    }
+  const onPasswordSubmit = async (values: PasswordValues) => {
+    setPasswordSaving(true);
     try {
-      await navigator.clipboard.writeText(value);
-      showToastOnce(message, { type: "success" });
-    } catch {
-      showToastOnce("Nepodařilo se zkopírovat.", { type: "error" });
+      await fetchWithAuth("POST", "/auth/change-password", {
+        body: {
+          currentPassword: values.current,
+          newPassword: values.next,
+        },
+      });
+      passwordForm.reset();
+      showToastOnce("Heslo bylo změněno.", { type: "success" });
+    } catch (error) {
+      showToastOnce(
+        error instanceof Error ? error.message : "Heslo se nepodařilo změnit.",
+        { type: "error" },
+      );
+    } finally {
+      setPasswordSaving(false);
     }
-  };
-
-  const onProfileSubmit = () => {
-    setSubmitted(true);
-  };
-  const onPasswordSubmit = () => {
-    setSubmitted(true);
   };
 
   // ── Subjects management ──
@@ -226,7 +186,7 @@ export default function SettingsPage(): React.JSX.Element {
         ),
       );
     } catch {
-      // silent — subjects section just stays empty
+      showToastOnce("Předměty se nepodařilo načíst.", { type: "error" });
     } finally {
       setSubjectsLoading(false);
     }
@@ -315,6 +275,7 @@ export default function SettingsPage(): React.JSX.Element {
     } catch {
       setSubjectTopics([]);
       setTopicDrafts({});
+      showToastOnce("Témata se nepodařilo načíst.", { type: "error" });
     } finally {
       setTopicsLoading(false);
     }
@@ -469,8 +430,7 @@ export default function SettingsPage(): React.JSX.Element {
     }
   };
 
-  // ── Curriculum (SubjectLevel) management ──
-  const [togglingLevel, setTogglingLevel] = useState<string | null>(null); // `${subjectId}:${grade}`
+  const [togglingLevel, setTogglingLevel] = useState<string | null>(null);
 
   const toggleGradeLevel = async (subject: OrgSubjectOption, grade: string, currentEnabled: boolean) => {
     const subjectId = subject.subject.id;
@@ -552,141 +512,81 @@ export default function SettingsPage(): React.JSX.Element {
     <div className="grid gap-6 md:grid-cols-2">
       <Card>
         <h2 className="text-lg font-semibold text-slate-900">Profil</h2>
+        <p className="mt-1 text-sm text-slate-500">Údaje vašeho účtu používané napříč aplikací.</p>
         <form onSubmit={profileForm.handleSubmit(onProfileSubmit)} className="mt-4 space-y-4">
-          <Input placeholder="Celé jméno" {...profileForm.register("fullName")} />
-          <Input placeholder="E-mail" type="email" {...profileForm.register("email")} />
-          <Button type="submit" className="w-full">
-            Uložit profil
+          <div>
+            <Input placeholder="Celé jméno" autoComplete="name" {...profileForm.register("fullName")} />
+            {profileForm.formState.errors.fullName?.message && (
+              <p className="mt-1 text-xs text-red-600">{profileForm.formState.errors.fullName.message}</p>
+            )}
+          </div>
+          <div>
+            <Input placeholder="E-mail" type="email" autoComplete="email" {...profileForm.register("email")} />
+            {profileForm.formState.errors.email?.message && (
+              <p className="mt-1 text-xs text-red-600">{profileForm.formState.errors.email.message}</p>
+            )}
+          </div>
+          <Button type="submit" className="w-full" disabled={profileSaving || !user?.id}>
+            {profileSaving ? "Ukládám…" : "Uložit profil"}
           </Button>
         </form>
       </Card>
 
       <Card>
         <h2 className="text-lg font-semibold text-slate-900">Zabezpečení</h2>
+        <p className="mt-1 text-sm text-slate-500">Změna hesla vyžaduje ověření současného hesla.</p>
         <form onSubmit={passwordForm.handleSubmit(onPasswordSubmit)} className="mt-4 space-y-4">
-          <Input placeholder="Současné heslo" type="password" {...passwordForm.register("current")} />
-          <Input placeholder="Nové heslo" type="password" {...passwordForm.register("next")} />
-          <Input placeholder="Potvrzení nového hesla" type="password" {...passwordForm.register("confirm")} />
-          <Button type="submit" className="w-full">
-            Změnit heslo
+          <Input placeholder="Současné heslo" type="password" autoComplete="current-password" {...passwordForm.register("current")} />
+          <div>
+            <Input placeholder="Nové heslo" type="password" autoComplete="new-password" {...passwordForm.register("next")} />
+            {passwordForm.formState.errors.next?.message && (
+              <p className="mt-1 text-xs text-red-600">{passwordForm.formState.errors.next.message}</p>
+            )}
+          </div>
+          <div>
+            <Input placeholder="Potvrzení nového hesla" type="password" autoComplete="new-password" {...passwordForm.register("confirm")} />
+            {passwordForm.formState.errors.confirm?.message && (
+              <p className="mt-1 text-xs text-red-600">{passwordForm.formState.errors.confirm.message}</p>
+            )}
+          </div>
+          <Button type="submit" className="w-full" disabled={passwordSaving}>
+            {passwordSaving ? "Měním heslo…" : "Změnit heslo"}
           </Button>
         </form>
       </Card>
 
       <Card className="md:col-span-2">
-        <h2 className="text-lg font-semibold text-slate-900">Notifications & GDPR</h2>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">Notifikace a GDPR</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Preference zatím nejsou napojené na backend. Dokud nejsou skutečně ukládané, nelze je měnit.
+            </p>
+          </div>
+          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">Připravujeme</span>
+        </div>
         <div className="mt-4 space-y-4">
           <label className="flex items-center justify-between rounded-2xl border border-slate-100 px-4 py-3">
-            <span className="text-sm text-slate-600">
-              Weekly analytics digest
-            </span>
-            <Switch defaultChecked />
+            <span className="text-sm text-slate-600">Týdenní přehled analytiky</span>
+            <Switch disabled aria-label="Týdenní přehled analytiky — připravujeme" />
           </label>
           <label className="flex items-center justify-between rounded-2xl border border-slate-100 px-4 py-3">
-            <span className="text-sm text-slate-600">
-              GDPR data export reminders
-            </span>
-            <Switch />
+            <span className="text-sm text-slate-600">Připomenutí GDPR exportu</span>
+            <Switch disabled aria-label="Připomenutí GDPR exportu — připravujeme" />
           </label>
         </div>
       </Card>
 
-      {submitted && (
-        <SuccessAlert
-          title="Settings updated"
-          description="All changes synced with Eduto backend."
-        />
-      )}
-
-      {canInvite && (
-        <Card className="md:col-span-2 flex flex-col gap-4 rounded-3xl border border-emerald-200 bg-emerald-50/70 p-6">
-          <h3 className="text-lg font-semibold text-slate-900">
-            Invite members
-          </h3>
-          <p className="text-sm text-slate-600">
-            Sdílej kód nebo odkaz s předvybranou rolí.
-          </p>
-          {inviteLoading && (
-            <p className="text-sm text-slate-600">Generuji pozvánku…</p>
-          )}
-          {inviteError && (
-            <p className="text-sm text-red-600">{inviteError}</p>
-          )}
-          <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-700">
-                Role pozvánky
-              </label>
-              <div className="flex flex-wrap gap-2">
-                <select
-                  className="min-w-[180px] rounded-2xl border border-slate-200 px-3 py-2 text-sm"
-                  value={effectiveInviteRole ?? ""}
-                  onChange={(event) =>
-                    setInviteRole(event.target.value as "STUDENT" | "TEACHER")
-                  }
-                >
-                  {inviteRoleOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-700">
-                Invite code
-              </label>
-              <div className="flex flex-wrap gap-2">
-                <Input readOnly value={inviteCode} />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => copyToClipboard(inviteCode, "Kód zkopírován.")}
-                  disabled={!inviteCode || inviteLoading}
-                >
-                  Copy
-                </Button>
-              </div>
-            </div>
-            <div className="space-y-2 md:col-span-2">
-              <label className="text-sm font-medium text-slate-700">
-                Invite link
-              </label>
-              <div className="flex flex-wrap gap-2">
-                <Input readOnly value={inviteLink} />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => copyToClipboard(inviteLink, "Pozvánka zkopírována.")}
-                  disabled={!inviteLink || inviteLoading}
-                >
-                  Zkopírovat pozvánku
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => void generateInvite()}
-                  disabled={inviteLoading || !effectiveInviteRole}
-                >
-                  Obnovit
-                </Button>
-              </div>
-            </div>
+      {canManagePeople && (
+        <Card className="md:col-span-2 flex flex-col gap-3 p-6">
+          <div>
+            <h3 className="text-lg font-semibold text-slate-900">Lidé ve škole</h3>
+            <p className="mt-1 text-sm text-slate-500">
+              Přidávání a úpravy žáků, učitelů a vedení jsou na jednom místě.
+            </p>
           </div>
-        </Card>
-      )}
-
-      {can(PermissionKey.MANAGE_TEACHERS) && (
-        <Card className="md:col-span-2 flex flex-col gap-3 rounded-3xl border border-dashed border-blue-200 bg-blue-50/70 p-6">
-          <h3 className="text-lg font-semibold text-slate-900">
-            Správa učitelů
-          </h3>
-          <p className="text-sm text-slate-600">
-            Přístup pouze pro ředitele nebo ownera. Umožňuje přidávat a odebírat učitele.
-          </p>
-          <Button asChild className="w-fit rounded-2xl" variant="outline">
-            <Link href="/app/settings/teachers">Otevřít správu učitelů</Link>
+          <Button asChild variant="outline" className="min-h-11 w-full sm:w-fit">
+            <Link href="/app/people">Otevřít lidi ve škole</Link>
           </Button>
         </Card>
       )}
@@ -695,14 +595,14 @@ export default function SettingsPage(): React.JSX.Element {
         <Card className="md:col-span-2 flex flex-col gap-3 p-6">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-            <h3 className="text-lg font-semibold text-slate-900">Osnova dle ročníků</h3>
-            <p className="text-sm text-slate-500">
-              Povolte předměty pro jednotlivé ročníky pro potřeby osnov a plánování výuky. Toto nastavení už neurčuje, pro které ročníky je test platný.
-            </p>
+              <h3 className="text-lg font-semibold text-slate-900">Osnova dle ročníků</h3>
+              <p className="text-sm text-slate-500">
+                Povolte předměty pro jednotlivé ročníky pro potřeby osnov a plánování výuky. Toto nastavení už neurčuje, pro které ročníky je test platný.
+              </p>
             </div>
             <ReportIssueButton
               compact
-              label="Report issue with subjects"
+              label="Nahlásit problém s předměty"
               componentContext="subjects_settings"
               defaultCategory="SUBJECT"
               defaultMessage="Problém s předměty ve škole"
@@ -758,13 +658,13 @@ export default function SettingsPage(): React.JSX.Element {
           <div>
             <h3 className="text-lg font-semibold text-slate-900">Témata předmětů</h3>
             <p className="text-sm text-slate-500">
-              Témata se spravují na úrovni předmětu a ročníku. Používají je testy, materiály i zadání přes `topicLevelId`.
+              Témata se spravují na úrovni předmětu a ročníku. Používají je testy, materiály i zadání přes <code>topicLevelId</code>.
             </p>
           </div>
 
           {topicManageableSubjects.length === 0 ? (
             <p className="text-sm text-slate-500">
-              Pro správu témat nejdřív aktivuj katalogový předmět a ročník v osnově. Vlastní předměty bez napojení na katalog zatím témata nepodporují.
+              Pro správu témat nejdřív aktivujte katalogový předmět a ročník v osnově. Vlastní předměty bez napojení na katalog zatím témata nepodporují.
             </p>
           ) : (
             <>
@@ -794,7 +694,7 @@ export default function SettingsPage(): React.JSX.Element {
                     disabled={!enabledTopicLevels.length}
                   >
                     {enabledTopicLevels.length === 0 ? (
-                      <option value="">Nejdřív povol ročník v osnově</option>
+                      <option value="">Nejdřív povolte ročník v osnově</option>
                     ) : (
                       enabledTopicLevels.map((level) => (
                         <option key={level.id} value={level.grade}>
@@ -818,17 +718,15 @@ export default function SettingsPage(): React.JSX.Element {
                   >
                     <option value="">
                       {!selectedSubjectLevel
-                        ? "Nejdřív povol ročník"
+                        ? "Nejdřív povolte ročník"
                         : catalogTopicsLoading
                           ? "Načítám témata…"
                           : catalogTopics.length === 0
                             ? "Žádná katalogová témata"
-                            : "Vyber téma"}
+                            : "Vyberte téma"}
                     </option>
                     {catalogTopics.map((topic) => (
-                      <option key={topic.id} value={topic.id}>
-                        {topic.name}
-                      </option>
+                      <option key={topic.id} value={topic.id}>{topic.name}</option>
                     ))}
                   </select>
                 </label>
@@ -888,9 +786,7 @@ export default function SettingsPage(): React.JSX.Element {
                           <p className="text-sm font-medium text-slate-800">
                             {topic.catalogTopic?.name ?? "Neznámé téma"}
                           </p>
-                          <p className="text-xs text-slate-500">
-                            Fáze: {topic.phase ?? "INTRO"}
-                          </p>
+                          <p className="text-xs text-slate-500">Fáze: {topic.phase ?? "INTRO"}</p>
                         </div>
                         <Input
                           value={draft.name}
@@ -969,9 +865,7 @@ export default function SettingsPage(): React.JSX.Element {
               {createSubjectLoading ? "Vytvářím…" : "Přidat vlastní předmět"}
             </Button>
           </div>
-          {createSubjectError && (
-            <p className="text-sm text-red-600">{createSubjectError}</p>
-          )}
+          {createSubjectError && <p className="text-sm text-red-600">{createSubjectError}</p>}
 
           {subjectsLoading ? (
             <p className="text-sm text-slate-500">Načítám předměty…</p>
@@ -980,10 +874,7 @@ export default function SettingsPage(): React.JSX.Element {
           ) : (
             <ul className="divide-y divide-slate-100">
               {allSubjects.map((subject) => (
-                <li
-                  key={subject.id}
-                  className="flex items-center justify-between py-3"
-                >
+                <li key={subject.id} className="flex items-center justify-between py-3">
                   <span
                     className={
                       subject.isEnabled

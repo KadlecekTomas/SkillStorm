@@ -62,8 +62,12 @@ function validateRows(
 ): EditableStudentImportRow[] {
   if (!preview) return rows;
 
-  const classSet = new Set(preview.meta.classOptions.map((option) => normalizeClass(option.label)));
-  const reservedEmails = new Set(preview.meta.reservedEmails.map((email) => email.trim().toLowerCase()));
+  const classSet = new Set(
+    preview.meta.classOptions.map((option) => normalizeClass(option.label)),
+  );
+  const reservedEmails = new Set(
+    preview.meta.reservedEmails.map((email) => email.trim().toLowerCase()),
+  );
   const emailCounts = new Map<string, number>();
 
   rows.forEach((row) => {
@@ -82,21 +86,21 @@ function validateRows(
     if (!firstName) errors.push("Chybí jméno.");
     if (!lastName) errors.push("Chybí příjmení.");
     if (!email && !preview.meta.usernameModeEnabled) {
-      errors.push("Email je povinný.");
+      errors.push("E-mail je povinný.");
     }
     if (email && !emailRegex.test(email)) {
-      errors.push("Email nemá platný formát.");
+      errors.push("E-mail nemá platný formát.");
     }
     if (email && (emailCounts.get(email) ?? 0) > 1) {
-      errors.push("Duplicitní email v importu.");
+      errors.push("Duplicitní e-mail v importu.");
     }
     if (email && reservedEmails.has(email)) {
-      errors.push("Email už v systému existuje.");
+      errors.push("E-mail už v systému existuje.");
     }
     if (!className) {
       errors.push("Chybí třída.");
     } else if (!classSet.has(normalizeClass(className))) {
-      errors.push(`Třída "${className}" neexistuje.`);
+      errors.push(`Třída „${className}“ neexistuje.`);
     }
 
     return {
@@ -130,10 +134,15 @@ export function StudentImportPreviewDialog({
     );
   }, [preview]);
 
-  const validatedRows = useMemo(() => validateRows(rows, preview), [preview, rows]);
+  const validatedRows = useMemo(
+    () => validateRows(rows, preview),
+    [preview, rows],
+  );
 
   const summary = useMemo(() => {
-    const invalidRows = validatedRows.filter((row) => row.status === "INVALID").length;
+    const invalidRows = validatedRows.filter(
+      (row) => row.status === "INVALID",
+    ).length;
     return {
       totalRows: validatedRows.length,
       validRows: validatedRows.length - invalidRows,
@@ -154,7 +163,14 @@ export function StudentImportPreviewDialog({
     [validatedRows],
   );
 
-  const updateCell = (rowId: string, field: keyof Pick<EditableStudentImportRow, "firstName" | "lastName" | "email" | "class">, value: string) => {
+  const updateCell = (
+    rowId: string,
+    field: keyof Pick<
+      EditableStudentImportRow,
+      "firstName" | "lastName" | "email" | "class"
+    >,
+    value: string,
+  ) => {
     setRows((current) =>
       current.map((row) =>
         row.id === rowId
@@ -175,44 +191,52 @@ export function StudentImportPreviewDialog({
     () => [
       {
         accessorKey: "firstName",
-        header: "firstName",
+        header: "Jméno",
         cell: ({ row }) => (
           <Input
             value={row.original.firstName}
-            onChange={(event) => updateCell(row.original.id, "firstName", event.target.value)}
+            onChange={(event) =>
+              updateCell(row.original.id, "firstName", event.target.value)
+            }
             className="min-w-28"
           />
         ),
       },
       {
         accessorKey: "lastName",
-        header: "lastName",
+        header: "Příjmení",
         cell: ({ row }) => (
           <Input
             value={row.original.lastName}
-            onChange={(event) => updateCell(row.original.id, "lastName", event.target.value)}
+            onChange={(event) =>
+              updateCell(row.original.id, "lastName", event.target.value)
+            }
             className="min-w-32"
           />
         ),
       },
       {
         accessorKey: "email",
-        header: "email",
+        header: "E-mail",
         cell: ({ row }) => (
           <Input
             value={row.original.email}
-            onChange={(event) => updateCell(row.original.id, "email", event.target.value)}
+            onChange={(event) =>
+              updateCell(row.original.id, "email", event.target.value)
+            }
             className="min-w-52"
           />
         ),
       },
       {
         accessorKey: "class",
-        header: "class",
+        header: "Třída",
         cell: ({ row }) => (
           <Input
             value={row.original.class}
-            onChange={(event) => updateCell(row.original.id, "class", event.target.value)}
+            onChange={(event) =>
+              updateCell(row.original.id, "class", event.target.value)
+            }
             className="min-w-28"
             list="student-import-class-options"
           />
@@ -220,11 +244,15 @@ export function StudentImportPreviewDialog({
       },
       {
         accessorKey: "status",
-        header: "status",
+        header: "Stav",
         cell: ({ row }) => (
           <div className="min-w-40">
-            <Badge variant={row.original.status === "VALID" ? "success" : "warning"}>
-              {row.original.status === "VALID" ? "VALID" : "INVALID"}
+            <Badge
+              variant={
+                row.original.status === "VALID" ? "success" : "warning"
+              }
+            >
+              {row.original.status === "VALID" ? "Připraveno" : "Opravit"}
             </Badge>
             {row.original.errors.length > 0 && (
               <p className="mt-2 text-xs text-red-600">
@@ -244,6 +272,7 @@ export function StudentImportPreviewDialog({
             size="sm"
             onClick={() => removeRow(row.original.id)}
             aria-label={`Odstranit řádek ${row.original.rowNumber}`}
+            title="Odstranit řádek z importu"
           >
             <Trash2 className="h-4 w-4" />
           </Button>
@@ -265,24 +294,39 @@ export function StudentImportPreviewDialog({
         <DialogHeader>
           <DialogTitle>Kontrola importu žáků</DialogTitle>
           <DialogDescription>
-            Zkontroluj a případně uprav importovaná data před vytvořením účtů a zápisem do tříd.
+            Zkontrolujte data před vytvořením účtů. Chybný řádek můžete opravit
+            přímo v tabulce nebo ho z importu odstranit.
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-3 md:grid-cols-3">
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-            <p className="text-sm text-slate-500">Total rows</p>
-            <p className="mt-1 text-2xl font-semibold text-slate-900">{summary.totalRows}</p>
+            <p className="text-sm text-slate-500">Celkem řádků</p>
+            <p className="mt-1 text-2xl font-semibold text-slate-900">
+              {summary.totalRows}
+            </p>
           </div>
           <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-            <p className="text-sm text-emerald-700">Valid rows</p>
-            <p className="mt-1 text-2xl font-semibold text-emerald-900">{summary.validRows}</p>
+            <p className="text-sm text-emerald-700">Připraveno k importu</p>
+            <p className="mt-1 text-2xl font-semibold text-emerald-900">
+              {summary.validRows}
+            </p>
           </div>
           <div className="rounded-xl border border-red-200 bg-red-50 p-4">
-            <p className="text-sm text-red-700">Invalid rows</p>
-            <p className="mt-1 text-2xl font-semibold text-red-900">{summary.invalidRows}</p>
+            <p className="text-sm text-red-700">Vyžaduje opravu</p>
+            <p className="mt-1 text-2xl font-semibold text-red-900">
+              {summary.invalidRows}
+            </p>
           </div>
         </div>
+
+        {summary.invalidRows > 0 && (
+          <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            {summary.invalidRows === 1
+              ? "1 chybný řádek se neimportuje, dokud ho neopravíte nebo neodstraníte."
+              : `${summary.invalidRows} chybné řádky se neimportují, dokud je neopravíte nebo neodstraníte.`}
+          </p>
+        )}
 
         <div className="max-h-[55vh] overflow-auto rounded-xl border border-slate-200">
           <table className="min-w-full border-collapse">
@@ -290,10 +334,16 @@ export function StudentImportPreviewDialog({
               {table.getHeaderGroups().map((headerGroup) => (
                 <tr key={headerGroup.id} className="border-b border-slate-200">
                   {headerGroup.headers.map((header) => (
-                    <th key={header.id} className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    <th
+                      key={header.id}
+                      className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500"
+                    >
                       {header.isPlaceholder
                         ? null
-                        : flexRender(header.column.columnDef.header, header.getContext())}
+                        : flexRender(
+                            header.column.columnDef.header,
+                            header.getContext(),
+                          )}
                     </th>
                   ))}
                 </tr>
@@ -303,11 +353,17 @@ export function StudentImportPreviewDialog({
               {table.getRowModel().rows.map((row) => (
                 <tr
                   key={row.id}
-                  className={cn("border-b border-slate-100", row.original.status === "INVALID" && "bg-red-50/70")}
+                  className={cn(
+                    "border-b border-slate-100",
+                    row.original.status === "INVALID" && "bg-red-50/70",
+                  )}
                 >
                   {row.getVisibleCells().map((cell) => (
                     <td key={cell.id} className="px-3 py-2 align-top">
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      {flexRender(
+                        cell.column.columnDef.cell,
+                        cell.getContext(),
+                      )}
                     </td>
                   ))}
                 </tr>
@@ -325,15 +381,22 @@ export function StudentImportPreviewDialog({
         {error && <p className="text-sm text-red-600">{error}</p>}
 
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
-            Cancel
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={pending}
+          >
+            Zrušit
           </Button>
           <Button
             type="button"
             onClick={() => void onCommit(validRows)}
             disabled={pending || validRows.length === 0}
           >
-            {pending ? "Importuji…" : "Import valid rows"}
+            {pending
+              ? "Importuji…"
+              : `Importovat ${validRows.length} ${validRows.length === 1 ? "žáka" : "žáků"}`}
           </Button>
         </DialogFooter>
       </DialogContent>

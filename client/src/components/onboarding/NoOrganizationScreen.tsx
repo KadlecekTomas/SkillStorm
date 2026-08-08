@@ -228,8 +228,8 @@ export const NoOrganizationScreen = (): React.JSX.Element => {
                 Vytvořit
               </p>
               <p className="mt-2 text-sm text-slate-600">
-                Založ novou školu a nastav její název. Získáš roli OWNER a můžeš
-                spravovat školu.
+                Založ novou školu a nastav její název. Budeš jejím vlastníkem a můžeš
+                spravovat její nastavení.
               </p>
             </Card>
             <Card className="border-slate-200 p-5">
@@ -237,8 +237,8 @@ export const NoOrganizationScreen = (): React.JSX.Element => {
                 Připojit se
               </p>
               <p className="mt-2 text-sm text-slate-600">
-                Zadej kód od ředitele a vyber svou roli. Připojení zvládneš bez
-                manuálních kroků.
+                Zadej kód od ředitele nebo učitele. Role se nastaví automaticky
+                podle pozvánky.
               </p>
             </Card>
           </div>

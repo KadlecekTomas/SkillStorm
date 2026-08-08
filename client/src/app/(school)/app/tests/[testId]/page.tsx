@@ -205,9 +205,9 @@ function AssignmentCta({ assignment, onNavigate }: { assignment: StudentAssignme
       );
     case "UPCOMING":
       return (
-        <Button disabled className="cursor-not-allowed opacity-60">
-          Dostupné od {formatDate(assignment.openAt)}
-        </Button>
+        <p className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-600">
+          Test bude dostupný od {formatDate(assignment.openAt)}
+        </p>
       );
     case "CLOSED":
       return <p className="text-sm text-slate-500">Termín pro odevzdání vypršel.</p>;
@@ -252,9 +252,6 @@ function StudentTestView({ testId }: { testId: string }): React.JSX.Element {
         const found = pool.sort(
           (a, b) => new Date(b.closeAt).getTime() - new Date(a.closeAt).getTime(),
         )[0] ?? null;
-        if (found) {
-          console.log("assignment.openAt raw:", found.openAt);
-        }
         setAssignment(found);
       } catch (e) {
         if (!active) return;
@@ -276,7 +273,9 @@ function StudentTestView({ testId }: { testId: string }): React.JSX.Element {
     return (
       <div className="space-y-4">
         <WarningAlert title="Test nenalezen" description="Test nenalezen nebo k němu nemáte přístup." />
-        <Link href="/app/tests"><Button variant="outline">Zpět na testy</Button></Link>
+        <Button asChild variant="outline">
+          <Link href="/app/tests">Zpět na testy</Link>
+        </Button>
       </div>
     );
   }
@@ -285,7 +284,9 @@ function StudentTestView({ testId }: { testId: string }): React.JSX.Element {
     return (
       <div className="space-y-4">
         <ErrorAlert title="Chyba" description="Nepodařilo se načíst test." />
-        <Link href="/app/tests"><Button variant="outline">Zpět na testy</Button></Link>
+        <Button asChild variant="outline">
+          <Link href="/app/tests">Zpět na testy</Link>
+        </Button>
       </div>
     );
   }
@@ -368,9 +369,9 @@ function TestPageWrapper(): React.JSX.Element {
     return (
       <div className="space-y-4">
         <WarningAlert title="Chyba" description="Chybí ID testu." />
-        <Link href="/app/tests">
-          <Button variant="outline">Zpět na testy</Button>
-        </Link>
+        <Button asChild variant="outline">
+          <Link href="/app/tests">Zpět na testy</Link>
+        </Button>
       </div>
     );
   }
@@ -688,7 +689,9 @@ function TestPageInner({ testId }: { testId: string }): React.JSX.Element {
     return (
       <div className="space-y-4">
         <WarningAlert title="Test nenalezen" description="Test nenalezen." />
-        <Link href="/app/tests"><Button variant="outline">Zpět na testy</Button></Link>
+        <Button asChild variant="outline">
+          <Link href="/app/tests">Zpět na testy</Link>
+        </Button>
       </div>
     );
   }
@@ -697,7 +700,9 @@ function TestPageInner({ testId }: { testId: string }): React.JSX.Element {
     return (
       <div className="space-y-4">
         <WarningAlert title="Přístup odepřen" description="Nemáte oprávnění k tomuto testu." />
-        <Link href="/app/tests"><Button variant="outline">Zpět na testy</Button></Link>
+        <Button asChild variant="outline">
+          <Link href="/app/tests">Zpět na testy</Link>
+        </Button>
       </div>
     );
   }
@@ -707,7 +712,9 @@ function TestPageInner({ testId }: { testId: string }): React.JSX.Element {
       <div className="space-y-4">
         <ErrorAlert title="Chyba" description="Nepodařilo se načíst test. Zkuste to znovu." />
         <Button variant="outline" onClick={() => void fetchTest(false)}>Zkusit znovu</Button>
-        <Link href="/app/tests"><Button variant="outline">Zpět na testy</Button></Link>
+        <Button asChild variant="outline">
+          <Link href="/app/tests">Zpět na testy</Link>
+        </Button>
       </div>
     );
   }
@@ -716,7 +723,9 @@ function TestPageInner({ testId }: { testId: string }): React.JSX.Element {
     return (
       <div className="space-y-4">
         <ErrorAlert title="Chyba při načítání testu" description="Stav připravenosti testu nebyl načten z backendu." />
-        <Link href="/app/tests"><Button variant="outline">Zpět na testy</Button></Link>
+        <Button asChild variant="outline">
+          <Link href="/app/tests">Zpět na testy</Link>
+        </Button>
       </div>
     );
   }

@@ -146,8 +146,12 @@ export function ClassroomsPageContent(): React.JSX.Element {
   const rawDirection = searchParams.get("dir");
   const rawLimit = searchParams.get("limit");
   const highlightId = searchParams.get("highlight");
-  const { org, syncProfile, isLoading: authLoading, isAuthenticated, roles } = useAuth();
-  const canViewStudentDetail = !roles.includes("STUDENT");
+  const { org, syncProfile, isLoading: authLoading, isAuthenticated, roles, activeRole } = useAuth();
+  const effectiveRole = activeRole ?? roles[0] ?? null;
+  const canViewStudentDetail =
+    effectiveRole === "OWNER" ||
+    effectiveRole === "DIRECTOR" ||
+    effectiveRole === "TEACHER";
   const isRepairState = useIsRepairState(org);
   const isInitOrg =
     org?.status === "ACTIVE" &&
@@ -194,7 +198,7 @@ export function ClassroomsPageContent(): React.JSX.Element {
   const canManageClasses = can(PermissionKey.MANAGE_TEACHERS);
   const canManageEnrollments = can(PermissionKey.MANAGE_STUDENTS);
   const canCreateYear = can(PermissionKey.MANAGE_TEACHERS);
-  const isTeacherView = !canManageClasses && !roles.includes("STUDENT");
+  const isTeacherView = effectiveRole === "TEACHER";
   /** True when the active year is expired AND the user cannot manage the org (i.e. teacher/student). */
   const yearWriteBlocked = isYearWriteBlocked(isAcademicYearExpired, canManageClasses);
 
@@ -1462,16 +1466,9 @@ export function ClassroomsPageContent(): React.JSX.Element {
           <p className="text-sm text-slate-600">
             Pro práci s třídami potřebujete školní rok.
           </p>
-          <Button
-            className="mt-3"
-            onClick={() =>
-              showToastOnce("Požádej správce o vytvoření školního roku.", {
-                type: "info",
-              })
-            }
-          >
-            Požádat správce o vytvoření školního roku
-          </Button>
+          <p className="mt-2 text-sm font-medium text-slate-700">
+            Školní rok musí nastavit ředitel nebo vlastník školy. Jakmile ho vedení nastaví, stránku znovu načtěte.
+          </p>
         </div>
       )}
 

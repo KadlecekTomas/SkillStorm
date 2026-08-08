@@ -8,14 +8,18 @@ type Props = {
 };
 
 function pluralSubmissions(n: number): string {
-  if (n === 1) return "odevzdání čeká na vyhodnocení";
-  if (n >= 2 && n <= 4) return "odevzdání čekají na vyhodnocení";
-  return "odevzdání čeká na vyhodnocení";
+  if (n === 1) return "odevzdání čeká na kontrolu výsledků";
+  if (n >= 2 && n <= 4) return "odevzdání čekají na kontrolu výsledků";
+  return "odevzdání čeká na kontrolu výsledků";
 }
 
 /**
  * Shown only when there are pending submissions — zero state is silent (no noise).
  * The prominent number makes the urgency immediately scannable.
+ *
+ * There is currently no separate manual-grading workspace; /app/results is the
+ * class diagnostics/results surface. The copy intentionally describes that
+ * real destination instead of promising a grading workflow that does not exist.
  */
 export function PendingTasks({ pendingSubmissions }: Props): React.JSX.Element | null {
   const router = useRouter();
@@ -28,7 +32,7 @@ export function PendingTasks({ pendingSubmissions }: Props): React.JSX.Element |
         <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-streak" />
         <div>
           <p className="text-xs font-bold uppercase tracking-wide text-streak">
-            Čeká na vyhodnocení
+            Nová odevzdání
           </p>
           <p className="mt-1 text-3xl font-extrabold text-ink tabular-nums">
             {pendingSubmissions}
@@ -41,7 +45,7 @@ export function PendingTasks({ pendingSubmissions }: Props): React.JSX.Element |
         onClick={() => router.push("/app/results")}
         className="shrink-0 rounded-2xl bg-streak px-5 py-2.5 text-sm font-bold text-white shadow-tactile transition-all duration-100 [--tactile-shadow:rgb(var(--streak-deep))] hover:brightness-105 focus:outline-none focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-xp active:translate-y-[2px] active:shadow-tactile-pressed"
       >
-        Přejít na vyhodnocení →
+        Otevřít diagnostiku →
       </button>
     </div>
   );

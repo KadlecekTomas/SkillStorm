@@ -1,20 +1,28 @@
 /**
  * @vitest-environment jsdom
  */
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import SettingsPage from "@/app/(school)/app/settings/page";
 import { PermissionKey } from "@/types";
 
+const authState: {
+  activeRole: "DIRECTOR" | "TEACHER";
+} = {
+  activeRole: "DIRECTOR",
+};
+
 vi.mock("@/hooks/use-auth", () => ({
   useAuth: () => ({
     org: { id: "org-1", name: "Demo School" },
-    hasOrganization: true,
+    user: null,
+    activeRole: authState.activeRole,
+    syncProfile: vi.fn(),
   }),
 }));
 
 const permissionsState: { can: (key: PermissionKey) => boolean } = {
-  can: (key: PermissionKey) => key === PermissionKey.INVITE_STUDENTS,
+  can: (_key: PermissionKey) => false,
 };
 
 vi.mock("@/hooks/use-permissions", () => ({
@@ -22,10 +30,7 @@ vi.mock("@/hooks/use-permissions", () => ({
 }));
 
 vi.mock("@/lib/http/client", () => ({
-  fetchWithAuth: vi.fn().mockResolvedValue({
-    inviteToken: "invite-token",
-    code: "invite-token",
-  }),
+  fetchWithAuth: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock("next/link", () => ({
@@ -35,19 +40,35 @@ vi.mock("next/link", () => ({
   ),
 }));
 
-describe("SettingsPage invite permissions", () => {
+describe("SettingsPage people management entry", () => {
   beforeEach(() => {
-    permissionsState.can = (key: PermissionKey) => key === PermissionKey.INVITE_STUDENTS;
-  });
-
-  it("renders invite section only when user has invite permission", () => {
-    render(<SettingsPage />);
-    expect(screen.getByText(/invite members/i)).toBeInTheDocument();
-  });
-
-  it("hides invite section when user lacks invite permission", () => {
+    authState.activeRole = "DIRECTOR";
     permissionsState.can = (_key: PermissionKey) => false;
+  });
+
+  it("shows one clear people-management entry to school leadership", () => {
     render(<SettingsPage />);
-    expect(screen.queryByText(/invite members/i)).not.toBeInTheDocument();
+
+    expect(
+      screen.getByRole("heading", { name: "Lidé ve škole" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Otevřít lidi ve škole" }),
+    ).toHaveAttribute("href", "/app/people");
+    expect(
+      screen.queryByRole("heading", { name: "Pozvat členy" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not expose the management entry to a teacher", () => {
+    authState.activeRole = "TEACHER";
+    render(<SettingsPage />);
+
+    expect(
+      screen.queryByRole("heading", { name: "Lidé ve škole" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Pozvat členy" }),
+    ).not.toBeInTheDocument();
   });
 });

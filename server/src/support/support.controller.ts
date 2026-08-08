@@ -106,6 +106,8 @@ export class SupportController {
   @ApiOperation({
     summary: 'Get support ticket detail (READ — SUPERADMIN | DEVOPS | SUPPORT)',
   })
+  @NoHttpCache()
+  @Header('Cache-Control', 'no-store, no-cache, must-revalidate, private')
   async getTicket(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Req() req: RequestWithUser,

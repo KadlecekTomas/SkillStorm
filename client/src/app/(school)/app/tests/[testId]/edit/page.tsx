@@ -45,6 +45,15 @@ type TestDetail = {
   questions?: TestQuestion[];
 };
 
+const QUESTION_TYPE_LABELS: Record<string, string> = {
+  TRUE_FALSE: "Pravda / nepravda",
+  MULTIPLE_CHOICE: "Výběr z možností",
+  FILL_IN_THE_BLANK: "Doplňovací odpověď",
+  MATCH_PAIRS: "Spojování dvojic",
+  ORDER: "Seřazení",
+  SORT_BINS: "Třídění",
+};
+
 function EditTestPage(): React.JSX.Element {
   const params = useParams<{ testId: string }>();
   const router = useRouter();
@@ -193,9 +202,9 @@ function EditTestPage(): React.JSX.Element {
     return (
       <div className="space-y-4">
         <ErrorAlert title="Chyba" description={error ?? "Test nebyl nalezen."} />
-        <Link href="/app/tests">
-          <Button variant="outline">Zpět na testy</Button>
-        </Link>
+        <Button asChild variant="outline">
+          <Link href="/app/tests">Zpět na testy</Link>
+        </Button>
       </div>
     );
   }
@@ -309,7 +318,7 @@ function EditTestPage(): React.JSX.Element {
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="space-y-1">
                     <p className="text-xs uppercase tracking-wide text-slate-400">
-                      {index + 1} · {question.type}
+                      {index + 1} · {QUESTION_TYPE_LABELS[question.type] ?? "Otázka"}
                       {["MATCH_PAIRS", "ORDER", "SORT_BINS"].includes(question.type) ? (
                         <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 normal-case text-slate-600">
                           interaktivní kolo — jen bleskovky

@@ -34,6 +34,7 @@ import { Permission } from '@/modules/rbac/permission.decorator';
 import { PermissionKey } from '@prisma/client';
 
 import { InvalidateScopes } from '@/common/cache/invalidate.decorator';
+import { NoHttpCache } from '@/common/cache/no-http-cache.decorator';
 import {
   OrgOperation,
   OrgOperationType,
@@ -58,6 +59,7 @@ export class LearningMaterialsController {
   @Permission(PermissionKey.VIEW_RESULTS)
   @ApiOperation({ summary: 'List learning materials' })
   @ApiQuery({ name: 'organizationId', required: false, type: String })
+  @NoHttpCache()
   @CacheTTL(0)
   findAll(@Req() req: RequestWithUser, @Query() q: QueryLearningMaterialsDto) {
     return this.service.findAll(req.user, q);
@@ -66,6 +68,7 @@ export class LearningMaterialsController {
   @Get(':id')
   @Permission(PermissionKey.VIEW_RESULTS)
   @ApiOperation({ summary: 'Get material detail' })
+  @NoHttpCache()
   @CacheTTL(0)
   findOne(
     @Param('id', new ParseUUIDPipe()) id: string,

@@ -6,6 +6,7 @@ import { fetchWithAuth } from "@/lib/http/client";
 import { Card } from "@/components/ui/card";
 import { ErrorAlert } from "@/components/ui/alert";
 import { withGuard } from "@/lib/guard/withGuard";
+import { PermissionKey, type OrganizationRole } from "@/types";
 
 type ResultRow = {
   id: string;
@@ -72,16 +73,16 @@ function TestResultsPage(): React.JSX.Element {
               {r.isAnonymous ? "Anonymizovaný uživatel" : r.student?.name ?? "Student"}
             </p>
             <p className="text-sm text-slate-600">
-              Score: {r.score !== null
+              Skóre: {r.score !== null
                 ? r.maxPoints != null && r.maxPoints > 0
                   ? `${r.score} / ${r.maxPoints} (${Math.round(r.percentage ?? (r.score / r.maxPoints) * 100)}%)`
                   : "n/a"
                 : "n/a"}
             </p>
             <p className="text-sm text-slate-600">Stav: {r.status}</p>
-            <p className="text-sm text-slate-600">Attempt: {r.attemptNo}</p>
+            <p className="text-sm text-slate-600">Pokus: {r.attemptNo}</p>
             <p className="text-sm text-slate-600">
-              Submitted: {r.submittedAt ? new Date(r.submittedAt).toLocaleString() : "neodevzdáno"}
+              Odevzdáno: {r.submittedAt ? new Date(r.submittedAt).toLocaleString("cs-CZ") : "neodevzdáno"}
             </p>
             <p className="text-sm text-slate-600">
               Správně: {r.correctCount} | Špatně: {r.incorrectCount} | Nevyhodnoceno: {r.pendingCount}
@@ -94,4 +95,10 @@ function TestResultsPage(): React.JSX.Element {
   );
 }
 
-export default withGuard({ requireSchoolWorkspace: true })(TestResultsPage);
+const STAFF_ROLES: OrganizationRole[] = ["OWNER", "DIRECTOR", "TEACHER"];
+
+export default withGuard({
+  requireRoles: STAFF_ROLES,
+  requirePerms: [PermissionKey.VIEW_RESULTS],
+  requireSchoolWorkspace: true,
+})(TestResultsPage);

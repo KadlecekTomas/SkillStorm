@@ -30,7 +30,7 @@ import type { SupportCategory } from "@/types";
 const CATEGORIES: Array<{ value: SupportCategory; label: string }> = [
   { value: "SUBJECT", label: "Předmět" },
   { value: "TEST", label: "Test" },
-  { value: "STUDENT", label: "Student" },
+  { value: "STUDENT", label: "Žák" },
   { value: "ASSIGNMENT", label: "Zadání" },
   { value: "TEST_ASSIGNMENT", label: "Přiřazení testu" },
   { value: "OTHER", label: "Jiné" },
@@ -53,7 +53,7 @@ export function ReportIssueButton({
   defaultCategory = "OTHER",
   defaultMessage = "",
 }: ReportIssueButtonProps): React.JSX.Element {
-  const { user, context } = useAuth();
+  const { user, context, activeRole } = useAuth();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [open, setOpen] = useState(false);
@@ -67,6 +67,7 @@ export function ReportIssueButton({
   );
   const queryString = searchParams?.toString() ?? "";
   const roleLabel =
+    activeRole ??
     user?.organizationRole ??
     user?.systemRole ??
     context?.mode ??
@@ -97,7 +98,7 @@ export function ReportIssueButton({
           clientTimestamp: new Date().toISOString(),
         },
       });
-      showToastOnce("Požadavek byl odeslán.", { type: "success" });
+      showToastOnce("Hlášení bylo odesláno podpoře.", { type: "success" });
       setOpen(false);
       reset();
     } catch (error) {
@@ -133,7 +134,7 @@ export function ReportIssueButton({
           <DialogHeader>
             <DialogTitle>Nahlásit problém</DialogTitle>
             <DialogDescription>
-              Support ticket odešleme superadminovi včetně aktuální stránky a technických metadat.
+              Hlášení odešleme podpoře SkillStorm spolu s informací, na které stránce problém nastal.
             </DialogDescription>
           </DialogHeader>
 
@@ -144,7 +145,7 @@ export function ReportIssueButton({
                 value={category}
                 onValueChange={(value) => setCategory(value as SupportCategory)}
               >
-                <SelectTrigger aria-label="Kategorie support požadavku">
+                <SelectTrigger aria-label="Kategorie problému">
                   <SelectValue placeholder="Vyberte kategorii" />
                 </SelectTrigger>
                 <SelectContent>
@@ -174,18 +175,19 @@ export function ReportIssueButton({
                   {queryString ? `?${queryString}` : ""}
                 </span>
               </p>
-              {componentContext ? (
-                <p className="text-xs text-slate-500">
-                  Kontext komponenty: <span className="font-mono">{componentContext}</span>
-                </p>
-              ) : null}
             </div>
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="ghost" asChild disabled={submitting}>
-              <Link href="/app/support">Moje hlášení</Link>
-            </Button>
+            {submitting ? (
+              <Button type="button" variant="ghost" disabled>
+                Moje hlášení
+              </Button>
+            ) : (
+              <Button type="button" variant="ghost" asChild>
+                <Link href="/app/support">Moje hlášení</Link>
+              </Button>
+            )}
             <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={submitting}>
               Zrušit
             </Button>

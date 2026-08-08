@@ -16,6 +16,8 @@ import { showToastOnce } from "@/utils/toast";
 import type { AssignabilityReport } from "@/types/assignability";
 import { formatAllowedGrades, gradeLabel } from "@/lib/grades";
 import { ReportIssueButton } from "@/components/support/report-issue-button";
+import { usePermissions } from "@/hooks/use-permissions";
+import { PermissionKey } from "@/types";
 
 type ClassSection = { id: string; label?: string | null; grade?: string; section?: string };
 type TopicOption = {
@@ -71,6 +73,8 @@ export function AssignToClassModal({
   testAssignments,
   onSuccess,
 }: AssignToClassModalProps): React.JSX.Element {
+  const { can } = usePermissions();
+  const canManageAcademicYears = can(PermissionKey.MANAGE_TEACHERS);
   const [classes, setClasses] = useState<ClassSection[]>([]);
   const [catalogTopics, setCatalogTopics] = useState<CatalogTopicEntry[]>([]);
   const [loading, setLoading] = useState(false);
@@ -204,9 +208,9 @@ export function AssignToClassModal({
       if (entry) {
         const classGrade = selectedClass?.grade ?? "__any__";
         resolvedTopicLevelId =
-          entry.gradeMap[classGrade] ??       // exact grade match
-          entry.gradeMap["__any__"] ??         // grade-less fallback
-          Object.values(entry.gradeMap)[0];    // any available
+          entry.gradeMap[classGrade] ??
+          entry.gradeMap["__any__"] ??
+          Object.values(entry.gradeMap)[0];
       }
     }
     try {
@@ -280,13 +284,21 @@ export function AssignToClassModal({
             <div className="flex flex-col items-center justify-center rounded-xl border border-amber-200 bg-amber-50/80 py-6 px-4 text-center">
               <h3 className="text-base font-semibold text-amber-900">Není nastaven aktivní školní rok</h3>
               <p className="mt-2 text-sm text-amber-800">
-                Pro přiřazení testu třídě je potřeba zvolit aktivní školní rok.
+                {canManageAcademicYears
+                  ? "Pro přiřazení testu třídě je potřeba nejdřív nastavit aktivní školní rok."
+                  : "Pro přiřazení testu třídě musí vedení školy nejdřív nastavit aktivní školní rok."}
               </p>
-              <Link href="/app/academic-years" onClick={() => onOpenChange(false)}>
-                <Button type="button" className="mt-4 bg-amber-700 hover:bg-amber-800">
-                  Nastavit školní rok
-                </Button>
-              </Link>
+              {canManageAcademicYears ? (
+                <Link href="/app/academic-years" onClick={() => onOpenChange(false)}>
+                  <Button type="button" className="mt-4 bg-amber-700 hover:bg-amber-800">
+                    Nastavit školní rok
+                  </Button>
+                </Link>
+              ) : (
+                <p className="mt-3 text-xs font-medium text-amber-900">
+                  Požádejte ředitele nebo vlastníka organizace o nastavení roku.
+                </p>
+              )}
             </div>
           )}
           <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
@@ -322,7 +334,7 @@ export function AssignToClassModal({
             </p>
             <ReportIssueButton
               compact
-              label="Report assignment problem"
+              label="Nahlásit problém s přiřazením"
               componentContext="test_assignment_modal"
               defaultCategory="TEST_ASSIGNMENT"
               defaultMessage="Problém při přiřazení testu třídě"

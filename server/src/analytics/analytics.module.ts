@@ -6,6 +6,8 @@ import { AnalyticsService } from './analytics.service';
 import { XpAnalyticsListener } from './listeners/xp-analytics.listener';
 import { StudentDiagnosticService } from './student-diagnostic.service';
 import { AnalyticsSnapshotService } from './analytics-snapshot.service';
+import { TeacherClassAnalyticsAccessGuard } from './guards/teacher-class-analytics-access.guard';
+import { StudentAnalyticsAccessGuard } from './guards/student-analytics-access.guard';
 
 @Module({
   imports: [PrismaModule, AcademicYearsModule],
@@ -15,6 +17,8 @@ import { AnalyticsSnapshotService } from './analytics-snapshot.service';
     StudentDiagnosticService,
     AnalyticsSnapshotService,
     XpAnalyticsListener,
+    TeacherClassAnalyticsAccessGuard,
+    StudentAnalyticsAccessGuard,
   ],
   exports: [
     AnalyticsService,

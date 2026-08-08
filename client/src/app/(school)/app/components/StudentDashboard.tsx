@@ -18,6 +18,7 @@ import { formatDate } from "@/lib/format-date";
 import { vocative } from "@/lib/czech-vocative";
 import { ErrorAlert } from "@/components/ui/alert";
 import { useAuth } from "@/hooks/use-auth";
+import { getMyStudentProgress, type StudentSelfProgress } from "@/lib/student-progress";
 
 const EMPTY_SUBMISSIONS = "Zatím nemáš žádné odevzdané testy.";
 const EMPTY_OPEN = "Teď na tebe nic nečeká. 🎉";
@@ -76,11 +77,113 @@ async function fetchOpenAssignments(): Promise<OpenAssignment[]> {
   );
 }
 
+function StudentProgressPanel({
+  data,
+  loading,
+  error,
+}: {
+  data: StudentSelfProgress | null;
+  loading: boolean;
+  error: string | null;
+}): React.JSX.Element {
+  if (loading) {
+    return (
+      <Card className="p-6">
+        <LoadingSpinner label="Načítám tvůj pokrok..." />
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card className="border-danger/30 p-5" role="status">
+        <p className="font-bold text-ink">Pokrok se teď nepodařilo načíst.</p>
+        <p className="mt-1 text-sm text-ink-muted">{error}</p>
+      </Card>
+    );
+  }
+
+  if (!data) {
+    return (
+      <Card className="px-5 py-8 text-center text-sm text-ink-muted">
+        Škola zatím nezapsala žádný průběžný pokrok.
+      </Card>
+    );
+  }
+
+  const hasSummary =
+    data.summary.averageGrade !== null ||
+    data.summary.competencyMasteryPercent !== null ||
+    data.summary.attendanceRate !== null;
+  const recent = data.timeline.slice(0, 5);
+
+  return (
+    <div className="space-y-3" data-testid="student-school-progress">
+      {hasSummary && (
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Card className="p-4">
+            <p className="text-xs font-bold uppercase tracking-wide text-ink-dim">Průměrná známka</p>
+            <p className="mt-1 text-2xl font-black text-ink">
+              {data.summary.averageGrade?.toFixed(2) ?? "—"}
+            </p>
+          </Card>
+          <Card className="p-4">
+            <p className="text-xs font-bold uppercase tracking-wide text-ink-dim">Kompetence</p>
+            <p className="mt-1 text-2xl font-black text-ink">
+              {data.summary.competencyMasteryPercent === null
+                ? "—"
+                : `${data.summary.competencyMasteryPercent} %`}
+            </p>
+          </Card>
+          <Card className="p-4">
+            <p className="text-xs font-bold uppercase tracking-wide text-ink-dim">Docházka</p>
+            <p className="mt-1 text-2xl font-black text-ink">
+              {data.summary.attendanceRate === null ? "—" : `${data.summary.attendanceRate} %`}
+            </p>
+          </Card>
+        </div>
+      )}
+
+      {recent.length > 0 ? (
+        <div className="space-y-2.5">
+          {recent.map((item) => (
+            <Card key={item.id} className="p-4 sm:p-5">
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                <div className="min-w-0">
+                  <p className="font-bold text-ink">{item.title}</p>
+                  {item.detail && (
+                    <p className="mt-1 break-words text-sm leading-relaxed text-ink-muted">
+                      {item.detail}
+                    </p>
+                  )}
+                  {item.authorName && (
+                    <p className="mt-1 text-xs font-semibold text-ink-dim">{item.authorName}</p>
+                  )}
+                </div>
+                <time className="shrink-0 text-xs font-semibold text-ink-dim">
+                  {formatDate(item.occurredAt)}
+                </time>
+              </div>
+            </Card>
+          ))}
+        </div>
+      ) : (
+        <Card className="px-5 py-8 text-center text-sm text-ink-muted">
+          Učitel zatím nepřidal žádný záznam do tvé historie.
+        </Card>
+      )}
+    </div>
+  );
+}
+
 export function StudentDashboard(): React.JSX.Element {
   const [data, setData] = useState<StudentDashboardResponse | null>(null);
   const [openAssignments, setOpenAssignments] = useState<OpenAssignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [schoolProgress, setSchoolProgress] = useState<StudentSelfProgress | null>(null);
+  const [progressLoading, setProgressLoading] = useState(true);
+  const [progressError, setProgressError] = useState<string | null>(null);
   const { user } = useAuth();
   const { summary: gamification } = useGamification();
   const { badges } = useBadges();
@@ -102,6 +205,29 @@ export function StudentDashboard(): React.JSX.Element {
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setProgressLoading(true);
+    setProgressError(null);
+    getMyStudentProgress()
+      .then((progress) => {
+        if (!cancelled) setSchoolProgress(progress);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setProgressError(
+            err instanceof Error ? err.message : "Zkus stránku znovu načíst.",
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setProgressLoading(false);
       });
     return () => {
       cancelled = true;
@@ -155,7 +281,6 @@ export function StudentDashboard(): React.JSX.Element {
           </p>
         </div>
 
-        {/* Hero s Parťákem — viditelný jen žákovi (viz design reference) */}
         <Card className="flex flex-wrap items-center gap-7 p-8" data-testid="student-hero-card">
           <PartakBlob size={110} />
           <div className="min-w-[220px] flex-1">
@@ -179,6 +304,15 @@ export function StudentDashboard(): React.JSX.Element {
             <Progress value={levelProgress} />
           </div>
         </Card>
+
+        <section>
+          <SectionLabel>Můj pokrok</SectionLabel>
+          <StudentProgressPanel
+            data={schoolProgress}
+            loading={progressLoading}
+            error={progressError}
+          />
+        </section>
 
         <section>
           <SectionLabel>Čeká na tebe</SectionLabel>

@@ -139,6 +139,7 @@ export class StudentsController {
   @Get(':id')
   @Permission(PermissionKey.MANAGE_STUDENTS, OrganizationRole.STUDENT)
   @ApiOperation({ summary: 'Get student by ID' })
+  @NoHttpCache()
   @CacheTTL(0)
   findOne(
     @Param('id', new ParseUUIDPipe()) id: string,

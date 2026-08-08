@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarClock, ChevronRight, Mail, Sparkles } from "lucide-react";
+import { AlertTriangle, CalendarClock, RefreshCw, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
@@ -18,6 +18,7 @@ import {
 } from "@/hooks/use-guardian";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/utils/cn";
+import { GuardianSchoolProgress } from "@/components/guardian/guardian-school-progress";
 
 /**
  * Rodinný prostor (guardian Etapa B) — první UI pro netechnické dospělé.
@@ -80,7 +81,7 @@ function initials(name: string): string {
 function DisputeThanksScreen({ onDone }: { onDone: () => void }) {
   return (
     <Card className="mx-auto max-w-md">
-      <CardContent className="space-y-4 p-8 text-center">
+      <CardContent className="space-y-4 p-6 text-center sm:p-8">
         <p className="text-4xl">🙏</p>
         <h1 className="text-xl font-extrabold text-ink">Děkujeme za upozornění</h1>
         <p className="text-[15px] leading-relaxed text-ink-muted">
@@ -104,12 +105,16 @@ function ConfirmChildScreen({
   onResolved: (confirmed: boolean) => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const answer = async (confirmed: boolean) => {
     setBusy(true);
+    setError(null);
     try {
       await resolveGuardianRelation(child.relationId, confirmed);
       onResolved(confirmed);
+    } catch {
+      setError("Potvrzení se nepodařilo uložit. Zkontrolujte připojení a zkuste to znovu.");
     } finally {
       setBusy(false);
     }
@@ -117,7 +122,7 @@ function ConfirmChildScreen({
 
   return (
     <Card className="mx-auto max-w-md">
-      <CardContent className="space-y-6 p-8 text-center">
+      <CardContent className="space-y-6 p-6 text-center sm:p-8">
         <Avatar className="mx-auto h-16 w-16">
           <AvatarFallback className="text-lg font-bold">
             {initials(child.name)}
@@ -131,6 +136,11 @@ function ConfirmChildScreen({
             <p className="text-[15px] text-ink-muted">třída {child.classLabel}</p>
           )}
         </div>
+        {error && (
+          <p role="alert" className="rounded-xl border border-danger/30 bg-danger-soft p-3 text-sm font-semibold text-danger">
+            {error}
+          </p>
+        )}
         <div className="space-y-3">
           <Button
             size="lg"
@@ -156,18 +166,18 @@ function ConfirmChildScreen({
 }
 
 function ChildSwitcher({
-  children,
+  items,
   selectedId,
   onSelect,
 }: {
-  children: GuardianChild[];
+  items: GuardianChild[];
   selectedId: string | null;
   onSelect: (studentId: string) => void;
-}) {
-  if (children.length <= 1) return null;
+}): React.JSX.Element | null {
+  if (items.length <= 1) return null;
   return (
     <div className="flex gap-2 overflow-x-auto pb-1">
-      {children.map((child) => (
+      {items.map((child) => (
         <button
           key={child.studentId}
           type="button"
@@ -260,16 +270,16 @@ function LaunchActivity({
         Budu u toho pomáhat (učitel to uvidí)
       </label>
       {error && <p className="text-sm font-semibold text-danger">{error}</p>}
-      <div className="flex flex-wrap gap-2">
+      <div className="grid gap-2 sm:flex sm:flex-wrap">
         <Button
           size="lg"
-          className="h-12"
+          className="h-12 w-full sm:w-auto"
           disabled={busy || (needsPin && pin.length < 4)}
           onClick={() => void start()}
         >
           {busy ? "Spouštím…" : `Předat zařízení a spustit`}
         </Button>
-        <Button variant="ghost" size="lg" className="h-12" onClick={onClose} disabled={busy}>
+        <Button variant="ghost" size="lg" className="h-12 w-full sm:w-auto" onClick={onClose} disabled={busy}>
           Zpět
         </Button>
       </div>
@@ -278,26 +288,43 @@ function LaunchActivity({
 }
 
 function FamilyOverview({ child }: { child: GuardianChild }) {
-  const { data, isLoading } = useChildOverview(child.studentId);
+  const { data, error, isLoading, refetch } = useChildOverview(child.studentId);
   const [showDetail, setShowDetail] = useState(false);
   const [launching, setLaunching] = useState<string | null>(null);
 
-  if (isLoading || !data) {
+  if (isLoading) {
     return (
       <div className="flex justify-center py-16">
         <LoadingSpinner />
       </div>
     );
   }
+  if (error || !data) {
+    return (
+      <Card>
+        <CardContent className="space-y-4 p-6 text-center">
+          <AlertTriangle className="mx-auto h-9 w-9 text-warning-strong" />
+          <h2 className="text-lg font-extrabold text-ink">Údaje dítěte se nepodařilo načíst</h2>
+          <p className="text-sm text-ink-muted">Zkontrolujte připojení a zkuste načtení znovu.</p>
+          <Button className="min-h-[48px] w-full sm:w-auto" onClick={() => void refetch()}>
+            <RefreshCw className="mr-2 h-4 w-4" /> Zkusit znovu
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
 
   const firstName = data.student.name.split(" ")[0];
+  const nextStepItem = data.nextStep
+    ? data.todo.find((item) => item.assignmentId === data.nextStep?.assignmentId) ?? null
+    : null;
 
   return (
     <div className="space-y-5">
-      {/* Doporučený další krok — jedna dominantní akce nahoře */}
+      {/* Doporučený další krok — skutečná akce jen pokud ji backend dovoluje */}
       {data.nextStep && (
         <Card className="border-accent bg-accent-soft">
-          <CardContent className="flex items-center justify-between gap-4 p-5">
+          <CardContent className="space-y-4 p-5">
             <div className="min-w-0 space-y-0.5">
               <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-accent-deep">
                 <Sparkles className="h-3.5 w-3.5" /> Doporučený další krok
@@ -309,7 +336,30 @@ function FamilyOverview({ child }: { child: GuardianChild }) {
                 {humanDue(data.nextStep.dueAt)}
               </p>
             </div>
-            <ChevronRight className="h-6 w-6 shrink-0 text-accent-deep" />
+            {nextStepItem && nextStepItem.guardianLaunchPolicy !== "DISABLED" && (
+              <Button
+                size="lg"
+                className="h-12 w-full sm:w-auto"
+                onClick={() =>
+                  setLaunching((current) =>
+                    current === nextStepItem.assignmentId
+                      ? null
+                      : nextStepItem.assignmentId,
+                  )
+                }
+              >
+                {launching === nextStepItem.assignmentId
+                  ? "Zavřít spuštění"
+                  : "Spustit doma"}
+              </Button>
+            )}
+            {nextStepItem && launching === nextStepItem.assignmentId && (
+              <LaunchActivity
+                child={child}
+                item={nextStepItem}
+                onClose={() => setLaunching(null)}
+              />
+            )}
           </CardContent>
         </Card>
       )}
@@ -329,7 +379,7 @@ function FamilyOverview({ child }: { child: GuardianChild }) {
             <ul className="divide-y divide-line">
               {data.todo.map((item) => (
                 <li key={item.assignmentId} className="space-y-3 py-3">
-                  <div className="flex items-center justify-between gap-3">
+                  <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="min-w-0">
                       <p className="truncate text-[15px] font-bold text-ink">{item.title}</p>
                       <p className="text-sm text-ink-muted">
@@ -340,7 +390,7 @@ function FamilyOverview({ child }: { child: GuardianChild }) {
                     {item.guardianLaunchPolicy !== "DISABLED" && (
                       <Button
                         variant="outline"
-                        className="h-11 shrink-0"
+                        className="h-11 w-full shrink-0 sm:w-auto"
                         onClick={() =>
                           setLaunching((cur) =>
                             cur === item.assignmentId ? null : item.assignmentId,
@@ -405,26 +455,16 @@ function FamilyOverview({ child }: { child: GuardianChild }) {
         </CardContent>
       </Card>
 
-      {/* Zprávy */}
-      <Card>
-        <CardContent className="space-y-3 p-5">
-          <h2 className="flex items-center gap-2 text-base font-extrabold text-ink">
-            <Mail className="h-4.5 w-4.5 text-ink-dim" /> Zprávy ze školy
-          </h2>
-          <p className="py-2 text-[15px] text-ink-muted">
-            Zatím žádné zprávy. Až škola něco pošle, najdete to tady.
-          </p>
-        </CardContent>
-      </Card>
+      <GuardianSchoolProgress data={data} />
     </div>
   );
 }
 
-export default function FamilyPage() {
+export default function FamilyPage(): React.JSX.Element | null {
   const router = useRouter();
   const { hasRole } = usePermissions();
   const isParent = hasRole("PARENT");
-  const { data, isLoading, refetch } = useGuardianChildren(isParent);
+  const { data, error, isLoading, refetch } = useGuardianChildren(isParent);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [justDisputed, setJustDisputed] = useState(false);
 
@@ -437,11 +477,25 @@ export default function FamilyPage() {
     children.find((c) => c.studentId === selectedId) ?? children[0] ?? null;
 
   if (!isParent) return null;
-  if (isLoading || !data) {
+  if (isLoading) {
     return (
       <div className="flex justify-center py-24">
         <LoadingSpinner />
       </div>
+    );
+  }
+  if (error || !data) {
+    return (
+      <Card className="mx-auto mt-8 max-w-md">
+        <CardContent className="space-y-4 p-6 text-center sm:p-8">
+          <AlertTriangle className="mx-auto h-10 w-10 text-warning-strong" />
+          <h1 className="text-xl font-extrabold text-ink">Rodinný přehled se nepodařilo načíst</h1>
+          <p className="text-[15px] leading-relaxed text-ink-muted">Zkontrolujte připojení k internetu a zkuste to prosím znovu.</p>
+          <Button size="lg" className="min-h-[52px] w-full" onClick={() => void refetch()}>
+            <RefreshCw className="mr-2 h-5 w-5" /> Zkusit znovu
+          </Button>
+        </CardContent>
+      </Card>
     );
   }
 
@@ -499,7 +553,7 @@ export default function FamilyPage() {
             : "Moje děti"}
         </h1>
         <ChildSwitcher
-          children={children}
+          items={children}
           selectedId={selected?.studentId ?? null}
           onSelect={setSelectedId}
         />

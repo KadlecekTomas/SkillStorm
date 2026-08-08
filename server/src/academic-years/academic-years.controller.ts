@@ -16,6 +16,7 @@ import { RequestWithUser } from '@/types/request-with-user';
 import { ApiStandardResponses } from '@/common/http/api-standard-responses.decorator';
 import { ok } from '@/common/http/envelope';
 import { AllowPendingOrg } from '@/common/decorators/allow-pending-org.decorator';
+import { NoHttpCache } from '@/common/cache/no-http-cache.decorator';
 import {
   OrgOperation,
   OrgOperationType,
@@ -39,7 +40,8 @@ export class AcademicYearsController {
   @Get()
   @AllowPendingOrg()
   @Permission(PermissionKey.VIEW_RESULTS, PermissionKey.MANAGE_STUDENTS)
-  @CacheTTL(0) // vypnout HTTP response cache – používáme verzovanou cache v service
+  @NoHttpCache()
+  @CacheTTL(0)
   @ApiOperation({
     summary: 'List academic years for organization',
     description:
@@ -51,6 +53,7 @@ export class AcademicYearsController {
 
   @Get('active')
   @AllowPendingOrg()
+  @NoHttpCache()
   @CacheTTL(0)
   @ApiOperation({
     summary: 'Get current academic year (deprecated)',
@@ -66,6 +69,7 @@ export class AcademicYearsController {
 
   @Get('current')
   @AllowPendingOrg()
+  @NoHttpCache()
   @CacheTTL(0)
   @ApiOperation({
     summary:
@@ -121,6 +125,7 @@ export class AcademicYearsController {
   @Get(':fromYearId/promotion-status')
   @AllowPendingOrg()
   @Permission(PermissionKey.VIEW_RESULTS, PermissionKey.MANAGE_STUDENTS)
+  @NoHttpCache()
   @CacheTTL(0)
   @ApiOperation({ summary: 'Check if year was already promoted' })
   getPromotionStatus(
@@ -136,6 +141,7 @@ export class AcademicYearsController {
   @Get(':fromYearId/next-year')
   @AllowPendingOrg()
   @Permission(PermissionKey.VIEW_RESULTS, PermissionKey.MANAGE_STUDENTS)
+  @NoHttpCache()
   @CacheTTL(0)
   @ApiOperation({
     summary: 'Get immediate next academic year (for promotion UI)',

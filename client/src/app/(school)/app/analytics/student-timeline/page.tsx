@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { PermissionKey } from "@/types";
+import type { OrganizationRole } from "@/types";
 import { Card } from "@/components/ui/card";
 import { httpClient } from "@/lib/http/client";
 import { withGuard } from "@/lib/guard/withGuard";
@@ -30,6 +30,8 @@ type TimelineItem = {
   openAt: string;
   closeAt: string;
 };
+
+const STUDENT_ONLY: OrganizationRole[] = ["STUDENT"];
 
 function StudentTimelinePage() {
   const { selectedYearId } = useAcademicYears();
@@ -72,14 +74,14 @@ function StudentTimelinePage() {
           Časová osa výsledků
         </h1>
         <p className="mt-1 text-sm text-slate-600">
-          Časová osa odevzdání a skóre v daném školním roce.
+          Tvoje odevzdání a skóre v daném školním roce.
         </p>
       </div>
 
       {!selectedYearId && (
         <Card className="rounded-3xl border border-amber-200 bg-amber-50/50 p-6">
           <p className="text-sm text-amber-800">
-            Vyberte školní rok pro zobrazení timeline.
+            Vyber školní rok pro zobrazení časové osy.
           </p>
         </Card>
       )}
@@ -122,29 +124,17 @@ function StudentTimelinePage() {
               <table className="min-w-full divide-y divide-slate-200 text-sm">
                 <thead className="bg-slate-50">
                   <tr>
-                    <th className="px-4 py-2 text-left font-medium text-slate-600">
-                      Test
-                    </th>
-                    <th className="px-4 py-2 text-left font-medium text-slate-600">
-                      Odevzdáno
-                    </th>
-                    <th className="px-4 py-2 text-right font-medium text-slate-600">
-                      Skóre
-                    </th>
-                    <th className="px-4 py-2 text-left font-medium text-slate-600">
-                      Stav
-                    </th>
-                    <th className="px-4 py-2 text-center font-medium text-slate-600">
-                      Pokus
-                    </th>
+                    <th className="px-4 py-2 text-left font-medium text-slate-600">Test</th>
+                    <th className="px-4 py-2 text-left font-medium text-slate-600">Odevzdáno</th>
+                    <th className="px-4 py-2 text-right font-medium text-slate-600">Skóre</th>
+                    <th className="px-4 py-2 text-left font-medium text-slate-600">Stav</th>
+                    <th className="px-4 py-2 text-center font-medium text-slate-600">Pokus</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {items.map((i) => (
                     <tr key={i.submissionId}>
-                      <td className="px-4 py-2 text-slate-700">
-                        {i.testTitle}
-                      </td>
+                      <td className="px-4 py-2 text-slate-700">{i.testTitle}</td>
                       <td className="px-4 py-2 text-slate-600">
                         {i.submittedAt
                           ? new Date(i.submittedAt).toLocaleString("cs-CZ")
@@ -188,6 +178,6 @@ function StudentTimelinePage() {
 }
 
 export default withGuard({
-  requirePerms: [PermissionKey.VIEW_RESULTS],
+  requireRoles: STUDENT_ONLY,
   requireSchoolWorkspace: true,
 })(StudentTimelinePage);

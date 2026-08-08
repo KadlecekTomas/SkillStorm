@@ -12,7 +12,7 @@ import {
 import { AnalyticsService } from './analytics.service';
 import { LogAnalyticsEventDto } from './dto/log-analytics-event.dto';
 import { Permission } from '@/modules/rbac/permission.decorator';
-import { PermissionKey } from '@prisma/client';
+import { OrganizationRole, PermissionKey } from '@prisma/client';
 import { RequestWithUser } from '@/types/request-with-user';
 import { JwtAuthGuard } from '@/auth/guards/jwt-auth.guard';
 import { RequireCurrentAcademicYearGuard } from '@/academic-years/require-current-academic-year.guard';
@@ -21,6 +21,8 @@ import {
   OrgOperationType,
 } from '@/common/decorators/org-operation.decorator';
 import { OrgContextService } from '@/common/org-context/org-context.service';
+import { TeacherClassAnalyticsAccessGuard } from './guards/teacher-class-analytics-access.guard';
+import { StudentAnalyticsAccessGuard } from './guards/student-analytics-access.guard';
 
 @Controller('analytics')
 @OrgOperation(OrgOperationType.EXECUTION)
@@ -49,15 +51,17 @@ export class AnalyticsController {
   }
 
   @Get('student-timeline')
-  @UseGuards(JwtAuthGuard, RequireCurrentAcademicYearGuard)
+  @UseGuards(
+    JwtAuthGuard,
+    RequireCurrentAcademicYearGuard,
+    StudentAnalyticsAccessGuard,
+  )
   @Permission(PermissionKey.VIEW_RESULTS, PermissionKey.VIEW_ANALYTICS)
   studentTimeline(
     @Query('yearId') yearId: string,
     @Query('studentId') studentId: string | undefined,
     @Req() req: RequestWithUser,
   ) {
-    const _ = yearId;
-    void _;
     const resolvedStudentId: string | null =
       typeof studentId === 'string' && studentId.length > 0 ? studentId : null;
     return this.orgContext.get(req).then((ctx) => {
@@ -70,14 +74,14 @@ export class AnalyticsController {
       return this.analytics.studentTimeline(
         ctx.activeAcademicYearId,
         req.user,
-        resolvedStudentId ?? null,
+        resolvedStudentId,
       );
     });
   }
 
   @Get('class-heatmap')
   @UseGuards(JwtAuthGuard, RequireCurrentAcademicYearGuard)
-  @Permission(PermissionKey.VIEW_ANALYTICS)
+  @Permission(OrganizationRole.DIRECTOR)
   classHeatmap(@Query('yearId') yearId: string, @Req() req: RequestWithUser) {
     return this.orgContext.get(req).then((ctx) => {
       if (!ctx.activeAcademicYearId) {
@@ -130,7 +134,11 @@ export class AnalyticsController {
   }
 
   @Get('teacher/:classId/errors')
-  @UseGuards(JwtAuthGuard, RequireCurrentAcademicYearGuard)
+  @UseGuards(
+    JwtAuthGuard,
+    RequireCurrentAcademicYearGuard,
+    TeacherClassAnalyticsAccessGuard,
+  )
   @Permission(PermissionKey.VIEW_RESULTS)
   teacherErrors(
     @Param('classId') classId: string,
@@ -153,7 +161,11 @@ export class AnalyticsController {
   }
 
   @Get('teacher/:classId/topics')
-  @UseGuards(JwtAuthGuard, RequireCurrentAcademicYearGuard)
+  @UseGuards(
+    JwtAuthGuard,
+    RequireCurrentAcademicYearGuard,
+    TeacherClassAnalyticsAccessGuard,
+  )
   @Permission(PermissionKey.VIEW_RESULTS)
   teacherTopics(
     @Param('classId') classId: string,
