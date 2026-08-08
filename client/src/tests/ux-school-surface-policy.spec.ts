@@ -54,18 +54,30 @@ describe("school UI surface policy", () => {
     expect(offenders).toEqual([]);
   });
 
-  it("správa učitelů je lokalizovaná a používá kanonický role/permission guard", () => {
-    const text = source("src/app/(school)/app/settings/teachers/page.tsx");
+  it("pozvánky učitelů jsou centralizované v Lidech a přístupy mají kanonický guard", () => {
+    const access = source("src/app/(school)/app/settings/teachers/page.tsx");
+    const people = source("src/app/(school)/app/people/page.tsx");
 
-    expect(text).toContain("Zatím tu nejsou žádní učitelé.");
-    expect(text).toContain("Pozvat učitele");
-    expect(text).toContain("Celkem učitelů:");
-    expect(text).toContain('TEACHER: "Učitel"');
-    expect(text).toContain("requireRoles: MANAGEMENT_ROLES");
-    expect(text).toContain("PermissionKey.MANAGE_TEACHERS");
-    expect(text).toContain("requireSchoolWorkspace: true");
-    expect(text).not.toContain("No teachers yet");
-    expect(text).not.toContain("Total teachers:");
+    expect(access).toContain("Přístupy učitelů");
+    expect(access).toContain("Zatím tu nejsou žádní učitelé.");
+    expect(access).toContain("Nejdřív pozvěte učitele v sekci Lidé.");
+    expect(access).toContain('href="/app/people"');
+    expect(access).toContain("Otevřít Lidi");
+    expect(access).toContain("Celkem učitelů:");
+    expect(access).toContain('TEACHER: "Učitel"');
+    expect(access).toContain("requireRoles: MANAGEMENT_ROLES");
+    expect(access).toContain("PermissionKey.MANAGE_TEACHERS");
+    expect(access).toContain("requireSchoolWorkspace: true");
+    expect(access).not.toContain('generateInvite("TEACHER")');
+    expect(access).not.toContain('"/invites"');
+
+    expect(people).toContain("Lidé ve škole");
+    expect(people).toContain("Pozvat učitele");
+    expect(people).toContain('generateInvite("TEACHER")');
+    expect(people).toContain('"/invites"');
+
+    expect(access).not.toContain("No teachers yet");
+    expect(access).not.toContain("Total teachers:");
   });
 
   it("audit nepoužívá zastaralý organizationRole branch a je chráněný guardem", () => {
