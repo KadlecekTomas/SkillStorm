@@ -346,7 +346,7 @@ CREATE TRIGGER framework_outcomes_immutable_trigger BEFORE INSERT OR UPDATE OR D
 -- Outcome aspects are SkillStorm's internal review layer and may evolve after
 -- an official framework release is verified. Any semantic edit must bump the
 -- review version so every approved mapping can be deterministically marked stale.
-CREATE OR REPLACE FUNCTION outcome_aspect_review_version_guard() RETURNS TRIGGER AS $
+CREATE OR REPLACE FUNCTION outcome_aspect_review_version_guard() RETURNS TRIGGER AS $$
 BEGIN
   IF NEW."review_version" < OLD."review_version" THEN
     RAISE EXCEPTION 'OUTCOME_ASPECT_REVIEW_VERSION_DECREASE';
@@ -359,7 +359,7 @@ BEGIN
   END IF;
   RETURN NEW;
 END;
-$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
 CREATE TRIGGER outcome_aspect_review_version_guard_trigger BEFORE UPDATE ON "outcome_aspects" FOR EACH ROW EXECUTE FUNCTION outcome_aspect_review_version_guard();
 
 -- Published ŠVP snapshots are immutable; retirement is a status transition,
@@ -520,7 +520,7 @@ END;
 $$ LANGUAGE plpgsql;
 CREATE TRIGGER school_outcome_mapping_consistency_trigger BEFORE INSERT OR UPDATE ON "school_outcome_mappings" FOR EACH ROW EXECUTE FUNCTION school_outcome_mapping_consistency();
 
-CREATE OR REPLACE FUNCTION school_outcome_mapping_history_guard() RETURNS TRIGGER AS $
+CREATE OR REPLACE FUNCTION school_outcome_mapping_history_guard() RETURNS TRIGGER AS $$
 BEGIN
   IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'CURRICULUM_MAPPING_HISTORY_IMMUTABLE'; END IF;
   IF OLD."status" IN ('REJECTED', 'STALE') THEN RAISE EXCEPTION 'CURRICULUM_MAPPING_HISTORY_IMMUTABLE'; END IF;
@@ -535,5 +535,5 @@ BEGIN
   END IF;
   RETURN NEW;
 END;
-$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
 CREATE TRIGGER school_outcome_mapping_history_guard_trigger BEFORE UPDATE OR DELETE ON "school_outcome_mappings" FOR EACH ROW EXECUTE FUNCTION school_outcome_mapping_history_guard();
