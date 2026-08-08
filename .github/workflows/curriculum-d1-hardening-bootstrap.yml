@@ -1,0 +1,49 @@
+name: Curriculum D1 Hardening Bootstrap
+
+on:
+  push:
+    branches:
+      - agent/curriculum-foundation-d1
+    paths:
+      - scripts/internal/harden-curriculum-d1.mjs
+      - .github/workflows/curriculum-d1-hardening-bootstrap.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v7
+        with:
+          ref: agent/curriculum-foundation-d1
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Apply exact hardening patch
+        run: node scripts/internal/harden-curriculum-d1.mjs
+
+      - name: Validate patch shape
+        run: |
+          git diff --check
+          test ! -f scripts/internal/harden-curriculum-d1.mjs
+          test ! -f .github/workflows/curriculum-d1-hardening-bootstrap.yml
+          grep -q 'OUTCOME_ASPECT_REVIEW_VERSION_REQUIRED' server/prisma/migrations/20260809005500_curriculum_foundation_d1/migration.sql
+          grep -q 'CURRICULUM_MAPPING_REVIEW_CLOSED' server/src/curriculum/curriculum.service.ts
+          grep -q 'same-content-different-label' server/test/e2e/curriculum-foundation.e2e-spec.ts
+
+      - name: Commit production-only result
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix(curriculum): harden provenance and review invariants"
+          git push origin HEAD:agent/curriculum-foundation-d1
