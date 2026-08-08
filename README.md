@@ -28,6 +28,7 @@ The repository currently contains both **implemented contracts** and **approved 
 - [All 18 Subject Blueprints](./docs/interactive-curriculum/subjects/README.md) — detailed production-spec pedagogical blueprints for every educational field in the revised RVP ZV.
 - [Audio & Language Learning Engine](./docs/interactive-curriculum/AUDIO-LANGUAGE-ENGINE.md) — curated audio, timed text, listening interactions and recommended Czech-language progression.
 - [Interactive IT Lab](./docs/interactive-it-lab/README.md) — detailed device-first engine blueprint including Build-a-PC and Teacher Mission Control.
+- [Interactive IT Lab — Full-year Informatics 4–9](./docs/interactive-it-lab/YEAR-COVERAGE.md) — 192 core lesson definitions, pacing/FLEX variants, RVP/OVU evidence paths, school ŠVP adaptation and production requirements for the complete informatics vertical.
 
 ### Current implemented classroom contracts
 
