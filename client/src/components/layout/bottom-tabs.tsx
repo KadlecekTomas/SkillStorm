@@ -2,10 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  DASHBOARD_NAV_ITEMS,
-  PARENT_NAV_ITEMS,
-} from "@/config/dashboard-navigation";
+import { getDashboardNavItems } from "@/config/dashboard-navigation";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/utils/cn";
 
@@ -18,15 +15,16 @@ function isActive(pathname: string, route: string): boolean {
 
 /**
  * Mobilní spodní navigace (design reference: .bottomtabs) — zobrazuje se
- * pod 768 px místo nav railu. Obsah stránky musí mít odpovídající
- * padding-bottom (řeší MainLayout).
+ * pod 768 px místo nav railu. Administrativní sekce Lidé se záměrně
+ * necpou do už tak husté denní lišty; vedení ji otevře z Nastavení.
  */
 export const BottomTabs = (): React.JSX.Element => {
   const pathname = usePathname();
-  const { user } = useAuth();
-  // Guardian Etapa B: rodič má vlastní (minimální) navigaci i na mobilu.
-  const navItems =
-    user?.organizationRole === "PARENT" ? PARENT_NAV_ITEMS : DASHBOARD_NAV_ITEMS;
+  const { user, activeRole } = useAuth();
+  const effectiveRole = activeRole ?? user?.organizationRole ?? null;
+  const navItems = getDashboardNavItems(effectiveRole).filter(
+    (item) => item.route !== "/app/people",
+  );
 
   return (
     <nav

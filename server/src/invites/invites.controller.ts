@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  ForbiddenException,
   Get,
   Post,
   Query,
@@ -15,7 +16,11 @@ import { CreateInviteDto } from './dto/create-invite.dto';
 import { AcceptInviteDto } from './dto/accept-invite.dto';
 import { JwtAuthGuard } from '@/auth/guards/jwt-auth.guard';
 import { Permission } from '@/modules/rbac/permission.decorator';
-import { PermissionKey } from '@prisma/client';
+import {
+  OrganizationRole,
+  PermissionKey,
+  SystemRole,
+} from '@prisma/client';
 import { RequestWithUser } from '@/types/request-with-user';
 import { ok } from '@/common/http/envelope';
 import { ApiStandardResponses } from '@/common/http/api-standard-responses.decorator';
@@ -48,6 +53,18 @@ export class InvitesController {
   )
   @ApiOperation({ summary: 'Create invite' })
   create(@Body() dto: CreateInviteDto, @Req() req: RequestWithUser) {
+    if (dto.role === OrganizationRole.DIRECTOR) {
+      const effectiveRole = req.user.activeRole ?? req.user.organizationRole;
+      const canInviteLeadership =
+        req.user.systemRole === SystemRole.SUPERADMIN ||
+        effectiveRole === OrganizationRole.OWNER ||
+        effectiveRole === OrganizationRole.DIRECTOR;
+      if (!canInviteLeadership) {
+        throw new ForbiddenException(
+          'Pozvánku do vedení může vytvořit pouze vlastník nebo ředitel školy.',
+        );
+      }
+    }
     return ok(this.service.createInvite(dto, req.user));
   }
 

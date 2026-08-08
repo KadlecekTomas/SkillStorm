@@ -28,6 +28,7 @@ import { UpdateMembershipDto } from './dto/update-membership.dto';
 import { QueryMembershipsDto } from './dto/query-memberships.dto';
 import { CacheTTL } from '@nestjs/cache-manager';
 import { InvalidateScopes } from '@/common/cache/invalidate.decorator';
+import { NoHttpCache } from '@/common/cache/no-http-cache.decorator';
 import { Permission } from '@/modules/rbac/permission.decorator';
 import {
   OrgOperation,
@@ -80,6 +81,7 @@ export class MembershipsController {
     OrganizationRole.OWNER,
     OrganizationRole.DIRECTOR,
   )
+  @NoHttpCache()
   @CacheTTL(0)
   async findAll(@Query() q: QueryMembershipsDto, @Req() req: RequestWithUser) {
     return this.service.findAll(req.user, q);
@@ -111,6 +113,7 @@ export class MembershipsController {
     OrganizationRole.OWNER,
     OrganizationRole.DIRECTOR,
   )
+  @NoHttpCache()
   @ApiOperation({ summary: 'List active role assignments of a membership' })
   async listRoles(
     @Param('id', new ParseUUIDPipe()) id: string,

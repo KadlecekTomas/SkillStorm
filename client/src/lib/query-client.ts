@@ -5,12 +5,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 export type QueryKeyPart = string | number | boolean | null | undefined;
 export type QueryKey = readonly QueryKeyPart[];
 
+type QueryNotificationReason = "state" | "invalidate";
+
 type QueryEntry<T = unknown> = {
   data?: T;
   error?: unknown;
   updatedAt: number;
   promise: Promise<T> | null;
-  listeners: Set<() => void>;
+  listeners: Set<(reason: QueryNotificationReason) => void>;
 };
 
 type QueryState<T> = {
@@ -50,9 +52,12 @@ function ensureEntry<T>(queryKey: QueryKey): QueryEntry<T> {
   return created;
 }
 
-function notify(queryKey: QueryKey) {
+function notify(
+  queryKey: QueryKey,
+  reason: QueryNotificationReason = "state",
+) {
   const entry = ensureEntry(queryKey);
-  entry.listeners.forEach((listener) => listener());
+  entry.listeners.forEach((listener) => listener(reason));
 }
 
 function isFresh(queryKey: QueryKey, staleTime: number): boolean {
@@ -113,7 +118,7 @@ export const queryClient = {
       entry.updatedAt = 0;
       entry.promise = null;
       if (options?.notify !== false) {
-        notify(queryKey);
+        notify(queryKey, "invalidate");
       }
     }
   },
@@ -138,7 +143,10 @@ export const queryClient = {
     notify(queryKey);
   },
 
-  subscribe(queryKey: QueryKey, listener: () => void): () => void {
+  subscribe(
+    queryKey: QueryKey,
+    listener: (reason: QueryNotificationReason) => void,
+  ): () => void {
     const entry = ensureEntry(queryKey);
     entry.listeners.add(listener);
     return () => {
@@ -279,9 +287,12 @@ export function useQuery<T>({
       return;
     }
 
-    const unsubscribe = queryClient.subscribe(key, () => {
+    const unsubscribe = queryClient.subscribe(key, (reason) => {
       syncFromCache();
-      if (!queryClient.isFresh(key, staleTime)) {
+      // State notifications are emitted by the request already in flight
+      // (success/error) and by local cache writes. Re-fetching on those
+      // notifications would turn every failed query into a request storm.
+      if (reason === "invalidate" && !queryClient.isFresh(key, staleTime)) {
         void load(true);
       }
     });

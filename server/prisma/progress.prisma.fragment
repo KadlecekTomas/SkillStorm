@@ -1,0 +1,115 @@
+// -----------------------------------------------------------------------------
+// School progress tracking — additive layer over existing Student/Class/Subject
+// identity. The SQL migration owns FK constraints and the partial idempotency
+// index; these models keep Prisma's source of truth aligned with the database.
+// -----------------------------------------------------------------------------
+
+enum ProgressEntryType {
+  ASSESSMENT
+  COMMENT
+  PRAISE
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  EXCUSED
+  LATE
+}
+
+enum InterventionStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+}
+
+model Competency {
+  id             String    @id @default(uuid()) @map("competency_id")
+  organizationId String    @map("organization_id")
+  subjectId      String?   @map("subject_id")
+  name           String    @db.VarChar(180)
+  description    String?   @db.VarChar(1000)
+  scaleMin       Int       @default(1) @map("scale_min")
+  scaleMax       Int       @default(4) @map("scale_max")
+  sortOrder      Int?      @map("sort_order")
+  isActive       Boolean   @default(true) @map("is_active")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  deletedAt      DateTime? @map("deleted_at")
+
+  @@index([organizationId, subjectId], map: "competencies_org_subject_idx")
+  @@index([organizationId, isActive, deletedAt], map: "competencies_org_active_idx")
+  @@map("competencies")
+}
+
+model StudentProgressEntry {
+  id               String            @id @default(uuid()) @map("progress_entry_id")
+  organizationId   String            @map("organization_id")
+  studentId        String            @map("student_id")
+  academicYearId   String            @map("academic_year_id")
+  classSectionId   String            @map("class_section_id")
+  subjectId        String?           @map("subject_id")
+  competencyId     String?           @map("competency_id")
+  createdById      String            @map("created_by_id")
+  entryType        ProgressEntryType @default(ASSESSMENT) @map("entry_type")
+  gradeValue       Int?              @map("grade_value")
+  competencyLevel  Int?              @map("competency_level")
+  comment          String?           @db.VarChar(2000)
+  clientMutationId String?           @map("client_mutation_id") @db.VarChar(64)
+  occurredAt       DateTime          @default(now()) @map("occurred_at")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+  deletedAt        DateTime?         @map("deleted_at")
+
+  @@index([studentId, occurredAt], map: "student_progress_student_time_idx")
+  @@index([organizationId, academicYearId, occurredAt], map: "student_progress_org_year_idx")
+  @@index([classSectionId, occurredAt], map: "student_progress_class_time_idx")
+  @@index([subjectId, occurredAt], map: "student_progress_subject_time_idx")
+  @@index([competencyId, occurredAt], map: "student_progress_competency_time_idx")
+  @@map("student_progress_entries")
+}
+
+model AttendanceRecord {
+  id             String           @id @default(uuid()) @map("attendance_record_id")
+  organizationId String           @map("organization_id")
+  studentId      String           @map("student_id")
+  academicYearId String           @map("academic_year_id")
+  classSectionId String           @map("class_section_id")
+  subjectId      String?          @map("subject_id")
+  createdById    String           @map("created_by_id")
+  status         AttendanceStatus
+  minutesLate    Int?             @map("minutes_late")
+  note           String?          @db.VarChar(1000)
+  occurredAt     DateTime         @default(now()) @map("occurred_at")
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
+  deletedAt      DateTime?        @map("deleted_at")
+
+  @@index([studentId, occurredAt], map: "attendance_student_time_idx")
+  @@index([classSectionId, occurredAt], map: "attendance_class_time_idx")
+  @@index([organizationId, academicYearId, occurredAt], map: "attendance_org_year_idx")
+  @@map("attendance_records")
+}
+
+model StudentIntervention {
+  id             String             @id @default(uuid()) @map("intervention_id")
+  organizationId String             @map("organization_id")
+  studentId      String             @map("student_id")
+  academicYearId String             @map("academic_year_id")
+  classSectionId String             @map("class_section_id")
+  subjectId      String?            @map("subject_id")
+  createdById    String             @map("created_by_id")
+  title          String             @db.VarChar(180)
+  note           String?            @db.VarChar(3000)
+  status         InterventionStatus @default(OPEN)
+  startedAt      DateTime           @default(now()) @map("started_at")
+  resolvedAt     DateTime?          @map("resolved_at")
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
+  deletedAt      DateTime?          @map("deleted_at")
+
+  @@index([studentId, status, startedAt], map: "interventions_student_status_idx")
+  @@index([classSectionId, status, startedAt], map: "interventions_class_status_idx")
+  @@index([organizationId, status, startedAt], map: "interventions_org_status_idx")
+  @@map("student_interventions")
+}

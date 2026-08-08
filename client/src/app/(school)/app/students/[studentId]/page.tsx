@@ -80,10 +80,10 @@ function DiagnosticBadge({ status }: { status: StudentDiagnosticStatus }): React
     INSUFFICIENT_DATA: "bg-slate-100 text-slate-700 border-slate-200",
   };
   const labels: Record<StudentDiagnosticStatus, string> = {
-    WEAK: "WEAK",
-    WARNING: "WARNING",
-    GOOD: "GOOD",
-    INSUFFICIENT_DATA: "INSUFFICIENT_DATA",
+    WEAK: "Slabé místo",
+    WARNING: "Pozor",
+    GOOD: "V pořádku",
+    INSUFFICIENT_DATA: "Málo dat",
   };
 
   return (

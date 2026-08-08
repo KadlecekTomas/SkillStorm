@@ -7,6 +7,7 @@ const ACADEMIC_YEAR_STORAGE_KEY = "skillstorm_academic_year";
 const ACTIVE_MEMBERSHIP_STORAGE_KEY = "skillstorm_activeMembershipId";
 const ACTIVE_MEMBERSHIP_SWITCHED_AT_STORAGE_KEY = "skillstorm_activeMembershipSwitchedAt";
 const RETURN_URL_STORAGE_KEY = "returnUrl";
+const PROGRESS_OFFLINE_DB = "skillstorm-offline";
 let logoutNavigationInProgress = false;
 
 export const markLogoutNavigationInProgress = (): void => {
@@ -19,6 +20,24 @@ export const clearLogoutNavigationInProgress = (): void => {
 
 export const isLogoutNavigationInProgress = (): boolean => logoutNavigationInProgress;
 
+function clearPrivateOfflineArtifacts(): void {
+  if (typeof window === "undefined") return;
+
+  if ("indexedDB" in window) {
+    // Logout is a hard privacy boundary on shared school devices. We delete the
+    // whole private progress DB, including any legacy unscoped rows.
+    window.indexedDB.deleteDatabase(PROGRESS_OFFLINE_DB);
+  }
+
+  if ("serviceWorker" in navigator) {
+    void navigator.serviceWorker.ready
+      .then((registration) => {
+        registration.active?.postMessage({ type: "CLEAR_PRIVATE_CACHES" });
+      })
+      .catch(() => undefined);
+  }
+}
+
 export const clearClientSessionArtifacts = (): void => {
   if (typeof window !== "undefined") {
     window.localStorage.removeItem(AUTH_STORAGE_KEY);
@@ -26,6 +45,7 @@ export const clearClientSessionArtifacts = (): void => {
     window.localStorage.removeItem(ACTIVE_MEMBERSHIP_STORAGE_KEY);
     window.localStorage.removeItem(ACTIVE_MEMBERSHIP_SWITCHED_AT_STORAGE_KEY);
     window.sessionStorage.removeItem(RETURN_URL_STORAGE_KEY);
+    clearPrivateOfflineArtifacts();
   }
 
   if (typeof document !== "undefined") {

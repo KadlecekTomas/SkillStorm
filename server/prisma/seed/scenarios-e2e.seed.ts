@@ -94,6 +94,18 @@ async function wipe() {
   await prisma.classPartak.deleteMany({ where: { organizationId: { in: orgIds } } });
   await prisma.liveSession.deleteMany({ where: { organizationId: { in: orgIds } } });
   await prisma.test.deleteMany({ where: { organizationId: { in: orgIds } } });
+  await prisma.studentIntervention.deleteMany({
+    where: { organizationId: { in: orgIds } },
+  });
+  await prisma.attendanceRecord.deleteMany({
+    where: { organizationId: { in: orgIds } },
+  });
+  await prisma.studentProgressEntry.deleteMany({
+    where: { organizationId: { in: orgIds } },
+  });
+  await prisma.competency.deleteMany({
+    where: { organizationId: { in: orgIds } },
+  });
   await prisma.enrollment.deleteMany({ where: { orgId: { in: orgIds } } });
   await prisma.student.deleteMany({ where: { orgId: { in: orgIds } } });
   await prisma.teacher.deleteMany({ where: { organizationId: { in: orgIds } } });

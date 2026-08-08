@@ -22,6 +22,7 @@ export const TeacherOverview = ({
   onAction,
 }: TeacherOverviewProps): React.JSX.Element => {
   const router = useRouter();
+  const primaryAction = actions[0] ?? null;
 
   const navigate = (href: string, label: string): void => {
     if (onAction) {
@@ -30,7 +31,7 @@ export const TeacherOverview = ({
     }
     if (href.startsWith("http")) {
       if (typeof window !== "undefined") {
-        window.open(href, "_blank");
+        window.open(href, "_blank", "noopener,noreferrer");
       }
     } else {
       router.push(href);
@@ -38,43 +39,43 @@ export const TeacherOverview = ({
   };
 
   return (
-  <motion.div whileHover={{ y: -4 }}>
-    <Card className="space-y-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-sm text-slate-500">{highlight.title}</p>
-          <p className="text-lg font-semibold text-slate-900">
-            {highlight.metric}
-          </p>
-          <p className="text-sm text-slate-600">{highlight.description}</p>
+    <motion.div whileHover={{ y: -4 }}>
+      <Card className="space-y-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-sm text-slate-500">{highlight.title}</p>
+            <p className="text-lg font-semibold text-slate-900">
+              {highlight.metric}
+            </p>
+            <p className="text-sm text-slate-600">{highlight.description}</p>
+          </div>
+          {primaryAction && (
+            <Button
+              variant="outline"
+              size="icon"
+              className="rounded-2xl"
+              onClick={() => navigate(primaryAction.href, primaryAction.label)}
+              aria-label={primaryAction.label}
+            >
+              <ArrowUpRight className="h-4 w-4" />
+            </Button>
+          )}
         </div>
-        <Button
-          variant="outline"
-          size="icon"
-          className="rounded-2xl"
-          onClick={() => {
-            if (actions[0]) {
-              navigate(actions[0].href, actions[0].label);
-            }
-          }}
-          aria-label={actions[0]?.label ?? "Přejít"}
-        >
-          <ArrowUpRight className="h-4 w-4" />
-        </Button>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        {actions.map((action) => (
-          <Button
-            key={action.label}
-            variant="ghost"
-            className="rounded-full border border-slate-200 px-4 py-2 text-xs"
-            onClick={() => navigate(action.href, action.label)}
-          >
-            {action.label}
-          </Button>
-        ))}
-      </div>
-    </Card>
-  </motion.div>
-);
+        {actions.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {actions.map((action) => (
+              <Button
+                key={`${action.label}:${action.href}`}
+                variant="ghost"
+                className="rounded-full border border-slate-200 px-4 py-2 text-xs"
+                onClick={() => navigate(action.href, action.label)}
+              >
+                {action.label}
+              </Button>
+            ))}
+          </div>
+        )}
+      </Card>
+    </motion.div>
+  );
 };

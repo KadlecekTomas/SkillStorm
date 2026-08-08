@@ -1,10 +1,6 @@
 import type { User } from "@/types";
 import type { PermissionKey } from "@/types";
-import {
-  ROLE_PERMISSION_MATRIX,
-  SYSTEM_ROLE_PERMISSIONS,
-  roleHome,
-} from "@/types/permissions";
+import { roleHome } from "@/types/permissions";
 
 /** Single source of truth: user may access /app/platform* (SUPERADMIN or platform admin flag). */
 export function isPlatformAdmin(user: User | null | undefined): boolean {
@@ -34,27 +30,23 @@ export function canTriageSupport(user: User | null | undefined): boolean {
   return user.systemRole === "SUPERADMIN" || user.systemRole === "SUPPORT";
 }
 
+/**
+ * Runtime permissions are server-authoritative.
+ *
+ * `/auth/me`, login and role/org switching all return the effective permission
+ * set after role defaults, organization overrides and user overrides have been
+ * resolved. Guessing permissions from a static role matrix on the client can
+ * expose actions that the API will reject (or, worse, hide actions that are
+ * explicitly granted). If a legacy/stale profile does not contain permissions,
+ * fail closed until the auth bootstrap refreshes it from the server.
+ */
 export const derivePermissions = (user: User | null): PermissionKey[] => {
   if (!user) return [];
-
-  if (Array.isArray(user.permissions)) {
-    return Array.from(new Set<PermissionKey>(user.permissions));
-  }
-
-  const system = user.systemRole
-    ? SYSTEM_ROLE_PERMISSIONS[user.systemRole] ?? []
-    : [];
-  const org = user.organizationRole
-    ? ROLE_PERMISSION_MATRIX[user.organizationRole] ?? []
-    : [];
-  const unique = new Set<PermissionKey>([
-    ...system,
-    ...org,
-  ]);
-  return Array.from(unique);
+  if (!Array.isArray(user.permissions)) return [];
+  return Array.from(new Set<PermissionKey>(user.permissions));
 };
 
-/** Fallback when role home is unknown or route missing. Must exist (app/(app)/app/page.tsx). */
+/** Fallback when role home is unknown or route missing. Must exist. */
 export const DASHBOARD_ENTRY = "/app";
 
 const PLATFORM_HOME = "/app/platform";

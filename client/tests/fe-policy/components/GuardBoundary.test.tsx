@@ -15,6 +15,8 @@ vi.mock("@/lib/guard/useAuth", () => ({
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn() }),
+  usePathname: () => "/app/results",
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 vi.mock("@/utils/rbac-telemetry", () => ({
@@ -76,7 +78,7 @@ describe("GuardBoundary", () => {
       </GuardBoundary>,
     );
 
-    expect(screen.getByText(/Access denied/i)).toBeInTheDocument();
+    expect(screen.getByText("Přístup není povolen")).toBeInTheDocument();
     recordPolicyCheck("RBAC", "guard-denies-manage-teachers", true, "Student without MANAGE_TEACHERS is blocked.");
   });
 

@@ -87,7 +87,7 @@ export class ClassSectionsController {
   @Permission(PermissionKey.MANAGE_STUDENTS, PermissionKey.VIEW_RESULTS)
   @ApiOperation({ summary: 'List class sections' })
   @NoHttpCache()
-  @CacheTTL(0) // vypnout HTTP response cache – používáme verzovanou cache v service
+  @CacheTTL(0)
   async findAll(
     @Req() req: RequestWithUser,
     @Query() q: QueryClassSectionsDto,
@@ -118,6 +118,7 @@ export class ClassSectionsController {
   @Get(':id')
   @ApiOperation({ summary: 'Detail třídy' })
   @Permission(PermissionKey.MANAGE_STUDENTS, PermissionKey.VIEW_RESULTS)
+  @NoHttpCache()
   @CacheTTL(0)
   findOne(
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -129,6 +130,7 @@ export class ClassSectionsController {
   @Get(':id/org-subjects')
   @ApiOperation({ summary: 'List subjects assigned to class section' })
   @Permission(PermissionKey.MANAGE_TEACHERS, PermissionKey.VIEW_RESULTS)
+  @NoHttpCache()
   @CacheTTL(0)
   listOrgSubjects(
     @Param('id', new ParseUUIDPipe()) id: string,

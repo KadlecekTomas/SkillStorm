@@ -9,6 +9,7 @@ export interface ScenarioManifest {
     student2a: string;
     student8a: string;
     studentHs: string;
+    parent: string;
     otherOrgDirector: string;
     otherOrgStudent: string;
   };
@@ -21,6 +22,12 @@ export interface ScenarioManifest {
   assignment2AId: string;
   assignmentHSId: string;
   assignmentFast8AId: string;
+  parentMembershipId: string;
+  parentUserId: string;
+  parentRelationId: string;
+  teacherSubjectId: string;
+  untaughtClassId: string;
+  unrelatedStudentId: string;
   foreignOrgId: string;
   foreignTestId: string;
   foreignAssignmentId: string;

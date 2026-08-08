@@ -12,7 +12,9 @@ import {
 import { normalizeAllowedGrades } from "@/lib/grades";
 import type { TestSummary } from "@/types";
 
-export type TestListItem = TestSummary & { creator?: { user?: { name?: string | null } } };
+export type TestListItem = TestSummary & {
+  creator?: { user?: { id?: string; name?: string | null } };
+};
 
 type TestsListQueryData = { items?: TestListItem[] } | TestListItem[];
 

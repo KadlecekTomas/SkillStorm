@@ -247,7 +247,7 @@ export function TeacherAccessManager({ teacher, classrooms }: Props): React.JSX.
                 ) : accessQuery.items.length === 0 ? (
                   <tr>
                     <td colSpan={4} className="px-4 py-6 text-slate-500">
-                      Učitel zatím nemá žádný scoped access.
+                      Učitel zatím nemá přístup k žádné třídě.
                     </td>
                   </tr>
                 ) : (

@@ -23,13 +23,14 @@ type AcademicYearGateProps = {
  */
 export const AcademicYearGate = ({ children }: AcademicYearGateProps): ReactNode => {
   const router = useRouter();
-  const { user, org, orgState } = useAuth();
+  const { user, org, orgState, activeRole } = useAuth();
   const [status, setStatus] = useState<"checking" | "allowed" | "redirect">("checking");
 
+  const effectiveRole = activeRole ?? user?.organizationRole ?? null;
   const isOwnerWithOrg =
-    user?.organizationRole === "OWNER" &&
+    effectiveRole === "OWNER" &&
     org?.id &&
-    user.organizationId === org.id;
+    user?.organizationId === org.id;
 
   const isSchool = org?.type === "SCHOOL";
 
@@ -39,14 +40,12 @@ export const AcademicYearGate = ({ children }: AcademicYearGateProps): ReactNode
       return;
     }
 
-    // SCHOOL organizace ve stavu PENDING – čistý stav, žádné volání core API.
     if (isSchool && orgState === "PENDING") {
       setStatus("redirect");
       router.replace(PENDING_ORG_PATH);
       return;
     }
 
-    // Pro neaktivní / suspendované organizace zde neřešíme academic-year – guardy to řeší na backendu.
     if (orgState !== "ACTIVE") {
       setStatus("allowed");
       return;
@@ -60,11 +59,11 @@ export const AcademicYearGate = ({ children }: AcademicYearGateProps): ReactNode
       })
       .catch((err) => {
         if (cancelled) return;
-        const data = err instanceof HttpError ? (err.data as { code?: string; meta?: { code?: string } } | undefined) : undefined;
+        const data = err instanceof HttpError
+          ? (err.data as { code?: string; meta?: { code?: string } } | undefined)
+          : undefined;
         const code = data?.code ?? data?.meta?.code ?? null;
 
-        // ORG_PENDING / ORG_NOT_READY jsou stavové kódy – FE je nemá zobrazovat jako chybu,
-        // ale v tomto gate by za ACTIVE org neměly nastat. Pro jistotu je bereme jako "bez redirectu".
         if (
           err instanceof HttpError &&
           (code === "ORG_PENDING" || code === "ORG_NOT_READY")

@@ -16,7 +16,7 @@ describe("derivePermissions", () => {
     expect(permissions).not.toContain(PermissionKey.CREATE_TEST);
   });
 
-  it("falls back to static role matrix only when backend permissions are missing", () => {
+  it("fails closed when backend permissions are missing", () => {
     const user: User = {
       id: "u-2",
       name: "Teacher",
@@ -25,7 +25,8 @@ describe("derivePermissions", () => {
 
     const permissions = derivePermissions(user);
 
-    expect(permissions).toContain(PermissionKey.CREATE_TEST);
-    expect(permissions).toContain(PermissionKey.ASSIGN_TESTS);
+    expect(permissions).toEqual([]);
+    expect(permissions).not.toContain(PermissionKey.CREATE_TEST);
+    expect(permissions).not.toContain(PermissionKey.ASSIGN_TESTS);
   });
 });

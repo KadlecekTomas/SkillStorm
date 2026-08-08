@@ -1,7 +1,8 @@
 "use client";
 
 import { fetchWithAuth } from "@/lib/http/client";
-import { useQuery } from "@/lib/query-client";
+import { progressApi, type StudentProgressDetail } from "@/lib/progress-api";
+import { useQuery, type UseQueryResult } from "@/lib/query-client";
 
 /**
  * Guardian Etapa B — rodičovská data + školní párování.
@@ -33,7 +34,20 @@ export type ChildOverview = {
     guardianLaunchPolicy: "DISABLED" | "ALLOWED" | "REQUIRE_CHILD_PIN";
   }[];
   progress: { title: string; submittedAt: string; score: number | null }[];
-  messages: never[];
+  messages: Array<{
+    id: string;
+    kind: "COMMENT" | "PRAISE";
+    title: string;
+    body: string | null;
+    occurredAt: string;
+    authorName: string | null;
+  }>;
+  schoolProgress: {
+    averageGrade: number | null;
+    competencyMasteryPercent: number | null;
+    attendanceRate: number | null;
+    competencyMap: StudentProgressDetail["competencyMap"];
+  } | null;
   nextStep: {
     type: "ASSIGNMENT_DUE";
     assignmentId: string;
@@ -56,7 +70,9 @@ export type GuardianBulkResult = {
   slips: GuardianSlip[];
 };
 
-export function useGuardianChildren(enabled: boolean) {
+export function useGuardianChildren(
+  enabled: boolean,
+): UseQueryResult<GuardianChildrenData> {
   return useQuery<GuardianChildrenData>({
     queryKey: ["guardian", "children"],
     queryFn: () => fetchWithAuth<GuardianChildrenData>("GET", "/guardian/children"),
@@ -64,14 +80,62 @@ export function useGuardianChildren(enabled: boolean) {
   });
 }
 
-export function useChildOverview(studentId: string | null) {
+async function loadChildOverview(studentId: string): Promise<ChildOverview> {
+  const [base, school] = await Promise.all([
+    fetchWithAuth<Omit<ChildOverview, "messages" | "schoolProgress"> & { messages?: never[] }>(
+      "GET",
+      `/guardian/children/${studentId}/overview`,
+    ),
+    progressApi.guardianStudent(studentId),
+  ]);
+
+  // A teacher's pedagogical feedback can be a standalone COMMENT/PRAISE or
+  // attached directly to an assessment/competency timeline entry. The parent
+  // overview must not silently drop that feedback just because its container
+  // is a GRADE/COMPETENCY event.
+  const messages = school.timeline
+    .filter(
+      (item) =>
+        item.kind === "COMMENT" ||
+        item.kind === "PRAISE" ||
+        ((item.kind === "GRADE" || item.kind === "COMPETENCY") &&
+          Boolean(item.detail?.trim())),
+    )
+    .map((item) => ({
+      id: item.id,
+      kind: item.kind === "PRAISE" ? ("PRAISE" as const) : ("COMMENT" as const),
+      title:
+        item.kind === "PRAISE"
+          ? "Pochvala"
+          : item.kind === "GRADE" || item.kind === "COMPETENCY"
+            ? item.title
+            : "Poznámka učitele",
+      body: item.detail,
+      occurredAt: item.occurredAt,
+      authorName: item.authorName,
+    }));
+
+  return {
+    ...base,
+    messages,
+    schoolProgress: {
+      averageGrade: school.summary.averageGrade,
+      competencyMasteryPercent: school.summary.competencyMasteryPercent,
+      attendanceRate: school.summary.attendanceRate,
+      competencyMap: school.competencyMap,
+    },
+  };
+}
+
+export function useChildOverview(
+  studentId: string | null,
+): UseQueryResult<ChildOverview> {
   return useQuery<ChildOverview>({
     queryKey: ["guardian", "overview", studentId],
-    queryFn: () =>
-      fetchWithAuth<ChildOverview>(
-        "GET",
-        `/guardian/children/${studentId}/overview`,
-      ),
+    queryFn: () => {
+      if (!studentId) throw new Error("STUDENT_ID_REQUIRED");
+      return loadChildOverview(studentId);
+    },
     enabled: Boolean(studentId),
   });
 }

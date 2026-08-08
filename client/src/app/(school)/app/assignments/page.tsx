@@ -29,16 +29,23 @@ type AssignmentRow = {
 };
 
 function assignmentTargetHref(assignment: AssignmentRow): string {
-  if (assignment.submissionId || assignment.attemptsUsed > 0) {
-    return `/app/results/${assignment.submissionId ?? assignment.id}`;
+  if (assignment.submissionId) {
+    return `/app/results/${assignment.submissionId}`;
   }
   return `/app/assignments/${assignment.id}`;
 }
 
+function assignmentActionLabel(assignment: AssignmentRow): string {
+  if (assignment.submissionId) return "Zobrazit výsledek";
+  if (assignment.attemptsUsed > 0) return "Pokračovat";
+  return "Otevřít test";
+}
+
 function AssignmentsPage() {
   const router = useRouter();
-  const { roles } = useAuth();
-  const isStudent = roles.includes("STUDENT");
+  const { activeRole, roles } = useAuth();
+  const effectiveRole = activeRole ?? roles[0] ?? null;
+  const isStudent = effectiveRole === "STUDENT";
   const assignmentsQuery = useQuery<AssignmentRow[]>({
     queryKey: buildListQueryKey("assignments-my", {}),
     staleTime: 10_000,
@@ -47,9 +54,26 @@ function AssignmentsPage() {
   const items = useMemo(() => assignmentsQuery.data ?? [], [assignmentsQuery.data]);
   const error = assignmentsQuery.error instanceof Error ? assignmentsQuery.error.message : null;
 
+  const openAssignment = (assignment: AssignmentRow): void => {
+    if (isStudent) {
+      router.push(assignmentTargetHref(assignment));
+      return;
+    }
+    router.push(`/app/tests/${assignment.testId}/results`);
+  };
+
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-semibold">Moje zadání</h1>
+      <div>
+        <h1 className="text-2xl font-semibold">
+          {isStudent ? "Moje zadání" : "Zadání a výsledky"}
+        </h1>
+        {!isStudent && (
+          <p className="mt-1 text-sm text-slate-500">
+            Otevřete výsledky testu a zkontrolujte práci žáků.
+          </p>
+        )}
+      </div>
       {error && <ErrorAlert title="Chyba" description={error} />}
       <div className="grid gap-3">
         {items.map((a) => (
@@ -66,12 +90,8 @@ function AssignmentsPage() {
                 Uzavírá se {formatDate(a.closeAt)}
               </p>
             </div>
-            <Button
-              onClick={() => router.push(assignmentTargetHref(a))}
-              disabled={!isStudent}
-              title={isStudent ? "" : "Zadání může odevzdat pouze žák"}
-            >
-              {a.submissionId || a.attemptsUsed > 0 ? "Zobrazit výsledek" : "Otevřít test"}
+            <Button onClick={() => openAssignment(a)}>
+              {isStudent ? assignmentActionLabel(a) : "Zobrazit výsledky"}
             </Button>
           </Card>
         ))}
@@ -79,7 +99,7 @@ function AssignmentsPage() {
           <Card className="p-4 text-sm text-slate-600">
             {isStudent
               ? "Nemáš žádná aktivní zadání."
-              : "Žádná zadání k zobrazení."}
+              : "Ve vašem rozsahu zatím nejsou žádná zadání."}
           </Card>
         )}
       </div>

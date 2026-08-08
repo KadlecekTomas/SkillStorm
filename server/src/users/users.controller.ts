@@ -58,6 +58,7 @@ export class UsersController {
   @ApiQuery({ name: 'page', required: false, example: 1 })
   @ApiQuery({ name: 'limit', required: false, example: 50 })
   @ApiQuery({ name: 'search', required: false, example: 'john' })
+  @NoHttpCache()
   @CacheTTL(0)
   findAll(@Req() req: RequestWithUser, @Query() q: QueryUsersDto) {
     // služba sama vyhodnotí scope (ALL pro superadmina, jinak org-scoped)

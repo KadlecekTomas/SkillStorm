@@ -9,6 +9,8 @@ import { PendingOrganizationOnboardingScreen } from "@/components/onboarding/Pen
 import { CurrentAcademicYearRequiredScreen } from "@/components/academic-years/CurrentAcademicYearRequiredScreen";
 import type { AppState } from "@/lib/app-state/app-state";
 import { BACKEND_STATE_CODES } from "@/lib/app-state/app-state";
+import { usePermissions } from "@/hooks/use-permissions";
+import { PermissionKey } from "@/types";
 import Link from "next/link";
 
 type AppStateScreensProps = {
@@ -16,14 +18,10 @@ type AppStateScreensProps = {
   onRetry?: () => Promise<void>;
 };
 
-/**
- * Renders the dedicated state screen for the current AppState.
- * Never shows generic "insufficient permissions"; each state has explicit WHAT / WHO / action.
- *
- * Domain rule: ORG_SUSPENDED is a HARD BLOCK. No retry button, no onboarding CTA, no repair.
- * SUSPENDED ≠ PENDING (never treat as "pending approval").
- */
 export function AppStateScreens({ state, onRetry }: AppStateScreensProps): React.JSX.Element {
+  const { can } = usePermissions();
+  const canManageSchoolSetup = can(PermissionKey.MANAGE_TEACHERS);
+
   if (state.code === "BOOTSTRAPPING") {
     return (
       <div className="flex min-h-[50vh] items-center justify-center px-4">
@@ -87,9 +85,16 @@ export function AppStateScreens({ state, onRetry }: AppStateScreensProps): React
                   </p>
                 </div>
               </div>
-              <Button asChild className="w-full rounded-xl" size="lg">
-                <Link href="/app/classrooms">Přiřadit třídy ke školnímu roku</Link>
-              </Button>
+              {canManageSchoolSetup ? (
+                <Button asChild className="w-full rounded-xl" size="lg">
+                  <Link href="/app/classrooms">Přiřadit třídy ke školnímu roku</Link>
+                </Button>
+              ) : (
+                <InfoAlert
+                  title="Co je potřeba"
+                  description="Přiřazení tříd musí dokončit ředitel nebo vlastník školy. Jakmile vedení stav opraví, aplikace bude znovu dostupná."
+                />
+              )}
             </div>
           </Card>
         </div>
@@ -108,13 +113,20 @@ export function AppStateScreens({ state, onRetry }: AppStateScreensProps): React
                 <div>
                   <h1 className="text-xl font-semibold text-slate-900">Příprava školy</h1>
                   <p className="text-sm text-slate-600">
-                    Škola je aktivní a má školní rok. Pro pokračování vytvořte alespoň jednu třídu.
+                    Škola je aktivní a má školní rok, ale ještě nemá vytvořenou žádnou třídu.
                   </p>
                 </div>
               </div>
-              <Button asChild className="w-full rounded-xl" size="lg">
-                <Link href="/app/classrooms">Vytvořit první třídu pro školní rok</Link>
-              </Button>
+              {canManageSchoolSetup ? (
+                <Button asChild className="w-full rounded-xl" size="lg">
+                  <Link href="/app/classrooms">Vytvořit první třídu pro školní rok</Link>
+                </Button>
+              ) : (
+                <InfoAlert
+                  title="Co je potřeba"
+                  description="První třídu musí vytvořit ředitel nebo vlastník školy. Vy jako běžný uživatel nemusíte nic nastavovat."
+                />
+              )}
             </div>
           </Card>
         </div>
@@ -137,7 +149,7 @@ export function AppStateScreens({ state, onRetry }: AppStateScreensProps): React
               </div>
               <InfoAlert
                 title="Kdo to může vyřešit"
-                description="Tuto situaci může opravit pouze ředitel nebo vlastník školy (např. v nastavení nebo přes podporu). Po nápravě obnovte stránku."
+                description="Tuto situaci může opravit pouze ředitel nebo vlastník školy. Po nápravě obnovte stránku."
               />
             </div>
           </Card>
@@ -169,13 +181,22 @@ export function AppStateScreens({ state, onRetry }: AppStateScreensProps): React
                 <p className="text-sm text-slate-600">Aby bylo možné pracovat s třídami a testy, musí být nastaven právě jeden aktivní školní rok.</p>
               </div>
             </div>
-            <InfoAlert
-              title="Kdo to může vyřešit"
-              description="Vlastník nebo ředitel školy může vytvořit školní rok na stránce nastavení. Po vytvoření obnovte stránku."
-            />
-            <Button asChild variant="outline" className="rounded-xl">
-              <Link href="/onboarding/academic-year">Přejít na vytvoření školního roku</Link>
-            </Button>
+            {canManageSchoolSetup ? (
+              <>
+                <InfoAlert
+                  title="Co je potřeba"
+                  description="Vytvořte nebo aktivujte školní rok a poté pokračujte v práci."
+                />
+                <Button asChild variant="outline" className="rounded-xl">
+                  <Link href="/onboarding/academic-year">Přejít na vytvoření školního roku</Link>
+                </Button>
+              </>
+            ) : (
+              <InfoAlert
+                title="Kdo to může vyřešit"
+                description="Aktivní školní rok musí nastavit ředitel nebo vlastník školy. Jakmile ho vedení nastaví, obnovte stránku."
+              />
+            )}
           </div>
         </Card>
       </div>

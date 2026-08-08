@@ -30,8 +30,6 @@ export function StudentSessionBar(): React.JSX.Element | null {
 
   if (!session) return null;
 
-  const firstName = session.studentName.split(" ")[0];
-
   const endNow = async () => {
     setEnding(true);
     try {
