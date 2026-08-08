@@ -20,6 +20,10 @@ type StudentListItem = {
   membership?: { user?: { email?: string | null } | null } | null;
 };
 
+type StudentListPayload = {
+  data?: StudentListItem[];
+};
+
 function unwrap<T>(value: T | { data?: T }): T {
   if (value && typeof value === 'object' && 'data' in value) {
     return ((value as { data?: T }).data ?? value) as T;
@@ -137,11 +141,13 @@ test.describe('school people management', () => {
       `/api/students?search=${encodeURIComponent(studentEmail)}&limit=10`,
     );
     expect(studentSearch.ok()).toBeTruthy();
-    const studentSearchBody = await studentSearch.json();
-    const studentRows = Array.isArray(studentSearchBody?.data)
-      ? (studentSearchBody.data as StudentListItem[])
-      : Array.isArray(studentSearchBody)
-        ? (studentSearchBody as StudentListItem[])
+    const studentList = unwrap<StudentListPayload | StudentListItem[]>(
+      await studentSearch.json(),
+    );
+    const studentRows = Array.isArray(studentList)
+      ? studentList
+      : Array.isArray(studentList.data)
+        ? studentList.data
         : [];
     const seededStudent = studentRows.find(
       (student) => student.membership?.user?.email === studentEmail,
