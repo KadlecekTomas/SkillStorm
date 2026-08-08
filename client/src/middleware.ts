@@ -14,18 +14,26 @@ function redirectToLogin(request: NextRequest, pathname: string, param: "from" |
   return NextResponse.redirect(login);
 }
 
+/** Origin-relative redirect: preserves the browser host and therefore host-only auth cookies. */
+function redirectRelative(pathname: string): NextResponse {
+  return new NextResponse(null, {
+    status: 307,
+    headers: { Location: pathname },
+  });
+}
+
 /** Redirect legacy /dashboard* to /app* for bookmarks. */
-function redirectDashboardToApp(pathname: string, request: NextRequest): NextResponse | null {
+function redirectDashboardToApp(pathname: string): NextResponse | null {
   if (pathname === "/dashboard" || pathname.startsWith("/dashboard/")) {
     const newPath = pathname === "/dashboard" ? "/app" : pathname.replace(/^\/dashboard/, "/app");
-    return NextResponse.redirect(new URL(newPath, request.url));
+    return redirectRelative(newPath);
   }
   return null;
 }
 
 /**
  * Server-side gate for app and join routes:
- * - /dashboard* → redirect to /app* (legacy bookmarks).
+ * - /dashboard* → redirect to /app* (legacy bookmarks) without changing origin.
  * - Unauthenticated on /app* → redirect to /login?from=pathname.
  * - Unauthenticated on /join* → redirect to /login?redirect=fullUrl (join has priority; after login user continues join flow).
  * - Role-based access to /app/platform* is enforced client-side (isPlatformAdmin).
@@ -34,7 +42,7 @@ export function middleware(request: NextRequest): NextResponse {
   const url = request.nextUrl;
   const { pathname } = url;
 
-  const legacyRedirect = redirectDashboardToApp(pathname, request);
+  const legacyRedirect = redirectDashboardToApp(pathname);
   if (legacyRedirect) return legacyRedirect;
 
   const hasAuthCookie = request.cookies.get(AUTH_COOKIE)?.value != null;
