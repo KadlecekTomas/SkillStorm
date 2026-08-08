@@ -161,10 +161,10 @@ Toto pořadí může změnit pilotní evidence a potřeba konkrétní školy, al
 [x] každý má >= 2 hero lessons
 [x] každý má MVP/non-goals/release gates
 [x] všechny cesty jsou v docs registry
-[ ] Documentation Integrity je zelený na aktuálním HEAD
+[x] Documentation Integrity je zelený na subject-complete HEAD před tímto synchronizačním commitem; finální HEAD musí stejný gate znovu potvrdit
 ```
 
-Poslední checkbox se označí pouze podle skutečného GitHub Actions výsledku na stejném HEAD, nikdy anticipovaně.
+GitHub Actions výsledek se vždy vztahuje ke konkrétnímu SHA. Tento synchronizační commit proto znovu spouští Documentation Integrity a finální PR verdict se opírá pouze o poslední HEAD.
 
 ---
 
