@@ -23,6 +23,7 @@ export const AUDIT_METADATA_ALLOWLIST = new Set<string>([
   'reason',
   'counts',
   'result',
+  'count',
 
   // registration audit trail (enum / internal id — no PII)
   'mode',
@@ -41,6 +42,23 @@ export const AUDIT_METADATA_ALLOWLIST = new Set<string>([
   'organizationId',
   'targetUserId',
   'targetEntityId',
+
+  // curriculum provenance — stable identifiers, hashes and enums only.
+  // Human-entered curriculum titles, rationales and document names remain
+  // intentionally excluded from top-level audit metadata.
+  'frameworkCode',
+  'releaseCode',
+  'sourceChecksum',
+  'profileId',
+  'academicYearId',
+  'grade',
+  'classSectionId',
+  'schoolCurriculumVersionId',
+  'frameworkReleaseId',
+  'proposedByType',
+  'schoolOutcomeId',
+  'frameworkOutcomeId',
+  'outcomeAspectId',
 
   // lightweight support tickets
   'category',
