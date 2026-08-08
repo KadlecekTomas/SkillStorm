@@ -327,9 +327,13 @@ for (const doc of SUBJECT_BLUEPRINTS) {
   if (content.length < 8000) {
     errors.push(`${doc}: subject blueprint is unexpectedly short (${content.length} chars)`);
   }
-  if (!/RVP/i.test(content) || !/ŠVP/i.test(content)) {
-    errors.push(`${doc}: subject blueprint must explicitly address both RVP and ŠVP`);
+
+  const addressesNationalOutcomes = /RVP/i.test(content) || /OVU/i.test(content);
+  const addressesSchoolCurriculum = /ŠVP/i.test(content);
+  if (!addressesNationalOutcomes || !addressesSchoolCurriculum) {
+    errors.push(`${doc}: subject blueprint must explicitly address national RVP/OVU and school ŠVP layers`);
   }
+
   if (!/BOARD_ONLY/.test(content)) {
     errors.push(`${doc}: subject blueprint must explicitly address BOARD_ONLY`);
   }
