@@ -44,13 +44,21 @@ test.describe('whole-app release — platform workspace', () => {
     const meResponse = await page.request.get('/api/auth/me');
     expect(meResponse.ok(), 'SUPERADMIN auth profile').toBeTruthy();
     const me = unwrap<{
-      systemRole?: string | null;
-      organizationId?: string | null;
-      isPlatformAdmin?: boolean;
+      user: {
+        systemRole?: string | null;
+        organizationId?: string | null;
+        isPlatformAdmin?: boolean;
+      };
+      organization: unknown | null;
+      membership: unknown | null;
+      context: { mode: string; organizationId: string | null };
     }>(await meResponse.json());
-    expect(me.systemRole).toBe('SUPERADMIN');
-    expect(me.organizationId ?? null).toBeNull();
-    expect(me.isPlatformAdmin).toBe(true);
+    expect(me.user.systemRole).toBe('SUPERADMIN');
+    expect(me.user.organizationId ?? null).toBeNull();
+    expect(me.user.isPlatformAdmin).toBe(true);
+    expect(me.organization).toBeNull();
+    expect(me.membership).toBeNull();
+    expect(me.context).toEqual({ mode: 'platform', organizationId: null });
 
     for (const route of PLATFORM_ROUTES) {
       await page.goto(route, { waitUntil: 'commit' });
