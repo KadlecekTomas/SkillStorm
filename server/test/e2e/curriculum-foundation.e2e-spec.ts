@@ -275,7 +275,7 @@ describe('Curriculum foundation D1 invariants (e2e)', () => {
     });
     await expect(
       prisma.$executeRawUnsafe(
-        'UPDATE framework_outcomes SET title = $1 WHERE framework_outcome_id = $2::uuid',
+        'UPDATE framework_outcomes SET title = $1 WHERE framework_outcome_id = $2::text',
         'Tampered title',
         outcome.id,
       ),
@@ -285,7 +285,7 @@ describe('Curriculum foundation D1 invariants (e2e)', () => {
   it('keeps PUBLISHED school outcomes immutable even through raw SQL', async () => {
     await expect(
       prisma.$executeRawUnsafe(
-        'UPDATE school_outcomes SET title = $1 WHERE school_outcome_id = $2::uuid',
+        'UPDATE school_outcomes SET title = $1 WHERE school_outcome_id = $2::text',
         'Tampered ŠVP title',
         newSchoolOutcomeId,
       ),

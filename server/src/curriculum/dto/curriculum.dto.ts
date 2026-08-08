@@ -2,6 +2,7 @@ import { Type } from 'class-transformer';
 import {
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsEnum,
   IsIn,
   IsInt,
@@ -70,6 +71,7 @@ export class OutcomeAspectImportDto {
   description!: string;
 
   @IsOptional()
+  @IsBoolean()
   requiredForFullCoverage?: boolean;
 
   @IsOptional()
@@ -399,10 +401,7 @@ export class ReviewSchoolOutcomeMappingDto {
     SchoolOutcomeMappingStatus.APPROVED,
     SchoolOutcomeMappingStatus.REJECTED,
   ])
-  status!:
-    | SchoolOutcomeMappingStatus.REVIEWED
-    | SchoolOutcomeMappingStatus.APPROVED
-    | SchoolOutcomeMappingStatus.REJECTED;
+  status!: SchoolOutcomeMappingStatus;
 
   @IsString()
   @IsNotEmpty()

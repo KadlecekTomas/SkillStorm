@@ -15,7 +15,7 @@ CREATE TYPE "MappingProposerType" AS ENUM ('HUMAN', 'SYSTEM', 'AI');
 ALTER TYPE "AuditEntityType" ADD VALUE IF NOT EXISTS 'CURRICULUM';
 
 CREATE TABLE "curriculum_frameworks" (
-  "curriculum_framework_id" UUID NOT NULL,
+  "curriculum_framework_id" TEXT NOT NULL,
   "code" VARCHAR(100) NOT NULL,
   "jurisdiction" VARCHAR(10) NOT NULL,
   "education_type" VARCHAR(100) NOT NULL,
@@ -27,8 +27,8 @@ CREATE TABLE "curriculum_frameworks" (
 );
 
 CREATE TABLE "curriculum_framework_releases" (
-  "curriculum_framework_release_id" UUID NOT NULL,
-  "framework_id" UUID NOT NULL,
+  "curriculum_framework_release_id" TEXT NOT NULL,
+  "framework_id" TEXT NOT NULL,
   "release_code" VARCHAR(160) NOT NULL,
   "title" VARCHAR(500) NOT NULL,
   "source_url" TEXT NOT NULL,
@@ -52,8 +52,8 @@ CREATE TABLE "curriculum_framework_releases" (
 );
 
 CREATE TABLE "framework_areas" (
-  "framework_area_id" UUID NOT NULL,
-  "framework_release_id" UUID NOT NULL,
+  "framework_area_id" TEXT NOT NULL,
+  "framework_release_id" TEXT NOT NULL,
   "external_code" VARCHAR(160) NOT NULL,
   "title" VARCHAR(500) NOT NULL,
   "description" TEXT,
@@ -62,9 +62,9 @@ CREATE TABLE "framework_areas" (
 );
 
 CREATE TABLE "framework_fields" (
-  "framework_field_id" UUID NOT NULL,
-  "framework_release_id" UUID NOT NULL,
-  "area_id" UUID NOT NULL,
+  "framework_field_id" TEXT NOT NULL,
+  "framework_release_id" TEXT NOT NULL,
+  "area_id" TEXT NOT NULL,
   "external_code" VARCHAR(160) NOT NULL,
   "title" VARCHAR(500) NOT NULL,
   "description" TEXT,
@@ -73,9 +73,9 @@ CREATE TABLE "framework_fields" (
 );
 
 CREATE TABLE "framework_outcomes" (
-  "framework_outcome_id" UUID NOT NULL,
-  "framework_release_id" UUID NOT NULL,
-  "field_id" UUID NOT NULL,
+  "framework_outcome_id" TEXT NOT NULL,
+  "framework_release_id" TEXT NOT NULL,
+  "field_id" TEXT NOT NULL,
   "external_code" VARCHAR(160) NOT NULL,
   "title" VARCHAR(1000) NOT NULL,
   "description" TEXT,
@@ -89,8 +89,8 @@ CREATE TABLE "framework_outcomes" (
 );
 
 CREATE TABLE "outcome_aspects" (
-  "outcome_aspect_id" UUID NOT NULL,
-  "framework_outcome_id" UUID NOT NULL,
+  "outcome_aspect_id" TEXT NOT NULL,
+  "framework_outcome_id" TEXT NOT NULL,
   "code" VARCHAR(120) NOT NULL,
   "title" VARCHAR(500) NOT NULL,
   "description" TEXT NOT NULL,
@@ -104,8 +104,8 @@ CREATE TABLE "outcome_aspects" (
 );
 
 CREATE TABLE "school_curriculum_profiles" (
-  "school_curriculum_profile_id" UUID NOT NULL,
-  "organization_id" UUID NOT NULL,
+  "school_curriculum_profile_id" TEXT NOT NULL,
+  "organization_id" TEXT NOT NULL,
   "title" VARCHAR(255) NOT NULL,
   "status" "SchoolCurriculumProfileStatus" NOT NULL DEFAULT 'ACTIVE',
   "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -115,8 +115,8 @@ CREATE TABLE "school_curriculum_profiles" (
 );
 
 CREATE TABLE "school_curriculum_versions" (
-  "school_curriculum_version_id" UUID NOT NULL,
-  "profile_id" UUID NOT NULL,
+  "school_curriculum_version_id" TEXT NOT NULL,
+  "profile_id" TEXT NOT NULL,
   "version_label" VARCHAR(160) NOT NULL,
   "source_type" "SchoolCurriculumSourceType" NOT NULL,
   "source_file_id" VARCHAR(255),
@@ -140,8 +140,8 @@ CREATE TABLE "school_curriculum_versions" (
 );
 
 CREATE TABLE "school_subjects" (
-  "school_subject_id" UUID NOT NULL,
-  "school_curriculum_version_id" UUID NOT NULL,
+  "school_subject_id" TEXT NOT NULL,
+  "school_curriculum_version_id" TEXT NOT NULL,
   "code" VARCHAR(120),
   "title" VARCHAR(255) NOT NULL,
   "short_title" VARCHAR(100),
@@ -152,9 +152,9 @@ CREATE TABLE "school_subjects" (
 );
 
 CREATE TABLE "school_outcomes" (
-  "school_outcome_id" UUID NOT NULL,
-  "school_curriculum_version_id" UUID NOT NULL,
-  "school_subject_id" UUID,
+  "school_outcome_id" TEXT NOT NULL,
+  "school_curriculum_version_id" TEXT NOT NULL,
+  "school_subject_id" TEXT,
   "external_code" VARCHAR(180),
   "title" VARCHAR(1200) NOT NULL,
   "description" TEXT,
@@ -168,13 +168,13 @@ CREATE TABLE "school_outcomes" (
 );
 
 CREATE TABLE "curriculum_applicabilities" (
-  "curriculum_applicability_id" UUID NOT NULL,
-  "organization_id" UUID NOT NULL,
-  "school_curriculum_version_id" UUID NOT NULL,
-  "framework_release_id" UUID NOT NULL,
-  "academic_year_id" UUID NOT NULL,
+  "curriculum_applicability_id" TEXT NOT NULL,
+  "organization_id" TEXT NOT NULL,
+  "school_curriculum_version_id" TEXT NOT NULL,
+  "framework_release_id" TEXT NOT NULL,
+  "academic_year_id" TEXT NOT NULL,
   "grade" "SchoolGrade",
-  "class_section_id" UUID,
+  "class_section_id" TEXT,
   "valid_from" TIMESTAMP(3),
   "valid_to" TIMESTAMP(3),
   "priority" INTEGER NOT NULL DEFAULT 0,
@@ -187,10 +187,10 @@ CREATE TABLE "curriculum_applicabilities" (
 );
 
 CREATE TABLE "school_outcome_mappings" (
-  "school_outcome_mapping_id" UUID NOT NULL,
-  "school_outcome_id" UUID NOT NULL,
-  "framework_outcome_id" UUID NOT NULL,
-  "outcome_aspect_id" UUID,
+  "school_outcome_mapping_id" TEXT NOT NULL,
+  "school_outcome_id" TEXT NOT NULL,
+  "framework_outcome_id" TEXT NOT NULL,
+  "outcome_aspect_id" TEXT,
   "mapping_type" "SchoolOutcomeMappingType" NOT NULL,
   "confidence" DOUBLE PRECISION,
   "rationale" TEXT NOT NULL,
@@ -200,8 +200,8 @@ CREATE TABLE "school_outcome_mappings" (
   "proposed_by_id" TEXT,
   "reviewed_by" TEXT,
   "reviewed_at" TIMESTAMP(3),
-  "framework_release_id" UUID NOT NULL,
-  "school_curriculum_version_id" UUID NOT NULL,
+  "framework_release_id" TEXT NOT NULL,
+  "school_curriculum_version_id" TEXT NOT NULL,
   "school_outcome_checksum" CHAR(64) NOT NULL,
   "framework_outcome_checksum" CHAR(64) NOT NULL,
   "outcome_aspect_review_version" INTEGER,
@@ -210,8 +210,9 @@ CREATE TABLE "school_outcome_mappings" (
   CONSTRAINT "school_outcome_mappings_pkey" PRIMARY KEY ("school_outcome_mapping_id"),
   CONSTRAINT "school_outcome_mapping_confidence_check" CHECK ("confidence" IS NULL OR ("confidence" >= 0 AND "confidence" <= 1)),
   CONSTRAINT "school_outcome_mapping_review_check" CHECK (
-    ("status" IN ('PROPOSED', 'STALE') AND "reviewed_at" IS NULL)
+    ("status" = 'PROPOSED' AND "reviewed_at" IS NULL)
     OR ("status" IN ('REVIEWED', 'APPROVED', 'REJECTED') AND "reviewed_at" IS NOT NULL AND "reviewed_by" IS NOT NULL AND "review_rationale" IS NOT NULL)
+    OR "status" = 'STALE'
   )
 );
 
@@ -277,7 +278,7 @@ ALTER TABLE "school_outcome_mappings" ADD CONSTRAINT "school_outcome_mappings_sc
 -- at a field from another release. Prisma relations alone do not express this
 -- redundant release invariant, so enforce it here.
 CREATE OR REPLACE FUNCTION curriculum_framework_structure_consistency() RETURNS TRIGGER AS $$
-DECLARE parent_release UUID;
+DECLARE parent_release TEXT;
 BEGIN
   IF TG_TABLE_NAME = 'framework_fields' THEN
     SELECT "framework_release_id" INTO parent_release FROM "framework_areas" WHERE "framework_area_id" = NEW."area_id";
@@ -314,8 +315,8 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER curriculum_framework_release_immutable_trigger BEFORE UPDATE OR DELETE ON "curriculum_framework_releases" FOR EACH ROW EXECUTE FUNCTION curriculum_framework_release_immutable();
 
 CREATE OR REPLACE FUNCTION curriculum_framework_child_immutable() RETURNS TRIGGER AS $$
-DECLARE old_release UUID;
-DECLARE new_release UUID;
+DECLARE old_release TEXT;
+DECLARE new_release TEXT;
 DECLARE immutable_count INTEGER;
 BEGIN
   IF TG_TABLE_NAME = 'framework_areas' THEN
@@ -350,7 +351,7 @@ BEGIN
     RAISE EXCEPTION 'SCHOOL_CURRICULUM_VERSION_IMMUTABLE';
   END IF;
   IF TG_OP = 'UPDATE' AND OLD."status" IN ('PUBLISHED', 'RETIRED') THEN
-    IF (to_jsonb(NEW) - 'status') IS DISTINCT FROM (to_jsonb(OLD) - 'status') THEN
+    IF (to_jsonb(NEW) - ARRAY['status', 'updated_at']) IS DISTINCT FROM (to_jsonb(OLD) - ARRAY['status', 'updated_at']) THEN
       RAISE EXCEPTION 'SCHOOL_CURRICULUM_VERSION_IMMUTABLE';
     END IF;
     IF OLD."status" = 'RETIRED' OR NEW."status" NOT IN ('PUBLISHED', 'RETIRED') THEN
@@ -363,8 +364,8 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER school_curriculum_version_immutable_trigger BEFORE UPDATE OR DELETE ON "school_curriculum_versions" FOR EACH ROW EXECUTE FUNCTION school_curriculum_version_immutable();
 
 CREATE OR REPLACE FUNCTION school_curriculum_child_immutable() RETURNS TRIGGER AS $$
-DECLARE old_version UUID;
-DECLARE new_version UUID;
+DECLARE old_version TEXT;
+DECLARE new_version TEXT;
 DECLARE immutable_count INTEGER;
 BEGIN
   old_version := CASE WHEN TG_OP <> 'INSERT' THEN OLD."school_curriculum_version_id" ELSE NULL END;
@@ -383,7 +384,7 @@ CREATE TRIGGER school_subjects_immutable_trigger BEFORE INSERT OR UPDATE OR DELE
 CREATE TRIGGER school_outcomes_immutable_trigger BEFORE INSERT OR UPDATE OR DELETE ON "school_outcomes" FOR EACH ROW EXECUTE FUNCTION school_curriculum_child_immutable();
 
 CREATE OR REPLACE FUNCTION school_outcome_subject_consistency() RETURNS TRIGGER AS $$
-DECLARE subject_version UUID;
+DECLARE subject_version TEXT;
 BEGIN
   IF NEW."school_subject_id" IS NULL THEN RETURN NEW; END IF;
   SELECT "school_curriculum_version_id" INTO subject_version
@@ -400,12 +401,12 @@ CREATE TRIGGER school_outcome_subject_consistency_trigger BEFORE INSERT OR UPDAT
 -- continue referencing a later SUPERSEDED release, but creation/edit of ACTIVE
 -- rules requires a currently VERIFIED release and PUBLISHED school version.
 CREATE OR REPLACE FUNCTION curriculum_applicability_consistency() RETURNS TRIGGER AS $$
-DECLARE profile_org UUID;
+DECLARE profile_org TEXT;
 DECLARE school_status "SchoolCurriculumVersionStatus";
 DECLARE release_status "CurriculumFrameworkReleaseStatus";
-DECLARE year_org UUID;
-DECLARE class_org UUID;
-DECLARE class_year UUID;
+DECLARE year_org TEXT;
+DECLARE class_org TEXT;
+DECLARE class_year TEXT;
 BEGIN
   SELECT p."organization_id", v."status" INTO profile_org, school_status
   FROM "school_curriculum_versions" v
@@ -447,13 +448,13 @@ CREATE UNIQUE INDEX "curriculum_applicability_active_default_rank_key"
   WHERE "status" = 'ACTIVE' AND "class_section_id" IS NULL AND "grade" IS NULL;
 
 CREATE OR REPLACE FUNCTION school_outcome_mapping_consistency() RETURNS TRIGGER AS $$
-DECLARE school_version UUID;
+DECLARE school_version TEXT;
 DECLARE school_checksum CHAR(64);
 DECLARE school_status "SchoolCurriculumVersionStatus";
-DECLARE framework_release UUID;
+DECLARE framework_release TEXT;
 DECLARE framework_checksum CHAR(64);
 DECLARE framework_status "CurriculumFrameworkReleaseStatus";
-DECLARE aspect_outcome UUID;
+DECLARE aspect_outcome TEXT;
 DECLARE aspect_review INTEGER;
 BEGIN
   SELECT so."school_curriculum_version_id", so."checksum", v."status"

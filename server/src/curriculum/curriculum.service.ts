@@ -42,8 +42,8 @@ import type {
 const asJson = (value: unknown): Prisma.InputJsonValue =>
   value as Prisma.InputJsonValue;
 
-function optionalDate(value?: string): Date | undefined {
-  return value ? new Date(value) : undefined;
+function optionalDate(value?: string): Date | null {
+  return value ? new Date(value) : null;
 }
 
 function activeRole(actor: JwtPayload): OrganizationRole | undefined {
@@ -270,7 +270,7 @@ export class CurriculumService {
             frameworkReleaseId: created.id,
             externalCode: areaDto.externalCode.trim(),
             title: areaDto.title.trim(),
-            description: areaDto.description?.trim(),
+            description: areaDto.description?.trim() ?? null,
             sortOrder: areaDto.sortOrder,
           },
         });
@@ -282,7 +282,7 @@ export class CurriculumService {
               areaId: area.id,
               externalCode: fieldDto.externalCode.trim(),
               title: fieldDto.title.trim(),
-              description: fieldDto.description?.trim(),
+              description: fieldDto.description?.trim() ?? null,
               sortOrder: fieldDto.sortOrder,
             },
           });
@@ -298,12 +298,12 @@ export class CurriculumService {
                 fieldId: field.id,
                 externalCode: outcomeDto.externalCode.trim(),
                 title: outcomeDto.title.trim(),
-                description: outcomeDto.description?.trim(),
-                nodeGrade: outcomeDto.nodeGrade,
+                description: outcomeDto.description?.trim() ?? null,
+                nodeGrade: outcomeDto.nodeGrade ?? null,
                 ...(outcomeDto.metadata
                   ? { metadata: asJson(outcomeDto.metadata) }
                   : {}),
-                sourceAnchor: outcomeDto.sourceAnchor?.trim(),
+                sourceAnchor: outcomeDto.sourceAnchor?.trim() ?? null,
                 checksum,
               },
             });
@@ -523,9 +523,9 @@ export class CurriculumService {
           profileId,
           versionLabel: dto.versionLabel.trim(),
           sourceType: dto.sourceType,
-          sourceFileId: dto.sourceFileId?.trim(),
+          sourceFileId: dto.sourceFileId?.trim() ?? null,
           sourceChecksum,
-          sourceDocumentName: dto.sourceDocumentName?.trim(),
+          sourceDocumentName: dto.sourceDocumentName?.trim() ?? null,
           sourceImportedAt: optionalDate(dto.sourceImportedAt) ?? new Date(),
           validFrom: optionalDate(dto.validFrom),
           validTo: optionalDate(dto.validTo),
@@ -537,9 +537,9 @@ export class CurriculumService {
         const subject = await tx.schoolSubject.create({
           data: {
             schoolCurriculumVersionId: created.id,
-            code: subjectDto.code?.trim(),
+            code: subjectDto.code?.trim() ?? null,
             title: subjectDto.title.trim(),
-            shortTitle: subjectDto.shortTitle?.trim(),
+            shortTitle: subjectDto.shortTitle?.trim() ?? null,
             gradeScope: asJson([...new Set(subjectDto.grades)].sort()),
             ...(subjectDto.metadata
               ? { metadata: asJson(subjectDto.metadata) }
@@ -552,15 +552,15 @@ export class CurriculumService {
             data: {
               schoolCurriculumVersionId: created.id,
               schoolSubjectId: subject.id,
-              externalCode: outcomeDto.externalCode?.trim(),
+              externalCode: outcomeDto.externalCode?.trim() ?? null,
               title: outcomeDto.title.trim(),
-              description: outcomeDto.description?.trim(),
+              description: outcomeDto.description?.trim() ?? null,
               gradeScope: asJson([...new Set(outcomeDto.grades)].sort()),
-              orderIndex: outcomeDto.orderIndex,
+              orderIndex: outcomeDto.orderIndex ?? null,
               ...(outcomeDto.metadata
                 ? { metadata: asJson(outcomeDto.metadata) }
                 : {}),
-              sourceAnchor: outcomeDto.sourceAnchor?.trim(),
+              sourceAnchor: outcomeDto.sourceAnchor?.trim() ?? null,
               checksum: this.schoolOutcomeChecksum(outcomeDto),
             },
           });
@@ -779,8 +779,8 @@ export class CurriculumService {
         schoolCurriculumVersionId: version.id,
         frameworkReleaseId: release.id,
         academicYearId: year.id,
-        grade: dto.classSectionId ? null : dto.grade,
-        classSectionId: dto.classSectionId,
+        grade: dto.classSectionId ? null : (dto.grade ?? null),
+        classSectionId: dto.classSectionId ?? null,
         validFrom: optionalDate(dto.validFrom),
         validTo: optionalDate(dto.validTo),
         priority,
@@ -997,9 +997,9 @@ export class CurriculumService {
       data: {
         schoolOutcomeId: schoolOutcome.id,
         frameworkOutcomeId: frameworkOutcome.id,
-        outcomeAspectId: aspect?.id,
+        outcomeAspectId: aspect?.id ?? null,
         mappingType: dto.mappingType,
-        confidence: dto.confidence,
+        confidence: dto.confidence ?? null,
         rationale: dto.rationale.trim(),
         status: SchoolOutcomeMappingStatus.PROPOSED,
         proposedByType: proposerType,
@@ -1008,7 +1008,7 @@ export class CurriculumService {
         schoolCurriculumVersionId: schoolOutcome.schoolCurriculumVersionId,
         schoolOutcomeChecksum: schoolOutcome.checksum,
         frameworkOutcomeChecksum: frameworkOutcome.checksum,
-        outcomeAspectReviewVersion: aspect?.reviewVersion,
+        outcomeAspectReviewVersion: aspect?.reviewVersion ?? null,
       },
       include: {
         schoolOutcome: true,
@@ -1280,10 +1280,10 @@ export class CurriculumService {
       area.fields.flatMap((field) =>
         field.outcomes.map((outcome) => ({
           externalCode: outcome.externalCode,
-          sourceAnchor: outcome.sourceAnchor,
+          sourceAnchor: outcome.sourceAnchor ?? null,
           fieldExternalCode: field.externalCode,
           title: outcome.title,
-          description: outcome.description,
+          description: outcome.description ?? null,
           metadata: (outcome.metadata ?? null) as JsonLike,
           checksum: this.frameworkOutcomeChecksum(field.externalCode, outcome),
         })),
