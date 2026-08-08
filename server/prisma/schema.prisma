@@ -93,6 +93,8 @@ model Organization {
   campaignProgresses CampaignProgress[]
   guardianRelations  GuardianStudentRelation[]
   learningSessions   LearningSession[]
+  schoolCurriculumProfiles SchoolCurriculumProfile[]
+  curriculumApplicabilities CurriculumApplicability[]
 
   @@index([name])
   @@index([city])
@@ -699,6 +701,7 @@ model AcademicYear {
   invites              Invite[]
   tests                Test[]
   teacherClassSections TeacherClassSection[]
+  curriculumApplicabilities CurriculumApplicability[]
 
   @@unique([orgId, label])
   @@index([orgId, isCurrent])
@@ -745,6 +748,7 @@ model ClassSection {
   liveSessions       LiveSession[]
   classPartak        ClassPartak?
   campaignProgresses CampaignProgress[]
+  curriculumApplicabilities CurriculumApplicability[]
 
   @@unique([orgId, yearId, grade, section])
   @@unique([id, yearId])
@@ -1619,6 +1623,337 @@ model AssignmentStudent {
   @@map("assignment_students")
 }
 
+
+// -----------------------------------------------------------------------------
+// Interactive Curriculum D1 — canonical framework + school ŠVP foundation.
+// Normative contract: docs/interactive-curriculum/CURRICULUM-DATA-CONTRACT.md
+// Published/verified immutability and cross-tenant applicability invariants are
+// enforced again at DB level by migration 20260809005500_curriculum_foundation_d1.
+// -----------------------------------------------------------------------------
+
+enum CurriculumFrameworkReleaseStatus {
+  IMPORTED
+  VERIFIED
+  SUPERSEDED
+}
+
+enum OutcomeAspectStatus {
+  ACTIVE
+  RETIRED
+}
+
+enum SchoolCurriculumProfileStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum SchoolCurriculumSourceType {
+  UPLOAD
+  MANUAL
+  TEMPLATE
+  IMPORT
+}
+
+enum SchoolCurriculumVersionStatus {
+  DRAFT
+  REVIEW
+  PUBLISHED
+  RETIRED
+}
+
+enum CurriculumApplicabilityStatus {
+  ACTIVE
+  RETIRED
+}
+
+enum SchoolOutcomeMappingType {
+  EXACT
+  PARTIAL
+  SUPPORTING
+  RELATED
+}
+
+enum SchoolOutcomeMappingStatus {
+  PROPOSED
+  REVIEWED
+  APPROVED
+  REJECTED
+  STALE
+}
+
+enum MappingProposerType {
+  HUMAN
+  SYSTEM
+  AI
+}
+
+model CurriculumFramework {
+  id            String                       @id @default(uuid()) @map("curriculum_framework_id")
+  code          String                       @unique @db.VarChar(100)
+  jurisdiction  String                       @db.VarChar(10)
+  educationType String                       @map("education_type") @db.VarChar(100)
+  title         String                       @db.VarChar(255)
+  authorityName String                       @map("authority_name") @db.VarChar(255)
+  createdAt     DateTime                     @default(now()) @map("created_at")
+  updatedAt     DateTime                     @updatedAt @map("updated_at")
+  releases      CurriculumFrameworkRelease[]
+
+  @@index([jurisdiction, educationType])
+  @@map("curriculum_frameworks")
+}
+
+model CurriculumFrameworkRelease {
+  id                String                           @id @default(uuid()) @map("curriculum_framework_release_id")
+  frameworkId       String                           @map("framework_id")
+  releaseCode       String                           @map("release_code") @db.VarChar(160)
+  title             String                           @db.VarChar(500)
+  sourceUrl         String                           @map("source_url") @db.Text
+  sourceAuthority   String                           @map("source_authority") @db.VarChar(255)
+  sourcePublishedAt DateTime?                        @map("source_published_at")
+  effectiveFrom     DateTime?                        @map("effective_from")
+  effectiveTo       DateTime?                        @map("effective_to")
+  importedAt        DateTime                         @default(now()) @map("imported_at")
+  sourceChecksum    String                           @map("source_checksum") @db.Char(64)
+  sourceMetadata    Json?                            @map("source_metadata_json")
+  status            CurriculumFrameworkReleaseStatus @default(IMPORTED)
+  verifiedAt        DateTime?                        @map("verified_at")
+  verifiedBy        String?                          @map("verified_by")
+  createdAt         DateTime                         @default(now()) @map("created_at")
+  framework         CurriculumFramework              @relation(fields: [frameworkId], references: [id], onDelete: Restrict)
+  areas             FrameworkArea[]
+  fields            FrameworkField[]
+  outcomes          FrameworkOutcome[]
+  applicabilities   CurriculumApplicability[]
+  schoolMappings    SchoolOutcomeMapping[]           @relation("SchoolOutcomeMappingRelease")
+
+  @@unique([frameworkId, releaseCode])
+  @@unique([frameworkId, sourceChecksum])
+  @@index([frameworkId, status])
+  @@index([effectiveFrom, effectiveTo])
+  @@map("curriculum_framework_releases")
+}
+
+model FrameworkArea {
+  id                 String                     @id @default(uuid()) @map("framework_area_id")
+  frameworkReleaseId String                     @map("framework_release_id")
+  externalCode       String                     @map("external_code") @db.VarChar(160)
+  title              String                     @db.VarChar(500)
+  description        String?                    @db.Text
+  sortOrder          Int                        @map("sort_order")
+  release            CurriculumFrameworkRelease @relation(fields: [frameworkReleaseId], references: [id], onDelete: Restrict)
+  fields             FrameworkField[]
+
+  @@unique([frameworkReleaseId, externalCode])
+  @@index([frameworkReleaseId, sortOrder])
+  @@map("framework_areas")
+}
+
+model FrameworkField {
+  id                 String                     @id @default(uuid()) @map("framework_field_id")
+  frameworkReleaseId String                     @map("framework_release_id")
+  areaId             String                     @map("area_id")
+  externalCode       String                     @map("external_code") @db.VarChar(160)
+  title              String                     @db.VarChar(500)
+  description        String?                    @db.Text
+  sortOrder          Int                        @map("sort_order")
+  release            CurriculumFrameworkRelease @relation(fields: [frameworkReleaseId], references: [id], onDelete: Restrict)
+  area               FrameworkArea              @relation(fields: [areaId], references: [id], onDelete: Restrict)
+  outcomes           FrameworkOutcome[]
+
+  @@unique([frameworkReleaseId, externalCode])
+  @@index([areaId, sortOrder])
+  @@map("framework_fields")
+}
+
+model FrameworkOutcome {
+  id                 String                     @id @default(uuid()) @map("framework_outcome_id")
+  frameworkReleaseId String                     @map("framework_release_id")
+  fieldId            String                     @map("field_id")
+  externalCode       String                     @map("external_code") @db.VarChar(160)
+  title              String                     @db.VarChar(1000)
+  description        String?                    @db.Text
+  nodeGrade          Int?                       @map("node_grade")
+  metadata           Json?                      @map("metadata_json")
+  sourceAnchor       String?                    @map("source_anchor") @db.VarChar(500)
+  checksum           String                     @db.Char(64)
+  createdAt          DateTime                   @default(now()) @map("created_at")
+  release            CurriculumFrameworkRelease @relation(fields: [frameworkReleaseId], references: [id], onDelete: Restrict)
+  field              FrameworkField             @relation(fields: [fieldId], references: [id], onDelete: Restrict)
+  aspects            OutcomeAspect[]
+  schoolMappings     SchoolOutcomeMapping[]
+
+  @@unique([frameworkReleaseId, externalCode])
+  @@index([fieldId])
+  @@index([frameworkReleaseId, sourceAnchor])
+  @@map("framework_outcomes")
+}
+
+model OutcomeAspect {
+  id                      String              @id @default(uuid()) @map("outcome_aspect_id")
+  frameworkOutcomeId      String              @map("framework_outcome_id")
+  code                    String              @db.VarChar(120)
+  title                   String              @db.VarChar(500)
+  description             String              @db.Text
+  requiredForFullCoverage Boolean             @default(true) @map("required_for_full_coverage")
+  reviewVersion           Int                 @default(1) @map("review_version")
+  status                  OutcomeAspectStatus @default(ACTIVE)
+  createdAt               DateTime            @default(now()) @map("created_at")
+  updatedAt               DateTime            @updatedAt @map("updated_at")
+  frameworkOutcome        FrameworkOutcome    @relation(fields: [frameworkOutcomeId], references: [id], onDelete: Restrict)
+  schoolMappings          SchoolOutcomeMapping[]
+
+  @@unique([frameworkOutcomeId, code])
+  @@index([frameworkOutcomeId, status])
+  @@map("outcome_aspects")
+}
+
+model SchoolCurriculumProfile {
+  id             String                        @id @default(uuid()) @map("school_curriculum_profile_id")
+  organizationId String                        @map("organization_id")
+  title          String                        @db.VarChar(255)
+  status         SchoolCurriculumProfileStatus @default(ACTIVE)
+  createdAt      DateTime                      @default(now()) @map("created_at")
+  updatedAt      DateTime                      @updatedAt @map("updated_at")
+  deletedAt      DateTime?                     @map("deleted_at")
+  organization   Organization                  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  versions       SchoolCurriculumVersion[]
+
+  @@index([organizationId, status, deletedAt])
+  @@map("school_curriculum_profiles")
+}
+
+model SchoolCurriculumVersion {
+  id                 String                        @id @default(uuid()) @map("school_curriculum_version_id")
+  profileId          String                        @map("profile_id")
+  versionLabel       String                        @map("version_label") @db.VarChar(160)
+  sourceType         SchoolCurriculumSourceType    @map("source_type")
+  sourceFileId       String?                       @map("source_file_id") @db.VarChar(255)
+  sourceChecksum     String                        @map("source_checksum") @db.Char(64)
+  sourceDocumentName String?                       @map("source_document_name") @db.VarChar(500)
+  sourceImportedAt   DateTime?                     @map("source_imported_at")
+  validFrom          DateTime?                     @map("valid_from")
+  validTo            DateTime?                     @map("valid_to")
+  status             SchoolCurriculumVersionStatus @default(DRAFT)
+  publishedAt        DateTime?                     @map("published_at")
+  publishedBy        String?                       @map("published_by")
+  createdAt          DateTime                      @default(now()) @map("created_at")
+  updatedAt          DateTime                      @updatedAt @map("updated_at")
+  deletedAt          DateTime?                     @map("deleted_at")
+  profile            SchoolCurriculumProfile       @relation(fields: [profileId], references: [id], onDelete: Restrict)
+  subjects           SchoolSubject[]
+  outcomes           SchoolOutcome[]
+  applicabilities    CurriculumApplicability[]
+  mappings           SchoolOutcomeMapping[]        @relation("SchoolOutcomeMappingVersion")
+
+  @@unique([profileId, versionLabel])
+  @@unique([profileId, sourceChecksum])
+  @@index([profileId, status, deletedAt])
+  @@map("school_curriculum_versions")
+}
+
+model SchoolSubject {
+  id                        String                  @id @default(uuid()) @map("school_subject_id")
+  schoolCurriculumVersionId String                  @map("school_curriculum_version_id")
+  code                      String?                 @db.VarChar(120)
+  title                     String                  @db.VarChar(255)
+  shortTitle                String?                 @map("short_title") @db.VarChar(100)
+  gradeScope                Json                    @map("grade_scope_json")
+  metadata                  Json?                   @map("metadata_json")
+  createdAt                 DateTime                @default(now()) @map("created_at")
+  schoolCurriculumVersion   SchoolCurriculumVersion @relation(fields: [schoolCurriculumVersionId], references: [id], onDelete: Restrict)
+  outcomes                  SchoolOutcome[]
+
+  @@unique([schoolCurriculumVersionId, code])
+  @@index([schoolCurriculumVersionId, title])
+  @@map("school_subjects")
+}
+
+model SchoolOutcome {
+  id                        String                  @id @default(uuid()) @map("school_outcome_id")
+  schoolCurriculumVersionId String                  @map("school_curriculum_version_id")
+  schoolSubjectId           String?                 @map("school_subject_id")
+  externalCode              String?                 @map("external_code") @db.VarChar(180)
+  title                     String                  @db.VarChar(1200)
+  description               String?                 @db.Text
+  gradeScope                Json                    @map("grade_scope_json")
+  orderIndex                Int?                    @map("order_index")
+  metadata                  Json?                   @map("metadata_json")
+  sourceAnchor              String?                 @map("source_anchor") @db.VarChar(500)
+  checksum                  String                  @db.Char(64)
+  createdAt                 DateTime                @default(now()) @map("created_at")
+  schoolCurriculumVersion   SchoolCurriculumVersion @relation(fields: [schoolCurriculumVersionId], references: [id], onDelete: Restrict)
+  schoolSubject             SchoolSubject?          @relation(fields: [schoolSubjectId], references: [id], onDelete: Restrict)
+  mappings                  SchoolOutcomeMapping[]
+
+  @@unique([schoolCurriculumVersionId, externalCode])
+  @@index([schoolCurriculumVersionId, schoolSubjectId])
+  @@index([checksum])
+  @@map("school_outcomes")
+}
+
+model CurriculumApplicability {
+  id                        String                         @id @default(uuid()) @map("curriculum_applicability_id")
+  organizationId            String                         @map("organization_id")
+  schoolCurriculumVersionId String                         @map("school_curriculum_version_id")
+  frameworkReleaseId        String                         @map("framework_release_id")
+  academicYearId            String                         @map("academic_year_id")
+  grade                     SchoolGrade?
+  classSectionId            String?                        @map("class_section_id")
+  validFrom                 DateTime?                      @map("valid_from")
+  validTo                   DateTime?                      @map("valid_to")
+  priority                  Int                            @default(0)
+  status                    CurriculumApplicabilityStatus @default(ACTIVE)
+  createdAt                 DateTime                       @default(now()) @map("created_at")
+  updatedAt                 DateTime                       @updatedAt @map("updated_at")
+  organization              Organization                   @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  schoolCurriculumVersion   SchoolCurriculumVersion        @relation(fields: [schoolCurriculumVersionId], references: [id], onDelete: Restrict)
+  frameworkRelease          CurriculumFrameworkRelease     @relation(fields: [frameworkReleaseId], references: [id], onDelete: Restrict)
+  academicYear              AcademicYear                   @relation(fields: [academicYearId], references: [id], onDelete: Restrict)
+  classSection              ClassSection?                  @relation(fields: [classSectionId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, academicYearId, status])
+  @@index([classSectionId, academicYearId, status])
+  @@index([grade, academicYearId, status])
+  @@index([schoolCurriculumVersionId])
+  @@index([frameworkReleaseId])
+  @@map("curriculum_applicabilities")
+}
+
+model SchoolOutcomeMapping {
+  id                         String                     @id @default(uuid()) @map("school_outcome_mapping_id")
+  schoolOutcomeId            String                     @map("school_outcome_id")
+  frameworkOutcomeId         String                     @map("framework_outcome_id")
+  outcomeAspectId            String?                    @map("outcome_aspect_id")
+  mappingType                SchoolOutcomeMappingType   @map("mapping_type")
+  confidence                 Float?
+  rationale                  String                     @db.Text
+  reviewRationale            String?                    @map("review_rationale") @db.Text
+  status                     SchoolOutcomeMappingStatus @default(PROPOSED)
+  proposedByType             MappingProposerType        @default(HUMAN) @map("proposed_by_type")
+  proposedById               String?                    @map("proposed_by_id")
+  reviewedBy                 String?                    @map("reviewed_by")
+  reviewedAt                 DateTime?                  @map("reviewed_at")
+  frameworkReleaseId         String                     @map("framework_release_id")
+  schoolCurriculumVersionId  String                     @map("school_curriculum_version_id")
+  schoolOutcomeChecksum      String                     @map("school_outcome_checksum") @db.Char(64)
+  frameworkOutcomeChecksum   String                     @map("framework_outcome_checksum") @db.Char(64)
+  outcomeAspectReviewVersion Int?                       @map("outcome_aspect_review_version")
+  createdAt                  DateTime                   @default(now()) @map("created_at")
+  updatedAt                  DateTime                   @updatedAt @map("updated_at")
+  schoolOutcome              SchoolOutcome              @relation(fields: [schoolOutcomeId], references: [id], onDelete: Restrict)
+  frameworkOutcome           FrameworkOutcome           @relation(fields: [frameworkOutcomeId], references: [id], onDelete: Restrict)
+  outcomeAspect              OutcomeAspect?             @relation(fields: [outcomeAspectId], references: [id], onDelete: Restrict)
+  frameworkRelease           CurriculumFrameworkRelease @relation("SchoolOutcomeMappingRelease", fields: [frameworkReleaseId], references: [id], onDelete: Restrict)
+  schoolCurriculumVersion    SchoolCurriculumVersion    @relation("SchoolOutcomeMappingVersion", fields: [schoolCurriculumVersionId], references: [id], onDelete: Restrict)
+
+  @@index([schoolOutcomeId, status])
+  @@index([frameworkOutcomeId, status])
+  @@index([outcomeAspectId, status])
+  @@index([frameworkReleaseId])
+  @@index([schoolCurriculumVersionId])
+  @@map("school_outcome_mappings")
+}
+
 enum SystemRole {
   SUPERADMIN
   DEVOPS
@@ -1754,6 +2089,7 @@ enum AuditEntityType {
   CATALOG_SUBJECT
   CATALOG_TOPIC
   PROGRESS
+  CURRICULUM
 }
 
 enum SupportTicketStatus {

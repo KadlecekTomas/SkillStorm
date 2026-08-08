@@ -55,6 +55,7 @@ import { TestingModule } from './testing/testing.module';
 import { TeacherAccessModule } from './teacher-access/teacher-access.module';
 import { ImportsModule } from './imports/imports.module';
 import { ProgressModule } from './progress/progress.module';
+import { CurriculumModule } from './curriculum/curriculum.module';
 import { resolveThrottleTracker } from './common/throttling/request-tracker';
 
 @Module({
@@ -140,6 +141,7 @@ import { resolveThrottleTracker } from './common/throttling/request-tracker';
     TeacherAccessModule,
     ImportsModule,
     ProgressModule,
+    CurriculumModule,
   ],
   providers: [
     { provide: APP_INTERCEPTOR, useClass: ResponseEnvelopeInterceptor },
