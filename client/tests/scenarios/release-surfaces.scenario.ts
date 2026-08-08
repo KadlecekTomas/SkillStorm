@@ -118,21 +118,24 @@ test.describe('whole-app release — public, account and legacy surfaces', () =>
     expect(pageErrors).toEqual([]);
   });
 
-  test('legacy static dashboard routes resolve to canonical app routes', async ({ asRole }) => {
+  test('legacy dashboard bookmarks resolve to their real canonical app surfaces', async ({ asRole }) => {
     const { page } = await asRole('director');
     const aliases = [
-      '/dashboard',
-      '/dashboard/tests',
-      '/dashboard/assignments',
-      '/dashboard/settings',
-      '/dashboard/subjects',
-      '/dashboard/teachers',
+      ['/dashboard', '/app'],
+      ['/dashboard/tests', '/app/tests'],
+      ['/dashboard/assignments', '/app/assignments'],
+      ['/dashboard/settings', '/app/settings'],
+      ['/dashboard/subjects', '/app/settings'],
+      ['/dashboard/teachers', '/app/people'],
     ] as const;
 
-    for (const alias of aliases) {
+    for (const [alias, target] of aliases) {
       await page.goto(alias, { waitUntil: 'commit' });
-      await expect(page).toHaveURL(/\/app(?:\/|$)/, { timeout: 15_000 });
+      await expect(page).toHaveURL(new RegExp(`${target.replaceAll('/', '\\/')}(?:\\?.*)?$`), {
+        timeout: 15_000,
+      });
       await expect(page.locator('body')).not.toContainText('Application error');
+      await expect(page.locator('body')).not.toContainText('Internal Server Error');
     }
   });
 });
