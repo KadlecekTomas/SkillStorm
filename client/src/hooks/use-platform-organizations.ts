@@ -115,6 +115,7 @@ export const usePlatformOrganizations = (
   );
 
   useEffect(() => {
+    aliveRef.current = true;
     return () => {
       aliveRef.current = false;
     };

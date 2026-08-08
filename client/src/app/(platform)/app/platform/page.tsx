@@ -167,7 +167,12 @@ export default function PlatformOverviewPage(): React.JSX.Element {
   const [refreshing, setRefreshing] = useState(false);
   const aliveRef = useRef(true);
 
-  useEffect(() => () => { aliveRef.current = false; }, []);
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => {
+      aliveRef.current = false;
+    };
+  }, []);
 
   const load = useCallback(async (nocache = false) => {
     if (!nocache) setLoading(true);
