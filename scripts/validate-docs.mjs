@@ -37,11 +37,36 @@ const HISTORICAL_DOCS = new Set([
   'server/test/e2e-legacy/README.md',
 ]);
 
+const SUBJECT_BLUEPRINT_STANDARD =
+  'docs/interactive-curriculum/subjects/SUBJECT-BLUEPRINT-STANDARD.md';
+const SUBJECT_BLUEPRINT_INDEX = 'docs/interactive-curriculum/subjects/README.md';
+const SUBJECT_BLUEPRINTS = [
+  'docs/interactive-curriculum/subjects/CZECH-LANGUAGE-LITERATURE.md',
+  'docs/interactive-curriculum/subjects/ENGLISH.md',
+  'docs/interactive-curriculum/subjects/ADDITIONAL-FOREIGN-LANGUAGE.md',
+  'docs/interactive-curriculum/subjects/MATHEMATICS.md',
+  'docs/interactive-curriculum/subjects/INFORMATICS.md',
+  'docs/interactive-curriculum/subjects/HUMAN-AND-WORLD.md',
+  'docs/interactive-curriculum/subjects/HISTORY.md',
+  'docs/interactive-curriculum/subjects/CIVICS.md',
+  'docs/interactive-curriculum/subjects/GEOGRAPHY.md',
+  'docs/interactive-curriculum/subjects/PHYSICS.md',
+  'docs/interactive-curriculum/subjects/CHEMISTRY.md',
+  'docs/interactive-curriculum/subjects/BIOLOGY.md',
+  'docs/interactive-curriculum/subjects/VISUAL-AND-FILM-EDUCATION.md',
+  'docs/interactive-curriculum/subjects/MUSIC-DANCE-DRAMA.md',
+  'docs/interactive-curriculum/subjects/HEALTH-AND-SAFETY.md',
+  'docs/interactive-curriculum/subjects/PHYSICAL-EDUCATION.md',
+  'docs/interactive-curriculum/subjects/PERSONAL-SOCIAL-EDUCATION.md',
+  'docs/interactive-curriculum/subjects/POLYTECHNICS-PRACTICAL-ACTIVITIES.md',
+];
+
 const NORMATIVE_DOCS = [
   'docs/README.md',
   'docs/roadmap/master.md',
   'docs/interactive-curriculum/PRODUCTION-CONTRACT.md',
   'docs/interactive-curriculum/CURRICULUM-DATA-CONTRACT.md',
+  SUBJECT_BLUEPRINT_STANDARD,
   'docs/tenant-rbac-test-matrix.md',
 ];
 
@@ -149,9 +174,8 @@ for (const doc of HISTORICAL_DOCS) {
 }
 
 // 4) Active docs must not regress to known stale setup/identity patterns.
-// Explicit historical provenance (for example a sentence saying an old doctrine
-// is superseded) is allowed; using the legacy brand as an active document
-// identity, setup example or runtime name is not.
+// Explicit historical provenance is allowed; using the legacy brand as an
+// active document identity, setup example or runtime name is not.
 const stalePatterns = [
   { regex: /^#\s+EDUTO\b/im, label: 'legacy product identity in document heading' },
   { regex: /\/Users\/[A-Za-z0-9._-]+\//, label: 'machine-local /Users/... path' },
@@ -186,8 +210,6 @@ for (const doc of NORMATIVE_DOCS) {
 }
 
 // 6) Every active doc under docs/ must visibly expose lifecycle metadata.
-// Scope/Purpose/Target/Authority are accepted only when they explicitly state
-// what the document governs; the registry remains canonical for classification.
 for (const doc of docs) {
   if (doc === 'README.md' || HISTORICAL_DOCS.has(doc)) continue;
   const content = fs.readFileSync(path.resolve(root, doc), 'utf8');
@@ -221,7 +243,108 @@ for (const doc of docs) {
   }
 }
 
-// 8) Deliberate TODO language is visible but non-blocking.
+// 8) Subject layer is a first-class coverage contract: exactly the 18 approved
+// educational-field blueprints must exist, be indexed and meet the common spec.
+const expectedSubjectBlueprints = new Set(SUBJECT_BLUEPRINTS);
+const discoveredSubjectBlueprints = new Set(
+  walk('docs/interactive-curriculum/subjects').filter(
+    (doc) => doc !== SUBJECT_BLUEPRINT_INDEX && doc !== SUBJECT_BLUEPRINT_STANDARD,
+  ),
+);
+
+if (SUBJECT_BLUEPRINTS.length !== 18) {
+  errors.push(`Subject blueprint contract must list exactly 18 fields; got ${SUBJECT_BLUEPRINTS.length}.`);
+}
+if (new Set(SUBJECT_BLUEPRINTS).size !== SUBJECT_BLUEPRINTS.length) {
+  errors.push('Subject blueprint contract contains duplicate paths.');
+}
+
+for (const doc of SUBJECT_BLUEPRINTS) {
+  if (!exists(doc)) errors.push(`Missing required subject blueprint: ${doc}`);
+  if (!registryDocTargets.has(doc)) errors.push(`Subject blueprint is not registered exactly: ${doc}`);
+  if (!discoveredSubjectBlueprints.has(doc)) errors.push(`Subject blueprint not discovered in subject directory: ${doc}`);
+}
+
+for (const doc of discoveredSubjectBlueprints) {
+  if (!expectedSubjectBlueprints.has(doc)) {
+    errors.push(`Unclassified subject Markdown found in subjects directory: ${doc}`);
+  }
+}
+
+if (!exists(SUBJECT_BLUEPRINT_INDEX)) {
+  errors.push(`Missing subject blueprint index: ${SUBJECT_BLUEPRINT_INDEX}`);
+} else {
+  const subjectIndex = stripCodeFences(
+    fs.readFileSync(path.resolve(root, SUBJECT_BLUEPRINT_INDEX), 'utf8'),
+  );
+  const subjectIndexLinks = [
+    ...subjectIndex.matchAll(/\[[^\]]*\]\(([^)]+\.md(?:#[^)]+)?)\)/g),
+  ];
+  const subjectIndexTargets = new Set(
+    subjectIndexLinks
+      .map(([, rawTarget]) => resolveLocalTarget(SUBJECT_BLUEPRINT_INDEX, rawTarget))
+      .filter(Boolean),
+  );
+
+  if (!subjectIndexTargets.has(SUBJECT_BLUEPRINT_STANDARD)) {
+    errors.push('Subject index must link to SUBJECT-BLUEPRINT-STANDARD.md.');
+  }
+  for (const doc of SUBJECT_BLUEPRINTS) {
+    if (!subjectIndexTargets.has(doc)) {
+      errors.push(`Subject index is missing exact blueprint link: ${doc}`);
+    }
+  }
+}
+
+const requiredSubjectSections = [
+  { regex: /##\s+\d+\.\s+Subject promise/i, label: 'Subject promise' },
+  { regex: /Delivery modes/i, label: 'Delivery modes' },
+  { regex: /Recommended progression/i, label: 'Recommended progression' },
+  { regex: /Lesson archetypes/i, label: 'Lesson archetypes' },
+  { regex: /Experience catalog/i, label: 'Experience catalog' },
+  { regex: /Teacher (orchestration|Mission Control)/i, label: 'Teacher orchestration' },
+  { regex: /Learning evidence/i, label: 'Learning evidence' },
+  { regex: /Difficulty\s*[×x]\s*scaffolding/i, label: 'Difficulty × scaffolding' },
+  { regex: /Accessibility\/SVP/i, label: 'Accessibility/SVP' },
+  { regex: /Content authoring|Content\/data authoring|Content authoring and|Content authoring\/|Content authoring &|Content authoring and language packs|Content authoring and provenance/i, label: 'Content authoring' },
+  { regex: /MVP vertical slice(?:s)?/i, label: 'MVP vertical slice' },
+  { regex: /Non-goals/i, label: 'Non-goals' },
+  { regex: /Production acceptance criteria/i, label: 'Production acceptance criteria' },
+  { regex: /Pilot metrics/i, label: 'Pilot metrics' },
+  { regex: /Content coverage workflow/i, label: 'Content coverage workflow' },
+];
+
+for (const doc of SUBJECT_BLUEPRINTS) {
+  if (!exists(doc)) continue;
+  const content = fs.readFileSync(path.resolve(root, doc), 'utf8');
+
+  if (!/\*\*Status:\*\*\s*`VISION \/ APPROVED`/i.test(content)) {
+    errors.push(`${doc}: subject blueprint must have Status VISION / APPROVED`);
+  }
+  if (!/\*\*Owner:\*\*/i.test(content)) {
+    errors.push(`${doc}: subject blueprint is missing Owner metadata`);
+  }
+  if (content.length < 8000) {
+    errors.push(`${doc}: subject blueprint is unexpectedly short (${content.length} chars)`);
+  }
+  if (!/RVP/i.test(content) || !/ŠVP/i.test(content)) {
+    errors.push(`${doc}: subject blueprint must explicitly address both RVP and ŠVP`);
+  }
+  if (!/BOARD_ONLY/.test(content)) {
+    errors.push(`${doc}: subject blueprint must explicitly address BOARD_ONLY`);
+  }
+
+  for (const { regex, label } of requiredSubjectSections) {
+    if (!regex.test(content)) errors.push(`${doc}: missing required subject section/concept: ${label}`);
+  }
+
+  const heroCount = (content.match(/Hero lesson\s+[A-Z0-9]/gi) || []).length;
+  if (heroCount < 2) {
+    errors.push(`${doc}: must contain at least two explicit Hero lessons; found ${heroCount}`);
+  }
+}
+
+// 9) Deliberate TODO language is visible but non-blocking.
 for (const doc of docs) {
   if (doc === 'README.md' || HISTORICAL_DOCS.has(doc)) continue;
   const content = fs.readFileSync(path.resolve(root, doc), 'utf8');
@@ -233,6 +356,7 @@ for (const doc of docs) {
 console.log(`Documentation integrity: ${docs.length} human Markdown files scanned.`);
 console.log(`Registry: ${registryDocTargets.size} local Markdown targets resolved.`);
 console.log(`Historical/superseded: ${HISTORICAL_DOCS.size} files classified.`);
+console.log(`Subject blueprints: ${SUBJECT_BLUEPRINTS.length}/18 required fields configured.`);
 
 if (warnings.length > 0) {
   console.log(`Warnings (${warnings.length}):`);
