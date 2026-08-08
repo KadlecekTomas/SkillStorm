@@ -116,12 +116,14 @@ Každý blueprint uvádí doporučené delivery modes, ale poslední slovo má u
 
 ## 6. Subject readiness stav
 
-Všechny blueprinty v tomto adresáři mají po vytvoření status `VISION / APPROVED`. To znamená:
+Všechny blueprinty v tomto adresáři mají status `VISION / APPROVED`. To znamená:
 
 - produktový a pedagogický směr je schválen jako cíl;
 - nejde o tvrzení, že engine už existuje;
 - před implementací konkrétního vertical slice se provede OVU/ŠVP mapping a subject-methodology review;
 - před produkčním release se použijí gates z `SUBJECT-BLUEPRINT-STANDARD.md` a `../PRODUCTION-CONTRACT.md`.
+
+Každý z 18 blueprintů obsahuje recommended progression, lesson archetypes, konkrétní experience catalog, delivery-mode strategii, teacher orchestration, learning evidence, difficulty × scaffolding, SVP/accessibility, authoring/engine pravidla, safety/privacy/licensing, nejméně dvě hero lessons, MVP vertical slice, non-goals, production acceptance criteria, pilot metrics a content coverage workflow.
 
 ---
 
@@ -151,16 +153,18 @@ Toto pořadí může změnit pilotní evidence a potřeba konkrétní školy, al
 ```text
 [x] existuje standard subject blueprintu
 [x] katalog odpovídá 18 vzdělávacím oborům RVP ZV
-[ ] všech 18 subject blueprintů existuje
-[ ] každý má recommended progression
-[ ] každý má lesson archetypes a experience catalog
-[ ] každý má delivery-mode strategii
-[ ] každý má learning evidence a accessibility
-[ ] každý má >= 2 hero lessons
-[ ] každý má MVP/non-goals/release gates
-[ ] všechny cesty jsou v docs registry
-[ ] Documentation Integrity je zelený
+[x] všech 18 subject blueprintů existuje
+[x] každý má recommended progression
+[x] každý má lesson archetypes a experience catalog
+[x] každý má delivery-mode strategii
+[x] každý má learning evidence a accessibility
+[x] každý má >= 2 hero lessons
+[x] každý má MVP/non-goals/release gates
+[x] všechny cesty jsou v docs registry
+[ ] Documentation Integrity je zelený na aktuálním HEAD
 ```
+
+Poslední checkbox se označí pouze podle skutečného GitHub Actions výsledku na stejném HEAD, nikdy anticipovaně.
 
 ---
 
