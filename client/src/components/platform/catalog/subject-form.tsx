@@ -27,20 +27,20 @@ export function SubjectForm({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>New Catalog Subject</CardTitle>
+        <CardTitle>Nový předmět</CardTitle>
       </CardHeader>
       <CardContent className="grid gap-3 md:grid-cols-[180px_1fr_auto]">
         <Input
-          aria-label="Subject code"
-          placeholder="Code"
+          aria-label="Kód předmětu"
+          placeholder="Kód"
           value={code}
           maxLength={32}
           onChange={(event) => setCode(event.target.value)}
           disabled={loading}
         />
         <Input
-          aria-label="Subject name"
-          placeholder="Subject name"
+          aria-label="Název předmětu"
+          placeholder="Název předmětu"
           value={name}
           maxLength={255}
           onChange={(event) => setName(event.target.value)}
@@ -50,7 +50,7 @@ export function SubjectForm({
           onClick={() => void handleSubmit()}
           disabled={loading || !code.trim() || !name.trim()}
         >
-          {loading ? "Saving…" : "Create subject"}
+          {loading ? "Ukládám…" : "Přidat předmět"}
         </Button>
       </CardContent>
     </Card>

@@ -1,4 +1,4 @@
-import { test, expect, uiLogin } from './fixtures';
+import { test, expect } from './fixtures';
 import { request as playwrightRequest } from '@playwright/test';
 
 /**
@@ -50,8 +50,8 @@ test('session expiry mid-work returns to the original page after re-login', asyn
 
   // fill the form IN PLACE (re-navigating to /login would drop ?from) →
   // PostAuthResolver returns us to /app/results
-  await page.getByPlaceholder(/you@school\.edu/i).fill(manifest.accounts.student8a);
-  await page.getByPlaceholder(/••••••••/i).fill(manifest.password);
+  await page.getByLabel(/e-?mail/i).fill(manifest.accounts.student8a);
+  await page.getByLabel(/heslo/i).fill(manifest.password);
   await page.getByRole('button', { name: /sign in|přihlásit/i }).click();
   await page.waitForURL(/\/app\/results/, { timeout: 20_000 });
 });
@@ -81,10 +81,10 @@ test('login rate limit surfaces a clear message, not a broken page', async ({ ba
   });
   const page = await ctx.newPage();
   await page.goto('/login', { waitUntil: 'commit' });
-  const email = page.getByPlaceholder(/you@school\.edu/i);
+  const email = page.getByLabel(/e-?mail/i);
   await expect(email).toBeVisible({ timeout: 20_000 });
   await email.fill('teacher@scenar.test');
-  await page.getByPlaceholder(/••••••••/i).fill('Scenar123!');
+  await page.getByLabel(/heslo/i).fill('Scenar123!');
   const throttled = page.waitForResponse(
     (r) => /\/auth\/login/.test(r.url()) && r.status() === 429,
     { timeout: 20_000 },
@@ -102,8 +102,8 @@ test('login rate limit surfaces a clear message, not a broken page', async ({ ba
   //    renamed and that must not break a security regression test.
   await expect(page).toHaveURL(/\/login/);
   await expect(page.getByRole('heading', { name: /přihlášení/i })).toBeVisible();
-  await expect(page.getByRole('textbox', { name: /e-?mail/i })).toBeVisible();
-  await expect(page.getByRole('textbox', { name: /heslo/i })).toBeVisible();
+  await expect(page.getByLabel(/e-?mail/i)).toBeVisible();
+  await expect(page.getByLabel(/heslo/i)).toBeVisible();
   // loading state released → the user can actually retry after the cooldown
   await expect(submit).toBeEnabled();
 

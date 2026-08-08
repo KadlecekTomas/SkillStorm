@@ -60,14 +60,14 @@ describe("school UI surface policy", () => {
 
     expect(access).toContain("Přístupy učitelů");
     expect(access).toContain("Zatím tu nejsou žádní učitelé.");
-    expect(access).toContain("Nejdřív pozvěte učitele v sekci Lidé.");
     expect(access).toContain('href="/app/people"');
-    expect(access).toContain("Otevřít Lidi");
-    expect(access).toContain("Celkem učitelů:");
-    expect(access).toContain('TEACHER: "Učitel"');
+    expect(access).toContain("Přejít do sekce Lidé");
+    expect(access).toContain('label: "Přístup ke třídám"');
     expect(access).toContain("requireRoles: MANAGEMENT_ROLES");
     expect(access).toContain("PermissionKey.MANAGE_TEACHERS");
     expect(access).toContain("requireSchoolWorkspace: true");
+    expect(access).not.toContain('label: "Role"');
+    expect(access).not.toContain("Zpět na Lidi");
     expect(access).not.toContain('generateInvite("TEACHER")');
     expect(access).not.toContain('"/invites"');
 

@@ -26,8 +26,8 @@ async function loginAs(
   password: string,
 ) {
   await page.goto(`${BASE_URL}${LOGIN_PATH}`);
-  await page.getByPlaceholder(/you@|email|e-mail/i).fill(email);
-  await page.getByPlaceholder(/••••••••|password|heslo/i).fill(password);
+  await page.getByLabel(/e-?mail/i).fill(email);
+  await page.getByLabel(/heslo/i).fill(password);
   await page.getByRole("button", { name: /Sign in|Přihlásit/i }).click();
   await page.waitForURL(/\/(dashboard|onboarding)/, { timeout: 15000 });
   await page.waitForLoadState("networkidle").catch(() => {});

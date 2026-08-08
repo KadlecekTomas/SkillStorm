@@ -23,15 +23,13 @@ const registerModeDetails: Array<{
 }> = [
   {
     value: "CREATE_ORG",
-    label: "Create org",
-    description:
-      "Založíš školu a staneš se ownerem. Pozvánky pošleš později.",
+    label: "Založit školu",
+    description: "Vytvoříte novou školu. Učitele a žáky můžete přidat později.",
   },
   {
     value: "JOIN_ORG",
-    label: "Join org",
-    description:
-      "Účet se vytvoří a připojení proběhne pomocí invite tokenu.",
+    label: "Připojit se",
+    description: "Připojíte se ke škole pomocí pozvánky nebo kódu.",
   },
 ];
 
@@ -44,7 +42,7 @@ const registerSchema = loginSchema
   .extend({
     name: z.string().min(2, { message: "Jméno musí mít alespoň 2 znaky" }),
     mode: z.enum(registerModeOptions, {
-      required_error: "Vyber typ registrace",
+      required_error: "Vyberte způsob registrace",
     }),
     inviteToken: z.string().optional(),
   })
@@ -53,7 +51,7 @@ const registerSchema = loginSchema
       if (!data.inviteToken || data.inviteToken.trim().length === 0) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: "Invite token je povinný.",
+          message: "Kód pozvánky je povinný.",
           path: ["inviteToken"],
         });
       }
@@ -86,12 +84,12 @@ export const AuthForm = ({
       mode === "login"
         ? { email: "", password: "" }
         : {
-          email: "",
-          password: "",
-          name: "",
-          mode: defaultRegisterMode,
-          inviteToken: (initialJoinCode ?? "").trim(),
-        },
+            email: "",
+            password: "",
+            name: "",
+            mode: defaultRegisterMode,
+            inviteToken: (initialJoinCode ?? "").trim(),
+          },
   });
 
   const [formError, setFormError] = useState<string | null>(null);
@@ -105,7 +103,6 @@ export const AuthForm = ({
     (item) => item.value === registerMode,
   );
 
-  // 🔹 oddělená submit logika
   const handleSubmit = async (values: LoginValues | RegisterValues) => {
     try {
       setFormError(null);
@@ -113,7 +110,6 @@ export const AuthForm = ({
 
       if (mode === "login") {
         await login({ email: values.email, password: values.password });
-        // ✅ Počkej na dokončení syncProfile před redirectem (redirect je v login/page.tsx)
         await syncProfile({ force: true });
         showToastOnce("Přihlašuji…", { type: "success" });
         return;
@@ -121,7 +117,6 @@ export const AuthForm = ({
 
       setRegistering(true);
       const registerValues = values as RegisterValues;
-      // Explicit payload – only fields allowed by backend RegisterDto (forbidNonWhitelisted).
       const selectedRegisterMode = registerModeOptions.includes(registerValues.mode)
         ? registerValues.mode
         : "CREATE_ORG";
@@ -138,20 +133,17 @@ export const AuthForm = ({
         mode: selectedRegisterMode,
       };
       if (selectedRegisterMode === "JOIN_ORG") {
-        const token = (registerValues as RegisterValues).inviteToken?.trim();
+        const token = registerValues.inviteToken?.trim();
         if (token) {
           payload.inviteToken = token;
         }
       }
-      await httpClient.post<{
-        user: unknown;
-      }>("/auth/register", payload);
+      await httpClient.post<{ user: unknown }>("/auth/register", payload);
 
       if (selectedRegisterMode === "CREATE_ORG" && typeof window !== "undefined") {
         window.sessionStorage.setItem("create_org_intent", "1");
       }
 
-      // ✅ Počkej na dokončení syncProfile před redirectem (redirect je v register/page.tsx)
       await syncProfile({ force: true });
       showToastOnce("Účet byl vytvořen. Přihlašuji…", { type: "success" });
     } catch (e: unknown) {
@@ -159,7 +151,6 @@ export const AuthForm = ({
         const status = e.status;
         const data = e.data as { error?: unknown } | null | undefined;
 
-        // 400 – validace vstupů (zobraz inline / form-level, žádný toast)
         if (status === 400) {
           const rawError = data && typeof data === "object" ? (data as { error?: unknown }).error : undefined;
 
@@ -182,7 +173,7 @@ export const AuthForm = ({
               nextFieldErrors.password = msg;
             } else if (lower.includes("email")) {
               nextFieldErrors.email = msg;
-            } else if (lower.includes("invite")) {
+            } else if (lower.includes("invite") || lower.includes("pozván")) {
               nextFieldErrors.inviteToken = msg;
             } else {
               formMessages.push(msg);
@@ -198,19 +189,16 @@ export const AuthForm = ({
           return;
         }
 
-        // 401 – auth chyba; nikdy neprozrazuj, co přesně bylo špatně.
         if (status === 401 && mode === "login") {
           setFormError("Neplatné přihlašovací údaje.");
           return;
         }
 
-        // 429 – rate limiting.
         if (status === 429) {
           setFormError("Příliš mnoho pokusů. Zkus to později.");
           return;
         }
 
-        // Pro ostatní HTTP chyby zobraz konkrétní zprávu nebo krátký fallback.
         const msg = e instanceof Error ? e.message : "Přihlášení nebo registrace se nepovedla. Zkuste to znovu.";
         showToastOnce(msg, { type: "error" });
         return;
@@ -222,7 +210,6 @@ export const AuthForm = ({
     }
   };
 
-  // 🔹 bezpečné obalení s preventDefault
   const handleFormSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     form.handleSubmit(handleSubmit)(e);
@@ -239,7 +226,7 @@ export const AuthForm = ({
       {mode === "register" && (
         <div className="space-y-3">
           <label className="text-sm font-medium text-slate-700">
-            Typ účtu
+            Jak chcete začít?
           </label>
           <Tabs
             value={registerMode}
@@ -254,7 +241,7 @@ export const AuthForm = ({
                 <TabsTrigger
                   key={option.value}
                   value={option.value}
-                  className="flex-1"
+                  className="flex-1 text-sm"
                 >
                   {option.label}
                 </TabsTrigger>
@@ -265,8 +252,8 @@ export const AuthForm = ({
             <p className="text-sm text-slate-500">{activeMode.description}</p>
           )}
           {registerMode === "JOIN_ORG" && (
-            <p className="text-red-600 text-sm">
-              Registration is invite-only. Use your organization invite link.
+            <p className="text-sm text-slate-500">
+              Registrace je možná přes pozvánku školy.
             </p>
           )}
         </div>
@@ -274,31 +261,26 @@ export const AuthForm = ({
 
       {mode === "register" && (
         <div className="space-y-2">
-          <label
-            htmlFor="name"
-            className="text-sm font-medium text-slate-700"
-          >
+          <label htmlFor="name" className="text-sm font-medium text-slate-700">
             Jméno
           </label>
-          <Input id="name" placeholder="Jane Cooper" {...form.register("name")} />
+          <Input id="name" placeholder="Jméno a příjmení" {...form.register("name")} />
           {(form.formState.errors as FieldErrors<RegisterValues>).name && (
-            <p>{(form.formState.errors as FieldErrors<RegisterValues>).name?.message}</p>
+            <p className="text-sm text-red-600">
+              {(form.formState.errors as FieldErrors<RegisterValues>).name?.message}
+            </p>
           )}
-
         </div>
       )}
 
       {mode === "register" && registerMode === "JOIN_ORG" && (
         <div className="space-y-2">
-          <label
-            htmlFor="inviteToken"
-            className="text-sm font-medium text-slate-700"
-          >
-            Invite token
+          <label htmlFor="inviteToken" className="text-sm font-medium text-slate-700">
+            Kód pozvánky
           </label>
           <Input
             id="inviteToken"
-            placeholder="Zadej invite token nebo kód"
+            placeholder="Vložte kód z pozvánky"
             {...form.register("inviteToken")}
           />
           {(form.formState.errors as FieldErrors<RegisterValues>).inviteToken && (
@@ -307,7 +289,7 @@ export const AuthForm = ({
             </p>
           )}
           {fieldErrors.inviteToken && (
-            <p className="text-sm text-red-500 mt-1">
+            <p className="mt-1 text-sm text-red-500">
               {fieldErrors.inviteToken}
             </p>
           )}
@@ -320,7 +302,7 @@ export const AuthForm = ({
         </label>
         <Input
           id="email"
-          placeholder="you@school.edu"
+          placeholder="např. jana@skola.cz"
           type="email"
           autoComplete="email"
           {...form.register("email")}
@@ -331,7 +313,7 @@ export const AuthForm = ({
           </p>
         )}
         {fieldErrors.email && (
-          <p className="text-sm text-red-500 mt-1">
+          <p className="mt-1 text-sm text-red-500">
             {fieldErrors.email}
           </p>
         )}
@@ -354,18 +336,11 @@ export const AuthForm = ({
           </p>
         )}
         {fieldErrors.password && (
-          <p className="text-sm text-red-500 mt-1">
+          <p className="mt-1 text-sm text-red-500">
             {fieldErrors.password}
           </p>
         )}
       </div>
-
-
-      {mode === "register" && registerMode === "CREATE_ORG" && (
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-          Role po vytvoření organizace: <span className="font-semibold text-slate-800">OWNER</span>
-        </div>
-      )}
 
       {formError && (
         <p className="text-sm text-red-600" role="alert">
@@ -376,7 +351,7 @@ export const AuthForm = ({
       <Button
         type="submit"
         disabled={mode === "login" ? authLoading : registering}
-        className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl text-base transition-opacity disabled:opacity-60 disabled:cursor-not-allowed"
+        className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl text-base transition-opacity disabled:cursor-not-allowed disabled:opacity-60"
       >
         {(mode === "login" ? authLoading : registering) && (
           <Loader2 className="h-4 w-4 animate-spin" />

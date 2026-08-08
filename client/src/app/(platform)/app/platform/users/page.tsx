@@ -32,6 +32,19 @@ function formatDate(iso: string | null | undefined): string {
   });
 }
 
+function roleLabel(role: string): string {
+  if (role === "SUPERADMIN") return "Superadmin";
+  if (role === "DEVOPS") return "DevOps";
+  if (role === "SUPPORT") return "Podpora";
+  return role;
+}
+
+function statusLabel(status: string): string {
+  if (status === "ACTIVE") return "Aktivní";
+  if (status === "SUSPENDED") return "Pozastaven";
+  return status;
+}
+
 function SystemRoleBadge({ role }: { role: string | null }) {
   if (!role) return <span className="text-gray-400">—</span>;
   const cls =
@@ -44,9 +57,9 @@ function SystemRoleBadge({ role }: { role: string | null }) {
           : "bg-gray-100 text-gray-600";
   return (
     <span
-      className={`inline-flex max-w-full rounded px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${cls}`}
+      className={`inline-flex max-w-full rounded px-1.5 py-0.5 text-[11px] font-semibold ${cls}`}
     >
-      {role}
+      {roleLabel(role)}
     </span>
   );
 }
@@ -59,8 +72,8 @@ function StatusBadge({ status }: { status: string }) {
         ? "bg-red-50 text-red-600"
         : "bg-gray-100 text-gray-600";
   return (
-    <span className={`inline-flex rounded px-1.5 py-0.5 text-[11px] font-semibold uppercase ${cls}`}>
-      {status}
+    <span className={`inline-flex rounded px-1.5 py-0.5 text-[11px] font-semibold ${cls}`}>
+      {statusLabel(status)}
     </span>
   );
 }
@@ -103,6 +116,7 @@ export default function PlatformUsersPage(): React.JSX.Element {
 
   const aliveRef = useRef(true);
   useEffect(() => {
+    aliveRef.current = true;
     return () => {
       aliveRef.current = false;
     };
@@ -145,17 +159,17 @@ export default function PlatformUsersPage(): React.JSX.Element {
     <div className="min-w-0 space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         <div className="min-w-0">
-          <h1 className="text-lg font-semibold text-gray-900">Global Users</h1>
+          <h1 className="text-lg font-semibold text-gray-900">Uživatelé</h1>
           {meta && (
             <p className="mt-0.5 text-xs text-gray-400">
-              {meta.total} {meta.total === 1 ? "uživatel" : "uživatelů"} celkem
+              Celkem {meta.total}
             </p>
           )}
         </div>
         <div className="relative w-full sm:w-72 sm:shrink-0">
           <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
           <Input
-            placeholder="Hledat podle jména nebo e-mailu…"
+            placeholder="Hledat jméno nebo e-mail…"
             value={searchRaw}
             onChange={(e) => setSearchRaw(e.target.value)}
             className="w-full pl-8"
@@ -194,12 +208,12 @@ export default function PlatformUsersPage(): React.JSX.Element {
             <div className="hidden min-w-0 md:block">
               <div className="border-b border-gray-200 px-5 py-3">
                 <div className="grid grid-cols-[2fr_2fr_1fr_1fr_1fr_1fr] gap-4 text-xs font-medium uppercase tracking-wide text-gray-400">
-                  <span>Name</span>
-                  <span>Email</span>
-                  <span>System Role</span>
-                  <span>Status</span>
-                  <span>Created</span>
-                  <span>Last Login</span>
+                  <span>Jméno</span>
+                  <span>E-mail</span>
+                  <span>Systémová role</span>
+                  <span>Stav</span>
+                  <span>Vytvořen</span>
+                  <span>Poslední přihlášení</span>
                 </div>
               </div>
               <div className="divide-y divide-gray-100">
@@ -224,7 +238,7 @@ export default function PlatformUsersPage(): React.JSX.Element {
         {!loading && !error && totalPages > 1 && (
           <div className="flex flex-col gap-2 border-t border-gray-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5 sm:py-2.5">
             <span className="text-xs text-gray-500">
-              Stránka {page} / {totalPages} · celkem {meta?.total ?? 0}
+              Strana {page} z {totalPages} · celkem {meta?.total ?? 0}
             </span>
             <div className="flex items-center gap-1">
               <Button

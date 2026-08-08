@@ -91,8 +91,66 @@ function errorMessage(error: unknown): string {
 
 async function settle(page: Page): Promise<void> {
   await page.waitForLoadState('domcontentloaded');
-  await page.waitForLoadState('networkidle', { timeout: 2_500 }).catch(() => undefined);
+  await page.waitForLoadState('networkidle', { timeout: 5_000 }).catch(() => undefined);
   await page.waitForTimeout(250);
+}
+
+async function assertUxContract(
+  page: Page,
+  viewportName: string,
+  audience: string,
+  key: string,
+  bodyText: string,
+): Promise<void> {
+  if (audience === 'public' && key === 'register') {
+    expect(bodyText).toContain('Založit školu');
+    expect(bodyText).toContain('Připojit se');
+    expect(bodyText).not.toContain('Create org');
+    expect(bodyText).not.toContain('Join org');
+    expect(bodyText).not.toContain('OWNER');
+    expect(bodyText).not.toContain('Invite token');
+  }
+
+  if (audience === 'director' && key === 'teacher-access') {
+    expect(bodyText).toContain('Přístupy učitelů');
+    expect(bodyText).not.toContain('Zpět na Lidi');
+    expect(bodyText).not.toContain('ROLE');
+  }
+
+  if (audience === 'superadmin' && key === 'platform-overview') {
+    await expect(page.getByRole('heading', { name: 'Přehled platformy' })).toBeVisible();
+    expect(bodyText).not.toContain('Platform overview');
+    expect(bodyText).not.toContain('At Risk');
+    expect(bodyText).not.toContain('Total Organizations');
+  }
+
+  if (audience === 'superadmin' && key === 'platform-users') {
+    await expect(page.getByRole('heading', { name: 'Uživatelé' }).last()).toBeVisible();
+    expect(bodyText).not.toContain('Global Users');
+  }
+
+  if (audience === 'superadmin' && key === 'platform-catalog') {
+    await expect(page.getByRole('heading', { name: 'Katalog obsahu' })).toBeVisible();
+    expect(bodyText).not.toContain('Catalog Management');
+  }
+
+  if (audience === 'superadmin' && key === 'platform-support') {
+    await expect(page.getByRole('heading', { name: 'Podpora požadavků' })).toBeVisible();
+    expect(bodyText).not.toContain('Support inbox');
+    expect(bodyText).not.toContain('No tickets match the current filters.');
+    expect(bodyText).not.toContain('Refresh');
+  }
+
+  if (
+    viewportName === 'mobile' &&
+    (audience === 'director' || audience === 'teacher' || audience === 'student8a' || audience === 'parent')
+  ) {
+    const nav = page.getByRole('navigation', { name: 'Hlavní navigace' });
+    if (await nav.count()) {
+      const visibleItems = nav.locator(':scope > div:last-child > a, :scope > div:last-child > button');
+      expect(await visibleItems.count(), `${audience}/${key} mobile nav stays compact`).toBeLessThanOrEqual(5);
+    }
+  }
 }
 
 async function captureRoute(
@@ -136,12 +194,19 @@ async function captureRoute(
 
     const body = page.locator('body');
     await expect(body).toBeVisible();
+    await expect
+      .poll(async () => (await body.innerText()).trim().length, {
+        timeout: 35_000,
+        message: `${audience}/${key} finishes loading meaningful content`,
+      })
+      .toBeGreaterThan(20);
     const bodyText = (await body.innerText()).trim();
     const rootOverflow = await page.evaluate(
       () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
     );
 
-    // Capture evidence even when a later acceptance assertion fails.
+    await assertUxContract(page, viewportName, audience, key, bodyText);
+
     await page.screenshot({
       path: filePath(viewportName, audience, key),
       fullPage: true,
@@ -233,8 +298,9 @@ async function captureChangedDirectorStates(
   const studentId = await resolveSeedStudentId(page);
   await page.goto(`/app/students/${studentId}`);
   await settle(page);
-  await expect(page.getByTestId('student-admin-editor')).toBeVisible();
-  await page.getByRole('button', { name: 'Upravit žáka' }).click();
+  const editor = page.getByTestId('student-admin-editor');
+  await expect(editor).toBeVisible();
+  await editor.getByRole('button', { name: 'Upravit' }).click();
   await expect(page.getByLabel('Jméno a příjmení žáka')).toBeVisible();
   await page.screenshot({
     path: filePath(viewportName, 'director', 'student-admin-editor'),

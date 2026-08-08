@@ -25,37 +25,37 @@ type PlatformNavItem = {
 
 export const PLATFORM_NAV_ITEMS: PlatformNavItem[] = [
   {
-    label: "Platform Overview",
+    label: "Přehled",
     icon: <LayoutDashboard className="h-4 w-4" />,
     href: "/app/platform",
   },
   {
-    label: "Organizations",
+    label: "Organizace",
     icon: <Building2 className="h-4 w-4" />,
     href: "/app/platform/organizations",
   },
   {
-    label: "Global Users",
+    label: "Uživatelé",
     icon: <Users className="h-4 w-4" />,
     href: "/app/platform/users",
   },
   {
-    label: "Catalog",
+    label: "Katalog",
     icon: <BookCopy className="h-4 w-4" />,
     href: "/app/platform/catalog",
   },
   {
-    label: "Audit Logs",
+    label: "Audit",
     icon: <ScrollText className="h-4 w-4" />,
     href: "/app/platform/audit",
   },
   {
-    label: "Support",
+    label: "Podpora",
     icon: <LifeBuoy className="h-4 w-4" />,
     href: "/app/platform/support",
   },
   {
-    label: "Handbook",
+    label: "Příručka",
     icon: <BookOpen className="h-4 w-4" />,
     href: "/handbook",
   },
@@ -100,15 +100,7 @@ function PlatformSidebarItem({
 export const PlatformSidebar = (): React.JSX.Element => {
   const pathname = usePathname();
   const { user, logout } = useAuth();
-  const displayName = user?.fullName ?? user?.name ?? "Platform Admin";
-  const systemRoleLabel =
-    user?.systemRole === "SUPERADMIN"
-      ? "Superadmin"
-      : user?.systemRole === "SUPPORT"
-        ? "Support"
-        : user?.systemRole === "DEVOPS"
-          ? "DevOps"
-          : "Platform";
+  const displayName = user?.fullName ?? user?.name ?? "Správce platformy";
   const handleLogout = () => {
     void logout();
     if (typeof window !== "undefined") {
@@ -119,7 +111,6 @@ export const PlatformSidebar = (): React.JSX.Element => {
   return (
     <aside className="hidden min-h-screen w-60 flex-shrink-0 flex-col justify-between border-r border-gray-200 bg-white px-3 py-5 lg:flex">
       <div className="space-y-5">
-        {/* Logo */}
         <div className="flex items-center gap-2.5 px-2">
           <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-amber-100">
             <ShieldCheck className="h-4 w-4 text-amber-700" />
@@ -128,7 +119,7 @@ export const PlatformSidebar = (): React.JSX.Element => {
             <p className="text-sm font-semibold leading-none text-gray-900">
               Eduto
             </p>
-            <p className="mt-0.5 text-xs text-gray-500">Platform workspace</p>
+            <p className="mt-0.5 text-xs text-gray-500">Správa platformy</p>
           </div>
         </div>
 
@@ -147,7 +138,6 @@ export const PlatformSidebar = (): React.JSX.Element => {
         </nav>
       </div>
 
-      {/* User card + logout */}
       <div className="space-y-1.5">
         <button
           type="button"
@@ -155,7 +145,7 @@ export const PlatformSidebar = (): React.JSX.Element => {
           className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700"
         >
           <LogOut className="h-4 w-4" />
-          <span>Log out</span>
+          <span>Odhlásit se</span>
         </button>
 
         <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5">
@@ -178,9 +168,6 @@ export const PlatformSidebar = (): React.JSX.Element => {
               <p className="truncate text-xs font-medium text-gray-900">
                 {displayName}
               </p>
-              <span className="mt-0.5 inline-block rounded px-1.5 py-0.5 text-xs font-bold uppercase tracking-wide bg-amber-100 text-amber-700">
-                {systemRoleLabel}
-              </span>
             </div>
           </div>
         </div>

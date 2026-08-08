@@ -55,7 +55,7 @@ export function TopicForm({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>New Catalog Topic</CardTitle>
+        <CardTitle>Nové téma</CardTitle>
       </CardHeader>
       <CardContent className="grid gap-3 md:grid-cols-[220px_1fr_120px_auto]">
         <Select
@@ -63,8 +63,8 @@ export function TopicForm({
           onValueChange={setSubjectId}
           disabled={loading || subjects.length === 0}
         >
-          <SelectTrigger aria-label="Topic subject">
-            <SelectValue placeholder="Select subject" />
+          <SelectTrigger aria-label="Předmět tématu">
+            <SelectValue placeholder="Vyberte předmět" />
           </SelectTrigger>
           <SelectContent>
             {subjects.map((subject) => (
@@ -75,16 +75,16 @@ export function TopicForm({
           </SelectContent>
         </Select>
         <Input
-          aria-label="Topic name"
-          placeholder="Topic name"
+          aria-label="Název tématu"
+          placeholder="Název tématu"
           value={name}
           maxLength={255}
           onChange={(event) => setName(event.target.value)}
           disabled={loading}
         />
         <Input
-          aria-label="Topic order"
-          placeholder="Order"
+          aria-label="Pořadí tématu"
+          placeholder="Pořadí"
           inputMode="numeric"
           value={order}
           onChange={(event) =>
@@ -96,7 +96,7 @@ export function TopicForm({
           onClick={() => void handleSubmit()}
           disabled={loading || !subjectId || !name.trim()}
         >
-          {loading ? "Saving…" : "Create topic"}
+          {loading ? "Ukládám…" : "Přidat téma"}
         </Button>
       </CardContent>
     </Card>

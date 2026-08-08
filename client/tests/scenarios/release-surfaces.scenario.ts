@@ -57,7 +57,7 @@ test.describe('whole-app release — public, account and legacy surfaces', () =>
     await expect(page.getByRole('link', { name: 'Vyzkoušet demo' })).toBeVisible();
     await page.getByRole('link', { name: 'Vyzkoušet demo' }).click();
     await expect(page).toHaveURL(/\/register(?:\?.*)?$/);
-    await expect(page.getByRole('heading', { name: /Vytvoření účtu/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Vytvořit účet/i })).toBeVisible();
 
     await page.goto('/', { waitUntil: 'commit' });
     await page.getByRole('link', { name: 'Přihlásit se' }).first().click();

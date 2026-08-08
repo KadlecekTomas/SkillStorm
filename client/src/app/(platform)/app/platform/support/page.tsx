@@ -26,15 +26,15 @@ import { canTriageSupport } from "@/utils/permissions";
 import { showHttpErrorToastOnce, showToastOnce } from "@/utils/toast";
 
 const STATUS_LABELS: Record<SupportTicketStatus, string> = {
-  OPEN: "Open",
-  IN_REVIEW: "In review",
-  RESOLVED: "Resolved",
+  OPEN: "Otevřený",
+  IN_REVIEW: "V řešení",
+  RESOLVED: "Vyřešený",
 };
 
 const PRIORITY_LABELS: Record<SupportTicketPriority, string> = {
-  LOW: "Low",
-  MEDIUM: "Medium",
-  HIGH: "High",
+  LOW: "Nízká",
+  MEDIUM: "Střední",
+  HIGH: "Vysoká",
 };
 
 function formatDate(value: string): string {
@@ -45,6 +45,12 @@ function formatDate(value: string): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function ticketCountLabel(count: number): string {
+  if (count === 1) return "1 požadavek";
+  if (count >= 2 && count <= 4) return `${count} požadavky`;
+  return `${count} požadavků`;
 }
 
 function statusBadgeClass(status: SupportTicketStatus): string {
@@ -174,7 +180,7 @@ export default function PlatformSupportPage(): React.JSX.Element {
       setSelected(updated);
       setInternalNote(updated.internalNote ?? "");
       setResolutionNote(updated.resolutionNote ?? "");
-      showToastOnce("Ticket updated.", { type: "success" });
+      showToastOnce("Požadavek byl aktualizován.", { type: "success" });
     } catch (error) {
       showHttpErrorToastOnce(error);
     } finally {
@@ -184,7 +190,7 @@ export default function PlatformSupportPage(): React.JSX.Element {
 
   const currentAssigneeName =
     selected?.assignedTo?.name ??
-    (selected?.assignedTo?.id === user?.id ? "Assigned to you" : "Unassigned");
+    (selected?.assignedTo?.id === user?.id ? "Přiřazeno vám" : "Nepřiřazeno");
 
   return (
     <div className="space-y-6">
@@ -194,40 +200,40 @@ export default function PlatformSupportPage(): React.JSX.Element {
             <LifeBuoy className="h-5 w-5" />
           </div>
           <div>
-            <h1 className="text-xl font-semibold text-slate-900">Support inbox</h1>
+            <h1 className="text-xl font-semibold text-slate-900">Podpora požadavků</h1>
             <p className="text-sm text-slate-500">
-              Minimal triage queue for tenant-reported issues across organizations.
+              Požadavky uživatelů ze všech organizací na jednom místě.
             </p>
           </div>
         </div>
         <Button type="button" variant="outline" onClick={() => void loadTickets()} disabled={loading}>
           {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-          Refresh
+          Obnovit
         </Button>
       </div>
 
       <div className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:grid-cols-[180px_220px_180px_1fr]">
         <label className="space-y-1 text-sm text-slate-600">
-          <span>Status</span>
+          <span>Stav</span>
           <select
             className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
             value={statusFilter}
             onChange={(event) => setStatusFilter(event.target.value as SupportTicketStatus | "all")}
           >
-            <option value="all">All statuses</option>
-            <option value="OPEN">Open</option>
-            <option value="IN_REVIEW">In review</option>
-            <option value="RESOLVED">Resolved</option>
+            <option value="all">Všechny stavy</option>
+            <option value="OPEN">Otevřený</option>
+            <option value="IN_REVIEW">V řešení</option>
+            <option value="RESOLVED">Vyřešený</option>
           </select>
         </label>
         <label className="space-y-1 text-sm text-slate-600">
-          <span>Organization</span>
+          <span>Organizace</span>
           <select
             className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
             value={organizationFilter}
             onChange={(event) => setOrganizationFilter(event.target.value)}
           >
-            <option value="all">All organizations</option>
+            <option value="all">Všechny organizace</option>
             {organizations.map(([id, name]) => (
               <option key={id} value={id}>
                 {name}
@@ -236,13 +242,13 @@ export default function PlatformSupportPage(): React.JSX.Element {
           </select>
         </label>
         <label className="space-y-1 text-sm text-slate-600">
-          <span>Category</span>
+          <span>Kategorie</span>
           <select
             className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
             value={categoryFilter}
             onChange={(event) => setCategoryFilter(event.target.value)}
           >
-            <option value="all">All categories</option>
+            <option value="all">Všechny kategorie</option>
             {categories.map((category) => (
               <option key={category} value={category}>
                 {category}
@@ -252,7 +258,7 @@ export default function PlatformSupportPage(): React.JSX.Element {
         </label>
         <div className="flex items-end">
           <div className="rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-600">
-            {filteredTickets.length} ticket{filteredTickets.length === 1 ? "" : "s"}
+            {ticketCountLabel(filteredTickets.length)}
           </div>
         </div>
       </div>
@@ -260,10 +266,10 @@ export default function PlatformSupportPage(): React.JSX.Element {
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_420px]">
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-200 px-4 py-3 text-sm font-medium text-slate-700">
-            Queue
+            Fronta požadavků
           </div>
           {loading ? (
-            <div className="space-y-3 p-4">
+            <div className="space-y-3 p-4" aria-label="Načítání požadavků podpory">
               {Array.from({ length: 6 }).map((_, index) => (
                 <Skeleton key={`support-row-${index}`} className="h-24 bg-slate-100" />
               ))}
@@ -274,8 +280,8 @@ export default function PlatformSupportPage(): React.JSX.Element {
                 <ShieldAlert className="h-6 w-6" />
               </div>
               <div>
-                <p className="text-sm font-semibold text-slate-900">No tickets match the current filters.</p>
-                <p className="text-sm text-slate-500">Try a broader scope or refresh the queue.</p>
+                <p className="text-sm font-semibold text-slate-900">Žádné požadavky neodpovídají filtrům.</p>
+                <p className="text-sm text-slate-500">Zkuste upravit filtry nebo seznam obnovit.</p>
               </div>
             </div>
           ) : (
@@ -308,7 +314,7 @@ export default function PlatformSupportPage(): React.JSX.Element {
                       <p className="line-clamp-2">{ticket.message}</p>
                       <div className="text-xs text-slate-500 md:text-right">
                         <p>{formatDate(ticket.createdAt)}</p>
-                        <p>{ticket.assignedTo?.name ?? "Unassigned"}</p>
+                        <p>{ticket.assignedTo?.name ?? "Nepřiřazeno"}</p>
                       </div>
                     </div>
                   </button>
@@ -321,7 +327,7 @@ export default function PlatformSupportPage(): React.JSX.Element {
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           {!selectedId ? (
             <div className="flex h-full min-h-[320px] items-center justify-center text-sm text-slate-500">
-              Select a ticket to inspect details.
+              Vyberte požadavek a zobrazí se jeho detail.
             </div>
           ) : detailLoading || !selected ? (
             <div className="space-y-3">
@@ -342,27 +348,27 @@ export default function PlatformSupportPage(): React.JSX.Element {
                   </span>
                 </div>
                 <p className="text-sm text-slate-500">
-                  {selected.organization.name} · created {formatDate(selected.createdAt)}
+                  {selected.organization.name} · vytvořeno {formatDate(selected.createdAt)}
                 </p>
               </div>
 
               <div className="grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Reporter</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Nahlásil</p>
                   <p>{selected.user.name}</p>
-                  <p className="text-xs text-slate-500">{selected.user.email ?? "Redacted"}</p>
+                  <p className="text-xs text-slate-500">{selected.user.email ?? "Skryto"}</p>
                 </div>
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Route</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Trasa</p>
                   <p className="font-mono text-xs">{readRoute(selected)}</p>
                 </div>
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Component</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Komponenta</p>
                   <p className="font-mono text-xs">{selected.metadata?.componentContext ?? "—"}</p>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Viewport</p>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Rozlišení</p>
                     <p>
                       {selected.metadata?.viewportWidth && selected.metadata?.viewportHeight
                         ? `${selected.metadata.viewportWidth}×${selected.metadata.viewportHeight}`
@@ -370,23 +376,23 @@ export default function PlatformSupportPage(): React.JSX.Element {
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Assigned to</p>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Přiřazeno</p>
                     <p>{currentAssigneeName}</p>
                   </div>
                 </div>
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Message</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Zpráva</p>
                   <p className="whitespace-pre-wrap">{selected.message}</p>
                 </div>
                 {selected.resolutionNote ? (
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Resolution</p>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Řešení</p>
                     <p className="whitespace-pre-wrap">{selected.resolutionNote}</p>
                   </div>
                 ) : null}
                 {selected.internalNote ? (
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Internal note</p>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Interní poznámka</p>
                     <p className="whitespace-pre-wrap">{selected.internalNote}</p>
                   </div>
                 ) : null}
@@ -395,7 +401,7 @@ export default function PlatformSupportPage(): React.JSX.Element {
                     href={`/app/platform/organizations/${selected.organizationId}`}
                     className="font-medium text-slate-700 underline hover:text-slate-900"
                   >
-                    Open organization
+                    Otevřít organizaci
                   </Link>
                 </div>
               </div>
@@ -403,12 +409,12 @@ export default function PlatformSupportPage(): React.JSX.Element {
               {triageAllowed ? (
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-700">Internal note</label>
+                    <label className="text-sm font-medium text-slate-700">Interní poznámka</label>
                     <textarea
                       className="min-h-24 w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm text-slate-900"
                       value={internalNote}
                       onChange={(event) => setInternalNote(event.target.value)}
-                      placeholder="Internal triage context visible only in the platform inbox."
+                      placeholder="Interní poznámka k řešení, viditelná pouze v administraci podpory."
                     />
                     <Button
                       type="button"
@@ -416,7 +422,7 @@ export default function PlatformSupportPage(): React.JSX.Element {
                       disabled={saving}
                       onClick={() => void handleUpdate({ internalNote: internalNote.trim() || null })}
                     >
-                      Save note
+                      Uložit poznámku
                     </Button>
                   </div>
 
@@ -430,7 +436,7 @@ export default function PlatformSupportPage(): React.JSX.Element {
                           onClick={() => void handleUpdate({ assignedToId: user?.id ?? null })}
                         >
                           <UserRoundCheck className="h-4 w-4" />
-                          Assign to me
+                          Přiřadit mně
                         </Button>
                         <Button
                           type="button"
@@ -438,17 +444,17 @@ export default function PlatformSupportPage(): React.JSX.Element {
                           disabled={saving || selected.status !== "OPEN"}
                           onClick={() => void handleUpdate({ status: "IN_REVIEW" })}
                         >
-                          Move to in review
+                          Přesunout do řešení
                         </Button>
                       </div>
 
                       <div className="space-y-2">
-                        <label className="text-sm font-medium text-slate-700">Resolution note</label>
+                        <label className="text-sm font-medium text-slate-700">Poznámka k vyřešení</label>
                         <textarea
                           className="min-h-24 w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm text-slate-900"
                           value={resolutionNote}
                           onChange={(event) => setResolutionNote(event.target.value)}
-                          placeholder="State what was fixed or what the reporter should do next."
+                          placeholder="Popište, co bylo opraveno nebo jak má uživatel dále postupovat."
                         />
                         <Button
                           type="button"
@@ -461,19 +467,19 @@ export default function PlatformSupportPage(): React.JSX.Element {
                           }
                         >
                           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                          Resolve ticket
+                          Vyřešit požadavek
                         </Button>
                       </div>
                     </div>
                   ) : (
                     <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-                      Resolved {selected.resolvedAt ? formatDate(selected.resolvedAt) : ""}.
+                      Vyřešeno {selected.resolvedAt ? formatDate(selected.resolvedAt) : ""}.
                     </div>
                   )}
                 </div>
               ) : (
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                  Read-only access. SUPPORT or SUPERADMIN is required for triage actions.
+                  Pouze pro čtení. Pro zpracování požadavků je potřeba role SUPPORT nebo SUPERADMIN.
                 </div>
               )}
             </div>

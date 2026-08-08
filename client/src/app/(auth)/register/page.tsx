@@ -56,11 +56,10 @@ export default function RegisterPage(): JSX.Element {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold text-slate-900">
-          Vytvoření účtu v Edutu
+          Vytvořit účet
         </h1>
-
         <p className="text-sm text-slate-500">
-          Vytvořte si účet a pokračujte do nastavení.
+          Založte školu nebo se připojte pomocí pozvánky.
         </p>
       </div>
 
