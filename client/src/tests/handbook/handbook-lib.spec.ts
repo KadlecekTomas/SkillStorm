@@ -102,7 +102,11 @@ describe("extractTableOfContents", () => {
   });
 
   it("duplicitní nadpisy dostanou jedinečné slugy jako rehype-slug", () => {
-    const md = ["## Fáze A — Česko", "### Detail", "## Fáze A — Česko"].join("\n");
+    const md = [
+      "## Fáze A — Česko",
+      "### Detail",
+      "## Fáze A — Česko",
+    ].join("\n");
     const toc = extractTableOfContents(md);
     const h2 = toc.filter((t) => t.depth === 2);
     expect(h2[0]?.id).not.toBe(h2[1]?.id);
@@ -113,7 +117,9 @@ describe("extractTableOfContents", () => {
     const doc = loadHandbookDocument("doctrine");
     const toc = extractTableOfContents(doc.markdown);
     expect(toc.length).toBeGreaterThanOrEqual(2);
-    expect(toc.map((item) => item.text)).toContain("This document is not authoritative");
+    expect(toc.map((item) => item.text)).toContain(
+      "This document is not authoritative",
+    );
     expect(toc.map((item) => item.text)).toContain("Final invariant");
     for (const item of toc) {
       expect(item.id).toBeTruthy();
