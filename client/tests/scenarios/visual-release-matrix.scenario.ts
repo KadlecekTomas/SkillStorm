@@ -85,6 +85,10 @@ function filePath(viewport: string, audience: string, key: string): string {
   return `test-results/visual-matrix/${viewport}/${audience}-${key}.png`;
 }
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 async function settle(page: Page): Promise<void> {
   await page.waitForLoadState('domcontentloaded');
   await page.waitForLoadState('networkidle', { timeout: 2_500 }).catch(() => undefined);
@@ -123,8 +127,6 @@ async function captureRoute(
 
   try {
     const navigation = await page.goto(route, { waitUntil: 'domcontentloaded' });
-    expect(navigation, `${audience}/${key} returns a document response`).not.toBeNull();
-    expect(navigation!.status(), `${audience}/${key} document status`).toBeLessThan(400);
     await settle(page);
 
     await page.addStyleTag({
@@ -135,22 +137,25 @@ async function captureRoute(
     const body = page.locator('body');
     await expect(body).toBeVisible();
     const bodyText = (await body.innerText()).trim();
-    expect(bodyText.length, `${audience}/${key} renders meaningful content`).toBeGreaterThan(20);
-    expect(bodyText).not.toContain('Application error');
-    expect(bodyText).not.toContain('Internal Server Error');
-
     const rootOverflow = await page.evaluate(
       () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
     );
-    expect(rootOverflow, `${audience}/${key} has no page-level horizontal overflow`).toBe(false);
-    expect(pageErrors, `${audience}/${key} page errors`).toEqual([]);
-    expect(consoleErrors, `${audience}/${key} console errors`).toEqual([]);
-    expect(badResponses, `${audience}/${key} API/document 4xx/5xx responses`).toEqual([]);
 
+    // Capture evidence even when a later acceptance assertion fails.
     await page.screenshot({
       path: filePath(viewportName, audience, key),
       fullPage: true,
     });
+
+    expect(navigation, `${audience}/${key} returns a document response`).not.toBeNull();
+    expect(navigation!.status(), `${audience}/${key} document status`).toBeLessThan(400);
+    expect(bodyText.length, `${audience}/${key} renders meaningful content`).toBeGreaterThan(20);
+    expect(bodyText).not.toContain('Application error');
+    expect(bodyText).not.toContain('Internal Server Error');
+    expect(rootOverflow, `${audience}/${key} has no page-level horizontal overflow`).toBe(false);
+    expect(pageErrors, `${audience}/${key} page errors`).toEqual([]);
+    expect(consoleErrors, `${audience}/${key} console errors`).toEqual([]);
+    expect(badResponses, `${audience}/${key} API/document 4xx/5xx responses`).toEqual([]);
   } finally {
     page.off('console', onConsole);
     page.off('pageerror', onPageError);
@@ -238,21 +243,25 @@ async function captureChangedDirectorStates(
 }
 
 test.describe('visual release matrix — whole SkillStorm', () => {
-  test.describe.configure({ mode: 'serial' });
-
   for (const viewport of VIEWPORTS) {
     test(`anonymous surfaces — ${viewport.name}`, async ({ browser }) => {
       const context = await browser.newContext({
         viewport: { width: viewport.width, height: viewport.height },
       });
       const page = await context.newPage();
+      const failures: string[] = [];
       try {
         for (const [key, route] of PUBLIC_ROUTES) {
-          await captureRoute(page, viewport.name, 'public', key, route);
+          try {
+            await captureRoute(page, viewport.name, 'public', key, route);
+          } catch (error) {
+            failures.push(`${key}: ${errorMessage(error)}`);
+          }
         }
       } finally {
         await context.close();
       }
+      expect(failures, `public/${viewport.name} acceptance failures`).toEqual([]);
     });
 
     for (const role of Object.keys(ROLE_ROUTES) as RoleKey[]) {
@@ -262,16 +271,26 @@ test.describe('visual release matrix — whole SkillStorm', () => {
           viewport: { width: viewport.width, height: viewport.height },
         });
         const page = await context.newPage();
+        const failures: string[] = [];
         try {
           for (const [key, route] of ROLE_ROUTES[role]) {
-            await captureRoute(page, viewport.name, role, key, route);
+            try {
+              await captureRoute(page, viewport.name, role, key, route);
+            } catch (error) {
+              failures.push(`${key}: ${errorMessage(error)}`);
+            }
           }
           if (role === 'director') {
-            await captureChangedDirectorStates(page, viewport.name);
+            try {
+              await captureChangedDirectorStates(page, viewport.name);
+            } catch (error) {
+              failures.push(`changed-director-states: ${errorMessage(error)}`);
+            }
           }
         } finally {
           await context.close();
         }
+        expect(failures, `${role}/${viewport.name} acceptance failures`).toEqual([]);
       });
     }
   }
