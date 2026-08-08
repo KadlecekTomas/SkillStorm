@@ -27,10 +27,10 @@ describe("LoginForm", () => {
   it("calls login with form values", async () => {
     loginMock.mockResolvedValueOnce(undefined);
     render(<LoginForm />);
-    fireEvent.change(screen.getByPlaceholderText(/you@school\.edu/i), {
+    fireEvent.change(screen.getByLabelText(/e-mail/i), {
       target: { value: "teacher@atlas.test" },
     });
-    fireEvent.change(screen.getByPlaceholderText(/••••••••/i), {
+    fireEvent.change(screen.getByLabelText(/heslo/i), {
       target: { value: "password" },
     });
     fireEvent.click(screen.getByRole("button", { name: /přihlásit se/i }));
