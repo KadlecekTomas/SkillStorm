@@ -7,7 +7,6 @@ const PLATFORM_ROUTES = [
   '/app/platform/catalog',
   '/app/platform/audit',
   '/app/platform/support',
-  '/app/platform/health',
 ] as const;
 
 const unwrap = <T>(value: T | { data?: T }): T =>
@@ -67,6 +66,11 @@ test.describe('whole-app release — platform workspace', () => {
         )
         .toBe(true);
     }
+
+    // /health is intentionally an alias: the platform overview is the health dashboard.
+    await page.goto('/app/platform/health', { waitUntil: 'commit' });
+    await expect(page).toHaveURL(/\/app\/platform(?:\?.*)?$/, { timeout: 15_000 });
+    await expect(page.getByText('Platform workspace', { exact: true })).toBeVisible();
 
     await page.goto('/app/platform', { waitUntil: 'commit' });
     await expect(page.getByText('Platform workspace', { exact: true })).toBeVisible();
