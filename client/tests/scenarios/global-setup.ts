@@ -12,7 +12,7 @@ const { assertTestDatabaseUrl } = require('../../../server/scripts/db-safety.js'
  * 2. Brings the schema up to date (migrate deploy) and runs the deterministic
  *    scenario seed (server/prisma/seed/scenarios-e2e.seed.ts), whose own wipe
  *    resets the scenario data idempotently.
- * 3. Adds verified PARENT and progress/RBAC fixtures.
+ * 3. Adds verified PARENT, progress/RBAC and platform fixtures.
  * 4. Captures the combined manifest (accounts, ids) to
  *    tests/scenarios/.manifest.json for auth.setup + specs.
  *
@@ -90,9 +90,25 @@ export default async function globalSetup() {
   manifest.untaughtClassId = progress.untaughtClassId;
   manifest.unrelatedStudentId = progress.unrelatedStudentId;
 
+  const platformOut = execSync(
+    'npx ts-node --transpile-only prisma/seed/scenarios-platform-extension.ts',
+    { cwd: serverDir, env: { ...process.env, DATABASE_URL_TEST: dbUrl } },
+  ).toString();
+  const platformLine = platformOut
+    .split('\n')
+    .find((l) => l.startsWith('SCENARIO_PLATFORM_EXTENSION='));
+  if (!platformLine) {
+    throw new Error('platform scenario extension did not emit SCENARIO_PLATFORM_EXTENSION');
+  }
+  const platform = JSON.parse(
+    platformLine.replace('SCENARIO_PLATFORM_EXTENSION=', ''),
+  );
+  manifest.accounts = { ...manifest.accounts, superadmin: platform.superadmin };
+  manifest.superadminUserId = platform.superadminUserId;
+
   writeFileSync(MANIFEST_PATH, JSON.stringify(manifest, null, 2));
   // eslint-disable-next-line no-console
   console.log(
-    `[scenarios] seeded org=${manifest.orgId} (8.A ${manifest.students8A.length}, 2.A ${manifest.students2A.length}, parent=1, progress-scope=1)`,
+    `[scenarios] seeded org=${manifest.orgId} (8.A ${manifest.students8A.length}, 2.A ${manifest.students2A.length}, parent=1, progress-scope=1, superadmin=1)`,
   );
 }

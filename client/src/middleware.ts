@@ -8,35 +8,49 @@ const LOGIN_PATH = "/login";
 const APP_PREFIX = "/app";
 const JOIN_PREFIX = "/join";
 
-function redirectToLogin(request: NextRequest, pathname: string, param: "from" | "redirect"): NextResponse {
-  const login = new URL(LOGIN_PATH, request.url);
+/**
+ * Build auth redirects from the request host. Legacy /dashboard routes are
+ * intentionally handled by Next route pages instead of middleware, so their
+ * relative `redirect()` calls preserve the browser origin and host-only cookie.
+ */
+function sameOriginUrl(request: NextRequest, pathname: string): URL {
+  const host =
+    request.headers.get("host")?.trim() ||
+    request.headers.get("x-forwarded-host")?.split(",")[0]?.trim() ||
+    request.nextUrl.host;
+  const forwardedProto = request.headers
+    .get("x-forwarded-proto")
+    ?.split(",")[0]
+    ?.trim()
+    .toLowerCase();
+  const protocol =
+    forwardedProto === "http" || forwardedProto === "https"
+      ? forwardedProto
+      : request.nextUrl.protocol.replace(/:$/, "");
+
+  return new URL(pathname, `${protocol}://${host}`);
+}
+
+function redirectToLogin(
+  request: NextRequest,
+  pathname: string,
+  param: "from" | "redirect",
+): NextResponse {
+  const login = sameOriginUrl(request, LOGIN_PATH);
   login.searchParams.set(param, pathname);
   return NextResponse.redirect(login);
 }
 
-/** Redirect legacy /dashboard* to /app* for bookmarks. */
-function redirectDashboardToApp(pathname: string, request: NextRequest): NextResponse | null {
-  if (pathname === "/dashboard" || pathname.startsWith("/dashboard/")) {
-    const newPath = pathname === "/dashboard" ? "/app" : pathname.replace(/^\/dashboard/, "/app");
-    return NextResponse.redirect(new URL(newPath, request.url));
-  }
-  return null;
-}
-
 /**
- * Server-side gate for app and join routes:
- * - /dashboard* → redirect to /app* (legacy bookmarks).
- * - Unauthenticated on /app* → redirect to /login?from=pathname.
- * - Unauthenticated on /join* → redirect to /login?redirect=fullUrl (join has priority; after login user continues join flow).
- * - Role-based access to /app/platform* is enforced client-side (isPlatformAdmin).
+ * Server-side gate for protected app and join routes:
+ * - legacy /dashboard* bookmarks are handled by server route redirects;
+ * - unauthenticated /app* → /login?from=pathname;
+ * - unauthenticated /join* → /login?redirect=fullUrl;
+ * - role-based /app/platform* access is enforced by the platform guard.
  */
 export function middleware(request: NextRequest): NextResponse {
   const url = request.nextUrl;
   const { pathname } = url;
-
-  const legacyRedirect = redirectDashboardToApp(pathname, request);
-  if (legacyRedirect) return legacyRedirect;
-
   const hasAuthCookie = request.cookies.get(AUTH_COOKIE)?.value != null;
 
   if (pathname === JOIN_PREFIX || pathname.startsWith(`${JOIN_PREFIX}/`)) {
@@ -60,5 +74,5 @@ export function middleware(request: NextRequest): NextResponse {
 }
 
 export const config = {
-  matcher: ["/dashboard", "/dashboard/:path*", "/app", "/app/:path*", "/join", "/join/:path*"],
+  matcher: ["/app", "/app/:path*", "/join", "/join/:path*"],
 };
