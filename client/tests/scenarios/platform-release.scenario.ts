@@ -14,6 +14,9 @@ const unwrap = <T>(value: T | { data?: T }): T =>
     ? ((value as { data?: T }).data ?? (value as T))
     : (value as T);
 
+const platformHeader = (page: import('@playwright/test').Page) =>
+  page.locator('header').getByRole('heading').first();
+
 test.describe('whole-app release — platform workspace', () => {
   test('SUPERADMIN without school membership can open every platform surface cleanly', async ({
     asRole,
@@ -62,9 +65,7 @@ test.describe('whole-app release — platform workspace', () => {
 
     for (const route of PLATFORM_ROUTES) {
       await page.goto(route, { waitUntil: 'commit' });
-      await expect(page.getByText('Platform workspace', { exact: true })).toBeVisible({
-        timeout: 15_000,
-      });
+      await expect(platformHeader(page)).toBeVisible({ timeout: 15_000 });
       await expect(page).toHaveURL(new RegExp(`${route.replaceAll('/', '\\/')}(?:\\?.*)?$`));
       await expect
         .poll(() =>
@@ -78,17 +79,17 @@ test.describe('whole-app release — platform workspace', () => {
     // /health is intentionally an alias: the platform overview is the health dashboard.
     await page.goto('/app/platform/health', { waitUntil: 'commit' });
     await expect(page).toHaveURL(/\/app\/platform(?:\?.*)?$/, { timeout: 15_000 });
-    await expect(page.getByText('Platform workspace', { exact: true })).toBeVisible();
+    await expect(platformHeader(page)).toHaveText('Přehled');
 
     await page.goto('/app/platform', { waitUntil: 'commit' });
-    await expect(page.getByText('Platform workspace', { exact: true })).toBeVisible();
+    await expect(platformHeader(page)).toHaveText('Přehled');
     await page.screenshot({
       path: 'test-results/release-platform-overview.png',
       fullPage: true,
     });
 
     await page.goto('/app/platform/organizations', { waitUntil: 'commit' });
-    await expect(page.getByText('Platform workspace', { exact: true })).toBeVisible();
+    await expect(platformHeader(page)).toHaveText('Organizace');
     await page.screenshot({
       path: 'test-results/release-platform-organizations.png',
       fullPage: true,
@@ -114,6 +115,6 @@ test.describe('whole-app release — platform workspace', () => {
     const { page } = await asRole('director');
     await page.goto('/app/platform', { waitUntil: 'commit' });
     await expect(page).toHaveURL(/\/app(?:\?.*)?$/, { timeout: 15_000 });
-    await expect(page.getByText('Platform workspace', { exact: true })).toHaveCount(0);
+    await expect(platformHeader(page)).toHaveCount(0);
   });
 });
