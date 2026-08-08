@@ -22,10 +22,13 @@ export const DashboardLayout = ({ children }: DashboardLayoutProps): React.JSX.E
   const { logEvent } = useAnalytics();
   const pathname = usePathname();
   const { user, org, switchOrganization, isOffline, context } = useAuth();
+  const { can, hasRole } = usePermissions();
+  const canReadAcademicYears = can("VIEW_RESULTS") || can("MANAGE_STUDENTS");
   const memberships = user?.memberships ?? [];
   const currentMembershipId = memberships.find((m) => m.organizationId === org?.id)?.id ?? "";
-  const { selectedYear, bootstrapState, activeYear, isAcademicYearExpired, refresh: refreshYears } = useAcademicYears();
-  const { hasRole } = usePermissions();
+  const { selectedYear, bootstrapState, activeYear, isAcademicYearExpired, refresh: refreshYears } = useAcademicYears({
+    enabled: canReadAcademicYears,
+  });
   const [expiredModalDismissed, setExpiredModalDismissed] = useState(false);
   // Only directors/owners see the expired-year modal. They are the only ones who
   // can take action (create/activate the next year). Teachers should never be
@@ -67,7 +70,7 @@ export const DashboardLayout = ({ children }: DashboardLayoutProps): React.JSX.E
         />
       )}
       <div className="space-y-3">
-        {context?.mode === "organization" && (
+        {context?.mode === "organization" && canReadAcademicYears && (
           <p data-app-chrome className="text-sm font-medium text-ink-dim" aria-label="Aktuální školní rok">
             Školní rok{" "}
             {bootstrapState === "READY" && selectedYear
