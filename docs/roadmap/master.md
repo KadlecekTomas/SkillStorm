@@ -2,7 +2,7 @@
 
 > **Status:** `CURRENT / NORMATIVE`  
 > **Owner:** Product + Engineering  
-> **Last review:** 2026-08-07  
+> **Last review:** 2026-08-08  
 > **Authority:** jediný source of truth pro pořadí velkých produktových a architektonických kroků. Při konfliktu s dílčí roadmapou platí tento dokument; security/privacy invarianty a normativní production/data contracts mají vyšší precedence podle [`../README.md`](../README.md).
 
 ---
@@ -47,6 +47,8 @@ Původní `Eduto Doctrine` je zachován pouze jako historická strategická teze
 8. **Curriculum mapping je reviewovaný a verzovaný.** AI může navrhnout, ne schválit normativní mapping.
 9. **Security a tenant isolation jsou serverové invarianty.** Žádný nový engine nemá paralelní zkratkovitý auth model.
 10. **Pilot validuje produkt, ne legalizuje špatnou architekturu.** Produkční gate se neobchází argumentem „zatím jen pilot“.
+11. **Subject vertical nesmí předběhnout shared foundations.** Ani prioritní informatika nesmí přeskočit D1 Curriculum Foundation a D2 Lesson Experience / Classroom Orchestration Kernel.
+12. **Celoroční coverage před showcase-first developmentem.** Hero lesson je validační vertical slice, ne náhrada za promyšlenou ročníkovou progresi.
 
 ---
 
@@ -54,27 +56,27 @@ Původní `Eduto Doctrine` je zachován pouze jako historická strategická teze
 
 Repozitář už obsahuje významnou platformní základnu. Před každou foundation změnou se aktuální stav ověří proti `main`, schématu a testům; tento přehled je orientační produktová baseline, nikoli náhrada git historie.
 
-### Platform foundation
+## Platform foundation
 
-- multi-tenant organizace, membership a RBAC,
-- studenti, učitelé, třídy, školní struktura,
-- obsahová taxonomie a globální/lokální obsah,
-- testy, otázky, assignments, submissions/responses,
-- import/export workflow,
-- analytické a progress základy,
-- audit/security/hardening infrastruktura,
+- multi-tenant organizace, membership a RBAC;
+- studenti, učitelé, třídy, školní struktura;
+- obsahová taxonomie a globální/lokální obsah;
+- testy, otázky, assignments, submissions/responses;
+- import/export workflow;
+- analytické a progress základy;
+- audit/security/hardening infrastruktura;
 - Docker/CI/Playwright testovací základ.
 
-### Classroom foundation
+## Classroom foundation
 
-- `BOARD_ONLY` Live Sessions / Bleskovky,
-- quiz voting,
-- dotykové `MATCH_PAIRS`, `ORDER`, `SORT_BINS`,
-- board-safe solution/reveal kontrakty,
-- věkové board režimy,
+- `BOARD_ONLY` Live Sessions / Bleskovky;
+- quiz voting;
+- dotykové `MATCH_PAIRS`, `ORDER`, `SORT_BINS`;
+- board-safe solution/reveal kontrakty;
+- věkové board režimy;
 - ClassParták participation XP invarianty.
 
-### Identity/family foundation
+## Identity/family foundation
 
 Repo obsahuje multi-role/guardian směry a související bezpečnostní práci. Jejich aktuální implementační stav se vždy ověřuje z `main` a příslušných current contracts; nový Interactive Curriculum je nesmí obcházet.
 
@@ -95,35 +97,39 @@ Nová velká vertikála může začít pouze pokud:
 [ ] migration/backward compatibility je známá
 [ ] test strategy je známá
 [ ] STOP checkpointy jsou definované
+[ ] upstream foundation branch je stabilní a required CI je zelené
 ```
 
 ---
 
 # 4. Fáze D0 — Documentation Hardening & Architecture Freeze
 
-**Stav:** `IN REVIEW` — PR #36.
+**Stav dokumentu:** foundation je specifikovaná v PR #36. D0 je dokončené až okamžikem, kdy tento balík projde required CI a je v `main`.
 
 Cíl: před prvním novým curriculum-engine kódem vytvořit jednoznačné specifikace a odstranit konkurenční source of truth.
 
 Výstupy:
 
-- Documentation Registry,
-- Interactive Curriculum vision,
-- Master Use Cases 1.–9.,
-- School Curriculum Coverage & ŠVP Integration,
-- Audio & Language Engine,
-- Interactive IT Lab,
-- Production Contract,
-- Curriculum Data Contract,
-- aktualizovaný root README,
-- aktualizovaný Master Roadmap,
-- klasifikace historických dokumentů.
+- Documentation Registry;
+- Interactive Curriculum vision;
+- Master Use Cases 1.–9.;
+- School Curriculum Coverage & ŠVP Integration;
+- Audio & Language Engine;
+- všech 18 subject blueprintů;
+- Interactive IT Lab;
+- [`../interactive-it-lab/YEAR-COVERAGE.md`](../interactive-it-lab/YEAR-COVERAGE.md) — celoroční informatika 4.–9.;
+- Production Contract;
+- Curriculum Data Contract;
+- aktualizovaný root README;
+- aktualizovaný Master Roadmap;
+- klasifikace historických dokumentů;
+- Documentation Integrity CI gate.
 
-### D0 exit gate
+## D0 exit gate
 
 ```text
 [ ] docs cross-review bez blocker contradiction
-[ ] žádný active source of truth nepoužívá Eduto jako aktuální brand
+[ ] žádný active source of truth nepoužívá legacy brand jako aktuální identitu
 [ ] žádný current setup návod neobsahuje lokální absolutní cesty/demo secrets
 [ ] CURRENT vs VISION jednoznačné
 [ ] curriculum versioning konzistentní
@@ -131,10 +137,10 @@ Výstupy:
 [ ] WCAG/privacy/security/realtime contracts konzistentní
 [ ] markdown/link/document validator zelený
 [ ] required CI zelené
-[ ] PR mergnutý do main
+[ ] PR #36 mergnutý do main
 ```
 
-**Dokud D0 není splněno, nezačíná D1.**
+**Dokud D0 není splněno, nezačíná D1 ani subject runtime development.**
 
 ---
 
@@ -150,11 +156,11 @@ Normativní dokument:
 
 Implementovat:
 
-- `CurriculumFramework`,
-- immutable `CurriculumFrameworkRelease`,
-- areas/fields/outcomes,
-- source provenance/checksum,
-- import dry-run + diff,
+- `CurriculumFramework`;
+- immutable `CurriculumFrameworkRelease`;
+- areas/fields/outcomes;
+- source provenance/checksum;
+- import dry-run + diff;
 - verified release workflow.
 
 ### STOP D1-A
@@ -165,31 +171,31 @@ Review DB migration, immutability a provenance **před** school-specific mapping
 
 Implementovat:
 
-- `SchoolCurriculumProfile`,
-- immutable published `SchoolCurriculumVersion`,
-- `SchoolSubject`,
-- `SchoolOutcome`,
-- `CurriculumApplicability`,
+- `SchoolCurriculumProfile`;
+- immutable published `SchoolCurriculumVersion`;
+- `SchoolSubject`;
+- `SchoolOutcome`;
+- `CurriculumApplicability`;
 - transition resolver per academic year/grade/class.
 
 ### STOP D1-B
 
 Povinné testy:
 
-- legacy + new curriculum současně v jedné škole,
-- class-specific override,
-- ambiguous applicability = explicit error,
+- legacy + new curriculum současně v jedné škole;
+- class-specific override;
+- ambiguous applicability = explicit error;
 - tenant isolation.
 
 ## D1.3 Mapping workflow
 
-- school outcome ↔ canonical outcome/aspect,
-- `PROPOSED / APPROVED / REJECTED / STALE`,
-- AI návrh bez auto-approval,
-- review provenance,
+- school outcome ↔ canonical outcome/aspect;
+- `PROPOSED / APPROVED / REJECTED / STALE`;
+- AI návrh bez auto-approval;
+- review provenance;
 - stale detection při změně source.
 
-### D1 exit gate
+## D1 exit gate
 
 Teacher/admin může pro konkrétní class + academic year jednoznačně resolve publikované ŠVP a dohledat jeho původ.
 
@@ -201,19 +207,19 @@ Teacher/admin může pro konkrétní class + academic year jednoznačně resolve
 
 Implementovat generické doménové základy:
 
-- `Activity` / `ActivityVersion` nebo výsledný ekvivalent odsouhlasený proti aktuálnímu Prisma schema,
-- Lesson Experience metadata,
-- supported/recommended delivery modes,
-- stages/checkpoints,
-- semantic event envelope + idempotency,
-- live session participant state,
-- teacher commands,
-- reconnect/resume,
-- learning evidence primitives,
-- engine registry/capability model,
+- `Activity` / `ActivityVersion` nebo výsledný ekvivalent odsouhlasený proti aktuálnímu Prisma schema;
+- Lesson Experience metadata;
+- supported/recommended delivery modes;
+- stages/checkpoints;
+- semantic event envelope + idempotency;
+- live session participant state;
+- teacher commands;
+- reconnect/resume;
+- learning evidence primitives;
+- engine registry/capability model;
 - asset manifest/preload.
 
-### Klíčový invariant
+## Klíčový invariant
 
 Současné Bleskovky zůstávají funkční. Komplexní Activity Engine se **nenacpe do `Test/Question`** jen proto, že Live Sessions tuto starší obsahovou cestu používají.
 
@@ -221,9 +227,9 @@ Současné Bleskovky zůstávají funkční. Komplexní Activity Engine se **nen
 
 Před migration:
 
-- porovnat proti aktuálnímu `schema.prisma`,
-- eliminovat duplicitní LiveSession/participant koncepty,
-- migration plan pro současné board sessions,
+- porovnat proti aktuálnímu `schema.prisma`;
+- eliminovat duplicitní LiveSession/participant koncepty;
+- migration plan pro současné board sessions;
 - tenant/RBAC review.
 
 ### STOP D2-B — realtime
@@ -239,47 +245,50 @@ Povinný test:
 → session finish
 ```
 
-### D2 exit gate
+## D2 exit gate
 
-Jedna minimální interní test activity musí projít všemi čtyřmi relevantními orchestration vrstvami bez subject-specific hacku.
-
----
-
-# 7. Fáze D3 — Vertical Slice 1: Chem Lab / BOARD_ONLY-first
-
-**Proč první:** ověří nejdostupnější český školní hardware model — učitel + jedna interaktivní tabule — a zároveň subject engine s reálnou simulací, predikcí, měřením a vysvětlením.
-
-MVP lesson:
-
-> **pH / neutralizace — Predict → Experiment → Particle View → New Challenge → Reflection**
-
-Scope:
-
-- board-first renderer,
-- teacher orchestration,
-- bezpečné virtuální experimenty,
-- particle/macro views,
-- curated lesson content,
-- curriculum mappings,
-- evidence bez individualizace v čistém `BOARD_ONLY` režimu,
-- fallback při renderer/network failure.
-
-Non-goals MVP:
-
-- kompletní laboratorní software,
-- reálné nebezpečné návody,
-- stovky chemikálií,
-- AI generování experimentů bez review.
-
-### D3 exit gate
-
-Pilotní učitel zvládne lekci spustit a odučit bez developerské pomoci; lesson přežije běžný restart/reconnect a pedagogický reviewer potvrdí, že interaktivita přináší hodnotu nad prezentaci.
+Jedna minimální interní test activity musí projít společným orchestration kernelem bez subject-specific hacku.
 
 ---
 
-# 8. Fáze D4 — Vertical Slice 2: Interactive IT Lab / DEVICES-first
+# 7. Fáze D3 — Vertical Slice 1: Interactive IT Lab / DEVICES-first
 
-**Cíl:** otestovat opačný classroom extrém — individuální zařízení, per-student semantic telemetry a Teacher Mission Control.
+**Priorita:** první produkční subject vertical po D1 a D2.
+
+Důvod:
+
+- informatika je přirozeně `DEVICES`-first;
+- ověří per-student semantic telemetry a Mission Control;
+- umožňuje rychle testovat reusable `BUILD / PROGRAM / DATA / DIAGNOSE` primitives;
+- máme předem definovaný celý 4.–9. ročníkový programme, takže Build-a-PC nebude izolované demo.
+
+Normativní produktové vstupy:
+
+- [`../interactive-curriculum/subjects/INFORMATICS.md`](../interactive-curriculum/subjects/INFORMATICS.md)
+- [`../interactive-it-lab/README.md`](../interactive-it-lab/README.md)
+- [`../interactive-it-lab/YEAR-COVERAGE.md`](../interactive-it-lab/YEAR-COVERAGE.md)
+
+## D3.1 Celoroční scope
+
+Vývoj se neplánuje jako jedna hra. Budoucí pořadí capabilities:
+
+```text
+IT-0 curriculum mapping + year-pack import
+IT-1 Algorithm / Human Robot / tracing
+IT-2 Block programming + testing/debugging
+IT-3 Data / Table / Information Systems
+IT-4 SystemBuilder foundation
+IT-5 Build-a-PC vertical slice
+IT-6 Network Builder
+IT-7 Security / Permissions scenarios
+IT-8 ML Lab
+IT-9 Project / Capstone orchestration
+IT-10 whole-year coverage validation
+```
+
+`YEAR-COVERAGE.md` definuje 32 core lessons na každý 4.–9. ročník + FLEX/pacing varianty, learning evidence, ŠVP adapter, safety, accessibility a release gates.
+
+## D3.2 První runtime showcase po foundations
 
 MVP:
 
@@ -287,29 +296,66 @@ MVP:
 
 Scope:
 
-- motherboard + CPU + cooler + RAM + SSD + GPU + PSU + basic cabling + power-on,
-- 2.5D renderer,
-- generic/SkillStorm assets bez cizích brand práv,
-- deterministic compatibility rules,
-- Explorer / Builder / Technician progression,
-- scaffolding oddělený od difficulty,
-- Mission Control,
-- teacher pause/resume/help,
-- semantic event telemetry,
-- learning evidence,
+- motherboard + CPU + cooler + RAM + SSD + GPU + PSU + basic cabling + power-on;
+- 2.5D renderer;
+- generic/SkillStorm assets bez cizích brand práv;
+- deterministic compatibility rules;
+- Explorer / Builder / Technician progression;
+- scaffolding oddělený od difficulty;
+- Mission Control;
+- teacher pause/resume/help;
+- semantic event telemetry;
+- learning evidence;
 - keyboard/tap alternative k drag interaction.
 
 Non-goals:
 
-- kompletní PC Building Simulator,
-- thermal paste physics,
-- every screw,
-- water cooling,
+- kompletní PC Building Simulator;
+- thermal paste physics;
+- every screw;
+- water cooling;
 - real retail catalog bez vyřešených data/licensing práv.
 
-### D4 exit gate
+## D3 exit gate
 
-Celá reálná třída zvládne activity flow; učitel identifikuje misconception cluster bez běhání naslepo mezi monitory; žádné pointer/frame streaming.
+- reálná třída zvládne activity flow;
+- učitel identifikuje misconception cluster bez běhání naslepo mezi monitory;
+- žádné pointer/frame streaming;
+- reconnect nezduplikuje evidence;
+- první reusable capabilities nejsou hardcoded pouze pro PC;
+- celoroční content pack má machine-mapovatelnou cestu na RVP/ŠVP.
+
+---
+
+# 8. Fáze D4 — Vertical Slice 2: Chem Lab / BOARD_ONLY-first
+
+**Cíl:** po device-first IT ověřit opačný classroom extrém — učitel + jedna interaktivní tabule, bez nutnosti individuálních zařízení.
+
+MVP lesson:
+
+> **pH / neutralizace — Predict → Experiment → Particle View → New Challenge → Reflection**
+
+Scope:
+
+- board-first renderer;
+- teacher orchestration;
+- bezpečné virtuální experimenty;
+- particle/macro views;
+- curated lesson content;
+- curriculum mappings;
+- evidence bez falešné individualizace v čistém `BOARD_ONLY` režimu;
+- fallback při renderer/network failure.
+
+Non-goals MVP:
+
+- kompletní laboratorní software;
+- reálné nebezpečné návody;
+- stovky chemikálií;
+- AI generování experimentů bez review.
+
+## D4 exit gate
+
+Pilotní učitel zvládne lekci spustit a odučit bez developerské pomoci; lesson přežije běžný restart/reconnect a pedagogický reviewer potvrdí, že interaktivita přináší hodnotu nad prezentaci.
 
 ---
 
@@ -321,20 +367,20 @@ MVP:
 
 Scope:
 
-- curated human reference audio,
-- normal/slow variants,
-- timed segments/highlight,
-- `PLAY_AUDIO`, `PLAY_SEGMENTED_AUDIO`, `LISTEN_AND_SELECT`, `LISTEN_AND_BUILD`,
-- board-first UX,
-- transcript/accessibility semantics,
-- no required microphone,
+- curated human reference audio;
+- normal/slow variants;
+- timed segments/highlight;
+- `PLAY_AUDIO`, `PLAY_SEGMENTED_AUDIO`, `LISTEN_AND_SELECT`, `LISTEN_AND_BUILD`;
+- board-first UX;
+- transcript/accessibility semantics;
+- no required microphone;
 - asset rights/provenance.
 
 ### STOP D5-A
 
 Lingvistický + pedagogický review audio asset pipeline před masovou výrobou nahrávek.
 
-### D5 exit gate
+## D5 exit gate
 
 Prvostupňový učitel zvládne activity použít na tabuli bez žákovských zařízení a audio timing je deterministicky reprodukovatelný.
 
@@ -344,11 +390,11 @@ Prvostupňový učitel zvládne activity použít na tabuli bez žákovských za
 
 MVP má prokázat:
 
-- velkou board mapu,
-- vrstvy,
-- měření/trasy,
-- datové provenance/licence,
-- scenario decision,
+- velkou board mapu;
+- vrstvy;
+- měření/trasy;
+- datové provenance/licence;
+- scenario decision;
 - Explain → Evidence vazbu.
 
 Hero case:
@@ -361,20 +407,20 @@ Map Lab se nesmí stát poznávačkou států jako hlavním produktem.
 
 # 11. Fáze D7 — Physics / Biology / Math Engines
 
-Po ověření tří různých runtime archetypů:
+Po ověření různých runtime archetypů:
 
-- simulation board (`Chem`),
-- device build (`IT`),
-- audio/timed media (`ČJ`),
-- layered spatial data (`GEO`),
+- device build / individual telemetry (`IT`);
+- simulation board (`Chem`);
+- audio/timed media (`ČJ`);
+- layered spatial data (`GEO`);
 
 otevřít další engines postupně:
 
-1. Physics Lab,
-2. Biology Explorer / Ecosystem Simulator,
+1. Physics Lab;
+2. Biology Explorer / Ecosystem Simulator;
 3. Math Manipulative Lab.
 
-Každý engine má vlastní blueprint **před kódem** a musí reuse existující primitives místo paralelního orchestration stacku.
+Každý engine musí reuse existující primitives místo paralelního orchestration stacku.
 
 ---
 
@@ -382,13 +428,13 @@ Každý engine má vlastní blueprint **před kódem** a musí reuse existujíc�
 
 Postupně:
 
-- Historical Investigation / Source Lab,
-- Civic & Finance Simulation,
-- Language Studio 2. stupně + cizí jazyky,
-- Health & Safety scenarios,
-- Creative/Media Studio,
-- Sound/Performance extensions,
-- Workshop/Project Engine,
+- Historical Investigation / Source Lab;
+- Civic & Finance Simulation;
+- Language Studio 2. stupně + cizí jazyky;
+- Health & Safety scenarios;
+- Creative/Media Studio;
+- Sound/Performance extensions;
+- Workshop/Project Engine;
 - PE orchestration s minimem screen time.
 
 Digitál nesmí vytlačit skutečnou řeč, pohyb, tvorbu, experiment nebo dílnu tam, kde je fyzická činnost samotným cílem.
@@ -415,11 +461,11 @@ framework release
 
 Vývoj se prioritizuje podle:
 
-- curricular importance,
-- school demand,
-- reuse across grades/subjects,
-- current `MISSING/PARTIAL`,
-- implementation cost,
+- curricular importance;
+- school demand;
+- reuse across grades/subjects;
+- current `MISSING/PARTIAL`;
+- implementation cost;
 - classroom evidence.
 
 Nikoli podle „co by byla cool další hra“.
@@ -428,31 +474,31 @@ Nikoli podle „co by byla cool další hra“.
 
 # 14. Průběžné platformní lanes
 
-Tyto práce mohou běžet jako menší izolované hardening PR, ale nesmí rozbít single-major-vertical pravidlo.
+Tyto práce mohou běžet jako menší izolované hardening PR, ale nesmí rozbít single-major-vertical pravidlo ani měnit foundation pod rozpracovaným subject PR bez koordinace.
 
 ## Security / privacy
 
-- RBAC/tenant regression,
-- audit logs,
-- rate limiting,
-- secret handling,
-- child-data minimization,
+- RBAC/tenant regression;
+- audit logs;
+- rate limiting;
+- secret handling;
+- child-data minimization;
 - privacy review pro nové telemetry typy.
 
 ## Reliability / ops
 
-- backup + restore drills,
-- monitoring/alerting,
-- query performance,
-- production deployment hardening,
+- backup + restore drills;
+- monitoring/alerting;
+- query performance;
+- production deployment hardening;
 - browser/device support matrix.
 
 ## Accessibility
 
-- WCAG 2.2 AA baseline,
-- keyboard/touch alternatives,
-- reduced motion,
-- screen reader sanity checks,
+- WCAG 2.2 AA baseline;
+- keyboard/touch alternatives;
+- reduced motion;
+- screen reader sanity checks;
 - accommodation profiles.
 
 ## Family / guardian
@@ -461,10 +507,10 @@ Guardian/family funkcionalita zůstává důležitá. Její práce se plánuje t
 
 ## Content operations
 
-- authoring validation,
-- review workflow,
-- asset provenance,
-- localization,
+- authoring validation;
+- review workflow;
+- asset provenance;
+- localization;
 - versioning.
 
 ---
@@ -486,13 +532,13 @@ Standard pilotu:
 
 Sbírat minimálně:
 
-- time to start,
-- completion/lesson survival,
-- teacher interventions,
-- misconception hotspots,
-- hints/support usage,
-- device/network failures,
-- learning evidence quality,
+- time to start;
+- completion/lesson survival;
+- teacher interventions;
+- misconception hotspots;
+- hints/support usage;
+- device/network failures;
+- learning evidence quality;
 - teacher willingness použít activity znovu.
 
 Žádná vanity metrika nenahrazuje otázku:
@@ -513,9 +559,9 @@ Cílový claim:
 
 Během přechodu RVP/ŠVP je silná capability:
 
-- curriculum versioning,
-- school-specific mapping,
-- coverage transparency,
+- curriculum versioning;
+- school-specific mapping;
+- coverage transparency;
 - lesson recommendations.
 
 Marketingové tvrzení `RVP aligned/complete` se řídí Production Contractem, nikoli marketingovým rozhodnutím.
@@ -524,16 +570,19 @@ Marketingové tvrzení `RVP aligned/complete` se řídí Production Contractem, 
 
 # 17. Co se nyní explicitně nezačíná
 
-Dokud nejsou foundations a první vertical slices ověřené:
+Dokud nejsou foundations a příslušné STOP gates uzavřené:
 
-- marketplace jako hlavní priorita,
-- masová tvorba stovek hardcoded miniher,
-- full realtime 3D napříč předměty,
-- vlastní školní chat/social network,
-- AI auto-publishing curriculum content,
-- real-product retail PC catalog,
-- automatické high-stakes známkování hlasu,
+- subject runtime development mimo pořadí této roadmapy;
+- marketplace jako hlavní priorita;
+- masová tvorba stovek hardcoded miniher;
+- full realtime 3D napříč předměty;
+- vlastní školní chat/social network;
+- AI auto-publishing curriculum content;
+- real-product retail PC catalog;
+- automatické high-stakes známkování hlasu;
 - jedna velká „adaptive AI“ vrstva bez explainable evidence modelu.
+
+Pro informatiku je během čekání povolená **dokumentace, pedagogický/content design a licenčně čistá asset příprava**. Produkční Prisma/API/realtime/runtime implementace začíná až podle D1/D2/D3 gate.
 
 ---
 
@@ -541,16 +590,18 @@ Dokud nejsou foundations a první vertical slices ověřené:
 
 Každá velká fáze:
 
-1. samostatná branch,
-2. explicitní scope,
-3. STOP checkpointy,
-4. unit/integration/e2e podle risku,
-5. real-browser verification pro UI/runtime,
-6. documentation update ve stejném PR,
-7. required CI green,
+1. samostatná branch;
+2. explicitní scope;
+3. STOP checkpointy;
+4. unit/integration/e2e podle risku;
+5. real-browser verification pro UI/runtime;
+6. documentation update ve stejném PR;
+7. required CI green;
 8. review před merge do `main`.
 
 Schema/API/security změna bez dokumentačního diffu je nekompletní změna.
+
+Paralelní programy mohou běžet, pokud mají izolovaný scope. Nová velká curriculum feature branch se nezakládá z historického `main`, pokud existuje právě dokončovaný foundation stack, který mění stejné schema/API/security oblasti.
 
 ---
 
@@ -583,15 +634,23 @@ To **není totéž** jako „máme obsah pro každý OVU“. Exhaustive content 
 
 # 20. Aktuální další krok
 
-K datu 2026-08-07:
+Dokumentační baseline se uzavírá v PR #36.
 
-> **Dokončit a mergnout D0 — Documentation Hardening & Architecture Freeze.**
+Po jejím bezpečném přijetí do `main` je implementační pořadí:
 
-Poté:
+```text
+D1 Curriculum Foundation
+        ↓
+D2 Lesson Experience & Classroom Orchestration Kernel
+        ↓
+D3 Interactive IT Lab — první subject vertical
+        ↓
+D4 Chem Lab
+        ↓
+D5+ další reusable archetypy podle roadmapy
+```
 
-> **D1 — Curriculum Foundation.**
-
-Žádná nová subject-specific feature nemá přeskočit curriculum/data foundation jen proto, že je vizuálně atraktivní.
+Žádná nová subject-specific feature nemá přeskočit curriculum/data/orchestration foundations jen proto, že je vizuálně atraktivní.
 
 ---
 
@@ -599,6 +658,7 @@ Poté:
 
 | Datum | Změna |
 | --- | --- |
+| 2026-08-08 | Informatika zvolena jako první subject vertical po D1/D2. Přidán celoroční 4.–9. programme `interactive-it-lab/YEAR-COVERAGE.md`; Build-a-PC zůstává první showcase uvnitř širší IT vertikály. Chem Lab přesunut jako druhý subject vertical. Runtime vývoj zůstává blokovaný do dokončení foundations. |
 | 2026-08-07 | Master Roadmap přestavěn kolem curriculum-aware classroom experience strategie. Přidány D0–D9, production/documentation gates, curriculum foundation, orchestration kernel a pořadí subject vertical slices. Původní Eduto doctrine označen jako superseded v documentation registry. |
 | 2026-07-20 | Předchozí roadmap snapshot: board/live/guardian/pilot priority model. Zachován v git historii. |
 
@@ -611,3 +671,5 @@ Poté:
 - [`../interactive-curriculum/CURRICULUM-DATA-CONTRACT.md`](../interactive-curriculum/CURRICULUM-DATA-CONTRACT.md)
 - [`../interactive-curriculum/README.md`](../interactive-curriculum/README.md)
 - [`../interactive-curriculum/USE-CASES.md`](../interactive-curriculum/USE-CASES.md)
+- [`../interactive-it-lab/README.md`](../interactive-it-lab/README.md)
+- [`../interactive-it-lab/YEAR-COVERAGE.md`](../interactive-it-lab/YEAR-COVERAGE.md)
