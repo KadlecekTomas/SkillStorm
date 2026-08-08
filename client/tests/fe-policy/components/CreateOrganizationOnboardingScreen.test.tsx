@@ -52,6 +52,19 @@ vi.mock("@/utils/toast", () => ({
 }));
 
 vi.mock("@/components/ui/select", () => {
+  const textContent = (node: ReactNode): string => {
+    if (typeof node === "string" || typeof node === "number") return String(node);
+    if (Array.isArray(node)) {
+      return node.map(textContent).filter(Boolean).join(" ");
+    }
+    if (node && typeof node === "object" && "props" in node) {
+      return textContent(
+        (node as { props?: { children?: ReactNode } }).props?.children,
+      );
+    }
+    return "";
+  };
+
   const Select = ({
     value,
     onValueChange,
@@ -106,7 +119,7 @@ vi.mock("@/components/ui/select", () => {
     [key: string]: unknown;
   }) => (
     <option value={value} disabled={disabled} {...props}>
-      {children}
+      {textContent(children)}
     </option>
   );
 
@@ -179,7 +192,8 @@ describe("CreateOrganizationOnboardingScreen", () => {
     expect(schoolOption).not.toBeDisabled();
     expect(communityOption).toBeDisabled();
     expect(privateOption).toBeDisabled();
-    expect(screen.getAllByText("Již brzy")).toHaveLength(2);
+    expect(communityOption).toHaveTextContent("Již brzy");
+    expect(privateOption).toHaveTextContent("Již brzy");
   });
 
   it("submits the supported school option", async () => {
