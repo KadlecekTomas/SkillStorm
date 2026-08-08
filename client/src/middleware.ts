@@ -8,32 +8,58 @@ const LOGIN_PATH = "/login";
 const APP_PREFIX = "/app";
 const JOIN_PREFIX = "/join";
 
-function redirectToLogin(request: NextRequest, pathname: string, param: "from" | "redirect"): NextResponse {
-  const login = new URL(LOGIN_PATH, request.url);
+/**
+ * Build redirects from the browser-visible Host header instead of request.url.
+ * Next's dev/proxy layer may normalize request.url to an internal hostname
+ * (for example localhost while the browser uses 127.0.0.1). Switching hosts
+ * would drop host-only auth cookies during a redirect.
+ */
+function sameOriginUrl(request: NextRequest, pathname: string): URL {
+  const host =
+    request.headers.get("host")?.trim() ||
+    request.headers.get("x-forwarded-host")?.split(",")[0]?.trim() ||
+    request.nextUrl.host;
+  const forwardedProto = request.headers
+    .get("x-forwarded-proto")
+    ?.split(",")[0]
+    ?.trim()
+    .toLowerCase();
+  const protocol =
+    forwardedProto === "http" || forwardedProto === "https"
+      ? forwardedProto
+      : request.nextUrl.protocol.replace(/:$/, "");
+
+  return new URL(pathname, `${protocol}://${host}`);
+}
+
+function redirectToLogin(
+  request: NextRequest,
+  pathname: string,
+  param: "from" | "redirect",
+): NextResponse {
+  const login = sameOriginUrl(request, LOGIN_PATH);
   login.searchParams.set(param, pathname);
   return NextResponse.redirect(login);
 }
 
-/** Origin-relative redirect: preserves the browser host and therefore host-only auth cookies. */
-function redirectRelative(pathname: string): NextResponse {
-  return new NextResponse(null, {
-    status: 307,
-    headers: { Location: pathname },
-  });
-}
-
-/** Redirect legacy /dashboard* to /app* for bookmarks. */
-function redirectDashboardToApp(pathname: string): NextResponse | null {
+/** Redirect legacy /dashboard* to /app* for old bookmarks. */
+function redirectDashboardToApp(
+  request: NextRequest,
+  pathname: string,
+): NextResponse | null {
   if (pathname === "/dashboard" || pathname.startsWith("/dashboard/")) {
-    const newPath = pathname === "/dashboard" ? "/app" : pathname.replace(/^\/dashboard/, "/app");
-    return redirectRelative(newPath);
+    const newPath =
+      pathname === "/dashboard"
+        ? "/app"
+        : pathname.replace(/^\/dashboard/, "/app");
+    return NextResponse.redirect(sameOriginUrl(request, newPath));
   }
   return null;
 }
 
 /**
  * Server-side gate for app and join routes:
- * - /dashboard* → redirect to /app* (legacy bookmarks) without changing origin.
+ * - /dashboard* → redirect to /app* (legacy bookmarks) on the same browser-visible origin.
  * - Unauthenticated on /app* → redirect to /login?from=pathname.
  * - Unauthenticated on /join* → redirect to /login?redirect=fullUrl (join has priority; after login user continues join flow).
  * - Role-based access to /app/platform* is enforced client-side (isPlatformAdmin).
@@ -42,7 +68,7 @@ export function middleware(request: NextRequest): NextResponse {
   const url = request.nextUrl;
   const { pathname } = url;
 
-  const legacyRedirect = redirectDashboardToApp(pathname);
+  const legacyRedirect = redirectDashboardToApp(request, pathname);
   if (legacyRedirect) return legacyRedirect;
 
   const hasAuthCookie = request.cookies.get(AUTH_COOKIE)?.value != null;
@@ -68,5 +94,12 @@ export function middleware(request: NextRequest): NextResponse {
 }
 
 export const config = {
-  matcher: ["/dashboard", "/dashboard/:path*", "/app", "/app/:path*", "/join", "/join/:path*"],
+  matcher: [
+    "/dashboard",
+    "/dashboard/:path*",
+    "/app",
+    "/app/:path*",
+    "/join",
+    "/join/:path*",
+  ],
 };
