@@ -19,6 +19,14 @@ function replaceOnce(input, needle, replacement, label) {
   return input.replace(needle, replacement);
 }
 
+function replaceExactCount(input, needle, replacement, expected, label) {
+  const actual = input.split(needle).length - 1;
+  if (actual !== expected) {
+    throw new Error(`Unexpected marker count for ${label}: expected ${expected}, got ${actual}`);
+  }
+  return input.split(needle).join(replacement);
+}
+
 let service = fs.readFileSync(servicePath, 'utf8');
 service = replaceOnce(
   service,
@@ -34,7 +42,13 @@ service = replaceOnce(
   `                description: outcomeDto.description?.trim() ?? null,\n                nodeGrade: outcomeDto.nodeGrade ?? null,`,
   'framework outcome nullable fields',
 );
-service = replaceOnce(service, 'sourceAnchor: outcomeDto.sourceAnchor?.trim(),', 'sourceAnchor: outcomeDto.sourceAnchor?.trim() ?? null,', 'framework outcome source anchor');
+service = replaceExactCount(
+  service,
+  'sourceAnchor: outcomeDto.sourceAnchor?.trim(),',
+  'sourceAnchor: outcomeDto.sourceAnchor?.trim() ?? null,',
+  2,
+  'framework + school outcome source anchors',
+);
 service = replaceOnce(service, 'sourceFileId: dto.sourceFileId?.trim(),', 'sourceFileId: dto.sourceFileId?.trim() ?? null,', 'school source file');
 service = replaceOnce(service, 'sourceDocumentName: dto.sourceDocumentName?.trim(),', 'sourceDocumentName: dto.sourceDocumentName?.trim() ?? null,', 'school source document');
 service = replaceOnce(service, 'code: subjectDto.code?.trim(),', 'code: subjectDto.code?.trim() ?? null,', 'school subject code');
@@ -42,7 +56,6 @@ service = replaceOnce(service, 'shortTitle: subjectDto.shortTitle?.trim(),', 'sh
 service = replaceOnce(service, 'externalCode: outcomeDto.externalCode?.trim(),', 'externalCode: outcomeDto.externalCode?.trim() ?? null,', 'school outcome code');
 service = replaceOnce(service, 'description: outcomeDto.description?.trim(),', 'description: outcomeDto.description?.trim() ?? null,', 'school outcome description');
 service = replaceOnce(service, 'orderIndex: outcomeDto.orderIndex,', 'orderIndex: outcomeDto.orderIndex ?? null,', 'school outcome order');
-service = replaceOnce(service, 'sourceAnchor: outcomeDto.sourceAnchor?.trim(),', 'sourceAnchor: outcomeDto.sourceAnchor?.trim() ?? null,', 'school outcome source anchor');
 service = replaceOnce(
   service,
   `        grade: dto.classSectionId ? null : dto.grade,\n        classSectionId: dto.classSectionId,\n        validFrom: optionalDate(dto.validFrom),\n        validTo: optionalDate(dto.validTo),`,
