@@ -91,7 +91,7 @@ function errorMessage(error: unknown): string {
 
 async function settle(page: Page): Promise<void> {
   await page.waitForLoadState('domcontentloaded');
-  await page.waitForLoadState('networkidle', { timeout: 2_500 }).catch(() => undefined);
+  await page.waitForLoadState('networkidle', { timeout: 5_000 }).catch(() => undefined);
   await page.waitForTimeout(250);
 }
 
@@ -117,6 +117,13 @@ async function assertUxContract(
     expect(bodyText).not.toContain('ROLE');
   }
 
+  if (audience === 'superadmin' && key === 'platform-overview') {
+    await expect(page.getByRole('heading', { name: 'Přehled platformy' })).toBeVisible();
+    expect(bodyText).not.toContain('Platform overview');
+    expect(bodyText).not.toContain('At Risk');
+    expect(bodyText).not.toContain('Total Organizations');
+  }
+
   if (audience === 'superadmin' && key === 'platform-users') {
     await expect(page.getByRole('heading', { name: 'Uživatelé' }).last()).toBeVisible();
     expect(bodyText).not.toContain('Global Users');
@@ -125,6 +132,13 @@ async function assertUxContract(
   if (audience === 'superadmin' && key === 'platform-catalog') {
     await expect(page.getByRole('heading', { name: 'Katalog obsahu' })).toBeVisible();
     expect(bodyText).not.toContain('Catalog Management');
+  }
+
+  if (audience === 'superadmin' && key === 'platform-support') {
+    await expect(page.getByRole('heading', { name: 'Podpora požadavků' })).toBeVisible();
+    expect(bodyText).not.toContain('Support inbox');
+    expect(bodyText).not.toContain('No tickets match the current filters.');
+    expect(bodyText).not.toContain('Refresh');
   }
 
   if (
@@ -180,6 +194,12 @@ async function captureRoute(
 
     const body = page.locator('body');
     await expect(body).toBeVisible();
+    await expect
+      .poll(async () => (await body.innerText()).trim().length, {
+        timeout: 15_000,
+        message: `${audience}/${key} finishes loading meaningful content`,
+      })
+      .toBeGreaterThan(20);
     const bodyText = (await body.innerText()).trim();
     const rootOverflow = await page.evaluate(
       () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
