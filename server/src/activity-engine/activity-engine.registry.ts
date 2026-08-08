@@ -128,6 +128,7 @@ export type ActivityEngineCompatibilityInput = {
   supportedModes: ActivityDeliveryMode[];
   recommendedMode: ActivityDeliveryMode;
   primitives: string[];
+  requiredCapabilities?: string[];
   config: unknown;
 };
 
@@ -192,6 +193,28 @@ export function validateActivityEngineCompatibility(
     throw new BadRequestException({
       code: 'ACTIVITY_ENGINE_PRIMITIVE_UNSUPPORTED',
       unsupportedPrimitives,
+    });
+  }
+
+  const requiredCapabilities = [...new Set(input.requiredCapabilities ?? [])];
+  const unknownCapabilities = requiredCapabilities.filter(
+    (capability) =>
+      !(ENGINE_CAPABILITIES as readonly string[]).includes(capability),
+  );
+  if (unknownCapabilities.length > 0) {
+    throw new BadRequestException({
+      code: 'ACTIVITY_ENGINE_CAPABILITY_UNKNOWN',
+      unknownCapabilities,
+    });
+  }
+  const unsupportedCapabilities = requiredCapabilities.filter(
+    (capability) =>
+      !engine.capabilities.includes(capability as EngineCapability),
+  );
+  if (unsupportedCapabilities.length > 0) {
+    throw new BadRequestException({
+      code: 'ACTIVITY_ENGINE_CAPABILITY_UNSUPPORTED',
+      unsupportedCapabilities,
     });
   }
 
