@@ -52,7 +52,6 @@ export const CardTitle = ({
     {...props}
   />
 );
-CardTitle.displayName = "CardTitle";
 
 export const CardContent = ({
   className,
