@@ -17,7 +17,7 @@ Tento adresář je detailní pedagogická vrstva pod:
 - `../SCHOOL-CURRICULUM-COVERAGE.md` — školní ŠVP/coverage pohled,
 - `../PRODUCTION-CONTRACT.md` — runtime a production invarianty,
 - `../CURRICULUM-DATA-CONTRACT.md` — curriculum/versioning/evidence data contract,
-- `SUBJECT-BLUEPRINT-STANDARD.md` — závazná struktura těchto blueprintů.
+- [`SUBJECT-BLUEPRINT-STANDARD.md`](./SUBJECT-BLUEPRINT-STANDARD.md) — závazná struktura těchto blueprintů.
 
 Blueprinty nejsou státní osnovy. Revidovaný RVP ZV pracuje s očekávanými výsledky učení a škola je rozpracovává do vlastního ŠVP. Ročníkové osy v těchto dokumentech jsou proto **SkillStorm recommended progression** a musí být při produkčním nasazení mapovány na konkrétní curriculum version a ŠVP školy.
 
@@ -121,7 +121,7 @@ Všechny blueprinty v tomto adresáři mají status `VISION / APPROVED`. To znam
 - produktový a pedagogický směr je schválen jako cíl;
 - nejde o tvrzení, že engine už existuje;
 - před implementací konkrétního vertical slice se provede OVU/ŠVP mapping a subject-methodology review;
-- před produkčním release se použijí gates z `SUBJECT-BLUEPRINT-STANDARD.md` a `../PRODUCTION-CONTRACT.md`.
+- před produkčním release se použijí gates z [`SUBJECT-BLUEPRINT-STANDARD.md`](./SUBJECT-BLUEPRINT-STANDARD.md) a `../PRODUCTION-CONTRACT.md`.
 
 Každý z 18 blueprintů obsahuje recommended progression, lesson archetypes, konkrétní experience catalog, delivery-mode strategii, teacher orchestration, learning evidence, difficulty × scaffolding, SVP/accessibility, authoring/engine pravidla, safety/privacy/licensing, nejméně dvě hero lessons, MVP vertical slice, non-goals, production acceptance criteria, pilot metrics a content coverage workflow.
 
