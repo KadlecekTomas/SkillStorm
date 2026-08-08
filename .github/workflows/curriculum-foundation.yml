@@ -6,6 +6,9 @@ on:
       - 'server/prisma/schema.prisma'
       - 'server/prisma/migrations/**'
       - 'server/src/curriculum/**'
+      - 'server/src/audit/audit-metadata.policy.ts'
+      - 'server/src/audit/audit-metadata.sanitize.ts'
+      - 'server/src/audit/audit-metadata.sanitize.spec.ts'
       - 'server/test/e2e/curriculum-foundation.e2e-spec.ts'
       - '.github/workflows/curriculum-foundation.yml'
   push:
@@ -14,6 +17,9 @@ on:
       - 'server/prisma/schema.prisma'
       - 'server/prisma/migrations/**'
       - 'server/src/curriculum/**'
+      - 'server/src/audit/audit-metadata.policy.ts'
+      - 'server/src/audit/audit-metadata.sanitize.ts'
+      - 'server/src/audit/audit-metadata.sanitize.spec.ts'
       - 'server/test/e2e/curriculum-foundation.e2e-spec.ts'
       - '.github/workflows/curriculum-foundation.yml'
 
@@ -75,9 +81,9 @@ jobs:
         working-directory: server
         run: npx prisma migrate deploy
 
-      - name: Run curriculum domain invariants
+      - name: Run curriculum and audit provenance unit invariants
         working-directory: server
-        run: npm test -- curriculum-domain.spec.ts --runInBand
+        run: npm test -- curriculum-domain.spec.ts audit-metadata.sanitize.spec.ts --runInBand
 
       - name: Run curriculum tenant and immutability E2E
         working-directory: server
