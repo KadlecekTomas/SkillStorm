@@ -178,7 +178,7 @@ test.describe('school people management', () => {
           response.url().includes(`/students/${studentId}/profile`) &&
           response.request().method() === 'PATCH',
       );
-      await page.getByRole('button', { name: 'Uložit změny' }).click();
+      await editor.getByRole('button', { name: 'Uložit', exact: true }).click();
       expect((await patchResponse).status()).toBeLessThan(400);
 
       const readBackResponse = await page.request.get(`/api/students/${studentId}`);

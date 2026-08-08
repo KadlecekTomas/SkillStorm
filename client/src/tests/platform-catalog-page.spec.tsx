@@ -230,20 +230,20 @@ describe("Platform catalog page", () => {
   it("renders the page", async () => {
     render(<PlatformCatalogPage />);
 
-    expect(await screen.findByText("Catalog Management")).toBeInTheDocument();
+    expect(await screen.findByText("Katalog obsahu")).toBeInTheDocument();
     expect(await screen.findByText("Mathematics")).toBeInTheDocument();
   });
 
   it("creates a subject", async () => {
     render(<PlatformCatalogPage />);
 
-    fireEvent.change(await screen.findByLabelText("Subject code"), {
+    fireEvent.change(await screen.findByLabelText("Kód předmětu"), {
       target: { value: "eng" },
     });
-    fireEvent.change(screen.getByLabelText("Subject name"), {
+    fireEvent.change(screen.getByLabelText("Název předmětu"), {
       target: { value: "English" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Create subject" }));
+    fireEvent.click(screen.getByRole("button", { name: "Přidat předmět" }));
 
     await waitFor(() =>
       expect(httpClient.post).toHaveBeenCalledWith(
@@ -263,8 +263,8 @@ describe("Platform catalog page", () => {
     const user = userEvent.setup();
     render(<PlatformCatalogPage />);
 
-    await user.click(screen.getByRole("tab", { name: "Topics" }));
-    fireEvent.change(await screen.findByLabelText("Search topics"), {
+    await user.click(screen.getByRole("tab", { name: "Témata" }));
+    fireEvent.change(await screen.findByLabelText("Hledat témata"), {
       target: { value: "plant" },
     });
 
@@ -284,19 +284,19 @@ describe("Platform catalog page", () => {
     const user = userEvent.setup();
     render(<PlatformCatalogPage />);
 
-    await user.click(screen.getByRole("tab", { name: "Topics" }));
+    await user.click(screen.getByRole("tab", { name: "Témata" }));
     await user.click(
       await screen
-        .findAllByRole("button", { name: "Edit" })
+        .findAllByRole("button", { name: "Upravit" })
         .then((buttons) => buttons[0]!),
     );
-    fireEvent.change(screen.getByLabelText("Edit topic Fractions"), {
+    fireEvent.change(screen.getByLabelText("Upravit téma Fractions"), {
       target: { value: "Advanced Fractions" },
     });
-    fireEvent.change(screen.getByLabelText("Edit order Fractions"), {
+    fireEvent.change(screen.getByLabelText("Upravit pořadí Fractions"), {
       target: { value: "7" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "Uložit" }));
 
     await waitFor(() =>
       expect(httpClient.patch).toHaveBeenCalledWith(
@@ -315,7 +315,7 @@ describe("Platform catalog page", () => {
   it("toggles subject active state", async () => {
     render(<PlatformCatalogPage />);
 
-    const toggle = await screen.findByLabelText("Toggle Mathematics");
+    const toggle = await screen.findByLabelText("Aktivita Mathematics");
     fireEvent.click(toggle);
 
     await waitFor(() =>

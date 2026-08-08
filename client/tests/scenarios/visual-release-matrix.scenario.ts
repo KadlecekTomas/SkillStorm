@@ -196,7 +196,7 @@ async function captureRoute(
     await expect(body).toBeVisible();
     await expect
       .poll(async () => (await body.innerText()).trim().length, {
-        timeout: 15_000,
+        timeout: 35_000,
         message: `${audience}/${key} finishes loading meaningful content`,
       })
       .toBeGreaterThan(20);

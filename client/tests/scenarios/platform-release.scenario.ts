@@ -115,6 +115,6 @@ test.describe('whole-app release — platform workspace', () => {
     const { page } = await asRole('director');
     await page.goto('/app/platform', { waitUntil: 'commit' });
     await expect(page).toHaveURL(/\/app(?:\?.*)?$/, { timeout: 15_000 });
-    await expect(platformHeader(page)).toHaveCount(0);
+    await expect(page.locator('a[href^="/app/platform"]')).toHaveCount(0);
   });
 });
