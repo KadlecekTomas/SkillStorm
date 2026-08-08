@@ -1,0 +1,42 @@
+name: Curriculum Dollar Quote Repair
+
+on:
+  push:
+    branches:
+      - agent/curriculum-foundation-d1
+    paths:
+      - scripts/internal/repair-curriculum-dollar-quotes.mjs
+      - .github/workflows/curriculum-dollar-quote-repair.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: agent/curriculum-foundation-d1
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Repair exact delimiters
+        run: node scripts/internal/repair-curriculum-dollar-quotes.mjs
+      - name: Validate repair
+        run: |
+          git diff --check
+          test ! -f scripts/internal/repair-curriculum-dollar-quotes.mjs
+          test ! -f .github/workflows/curriculum-dollar-quote-repair.yml
+          test "$(grep -c 'RETURNS TRIGGER AS \$\$' server/prisma/migrations/20260809005500_curriculum_foundation_d1/migration.sql)" -ge 8
+          ! grep -q 'RETURNS TRIGGER AS \$$' server/prisma/migrations/20260809005500_curriculum_foundation_d1/migration.sql
+      - name: Commit production-only repair
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix(curriculum): repair migration function delimiters"
+          git push origin HEAD:agent/curriculum-foundation-d1
