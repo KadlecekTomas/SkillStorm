@@ -1,116 +1,159 @@
-# Kampaně — rozhodnutí mimo plán (noční log)
+# SkillStorm — Campaigns Architecture Decision Record
 
-Formát: každé rozhodnutí má možnosti, výběr a důvod. Ráno projít.
+> **Status:** `HISTORICAL / ADR`  
+> **Owner:** Engineering + Product  
+> **Decision period:** July 2026  
+> **Last reviewed:** 2026-08-07  
+> **Current contract:** [`campaigns.md`](./campaigns.md)  
+> **Authority rule:** this file preserves why the first campaign implementation was shaped as it was. It is not an active backlog, bug list or higher-precedence specification.
 
-## R7 — Oprava wipe scénářového seedu (pre-existing, odhaleno kampaněmi)
+---
 
-`scenarios-e2e.seed.ts` wipe nemazal live sessions; `LiveSession→Test` je
-RESTRICT, takže `test.deleteMany` padal při KAŽDÉM druhém lokálním běhu
-scénářů (poprvé to odhalil kampaňový scénář — bleskovkové scénáře běžely
-dosud vždy nad čerstvou DB). Doplněny delete pro campaign_step_unlocks,
-campaign_progresses, class_partak_xp_events, class_partaks, live_sessions
-(před tests). CI to nevidělo, protože tam se DB zakládá vždy čistá.
+## Purpose
 
-## Otevřené otázky pro Tomáše (ráno)
+The original implementation produced a working overnight decision log containing architectural choices, temporary questions and implementation observations.
 
-1. **Obsah je draft** — texty Výpravy (7–9 let) i Archivu projít; zejména
-   tón K3 a epilogue prompt.
-2. **K1 fragment „datum z příštího týdne"** — teď literál („zápis
-   z pondělí — příští týden"). Chceme šablonovou proměnnou s reálným datem
-   (např. `{{nextMonday}}` doplněné na serveru)? Rozhodl jsem se ji zatím
-   nezavádět (obsah = statická data).
-3. **Vstup na kampaňovou projekci** — board je zatím dosažitelný jen přes
-   setup dialog (po bleskovce) a přímou URL. Přidat kartu „Kampaně" na
-   dashboard učitele / detail třídy?
-4. **Učitel s více homerooms**: `getMyStructure` vrací jen PRVNÍ homeroom
-   (bucket), další třídy bez úvazku ve struktuře nejsou → dialog Bleskovky
-   je nenabídne. Obešel jsem to v seedech úvazkem (TeacherClassSection),
-   ale je to kandidát na samostatnou opravu.
-5. **„Hrát znovu"** — dokončená kampaň se pro tutéž třídu nedá restartovat
-   (unique [classSectionId, campaignId]). Příští školní rok je to nová
-   ClassSection, takže tam problém není. OK?
-6. **Vzkaz předchůdce se snapshotuje při STARTU kampaně** — třída, která
-   začala dřív, než předchůdce vzkaz nahrál, ho nikdy nedostane. Přijatelné
-   (jednodušší, deterministické), nebo dohledávat i později?
-7. **Epilogue jen u Mise** — Výprava vzkaz budoucí třídě nemá (záměr:
-   smyčka patří k příběhu Archivu). Chceme obdobu i pro Výpravu?
+Those mixed concerns are separated now:
 
-## R1 — Campaign není DB tabulka, ale soubor v content registry
+- **current behavior/invariants** → [`campaigns.md`](./campaigns.md);
+- **implementation order** → [`roadmap/master.md`](./roadmap/master.md);
+- **open work** → current issues/specs/roadmap, not this file;
+- **historical rationale** → this ADR.
 
-**Možnosti:**
-- (a) DB model `Campaign` seedovaný/synchronizovaný z JSON souborů
-- (b) Žádná DB tabulka — `content/campaigns/*.json` je jediný zdroj pravdy,
-  server je načte při bootu (zod validace, fail-fast), `CampaignProgress.campaignId`
-  je slug z JSON
+Questions that were unresolved in July 2026 must not be treated as current defects or requirements merely because they remain visible in Git history.
 
-**Výběr: (b).** „Přidat kampaň = přidat JSON" platí doslova — žádná migrace,
-žádný seed, žádná synchronizační logika, obsah je PR-reviewovatelný diff.
-Referenční integrita se řeší validací proti registru v service vrstvě
-(neexistující slug → 404 při startu kampaně; progress s odstraněným obsahem
-se zobrazí jako „archivní" místo pádu).
+---
 
-**Dopad:** JSON musí být dostupný i při bootu z `dist` (CI past z PR #13) —
-soubory jdou do `server/content/campaigns/` a `nest-cli.json` je kopíruje
-jako asset do dist.
+# ADR-1 — Campaign definitions live in the content registry
 
-## R2 — Sbírka samolepek/fragmentů = tabulka odemčení kroků, ne nový model
+### Decision
 
-**Možnosti:**
-- (a) Nový model `StickerCollection`
-- (b) Pole (JSON array) na `CampaignProgress`
-- (c) Tabulka `CampaignStepUnlock` (1 řádek = 1 odemčená zastávka/kapitola)
-  — samolepka i fragment jsou jen obsahová interpretace odemčeného kroku,
-  assety žijí v campaign JSON pod klíčem kroku
+Campaign definitions are repository content (`server/content/campaigns/*.json`) rather than mutable `Campaign` database rows.
 
-**Výběr: (c).** Jedna tabulka pokrývá oba formáty (Výprava: samolepka,
-Mise: fragment), nese `unlockedAt` timestampy, které zadání chce, a unikátní
-constrainty na ní jsou zároveň idempotenční kotva advance (viz R4).
-Sbírka je třídní (vazba přes progress → classSection), ne individuální —
-o dětech se neukládá nic, stejně jako v režimu B.
+### Rationale
 
-## R3 — Ukončení bleskovky v půlce kol
+- adding/editing narrative content can be code-reviewed as data;
+- startup schema validation catches malformed content;
+- no database migration is required merely to add narrative content;
+- persistent database tables can focus on runtime state/provenance.
 
-**Možnosti:**
-- (a) Zastávka se počítá jen při odehrání všech kol
-- (b) Zastávka se počítá při finish bez podmínek (i 0 kol)
-- (c) Zastávka se počítá při finish, pokud proběhlo ≥ 1 dokončené kolo
+### Consequence
 
-**Výběr: (c).** Důvody:
-- Měnou postupu je účast, ne výdrž — hodina může skončit dřív (zvonění,
-  požární poplach) a třída nesmí o dnešní krok přijít. Varianta (a) by
-  tlačila učitele dojíždět kola pod tlakem — proti duchu vertikály.
-- Odehraná kola se neztrácejí: `roundsPlayed` se snapshotuje na unlock
-  záznam (rekapitulace + kosmetika „síly signálu" v Misi).
-- Podmínka ≥ 1 kola blokuje prázdný spam (start + okamžitý finish bez
-  hraní) — to není trest za správnost, je to definice „odehrané bleskovky",
-  konzistentní s pravidlem „postup POUZE za odehraná kola/dokončené bleskovky".
+Stable campaign/step identifiers referenced by persisted progress become compatibility-sensitive. Meaning-changing edits require explicit versioning/migration rather than casual reordering/renaming.
 
-## R4 — Idempotence advance: unikátní constraint na sessionId
+---
 
-Advance běží uvnitř stávající finish transakce. Dvojitou ochranu dávají:
-- `updateMany where status=RUNNING` guard ve finish (existující) — finish
-  proběhne právě jednou,
-- `CampaignStepUnlock.sessionId @unique` — jedna session může odemknout
-  nejvýš jeden krok, i kdyby se advance kdy volal jinou cestou,
-- `@@unique([progressId, stepIndex])` — souběžné finishe dvou session téže
-  třídy se serializují přes P2002 + jeden retry s přečtenou pozicí.
+# ADR-2 — One unlock table represents campaign step history
 
-## R6 — Vzkaz minulé třídy: reveal pojistka (schváleno ráno 2026-07-17)
+### Decision
 
-Doplnění od Tomáše při schválení Bloku 1: `epilogueMessage` píše učitel
-dokončené kampaně, ale budoucí třídě se NIKDY nezobrazí automaticky.
-Model: přijímající `CampaignProgress` má `predecessorProgressId` (snapshot
-zdroje vzkazu při startu kampaně — nejnovější COMPLETED progress téže
-kampaně v téže org s neprázdným vzkazem, mimo vlastní třídu)
-a `predecessorMessageRevealedAt`. Kontrakt stejný jako u correctKey:
-- projekční/board endpoint vzkaz NEVRACÍ, dokud `revealedAt` není nastaven,
-- učitel budoucí třídy má teacher-only preview endpoint (přečte si ho první),
-- explicitní `POST .../predecessor-message/reveal` teprve vzkaz pustí na
-  projekci (idempotentní).
+A durable `CampaignStepUnlock`-style record represents one unlocked campaign step rather than adding separate persistence models for each visual collectible type.
 
-## R5 — Cílení kampaně podle ročníku, ne podle LiveAgeMode
+### Rationale
 
-`LiveAgeMode` (YOUNG ≤ 3. třída) nesedí na hranici 1./2. stupně (5./6. třída).
-Campaign JSON proto cílí rozsahem `targetGrades: { min, max }` nad enumem
-`SchoolGrade`; list endpoint filtruje podle `grade` třídy. Prezentační
-`ageMode` session zůstává nedotčený a nezávislý.
+The same durable event can be rendered differently according to campaign content:
+
+```text
+EXPEDITION -> sticker/stop
+MISSION    -> fragment/chapter
+```
+
+This keeps the data model focused on provenance and progression rather than presentation assets.
+
+---
+
+# ADR-3 — Participation, not completeness/correctness, advances a campaign
+
+### Decision
+
+A finished linked Live Session advances campaign progress when at least one round was actually played/completed according to the current service contract.
+
+### Rationale
+
+A lesson can end early for legitimate classroom reasons. Requiring every planned round would encourage teachers to rush merely to protect a game mechanic.
+
+Zero-play start/finish must not advance because that would make campaign progression trivially spammable.
+
+Correctness remains irrelevant to campaign progression.
+
+---
+
+# ADR-4 — Progress advancement is idempotent and serialized
+
+### Decision
+
+Campaign advancement is coupled to the Live Session finish transaction and protected by durable uniqueness/serialization mechanisms so one session cannot unlock more than one logical campaign step.
+
+### Rationale
+
+Browser retries, duplicate clicks and concurrent class/session operations are expected operating conditions, not exceptional corruption cases.
+
+The current implementation/tests are authoritative for exact lock and uniqueness mechanics.
+
+---
+
+# ADR-5 — Campaign targeting uses `SchoolGrade`, not presentation age mode
+
+### Decision
+
+Campaign content declares target grades separately from `LiveAgeMode`.
+
+### Rationale
+
+`LiveAgeMode` is a presentation choice; it does not model curriculum/grade suitability. The boundary between primary stages does not align exactly with presentation breakpoints.
+
+---
+
+# ADR-6 — Predecessor message requires explicit teacher reveal
+
+### Decision
+
+A message from a previously completed class/campaign is not automatically pushed to the next class projection.
+
+The receiving teacher must have an authorized preview path and explicitly reveal the message before it can appear on the board.
+
+### Rationale
+
+- avoids surprising/unreviewed user-generated content appearing on a shared classroom display;
+- preserves a teacher-controlled reveal boundary similar to solution reveal;
+- makes board state reconstructable and intentional.
+
+Any future expansion of cross-class messages requires a renewed moderation/privacy/content-safety review.
+
+---
+
+# Historical implementation observation — deterministic scenario seed cleanup
+
+The initial campaign work exposed that a repeated scenario seed cleanup could fail because Live Session/Campaign-related records still referenced tests.
+
+The seed cleanup order was subsequently expanded to remove dependent campaign/Live Session/ClassParták records before deleting source tests.
+
+This is retained only as historical rationale for dependency-aware deterministic test cleanup. Current seed scripts/tests, not this note, define today's cleanup behavior.
+
+---
+
+# Superseded overnight questions
+
+The original log included temporary questions such as:
+
+- whether campaign copy should use dynamic dates;
+- where a campaign projection entry point should appear;
+- how multiple homerooms should be surfaced;
+- whether completed campaigns should replay for the same class;
+- exact timing semantics for predecessor messages;
+- whether Expedition should gain a Mission-like epilogue.
+
+These are **not active requirements by virtue of appearing in this ADR**.
+
+If any becomes relevant, it must be reintroduced through a current issue/spec and reconciled with:
+
+- current implementation;
+- Master Roadmap priority;
+- classroom evidence;
+- privacy/security/accessibility contracts.
+
+---
+
+## Final invariant
+
+> **This ADR explains historical choices; it never overrides the current Campaigns contract, executable code/tests or the Master Roadmap.**

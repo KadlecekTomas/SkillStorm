@@ -1,151 +1,252 @@
-# Bleskovky (Live Sessions)
+# SkillStorm — Bleskovky (Live Sessions)
 
-Živá cvičení pro celou třídu na interaktivní tabuli. MVP je **režim B
-(`BOARD_ONLY`)**: vše běží na učitelově obrazovce, žáci odpovídají ve třídě
-nahlas/hlasováním a učitel zadává výsledek kola. Datový model a API jsou od
-prvního dne připravené na **režim A (`DEVICES`)** — žáci se připojí vlastními
-zařízeními přes kód (realtime, WebSockets). Režim A je **záměrně
-neimplementovaný**; tento dokument popisuje, kde jsou pro něj švy.
+> **Status:** `CURRENT / IMPLEMENTED`  
+> **Owner:** Product + Engineering  
+> **Last verified:** 2026-08-07  
+> **Scope:** current Live Sessions / Bleskovky implementation, primarily `BOARD_ONLY`; explicit seams for future `DEVICES` mode  
+> **Implementation authority:** current Prisma schema, `server/src/live-sessions/`, relevant controllers/DTOs and client Live Session components. Future Interactive Curriculum work must also obey [`interactive-curriculum/PRODUCTION-CONTRACT.md`](./interactive-curriculum/PRODUCTION-CONTRACT.md).
 
-Kromě kvízových kol existují **interaktivní kola řešená drag & dropem přímo
-na tabuli** (`MATCH_PAIRS` / `ORDER` / `SORT_BINS`) — kompletní popis vč.
-návodu na přidání dalšího typu viz
-[live-sessions-interactions.md](./live-sessions-interactions.md).
+---
 
-## Datový model
+## 0. Current implementation boundary
 
-- `LiveSession` — běh bleskovky: `hostId` (Membership učitele),
-  `organizationId`, volitelně `classSectionId` (kvůli třídnímu parťákovi),
-  `testId` (zdrojová sada = existující `Test`), `mode`, `status`, `ageMode`,
-  `countdownSec`.
-- `LiveSessionRound` — jedno kolo se **snapshotem otázky** (text, možnosti
-  A–D, správný klíč). Pozdější editace zdrojového testu běžící ani ukončenou
-  bleskovku neovlivní. `outcome` je soud kola — buď ruční (3 tlačítka), nebo
-  předvyplněný z hlasování (viz níže); učitelovo slovo je vždy finální.
-  `voteCounts` (`Json?`) jsou **anonymní agregáty hlasů z dotykové tabule**
-  (`{"A": 14, "B": 6}`), `votingStartedAt` označuje otevřenou fázi VOTING.
-- `LiveSessionParticipant` — **navrženo pro režim A, v režimu B se nikdy
-  nezapisuje** (viz GDPR níže).
-- `ClassPartak` + `ClassPartakXpEvent` — kolektivní parťák třídy.
+Bleskovky are live whole-class exercises for an interactive board.
 
-### Sada otázek = `Test`
+The current implemented product is primarily **mode B — `BOARD_ONLY`**:
 
-Bleskovka není nový typ obsahu. `Question` má povinnou vazbu na `Test` a celý
-builder nad ní stojí, takže „sada" je publikovaný test. Do kol se snapshotují
-jen kompatibilní otázky: `MULTIPLE_CHOICE` v single-módu (2–4 možnosti, právě
-jedna správná) a `TRUE_FALSE` (→ Pravda/Nepravda). `FILL_IN_THE_BLANK` a
-multi-select se přeskakují. Budoucí globální knihovna sad = samostatný krok
-(dnes jsou seedové sady org-scoped testy v demo organizaci).
+- the teacher controls the session from the shared display;
+- pupils answer aloud / collectively;
+- optional board voting stores only anonymous aggregates;
+- the teacher records or confirms the round result.
 
-## Stavový automat
+The data model contains seams for a future **mode A — `DEVICES`**, where pupils would join with their own devices and realtime transport. `DEVICES` is **not declared implemented by this document**.
 
+Interactive board rounds (`MATCH_PAIRS`, `ORDER`, `SORT_BINS`) are documented in [`live-sessions-interactions.md`](./live-sessions-interactions.md).
+
+### Architecture boundary
+
+Current Bleskovky can use an existing `Test`/`Question` set as source content. This is a compatibility choice for the implemented feature, **not** a rule that future simulations, Chem Lab, Map Lab, Audio Lab or Build-a-PC must be modeled as tests/questions. The future Activity/Lesson Experience layer is defined separately by the Interactive Curriculum contracts.
+
+---
+
+# 1. Current data model
+
+- `LiveSession` — one Bleskovka run: teacher/host membership, organization, optional class section, source test, mode/status, age mode and countdown configuration.
+- `LiveSessionRound` — one round with a **snapshot** of the source question. Later source-test edits do not retroactively change an active/finished session.
+- `LiveSessionParticipant` — model seam for future participant/device workflows; current `BOARD_ONLY` behavior must not create per-pupil participation records merely to represent shared-board use.
+- `ClassPartak` + `ClassPartakXpEvent` — collective class companion/progression records.
+
+Exact field names and relations are defined by the current Prisma schema.
+
+## Source set = `Test`
+
+For the current quiz path, a Bleskovka source set is a published `Test`. Only compatible questions are snapshotted into quiz rounds. Current compatibility includes single-answer multiple-choice and true/false paths; unsupported classic test formats are not silently converted.
+
+Interactive-only question types have their own publish/assignability contract described in the interaction document.
+
+---
+
+# 2. Session state machine
+
+Current high-level state:
+
+```text
+DRAFT --start--> RUNNING --finish--> FINISHED
 ```
-DRAFT ──POST :id/start──▶ RUNNING ──POST :id/finish──▶ FINISHED
+
+Important implementation invariants:
+
+- `start` creates round snapshots transactionally and guards against duplicate concurrent transition;
+- `finish` is atomic/idempotency-aware according to the current service contract;
+- repeated invalid state transitions fail explicitly rather than silently mutating history.
+
+---
+
+# 3. Quiz round flow
+
+Voting is optional:
+
+```text
+QUESTION --start voting--> VOTING --reveal--> REVEAL
+    \---------------------------------------> REVEAL
+              skip voting / teacher reveal
 ```
 
-- `start` snapshotuje kola v transakci; `updateMany` guard (stejný vzor jako
-  publish testu) drží idempotenci při souběhu.
-- `finish` atomicky přepne stav a připíše XP; druhé volání → 409.
+Current behavior:
 
-### Fáze kola (hlasování je volitelné)
+- voting can be opened only for a valid active round;
+- votes are anonymous aggregate deltas by answer key;
+- aggregate counts cannot be driven below zero;
+- votes are accepted only during the voting phase;
+- reveal persists the reveal boundary and may derive a suggested aggregate outcome;
+- teacher may override the suggested aggregate outcome through the current outcome flow.
 
+Current aggregate outcome thresholds are implementation constants. Code/tests have precedence over prose if the threshold values change.
+
+### XP invariant
+
+Anonymous voting distribution and correctness must not alter ClassParták XP. XP represents participation/played-session mechanics according to the current ClassParták contract, not public class performance ranking.
+
+---
+
+# 4. Solution-secrecy contract
+
+**Correct answers/solutions must not leave the server before the reveal boundary.**
+
+For quiz rounds:
+
+- pre-reveal session projection excludes `correctKeySnapshot`;
+- reveal can return/persist the correct key;
+- after reveal, refresh may include already-revealed solution data so the board can reconstruct the current state.
+
+This is a security/product invariant for a shared display: network inspection on the classroom device must not expose answers for unrevealed rounds.
+
+Any future WebSocket/device implementation must preserve the same semantic boundary: question/event before reveal contains no solution; reveal is a separate authorized event.
+
+---
+
+# 5. Authorization and tenant isolation
+
+Current Bleskovka endpoints are teacher-authorized through the existing RBAC model and include host/session ownership constraints.
+
+Required behavior:
+
+- cross-organization access must not reveal resource existence;
+- another teacher in the same organization must not gain host control unless explicitly allowed by a future reviewed capability;
+- client-side route hiding is never authorization;
+- session, class and source-test organization relationships must be checked server-side.
+
+Current board projection is teacher-authenticated. There is no public pupil URL required for the implemented `BOARD_ONLY` flow.
+
+---
+
+# 6. Privacy contract for `BOARD_ONLY`
+
+`BOARD_ONLY` is intentionally class-aggregate rather than pupil-tracking.
+
+Current shared-board voting stores only anonymous aggregate counts such as:
+
+```json
+{"A":14,"B":6}
 ```
-otázka ──[Hlasujeme!]──▶ VOTING ──[Odhalit]──▶ REVEAL (graf + auto-outcome)
-   └──[Přeskočit hlasování]──▶ REVEAL (ruční outcome, 3 tlačítka)
+
+The implemented `BOARD_ONLY` path must not create:
+
+- per-pupil answers;
+- pupil identity linkage for board votes;
+- pupil performance ranking;
+- hidden individual behavior profiles from shared-board interaction.
+
+`LiveSessionParticipant` existing in the schema does not authorize writing pupil records in `BOARD_ONLY`.
+
+If future `DEVICES` participation is implemented, its identity, nickname, retention and evidence behavior requires an explicit privacy/security review under the Interactive Curriculum Production Contract.
+
+---
+
+# 7. ClassParták invariant
+
+The current ClassParták path rewards **participation**, not correctness.
+
+Current conceptual sources include:
+
+- played round;
+- finished session.
+
+The exact XP constants/stage formula are implementation details defined in current code/tests. Do not use them as pedagogical achievement scores.
+
+### No class ranking
+
+The product must not expose public or director-facing class league tables based on Bleskovka/ClassParták performance merely because aggregate data exists.
+
+---
+
+# 8. Age modes
+
+Current Live Sessions support age/presentation modes including:
+
+```text
+YOUNG
+MIDDLE
+SENIOR
 ```
 
-- `POST :id/rounds/:roundId/voting` otevře fázi VOTING (idempotentní; po
-  revealu → 409 `ROUND_ALREADY_REVEALED`).
-- `POST :id/rounds/:roundId/votes` (`{key, delta: 1 | -1}`) inkrementuje
-  agregát — atomicky v SQL, klampované na 0. Přijímá se **pouze** ve fázi
-  VOTING, jinak 409 `ROUND_NOT_VOTING`. Odpověď nikdy neobsahuje správný klíč.
-- `reveal` u kola s hlasy spočítá **auto-outcome**: podíl hlasů pro správnou
-  odpověď ≥ 2/3 → `MOSTLY_CORRECT`, ≤ 1/3 → `MOSTLY_WRONG`, jinak `SPLIT`
-  (prahy = konstanty `VOTE_CORRECT_MIN_SHARE` / `VOTE_WRONG_MAX_SHARE`,
-  celočíselné srovnání — žádné floaty). Auto-outcome se rovnou persistuje
-  (kolo je odehrané); učitel ho může jedním klepnutím přepsat přes stávající
-  `outcome` endpoint — jeho slovo je finální.
-- **Hlasy nikdy nevstupují do XP, kampaní ani advance** — `finish` počítá jen
-  `completedAt`-kola, stejně jako dřív (kryto e2e testem: opačné poměry hlasů
-  → identická XP delta).
+They change presentation density/tone and classroom pacing defaults; they must not silently change curriculum claims, stored evidence meaning or authorization.
 
-## Bezpečnostní kontrakt projekce (platí i pro režim A)
+The initial mode can be derived from class grade and teacher-overridden where the current UI permits. Unknown/unsupported contexts must use the implementation's explicit safe fallback rather than an accidental enum/string default.
 
-**`correctKeySnapshot` nikdy neopouští server před revealem.** Projekce běží
-na sdíleném/školním zařízení — network tab nesmí prozradit odpovědi budoucích
-kol. `GET /live-sessions/:id` vrací kola bez správného klíče;
-`POST :id/rounds/:roundId/reveal` uloží `revealedAt` a klíč vrátí. Po revealu
-už projekční GET klíč u daného kola obsahuje (kvůli refreshi uprostřed hodiny).
-V režimu A bude tentýž kontrakt platit pro websocket eventy: klientům se
-otázka pošle bez správné odpovědi, reveal je samostatný event.
+---
 
-RBAC: všechny endpointy jsou TEACHER+ (`CREATE_TEST`) a **host-only** — cizí
-organizace dostane 404 (existence se neprozrazuje), jiný učitel téže
-organizace 403. Projekce nevyžaduje žádné žákovské přihlášení, protože ji
-obsluhuje přihlášený učitel; žádná veřejná URL v režimu B neexistuje.
+# 9. Future `DEVICES` seams — not implemented capability
 
-## GDPR: proč režim B nezapisuje nic o dětech
+Existing architecture intentionally leaves expansion points for:
 
-Režim B je **anonymní na úrovni třídy** — záměr, ne nedodělek. Ukládá se jen
-agregovaný soud za kolo (`MOSTLY_CORRECT | SPLIT | MOSTLY_WRONG`) a volitelné
-**anonymní agregáty hlasů** (`voteCounts`, `{"A": 14, "B": 6}`) — děti chodí
-hlasovat k jedné sdílené tabuli, takže neexistuje žádná cesta, jak hlas
-spojit s osobou, a nic takového se ani neukládá. Hlasy slouží výhradně
-učitelovu přehledu; do XP ani odměn nevstupují. Žádné per-žák odpovědi,
-žádná identifikace dětí. Tabulka
-`LiveSessionParticipant` existuje jen jako schéma pro režim A; v režimu B do
-ní nevede žádná cesta kódu. Až režim A vznikne, `nickname` je přezdívka (ne
-jméno) a `membershipId` se vyplní jen u autentizovaného joinu.
+1. participant records / join-reconnect behavior;
+2. lobby between creation and start;
+3. realtime round-open/reveal/close events;
+4. per-participant semantic responses;
+5. explicit `DEVICES` mode orchestration.
 
-## Třídní parťák (ClassPartak)
+These are **future seams, not current promises**.
 
-- XP **pouze** za odehraná kola (`ROUND_PLAYED`, 10 XP/kolo) a dokončené
-  bleskovky (`SESSION_FINISHED`, 50 XP). Vynuceno konstrukcí: enum
-  `ClassPartakXpType` jiné zdroje nemá a `finish()` počítá jen
-  `completedAt`-kola; `outcome` do výpočtu nevstupuje (kryto e2e testem D).
-- Stage je lineární: `stage = 1 + floor(xp / 300)`.
-- **Žádné srovnávání tříd** v UI ani API (ani v ředitelské analytice) —
-  neexistuje list/ranking endpoint, jen `GET /live-sessions/class-partak/:id`
-  pro vlastní třídu. Stejné pravidlo jako u individuálního parťáka.
+When implemented, they must satisfy the newer Interactive Curriculum contracts for:
 
-## Věkové režimy projekce (`LiveAgeMode`)
+- semantic events and idempotency;
+- reconnect/resume;
+- tenant/RBAC enforcement;
+- minimal learner telemetry;
+- evidence semantics;
+- privacy/retention;
+- board/public projection safety;
+- accessibility.
 
-| Režim | Ročníky | Projekce |
-|---|---|---|
-| `YOUNG` | 1.–3. ZŠ | velké dlaždice, ikony, Parťák-blob komentuje, bez odpočtu defaultně |
-| `MIDDLE` | 4.–9. ZŠ | kompaktnější, odpočet zapnutý, parťák střízlivější |
-| `SENIOR` | SŠ (`HIGH_SCHOOL_YEAR_*`) | „quiz night" — jen emblém, tmavší tón, tempo + streak |
+Do not bolt pupil WebSockets directly onto the old board flow without that review.
 
-Default se odvozuje z `classSection.grade`; učitel může před spuštěním ručně
-přepnout (smíšené skupiny, semináře). **Fallback při neznámém ročníku je
-`MIDDLE`** — jiná volba než u testového `resolveAnsweringMode` (fallback
-`old`): test je vysokorizikový kontext, kde je bezpečnější selhat do plného
-režimu s časovačem a kontrolou; projekce bleskovky je nízkoriziková
-prezentační vrstva, kde je střední úroveň nejuniverzálnější a nic nerozbije.
+---
 
-## Švy pro režim A (kde se bude řezat)
+# 10. Current non-goals for `BOARD_ONLY`
 
-1. **Participant tabulka** — `LiveSessionParticipant` už existuje ve schématu
-   (join přes `joinToken`, reconnect přes `lastSeenAt`).
-2. **Lobby** — mezi `create` (DRAFT) a `start` (RUNNING) je dnes z pohledu
-   učitele jeden klik; v režimu A se sem vklíní lobby s join kódem. Stavový
-   automat se rozšíří jen o čekání v DRAFT, žádná migrace stavů.
-3. **Event flow kol** — dnes je zdrojem pravdy `GET` projekce + POST reveal/
-   outcome; v režimu A se tytéž přechody (round-open, reveal, round-closed)
-   publikují jako WS eventy (gateway vedle stávajícího SSE `EventsService`).
-   Reveal kontrakt (klíč až po revealu) zůstává.
-4. **Per-žák odpovědi** — přibude tabulka odpovědí vázaná na participanta;
-   `outcome` pak může být spočítaný návrh místo ručního soudu. XP pravidla
-   parťáka se NEMĚNÍ (žádné XP za správnost ani v režimu A).
-5. **`mode`** — `DEVICES` v enumu existuje; controller ho zatím nikdy
-   nenastaví.
+The implemented board mode intentionally has no requirement for:
 
-## Co režim B záměrně nemá
+- pupil join codes;
+- per-pupil websocket clients;
+- per-pupil answer history;
+- public ranking/leaderboards;
+- individual mastery claims from anonymous class votes.
 
-Žádné WebSockets, žádný join flow, žádné per-žák odpovědi, žádné žebříčky.
+Adding any of these is a product/data-contract change, not a cosmetic enhancement.
 
-## Seed
+---
 
-`npm run seed:live-sessions` (v `server/`) — 3 publikované ukázkové sady
-v demo organizaci: Vyjmenovaná slova (3. ZŠ), Zlomky (7. ZŠ), Literatura
-20. století (SŠ). Idempotentní.
+# 11. Seed/demo content
+
+The repository may contain Live Sessions seed/demo sets for development and scenarios.
+
+Seed content is **test/demo data**. It does not by itself establish curriculum alignment or production content quality. Curriculum claims require the review/mapping gates in the Interactive Curriculum contracts.
+
+Always inspect the current seed scripts/package scripts before relying on a specific demo command or fixed content set; executable scripts are authoritative over this prose.
+
+---
+
+# 12. Regression gate
+
+Changes to current Bleskovky must preserve tests for at least the affected invariants:
+
+```text
+[ ] tenant isolation / host authorization
+[ ] legal state transitions
+[ ] start/finish concurrency and idempotency
+[ ] pre-reveal solution secrecy
+[ ] reveal reconstruction after refresh
+[ ] voting accepted only in voting phase
+[ ] vote aggregate cannot go negative
+[ ] opposite correctness distributions do not change participation XP
+[ ] BOARD_ONLY creates no per-pupil response record
+[ ] interactive-round compatibility remains consistent with publish/assignability rules
+[ ] real-browser board flow remains usable on touch-sized targets
+```
+
+---
+
+## Final invariant
+
+> **Current Bleskovky are a safe shared-board classroom feature: teacher-controlled, tenant-scoped, solution-safe before reveal and aggregate-only for pupils. Future device participation must extend this contract deliberately; it must not be inferred from dormant schema fields or enum values.**

@@ -1,89 +1,321 @@
-# Jak pracujeme s Claudem (a Claude Code)
+# SkillStorm — AI-Assisted Development Workflow
 
-> Návod pro každého, kdo zadává práci na Eduta. Jedna stránka — přečti celou, pak zadávej.
-> Vzniklo destilací procesu, kterým prošel celý projekt: redesign, hardening, Bleskovky, kampaně, hlasování, interakce.
+> **Status:** `CURRENT / RUNBOOK`  
+> **Owner:** Engineering + Product  
+> **Last verified:** 2026-08-07  
+> **Scope:** how humans and coding agents collaborate on SkillStorm without bypassing architecture, security, Git or evidence gates  
+> **Authority:** this workflow is subordinate to [`README.md`](./README.md), [`roadmap/master.md`](./roadmap/master.md), security/privacy contracts and executable repository configuration.
 
 ---
 
-## Dělba práce
+## 0. Principle
 
-- **Ty (člověk):** vize, vkus, učitelská realita, produktová rozhodnutí, review na STOPech, čtení reportů.
-- **Claude (chat):** překlad vize do zadání s invarianty a kritérii, strategická oponentura, review návrhů modelů.
-- **Claude Code:** exekuce v repu — analýza, implementace, testy, reporty.
-- **Dokumenty v repu:** paměť. Co není v souboru, zítra neplatí.
+SkillStorm uses AI coding tools as implementation accelerators, not as sources of product authority.
 
-## Pravidlo #1 — Kontext žije v souborech, ne v promptech
+The workflow is intentionally **tool-neutral**. Claude Code, Codex or another capable coding agent may execute a task, but the repository contracts, current code, tests and reviewed decisions remain the source of truth.
 
-Session začíná odkazem, ne vysvětlováním:
+---
 
-> „Přečti si `docs/guardian-project.md`. Děláme Etapu B, krok 2. Pokračuj podle dokumentu."
+# 1. Division of responsibility
 
-Hierarchie pravdy (při konfliktu platí vyšší):
-1. `CLAUDE.md` — principy platné vždy (parťák neviditelný pro dospělé, XP nikdy za skóre, DB guard, git konvence)
-2. `docs/master-roadmap.md` — pořadí a priority
-3. Projektový dokument (`guardian-project.md`, `partak-2.0.md`) — detail projektu, STOPy, invarianty
-4. `docs/decisions/*` — proč jsme co rozhodli (zamítnuté věci se neotevírají z neznalosti)
-5. Zadání konkrétní session
+## Human owner
 
-## Pravidlo #2 — Anatomie dobrého zadání
+Owns:
 
+- product intent;
+- classroom reality;
+- irreversible architecture decisions;
+- privacy/security risk acceptance;
+- scope and prioritization;
+- review of evidence and user-visible behavior.
+
+## Reasoning/planning assistant
+
+May help:
+
+- translate a product goal into implementation invariants;
+- identify risks and dependencies;
+- draft acceptance criteria/test matrices;
+- challenge assumptions;
+- reconcile current code with documentation.
+
+It does not supersede repository truth.
+
+## Coding agent
+
+May:
+
+- inspect the repository;
+- implement a scoped change;
+- create migrations/tests;
+- run verification;
+- report findings;
+- prepare commits/PRs according to the task.
+
+It must not invent missing product authority or silently widen scope.
+
+---
+
+# 2. Context lives in versioned sources
+
+A new implementation session should start from current repository context, for example:
+
+```text
+Read docs/README.md.
+Follow docs/roadmap/master.md for priority.
+For Interactive Curriculum obey PRODUCTION-CONTRACT.md and CURRICULUM-DATA-CONTRACT.md.
+Inspect current code/schema/tests before changing anything.
 ```
-Cíl: (jedna věta)
-Branch: (název)
-Bloky/kroky: (očíslované, každý = commit + report)
-NEPORUŠITELNÁ PRAVIDLA: (invarianty explicitně, i "samozřejmé" —
-  autosave se nemění, correctKey neodchází před revealem,
-  destruktivní operace jen proti _test)
-KRITÉRIUM HOTOVOSTI: (co musí být zelené + JAKÝ DŮKAZ chci vidět)
-EXPLICITNĚ MIMO ROZSAH: (co NEZAČÍNAT — nejdůležitější sekce,
-  Claude je snaživý a rád "dodělá okolí")
+
+Do not rely on an old chat transcript, stale prompt or historical audit as the primary source of truth.
+
+### Current precedence
+
+Use [`docs/README.md`](./README.md) for the complete hierarchy.
+
+In short:
+
+```text
+security/privacy/tenant invariants
+→ normative production/data contracts
+→ Master Roadmap
+→ current implementation contracts
+→ approved vision/design docs
+→ task-specific instructions
+→ historical snapshots (context only)
 ```
 
-## Pravidlo #3 — STOP na nevratném, autonomie na vratném
+A prompt cannot legitimately override a higher-precedence safety/architecture contract without an explicit reviewed contract change.
 
-- **Datový model, architektura, migrace, bezpečnostní model → vždy STOP a schválení.** To se za měsíc nedá vzít zpátky.
-- **Implementace po blocích → autonomně.** Commit + krátký report po každém bloku; nečekat na schválení, pokud to zadání neříká.
-- **Nečekané rozhodnutí za běhu:** zapsat možnosti + zvolený default do decisions logu a pokračovat. Ráno se reviduje log, ne probdělá noc.
-- Hlídáš **rozhodnutí**, ne kroky.
+---
 
-## Pravidlo #4 — Důkazy, ne ujištění
+# 3. Anatomy of a strong implementation task
 
-„Testy prošly" nestačí. Zadání říká, jaký důkaz chceš:
-- počty testů a suit, 3× po sobě zelené pro stabilitu,
-- `git diff --stat` = prázdný pro soubory, které se nesměly změnit,
-- log guardu, který zastavil zakázaný běh (negativní zkouška!),
-- screenshoty (včetně mobilního viewportu), snapshot porovnání DB,
-- network tab pro „X nikdy neodchází na klienta".
+A coding task should state:
 
-Nejcennější momenty projektu byly, když důkaz odhalil skutečný problém (Prisma env únik do jest procesu; 429 maskovaná jako auth fail; throttler s okny 60 ms).
+```text
+GOAL
+What observable product/engineering outcome is required?
 
-## Pravidlo #5 — Reporty čti jako reviewer
+SCOPE
+Which domain/files/workflow are in scope?
 
-Claude Code reportuje poctivě — včetně nepříjemností schovaných ve vedlejších větách („zabil jsem ti dev server", „stash nosím třetí session", „5 CI jobů je červených už na mainu"). Tvoje práce:
-- **nálezy povyšuj na tasky** (jeden RBAC nález = hledej celý vzor — viz homeroom audit),
-- **provozní dluhy nenech vyšumět** (červený main = normalizace selhání = smrt CI),
-- **breaking changes si vědomě odsouhlas** (změna flow projekce = musíš to mít v prstech u tabule),
-- **nerozumíš-li vlastní feature, je to signál o produktu** — ptej se, pak zjednodušuj.
+CURRENT SOURCE OF TRUTH
+Which docs/code/tests must be read first?
 
-## Pravidlo #6 — Intuice je validní zadání
+INVARIANTS
+What must not regress? Include tenant, privacy, accessibility and data-history rules.
 
-„Přijde mi to divné", „chci aby to bylo popici", „ať to pohltí jak seriál" — to jsou nejlepší možné vstupy, pokud projdou překladem: pocit → pojmenovaný problém → specifikace s invarianty. Nikdy pocit nezahazuj a nikdy ho neposílej do Claude Code nepřeložený.
+ACCEPTANCE CRITERIA
+What must be true when finished?
 
-## Anti-patterny (draze zaplacené)
+EVIDENCE
+Which tests, screenshots, DB checks, network checks or diffs prove it?
 
-| Anti-pattern | Proč ne | Místo toho |
-|---|---|---|
-| „Přepiš to celé, je to hrozné" | 200 souborů v diffu, nerevidovatelné | fáze, bloky, commity po celcích |
-| Kontext opakovaný v promptech | drift mezi sessions | soubory jako paměť |
-| Míchání refactoru s featurami v PR | nepoznáš, co je co | jedna věc = jeden PR |
-| Necommitnutá práce ve stashi přes sessions | stash není záloha | commit na branch, hned |
-| „Testy prošly" bez důkazu | víra místo vědění | konkrétní důkaz v zadání |
-| Nový projekt přes rozdělané PR | fronta závislostí, rebase peklo | slot 0: dokončit, pak začít |
-| Retry/timeout jako řešení flaky testu | maskuje příčinu | oprav příčinu (viz Flake A/B) |
+OUT OF SCOPE
+What must not be started in this change?
 
-## Rituály
+GIT CONTRACT
+Target branch/base; commit/PR expectations; no destructive history rewrite unless explicitly authorized.
+```
 
-- **Nová session:** odkaz na dokument + kde jsme + co je další krok.
-- **Konec bloku:** commit, report (co, jak ověřeno, co selhalo a jak opraveno).
-- **Konec projektu:** PR se souhrnem, screenshoty, aktualizace master roadmapy (revizní log).
-- **Nový nápad mimo plán:** do decisions logu / nápadníku, ne do rozdělané práce.
+The task should not freeze implementation details that the repository proves are already different unless changing those details is itself the goal.
+
+---
+
+# 4. Inspect before editing
+
+Before implementation, the agent should establish:
+
+```text
+current branch / worktree
+working tree state
+relevant schema/migrations
+current API/data path
+existing tests
+current documentation status/precedence
+dependent or overlapping active changes
+```
+
+If the prompt conflicts with the repository, report the conflict and implement the safest scope consistent with the authoritative contract rather than blindly reproducing stale instructions.
+
+---
+
+# 5. Irreversible vs. reversible decisions
+
+Require explicit human review for high-impact decisions such as:
+
+- destructive migrations;
+- tenant/RBAC model changes;
+- identity/authentication architecture;
+- privacy/retention changes;
+- curriculum provenance/versioning semantics;
+- public API/event contracts that are expensive to migrate;
+- deletion of user/content history;
+- paid/child-facing commerce mechanics.
+
+Routine implementation inside an already approved contract can proceed autonomously within scope.
+
+### Unexpected design decision
+
+Do not hide it in code.
+
+Record:
+
+```text
+problem
+options considered
+chosen temporary/permanent decision
+why
+what evidence supports it
+whether a human decision is still required
+```
+
+Promote lasting decisions into the appropriate current contract/ADR rather than leaving them only in a task report.
+
+---
+
+# 6. Evidence, not reassurance
+
+Statements such as:
+
+```text
+"tests pass"
+"looks fine"
+"tenant-safe"
+"production ready"
+```
+
+are not sufficient by themselves.
+
+Useful evidence depends on the claim:
+
+| Claim | Expected evidence |
+| --- | --- |
+| tenant isolation | real two-tenant negative backend E2E |
+| no solution leak | server/API/network assertion before reveal |
+| migration safe | migrated disposable DB + invariant tests + rollback/deploy reasoning |
+| UI works | real-browser scenario/screenshots at relevant viewports/input modes |
+| concurrency safe | overlapping requests + persisted DB truth |
+| no accidental file scope | `git diff --stat` / changed-file review |
+| restore works | successful restore drill + application smoke test |
+| curriculum claim | authoritative source + approved versioned mapping/evidence path |
+
+The evidence must test the failure mode, not merely the happy path.
+
+---
+
+# 7. Git discipline
+
+For material work:
+
+- use the intended feature/fix branch;
+- inspect existing uncommitted work before editing;
+- do not mix unrelated refactors/features;
+- commit coherent verified increments;
+- do not use stash as long-term storage;
+- avoid force-push/history rewrite unless explicitly required and safe;
+- open/review a PR before merging protected work;
+- update documentation/contracts in the same PR when behavior changes.
+
+One change should be reviewable as one story.
+
+---
+
+# 8. Test discipline
+
+Do not fix a deterministic failure with repeated reruns, arbitrary sleeps or inflated timeouts unless the root cause genuinely requires timing tolerance.
+
+When a test fails:
+
+1. reproduce;
+2. determine whether code, fixture, test, environment or infrastructure is wrong;
+3. fix the cause;
+4. preserve or improve intended coverage;
+5. rerun the relevant narrow test;
+6. run the wider gate required by the domain.
+
+A skipped/quarantined test is not release evidence unless the release contract explicitly excludes it with replacement coverage.
+
+---
+
+# 9. Database safety
+
+Any destructive automated test operation must obey [`testing/test-database-isolation.md`](./testing/test-database-isolation.md).
+
+Never ask an agent to bypass the database safety guard for convenience.
+
+Production restore uses the dedicated [`ops/backup-restore.md`](./ops/backup-restore.md) procedure, not test tooling.
+
+---
+
+# 10. Documentation discipline
+
+After a change, ask:
+
+```text
+Did this alter a normative invariant?
+Did this alter current implementation behavior?
+Did this alter the Master Roadmap order?
+Did this invalidate an old design/audit?
+Did this add a new human-authored Markdown file?
+```
+
+Then update the correct source of truth and documentation registry in the same PR.
+
+Run:
+
+```bash
+npm run docs:validate
+```
+
+before calling documentation work complete.
+
+---
+
+# 11. Report format
+
+A useful implementation report is concise but evidence-based:
+
+```text
+VERDICT
+READY / BLOCKED / PARTIAL
+
+CHANGED
+What changed and why.
+
+VERIFIED
+Exact tests/checks and results.
+
+NOT VERIFIED / RISKS
+Anything that remains uncertain.
+
+GIT
+Branch, commit(s), PR, working-tree status.
+
+FOLLOW-UP
+Only concrete work that is actually required next.
+```
+
+Do not bury a security failure, red CI job or destructive side effect in a footnote.
+
+---
+
+# 12. Anti-patterns
+
+| Anti-pattern | Why it is dangerous | Preferred approach |
+| --- | --- | --- |
+| "rewrite everything" | unreviewable blast radius | scoped phases/PRs |
+| context only in prompts | drift across sessions/tools | versioned repo docs |
+| feature + unrelated refactor | hides causality/regressions | separate reviewable changes |
+| repeated retry until green | masks deterministic defects | root-cause analysis |
+| trusting client tenant IDs | security bug | server-resolved tenant scope |
+| claiming future blueprint as implemented | product/docs drift | explicit `CURRENT` vs `VISION` |
+| schema invented from an old document | migrations against stale assumptions | inspect current Prisma/migrations first |
+| AI says "production ready" without evidence | confidence is not proof | defined production gate |
+
+---
+
+## Final invariant
+
+> **AI may accelerate SkillStorm engineering, but every consequential claim must remain grounded in current repository truth, explicit contracts and reproducible evidence.**

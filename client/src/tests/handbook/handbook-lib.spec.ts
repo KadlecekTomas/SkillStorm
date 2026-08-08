@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import GithubSlugger from "github-slugger";
 import {
   HandbookDocumentNotFoundError,
@@ -11,24 +11,28 @@ import {
 /*
  * Knihovní testy Handbooku — bez DB, bez API, bez sítě.
  * loadHandbookDocument čte skutečné Markdown soubory z repozitáře přes fs.
+ * Testujeme současný lifecycle kontrakt dokumentů, ne historickou kopii textu.
  */
 
 describe("loadHandbookDocument", () => {
-  it("načte skutečný Doctrine Markdown ze souboru", () => {
+  it("načte skutečný superseded Doctrine Markdown ze souboru", () => {
     const doc = loadHandbookDocument("doctrine");
     expect(doc.slug).toBe("doctrine");
     expect(doc.sourcePath).toBe("docs/roadmap/doctrine.md");
-    // Obsah pochází ze skutečného souboru (H1 dokumentu).
-    expect(doc.markdown).toContain("THE EDUTO DOCTRINE");
+    expect(doc.markdown).toContain("SkillStorm — Superseded Founding Doctrine");
+    expect(doc.markdown).toContain("**Status:** `SUPERSEDED`");
+    expect(doc.markdown).toContain("This document is not authoritative");
     expect(doc.markdown.length).toBeGreaterThan(1000);
   });
 
-  it("načte skutečný Master Roadmap Markdown ze souboru", () => {
+  it("načte skutečný current Master Roadmap Markdown ze souboru", () => {
     const doc = loadHandbookDocument("master-roadmap");
     expect(doc.slug).toBe("master-roadmap");
     expect(doc.sourcePath).toBe("docs/roadmap/master.md");
-    expect(doc.markdown).toContain("Master Roadmap");
-    expect(doc.markdown).toContain("| Oblast | Stav |"); // tabulka je zdroj pravdy
+    expect(doc.markdown).toContain("SkillStorm — Master Roadmap");
+    expect(doc.markdown).toContain("**Status:** `CURRENT / NORMATIVE`");
+    expect(doc.markdown).toContain("Definition of Ready");
+    expect(doc.markdown).toContain("Interactive IT Lab — první subject vertical");
   });
 
   it("neexistující dokument skončí bezpečně (typed error)", () => {
@@ -42,6 +46,7 @@ describe("loadHandbookDocument", () => {
     loadHandbookDocument("doctrine");
     loadHandbookDocument("master-roadmap");
     expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
   });
 });
 
@@ -93,24 +98,29 @@ describe("extractTableOfContents", () => {
     const toc = extractTableOfContents(md);
     const expected = new GithubSlugger().slug("Zakladatelská teze");
     expect(toc[0]?.id).toBe(expected);
-    // slug si diakritiku zachovává (nezmění na prázdné id)
     expect(toc[0]?.id).toBe("zakladatelská-teze");
   });
 
   it("duplicitní nadpisy dostanou jedinečné slugy jako rehype-slug", () => {
-    const md = ["## Fáze A — Česko", "### Detail", "## Fáze A — Česko"].join(
-      "\n",
-    );
+    const md = [
+      "## Fáze A — Česko",
+      "### Detail",
+      "## Fáze A — Česko",
+    ].join("\n");
     const toc = extractTableOfContents(md);
     const h2 = toc.filter((t) => t.depth === 2);
     expect(h2[0]?.id).not.toBe(h2[1]?.id);
     expect(h2[1]?.id).toMatch(/-1$/);
   });
 
-  it("skutečný Doctrine dokument vyprodukuje neprázdný obsah", () => {
+  it("superseded Doctrine dokument stále poskytuje stabilní navigační obsah", () => {
     const doc = loadHandbookDocument("doctrine");
     const toc = extractTableOfContents(doc.markdown);
-    expect(toc.length).toBeGreaterThan(5);
+    expect(toc.length).toBeGreaterThanOrEqual(2);
+    expect(toc.map((item) => item.text)).toContain(
+      "This document is not authoritative",
+    );
+    expect(toc.map((item) => item.text)).toContain("Final invariant");
     for (const item of toc) {
       expect(item.id).toBeTruthy();
       expect(item.text).toBeTruthy();

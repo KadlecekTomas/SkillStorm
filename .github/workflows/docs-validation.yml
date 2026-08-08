@@ -1,0 +1,43 @@
+name: Documentation Integrity
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "README.md"
+      - "docs/**/*.md"
+      - "server/test/e2e-legacy/README.md"
+      - "scripts/validate-docs.mjs"
+      - "package.json"
+      - ".github/workflows/docs-validation.yml"
+  pull_request:
+    branches: ["*"]
+    paths:
+      - "README.md"
+      - "docs/**/*.md"
+      - "server/test/e2e-legacy/README.md"
+      - "scripts/validate-docs.mjs"
+      - "package.json"
+      - ".github/workflows/docs-validation.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  documentation-integrity:
+    name: Documentation Integrity
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Validate documentation registry, links and invariants
+        run: npm run docs:validate
