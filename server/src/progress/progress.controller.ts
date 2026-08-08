@@ -17,6 +17,7 @@ import {
 } from '@/common/decorators/org-operation.decorator';
 import { NoHttpCache } from '@/common/cache/no-http-cache.decorator';
 import { ProgressService } from './progress.service';
+import { StudentProgressSelfService } from './student-progress-self.service';
 import {
   CreateProgressEntryDto,
   SyncProgressEntriesDto,
@@ -30,6 +31,8 @@ import { CreateCompetencyDto } from './dto/create-competency.dto';
  * aktuálního enrollmentu a teacher-class vztahu; klient tyto autorizační
  * atributy neposílá. Guardian route úmyslně nemá @Permission — přístup je
  * relationship-scoped a ověřuje se v ProgressService stejně jako guardian API.
+ * Student self route naopak nepřijímá studentId vůbec: identita žáka se odvodí
+ * výhradně z aktivního membershipu v StudentProgressSelfService.
  *
  * V tomto modulu tvoří vedení školy role OWNER + DIRECTOR. Obě mají shodný
  * přístup k celoškolnímu dashboardu, kompetencím a zápisu školního pokroku;
@@ -43,7 +46,10 @@ import { CreateCompetencyDto } from './dto/create-competency.dto';
 @OrgOperation(OrgOperationType.EXECUTION)
 @NoHttpCache()
 export class ProgressController {
-  constructor(private readonly progress: ProgressService) {}
+  constructor(
+    private readonly progress: ProgressService,
+    private readonly studentSelf: StudentProgressSelfService,
+  ) {}
 
   @Get('context')
   @Permission(
@@ -53,6 +59,12 @@ export class ProgressController {
   )
   context(@Req() req: RequestWithUser) {
     return this.progress.getContext(req.user);
+  }
+
+  @Get('me')
+  @Permission(OrganizationRole.STUDENT)
+  ownStudentDetail(@Req() req: RequestWithUser) {
+    return this.studentSelf.getOwnDetail(req.user);
   }
 
   @Post('competencies')

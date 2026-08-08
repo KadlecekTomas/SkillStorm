@@ -5,6 +5,7 @@ import { ProgressController } from './progress.controller';
 
 type PermissionedMethod =
   | 'context'
+  | 'ownStudentDetail'
   | 'createCompetency'
   | 'createEntry'
   | 'sync'
@@ -54,6 +55,10 @@ describe('ProgressController leadership role contract', () => {
       expect(roles).not.toContain(OrganizationRole.TEACHER);
     },
   );
+
+  it('keeps student self progress strictly student-only', () => {
+    expect(requiredRoles('ownStudentDetail')).toEqual([OrganizationRole.STUDENT]);
+  });
 
   it('keeps guardian progress relationship-scoped instead of role-decorated', () => {
     expect(requiredRoles('guardianStudentDetail')).toEqual([]);
