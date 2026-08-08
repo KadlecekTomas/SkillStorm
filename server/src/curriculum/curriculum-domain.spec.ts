@@ -182,6 +182,23 @@ describe('curriculum domain invariants', () => {
       expect(selected?.id).toBe('grade-high');
     });
 
+    it('returns null when no applicability matches the class and grade', () => {
+      expect(
+        pickCurriculumApplicability(
+          [
+            {
+              id: 'grade-5-only',
+              classSectionId: null,
+              grade: SchoolGrade.GRADE_5,
+              priority: 0,
+            },
+          ],
+          'class-9a',
+          SchoolGrade.GRADE_9,
+        ),
+      ).toBeNull();
+    });
+
     it('fails explicitly instead of selecting a random equally ranked row', () => {
       expect(() =>
         pickCurriculumApplicability(
