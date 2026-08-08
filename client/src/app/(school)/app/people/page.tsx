@@ -187,7 +187,7 @@ function PeoplePageContent(): React.JSX.Element {
         <p className="mt-1 text-sm text-slate-600">Žáci, učitelé a vedení na jednom místě.</p>
       </header>
 
-      <section className="grid gap-3 md:grid-cols-3" aria-label="Přidat člověka">
+      <section className="grid gap-3 xl:grid-cols-3" aria-label="Přidat člověka">
         <Link
           href="/app/classrooms"
           className="group flex min-h-28 items-center gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-blue-200 hover:bg-blue-50/40"
