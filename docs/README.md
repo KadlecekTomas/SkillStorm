@@ -13,7 +13,7 @@ Markdown není source of truth jen proto, že existuje. Autoritu určuje:
 
 1. tento registr a status dokumentu;
 2. normativní security/privacy/production/data contracts;
-3. executable code, migrations, configuration and tests tam, kde dokument popisuje současnou implementaci.
+3. executable code, migrations, configuration a testy tam, kde dokument popisuje současnou implementaci.
 
 Každý human-authored `.md` zahrnutý do `npm run docs:validate` musí být registrován přes svou **skutečnou cestu**. Starý basename, přibližný název nebo neexistující link není přijatelný.
 
@@ -46,7 +46,7 @@ Při konfliktu platí:
 2. [`interactive-curriculum/PRODUCTION-CONTRACT.md`](./interactive-curriculum/PRODUCTION-CONTRACT.md);
 3. [`interactive-curriculum/CURRICULUM-DATA-CONTRACT.md`](./interactive-curriculum/CURRICULUM-DATA-CONTRACT.md) pro curriculum/versioning/coverage/evidence;
 4. [`roadmap/master.md`](./roadmap/master.md) pro pořadí vývoje;
-5. [`interactive-curriculum/subjects/SUBJECT-BLUEPRINT-STANDARD.md`](./interactive-curriculum/subjects/SUBJECT-BLUEPRINT-STANDARD.md) pro povinnou strukturu všech subject verticals;
+5. [`interactive-curriculum/subjects/SUBJECT-BLUEPRINT-STANDARD.md`](./interactive-curriculum/subjects/SUBJECT-BLUEPRINT-STANDARD.md) pro povinnou strukturu subject verticals;
 6. current implementation contracts;
 7. `VISION / APPROVED` blueprints;
 8. parked/historical/superseded dokumenty pouze jako kontext.
@@ -68,8 +68,9 @@ Při konfliktu platí:
 | [`interactive-curriculum/USE-CASES.md`](./interactive-curriculum/USE-CASES.md) | `VISION / APPROVED` | pedagogický use-case katalog |
 | [`interactive-curriculum/SCHOOL-CURRICULUM-COVERAGE.md`](./interactive-curriculum/SCHOOL-CURRICULUM-COVERAGE.md) | `VISION / APPROVED` | school curriculum/coverage UX blueprint |
 | [`interactive-curriculum/AUDIO-LANGUAGE-ENGINE.md`](./interactive-curriculum/AUDIO-LANGUAGE-ENGINE.md) | `VISION / APPROVED` | Audio & Language Engine blueprint |
-| [`interactive-curriculum/subjects/README.md`](./interactive-curriculum/subjects/README.md) | `VISION / APPROVED` | úplný katalog všech 18 vzdělávacích oborů a jejich subject blueprintů |
-| [`interactive-it-lab/README.md`](./interactive-it-lab/README.md) | `VISION / APPROVED` | detailní Interactive IT Lab engine/vertical blueprint |
+| [`interactive-curriculum/subjects/README.md`](./interactive-curriculum/subjects/README.md) | `VISION / APPROVED` | katalog všech 18 vzdělávacích oborů |
+| [`interactive-it-lab/README.md`](./interactive-it-lab/README.md) | `VISION / APPROVED` | Interactive IT Lab engine/vertical blueprint |
+| [`interactive-it-lab/YEAR-COVERAGE.md`](./interactive-it-lab/YEAR-COVERAGE.md) | `VISION / APPROVED` | celoroční informatika 4.–9.; 192 core lessons + pacing/FLEX, OVU evidence, ŠVP adapter a production requirements |
 | [`roadmap/partak-2.0.md`](./roadmap/partak-2.0.md) | `VISION / PARKED` | future Parťák hypothesis; bez priority do pilot evidence |
 
 ### 4.1 Subject blueprints — všech 18 vzdělávacích oborů RVP ZV
