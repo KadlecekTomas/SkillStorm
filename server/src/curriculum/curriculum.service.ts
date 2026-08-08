@@ -115,7 +115,7 @@ export class CurriculumService {
       entityId: framework.id,
       userId: actor.userId,
       systemRole: actor.systemRole ?? null,
-      metadata: asJson({ code: framework.code }),
+      metadata: asJson({ frameworkCode: framework.code }),
     });
 
     return framework;
@@ -485,7 +485,6 @@ export class CurriculumService {
       entityId: profile.id,
       userId: actor.userId,
       organizationId,
-      metadata: asJson({ title: profile.title }),
     });
     return profile;
   }
@@ -587,7 +586,6 @@ export class CurriculumService {
       organizationId,
       metadata: asJson({
         profileId,
-        versionLabel: version.versionLabel,
         sourceChecksum,
       }),
     });
@@ -941,6 +939,15 @@ export class CurriculumService {
     if (!schoolOutcome) {
       throw new NotFoundException('School outcome v organizaci nenalezen.');
     }
+    if (
+      schoolOutcome.schoolCurriculumVersion.status !==
+      SchoolCurriculumVersionStatus.PUBLISHED
+    ) {
+      throw new ConflictException({
+        code: 'CURRICULUM_MAPPING_SCHOOL_VERSION_NOT_PUBLISHED',
+        message: 'Mapping lze navrhnout pouze proti PUBLISHED ŠVP snapshotu.',
+      });
+    }
 
     const frameworkOutcome = await this.prisma.frameworkOutcome.findUnique({
       where: { id: dto.frameworkOutcomeId },
@@ -1054,12 +1061,15 @@ export class CurriculumService {
     });
     if (!mapping) throw new NotFoundException('Curriculum mapping nenalezen.');
     if (
+      mapping.status === SchoolOutcomeMappingStatus.APPROVED ||
       mapping.status === SchoolOutcomeMappingStatus.REJECTED ||
       mapping.status === SchoolOutcomeMappingStatus.STALE
     ) {
-      throw new ConflictException(
-        'REJECTED/STALE mapping nelze schválit; vytvořte nový návrh.',
-      );
+      throw new ConflictException({
+        code: 'CURRICULUM_MAPPING_REVIEW_CLOSED',
+        message:
+          'APPROVED/REJECTED/STALE mapping je historický záznam; pro změnu vytvořte nový návrh.',
+      });
     }
 
     if (this.mappingIsStale(mapping)) {
@@ -1135,7 +1145,7 @@ export class CurriculumService {
         entityType: AuditEntityType.CURRICULUM,
         userId: actor.userId,
         organizationId,
-        metadata: asJson({ count: staleIds.length, mappingIds: staleIds }),
+        metadata: asJson({ count: staleIds.length }),
       });
     }
 
@@ -1205,12 +1215,28 @@ export class CurriculumService {
 
   private validateSchoolVersionPayload(dto: CreateSchoolCurriculumVersionDto) {
     const subjectCodes = new Set<string>();
+    const outcomeCodes = new Set<string>();
     for (const subject of dto.subjects) {
-      if (subject.code) this.assertUnique(subjectCodes, subject.code, 'school subject code');
-      const outcomeCodes = new Set<string>();
+      if (subject.code) {
+        this.assertUnique(subjectCodes, subject.code, 'school subject code');
+      }
+      const subjectGrades = new Set(subject.grades);
       for (const outcome of subject.outcomes) {
         if (outcome.externalCode) {
           this.assertUnique(outcomeCodes, outcome.externalCode, 'school outcome code');
+        }
+        const invalidGrades = outcome.grades.filter(
+          (grade) => !subjectGrades.has(grade),
+        );
+        if (invalidGrades.length > 0) {
+          throw new BadRequestException({
+            code: 'SCHOOL_CURRICULUM_OUTCOME_GRADE_OUTSIDE_SUBJECT',
+            message:
+              'School outcome nesmí deklarovat ročník mimo grade scope svého předmětu.',
+            invalidGrades,
+            subjectCode: subject.code ?? null,
+            outcomeCode: outcome.externalCode ?? null,
+          });
         }
       }
     }
@@ -1225,15 +1251,10 @@ export class CurriculumService {
   }
 
   private frameworkCanonicalPayload(dto: FrameworkReleaseImportDto): JsonLike {
+    // Content identity is deliberately independent of local release labels,
+    // mirrors and import metadata. The same authoritative curriculum structure
+    // must deduplicate even when it arrives through another URL/file.
     return {
-      releaseCode: dto.releaseCode,
-      title: dto.title,
-      sourceUrl: dto.sourceUrl,
-      sourceAuthority: dto.sourceAuthority,
-      sourcePublishedAt: dto.sourcePublishedAt ?? null,
-      effectiveFrom: dto.effectiveFrom ?? null,
-      effectiveTo: dto.effectiveTo ?? null,
-      sourceMetadata: (dto.sourceMetadata ?? null) as JsonLike,
       areas: [...dto.areas]
         .sort((a, b) => a.externalCode.localeCompare(b.externalCode))
         .map((area) => ({
@@ -1309,13 +1330,10 @@ export class CurriculumService {
   private schoolCurriculumCanonicalPayload(
     dto: CreateSchoolCurriculumVersionDto,
   ): JsonLike {
+    // Snapshot identity is curriculum content, not the upload filename, local
+    // label or validity window. Re-importing the same ŠVP content must be
+    // detected as a duplicate rather than creating parallel truth.
     return {
-      versionLabel: dto.versionLabel,
-      sourceType: dto.sourceType,
-      sourceFileId: dto.sourceFileId ?? null,
-      sourceDocumentName: dto.sourceDocumentName ?? null,
-      validFrom: dto.validFrom ?? null,
-      validTo: dto.validTo ?? null,
       subjects: [...dto.subjects]
         .sort((a, b) => (a.code ?? a.title).localeCompare(b.code ?? b.title))
         .map((subject) => ({

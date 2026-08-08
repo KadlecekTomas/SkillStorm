@@ -168,6 +168,47 @@ describe('Curriculum foundation D1 invariants (e2e)', () => {
     aspectId = release.outcomes[0]!.aspects[0]!.id;
     await curriculum.verifyFrameworkRelease(releaseId, platform);
 
+    const duplicateDryRun = await curriculum.dryRunFrameworkImport(
+      framework.code,
+      {
+        releaseCode: 'same-content-different-label',
+        title: 'Mirror label must not change content identity',
+        sourceUrl: 'https://mirror.example.invalid/rvp-zv-e2e',
+        sourceAuthority: 'Another local label',
+        areas: [
+          {
+            externalCode: 'INF',
+            title: 'Informatika',
+            sortOrder: 1,
+            fields: [
+              {
+                externalCode: 'INF-DATA',
+                title: 'Data, informace a modelování',
+                sortOrder: 1,
+                outcomes: [
+                  {
+                    externalCode: 'INF-OVU-001',
+                    sourceAnchor: 'e2e-stable-outcome-1',
+                    title: 'Žák pracuje s daty a modely.',
+                    nodeGrade: 9,
+                    aspects: [
+                      {
+                        code: 'MODEL',
+                        title: 'Modelování',
+                        description: 'Rozpozná a vytváří model.',
+                        requiredForFullCoverage: true,
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    );
+    expect(duplicateDryRun.duplicate?.id).toBe(releaseId);
+
     const profile = await curriculum.createSchoolProfile(
       { title: 'ŠVP E2E' },
       actorA,
@@ -224,6 +265,32 @@ describe('Curriculum foundation D1 invariants (e2e)', () => {
     newVersionId = modern.id;
     newSchoolOutcomeId = modern.subjects[0]!.outcomes[0]!.id;
     await curriculum.publishSchoolCurriculumVersion(newVersionId, actorA);
+
+    await expect(
+      curriculum.createSchoolCurriculumVersion(
+        profileId,
+        {
+          versionLabel: 'same-content-new-label',
+          sourceType: SchoolCurriculumSourceType.UPLOAD,
+          sourceDocumentName: 'renamed-file.pdf',
+          subjects: [
+            {
+              code: 'INF-NEW',
+              title: 'Informatika nové RVP',
+              grades: [SchoolGrade.GRADE_6],
+              outcomes: [
+                {
+                  externalCode: 'SVP-NEW-001',
+                  title: 'Nový školní outcome',
+                  grades: [SchoolGrade.GRADE_6],
+                },
+              ],
+            },
+          ],
+        },
+        actorA,
+      ),
+    ).rejects.toMatchObject({ status: 409 });
   });
 
   afterAll(async () => {
@@ -401,9 +468,32 @@ describe('Curriculum foundation D1 invariants (e2e)', () => {
     );
     expect(approved.status).toBe(SchoolOutcomeMappingStatus.APPROVED);
 
+    await expect(
+      curriculum.reviewSchoolOutcomeMapping(
+        mapping.id,
+        {
+          status: SchoolOutcomeMappingStatus.APPROVED,
+          rationale: 'An approved decision must not be silently rewritten.',
+        },
+        actorA,
+      ),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ code: 'CURRICULUM_MAPPING_REVIEW_CLOSED' }),
+    });
+
+    await expect(
+      prisma.outcomeAspect.update({
+        where: { id: aspectId },
+        data: { description: 'Semantic change without provenance bump.' },
+      }),
+    ).rejects.toThrow(/OUTCOME_ASPECT_REVIEW_VERSION_REQUIRED/);
+
     await prisma.outcomeAspect.update({
       where: { id: aspectId },
-      data: { reviewVersion: { increment: 1 } },
+      data: {
+        description: 'Reviewed semantic change with explicit provenance bump.',
+        reviewVersion: { increment: 1 },
+      },
     });
     const stale = await curriculum.refreshStaleMappings(actorA);
     expect(stale.staleIds).toContain(mapping.id);

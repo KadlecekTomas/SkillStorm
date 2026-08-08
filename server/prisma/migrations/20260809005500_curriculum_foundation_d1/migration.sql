@@ -343,6 +343,25 @@ CREATE TRIGGER framework_areas_immutable_trigger BEFORE INSERT OR UPDATE OR DELE
 CREATE TRIGGER framework_fields_immutable_trigger BEFORE INSERT OR UPDATE OR DELETE ON "framework_fields" FOR EACH ROW EXECUTE FUNCTION curriculum_framework_child_immutable();
 CREATE TRIGGER framework_outcomes_immutable_trigger BEFORE INSERT OR UPDATE OR DELETE ON "framework_outcomes" FOR EACH ROW EXECUTE FUNCTION curriculum_framework_child_immutable();
 
+-- Outcome aspects are SkillStorm's internal review layer and may evolve after
+-- an official framework release is verified. Any semantic edit must bump the
+-- review version so every approved mapping can be deterministically marked stale.
+CREATE OR REPLACE FUNCTION outcome_aspect_review_version_guard() RETURNS TRIGGER AS $
+BEGIN
+  IF NEW."review_version" < OLD."review_version" THEN
+    RAISE EXCEPTION 'OUTCOME_ASPECT_REVIEW_VERSION_DECREASE';
+  END IF;
+  IF (NEW."title", NEW."description", NEW."required_for_full_coverage", NEW."status")
+      IS DISTINCT FROM
+     (OLD."title", OLD."description", OLD."required_for_full_coverage", OLD."status")
+     AND NEW."review_version" <= OLD."review_version" THEN
+    RAISE EXCEPTION 'OUTCOME_ASPECT_REVIEW_VERSION_REQUIRED';
+  END IF;
+  RETURN NEW;
+END;
+$ LANGUAGE plpgsql;
+CREATE TRIGGER outcome_aspect_review_version_guard_trigger BEFORE UPDATE ON "outcome_aspects" FOR EACH ROW EXECUTE FUNCTION outcome_aspect_review_version_guard();
+
 -- Published ŠVP snapshots are immutable; retirement is a status transition,
 -- not an edit. Draft/review snapshots remain authorable.
 CREATE OR REPLACE FUNCTION school_curriculum_version_immutable() RETURNS TRIGGER AS $$
@@ -501,14 +520,20 @@ END;
 $$ LANGUAGE plpgsql;
 CREATE TRIGGER school_outcome_mapping_consistency_trigger BEFORE INSERT OR UPDATE ON "school_outcome_mappings" FOR EACH ROW EXECUTE FUNCTION school_outcome_mapping_consistency();
 
-CREATE OR REPLACE FUNCTION school_outcome_mapping_history_guard() RETURNS TRIGGER AS $$
+CREATE OR REPLACE FUNCTION school_outcome_mapping_history_guard() RETURNS TRIGGER AS $
 BEGIN
   IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'CURRICULUM_MAPPING_HISTORY_IMMUTABLE'; END IF;
   IF OLD."status" IN ('REJECTED', 'STALE') THEN RAISE EXCEPTION 'CURRICULUM_MAPPING_HISTORY_IMMUTABLE'; END IF;
-  IF OLD."status" = 'APPROVED' AND NEW."status" NOT IN ('APPROVED', 'STALE') THEN
-    RAISE EXCEPTION 'CURRICULUM_MAPPING_APPROVAL_IMMUTABLE';
+  IF OLD."status" = 'APPROVED' THEN
+    IF NEW."status" <> 'STALE' THEN
+      RAISE EXCEPTION 'CURRICULUM_MAPPING_APPROVAL_IMMUTABLE';
+    END IF;
+    IF (to_jsonb(NEW) - ARRAY['status', 'updated_at']) IS DISTINCT FROM
+       (to_jsonb(OLD) - ARRAY['status', 'updated_at']) THEN
+      RAISE EXCEPTION 'CURRICULUM_MAPPING_APPROVAL_IMMUTABLE';
+    END IF;
   END IF;
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$ LANGUAGE plpgsql;
 CREATE TRIGGER school_outcome_mapping_history_guard_trigger BEFORE UPDATE OR DELETE ON "school_outcome_mappings" FOR EACH ROW EXECUTE FUNCTION school_outcome_mapping_history_guard();

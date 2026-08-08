@@ -239,6 +239,7 @@ export class SchoolOutcomeImportDto {
   description?: string;
 
   @IsArray()
+  @ArrayMinSize(1)
   @IsEnum(SchoolGrade, { each: true })
   grades!: SchoolGrade[];
 
@@ -274,6 +275,7 @@ export class SchoolSubjectImportDto {
   shortTitle?: string;
 
   @IsArray()
+  @ArrayMinSize(1)
   @IsEnum(SchoolGrade, { each: true })
   grades!: SchoolGrade[];
 
@@ -282,6 +284,7 @@ export class SchoolSubjectImportDto {
   metadata?: Record<string, unknown>;
 
   @IsArray()
+  @ArrayMinSize(1)
   @ValidateNested({ each: true })
   @Type(() => SchoolOutcomeImportDto)
   outcomes!: SchoolOutcomeImportDto[];
