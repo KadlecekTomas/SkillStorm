@@ -18,14 +18,16 @@ The repository currently contains both **implemented contracts** and **approved 
 - [Master Roadmap](./docs/roadmap/master.md) — the single active source of truth for implementation order.
 - [Interactive Curriculum Production Contract](./docs/interactive-curriculum/PRODUCTION-CONTRACT.md) — cross-cutting production invariants: curriculum, classroom realtime, privacy, accessibility, safety, resilience, evidence and release gates.
 - [Curriculum Data Contract](./docs/interactive-curriculum/CURRICULUM-DATA-CONTRACT.md) — RVP/ŠVP versioning, mappings, curriculum applicability and coverage semantics.
+- [Subject Blueprint Standard](./docs/interactive-curriculum/subjects/SUBJECT-BLUEPRINT-STANDARD.md) — mandatory pedagogical/product structure and release gates for every subject vertical.
 
 ### Approved product blueprints
 
 - [SkillStorm Interactive Curriculum](./docs/interactive-curriculum/README.md) — whole-school product north star across subjects and classroom hardware modes.
 - [Interactive Curriculum — Master Use Cases](./docs/interactive-curriculum/USE-CASES.md) — detailed use cases across grades 1–9.
 - [School Curriculum Coverage & ŠVP Integration](./docs/interactive-curriculum/SCHOOL-CURRICULUM-COVERAGE.md) — school-facing curriculum/coverage UX and all 10 RVP ZV areas.
+- [All 18 Subject Blueprints](./docs/interactive-curriculum/subjects/README.md) — detailed production-spec pedagogical blueprints for every educational field in the revised RVP ZV.
 - [Audio & Language Learning Engine](./docs/interactive-curriculum/AUDIO-LANGUAGE-ENGINE.md) — curated audio, timed text, listening interactions and recommended Czech-language progression.
-- [Interactive IT Lab](./docs/interactive-it-lab/README.md) — first detailed subject blueprint, including Build-a-PC and Teacher Mission Control.
+- [Interactive IT Lab](./docs/interactive-it-lab/README.md) — detailed device-first engine blueprint including Build-a-PC and Teacher Mission Control.
 
 ### Current implemented classroom contracts
 
@@ -136,6 +138,7 @@ docker compose --profile dev down -v
 5. **Do not implement a future blueprint by bypassing existing production/security contracts.** Resolve the documentation conflict first.
 6. **A changed contract requires changed tests and documentation in the same PR.**
 7. **Historical audits are evidence, not current instructions.** Their status is defined in [`docs/README.md`](./docs/README.md).
+8. **A new subject vertical must conform to the Subject Blueprint Standard before implementation starts.**
 
 ---
 
@@ -145,10 +148,13 @@ Before a new subject engine or Lesson Experience is called production-ready, it 
 
 - [`PRODUCTION-CONTRACT.md`](./docs/interactive-curriculum/PRODUCTION-CONTRACT.md)
 - [`CURRICULUM-DATA-CONTRACT.md`](./docs/interactive-curriculum/CURRICULUM-DATA-CONTRACT.md)
+- [`SUBJECT-BLUEPRINT-STANDARD.md`](./docs/interactive-curriculum/subjects/SUBJECT-BLUEPRINT-STANDARD.md)
 
 This includes pedagogical review, curriculum provenance/mapping, accessibility, privacy/security, asset licensing, classroom resilience, semantic telemetry, reconnect behavior, learning-evidence semantics and real-browser validation.
 
-The repository must never claim `RVP complete`, `production ready` or equivalent purely because a topic tag or demo exists.
+The complete subject catalog is maintained in [`docs/interactive-curriculum/subjects/README.md`](./docs/interactive-curriculum/subjects/README.md). It covers all 18 educational fields in the revised RVP ZV, but blueprint existence does **not** mean that every OVU is already implemented or content-complete.
+
+The repository must never claim `RVP complete`, `production ready` or equivalent purely because a topic tag, blueprint or demo exists.
 
 ---
 
