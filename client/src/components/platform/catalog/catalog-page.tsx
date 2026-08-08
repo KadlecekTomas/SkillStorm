@@ -63,7 +63,7 @@ export function CatalogPage(): React.JSX.Element {
     setSubjectCreating(true);
     try {
       await subjects.createSubject(input);
-      showToastOnce("Catalog subject created.", { type: "success" });
+      showToastOnce("Předmět byl vytvořen.", { type: "success" });
     } catch (error) {
       showHttpErrorToastOnce(error);
     } finally {
@@ -78,7 +78,7 @@ export function CatalogPage(): React.JSX.Element {
     setSubjectSavingId(id);
     try {
       await subjects.updateSubject(id, input);
-      showToastOnce("Catalog subject updated.", { type: "success" });
+      showToastOnce("Předmět byl upraven.", { type: "success" });
     } catch (error) {
       showHttpErrorToastOnce(error);
     } finally {
@@ -90,7 +90,7 @@ export function CatalogPage(): React.JSX.Element {
     setSubjectSavingId(id);
     try {
       await subjects.deleteSubject(id);
-      showToastOnce("Catalog subject removed.", { type: "success" });
+      showToastOnce("Předmět byl odebrán.", { type: "success" });
     } catch (error) {
       showHttpErrorToastOnce(error);
     } finally {
@@ -106,7 +106,7 @@ export function CatalogPage(): React.JSX.Element {
     setTopicCreating(true);
     try {
       await topics.createTopic(input);
-      showToastOnce("Catalog topic created.", { type: "success" });
+      showToastOnce("Téma bylo vytvořeno.", { type: "success" });
     } catch (error) {
       showHttpErrorToastOnce(error);
     } finally {
@@ -121,7 +121,7 @@ export function CatalogPage(): React.JSX.Element {
     setTopicSavingId(id);
     try {
       await topics.updateTopic(id, input);
-      showToastOnce("Catalog topic updated.", { type: "success" });
+      showToastOnce("Téma bylo upraveno.", { type: "success" });
     } catch (error) {
       showHttpErrorToastOnce(error);
     } finally {
@@ -133,7 +133,7 @@ export function CatalogPage(): React.JSX.Element {
     setTopicSavingId(id);
     try {
       await topics.deleteTopic(id);
-      showToastOnce("Catalog topic removed.", { type: "success" });
+      showToastOnce("Téma bylo odebráno.", { type: "success" });
     } catch (error) {
       showHttpErrorToastOnce(error);
     } finally {
@@ -149,32 +149,32 @@ export function CatalogPage(): React.JSX.Element {
         </div>
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">
-            Catalog Management
+            Katalog obsahu
           </h1>
           <p className="text-sm text-slate-500">
-            Manage global catalog subjects and topics for every school.
+            Předměty a témata dostupná pro všechny školy.
           </p>
         </div>
       </div>
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
-          <TabsTrigger value="subjects">Subjects</TabsTrigger>
-          <TabsTrigger value="topics">Topics</TabsTrigger>
+          <TabsTrigger value="subjects">Předměty</TabsTrigger>
+          <TabsTrigger value="topics">Témata</TabsTrigger>
         </TabsList>
 
         <TabsContent value="subjects" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Catalog Subjects</CardTitle>
+              <CardTitle>Předměty</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-3 md:grid-cols-[1fr_180px_180px_auto] md:items-center">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <Input
-                  aria-label="Search subjects"
+                  aria-label="Hledat předměty"
                   className="pl-9"
-                  placeholder="Search by name or code"
+                  placeholder="Hledat podle názvu nebo kódu"
                   value={subjectSearch}
                   onChange={(event) => {
                     setSubjectSearch(event.target.value);
@@ -188,15 +188,13 @@ export function CatalogPage(): React.JSX.Element {
                   setSubjectSortBy(value as "name" | "code" | "createdAt")
                 }
               >
-                <SelectTrigger aria-label="Sort subjects by">
-                  <SelectValue placeholder="Sort by" />
+                <SelectTrigger aria-label="Řazení předmětů">
+                  <SelectValue placeholder="Řadit podle" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="name">Sort by name</SelectItem>
-                  <SelectItem value="code">Sort by code</SelectItem>
-                  <SelectItem value="createdAt">
-                    Sort by created date
-                  </SelectItem>
+                  <SelectItem value="name">Název</SelectItem>
+                  <SelectItem value="code">Kód</SelectItem>
+                  <SelectItem value="createdAt">Datum vytvoření</SelectItem>
                 </SelectContent>
               </Select>
               <Select
@@ -205,16 +203,16 @@ export function CatalogPage(): React.JSX.Element {
                   setSubjectSortDir(value as "asc" | "desc")
                 }
               >
-                <SelectTrigger aria-label="Sort subjects direction">
-                  <SelectValue placeholder="Direction" />
+                <SelectTrigger aria-label="Směr řazení předmětů">
+                  <SelectValue placeholder="Směr" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="asc">Ascending</SelectItem>
-                  <SelectItem value="desc">Descending</SelectItem>
+                  <SelectItem value="asc">Vzestupně</SelectItem>
+                  <SelectItem value="desc">Sestupně</SelectItem>
                 </SelectContent>
               </Select>
               <label className="flex items-center justify-end gap-3 text-sm text-slate-600">
-                <span>Include inactive</span>
+                <span>Včetně neaktivních</span>
                 <Switch
                   checked={subjectIncludeInactive}
                   onCheckedChange={setSubjectIncludeInactive}
@@ -241,15 +239,15 @@ export function CatalogPage(): React.JSX.Element {
         <TabsContent value="topics" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Catalog Topics</CardTitle>
+              <CardTitle>Témata</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-3 md:grid-cols-[1fr_220px_auto] md:items-center">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <Input
-                  aria-label="Search topics"
+                  aria-label="Hledat témata"
                   className="pl-9"
-                  placeholder="Search topics"
+                  placeholder="Hledat témata"
                   value={topicSearch}
                   onChange={(event) => {
                     setTopicSearch(event.target.value);
@@ -264,11 +262,11 @@ export function CatalogPage(): React.JSX.Element {
                   setTopicPage(1);
                 }}
               >
-                <SelectTrigger aria-label="Filter topics by subject">
-                  <SelectValue placeholder="All subjects" />
+                <SelectTrigger aria-label="Filtrovat témata podle předmětu">
+                  <SelectValue placeholder="Všechny předměty" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All subjects</SelectItem>
+                  <SelectItem value="all">Všechny předměty</SelectItem>
                   {subjects.items.map((subject) => (
                     <SelectItem key={subject.id} value={subject.id}>
                       {subject.code} · {subject.name}
@@ -277,7 +275,7 @@ export function CatalogPage(): React.JSX.Element {
                 </SelectContent>
               </Select>
               <label className="flex items-center justify-end gap-3 text-sm text-slate-600">
-                <span>Include inactive</span>
+                <span>Včetně neaktivních</span>
                 <Switch
                   checked={topicIncludeInactive}
                   onCheckedChange={setTopicIncludeInactive}
