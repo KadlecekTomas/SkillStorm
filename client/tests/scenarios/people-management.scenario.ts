@@ -156,9 +156,11 @@ test.describe('school people management', () => {
     const studentId = seededStudent!.id;
 
     await page.goto(`/app/students/${studentId}`);
-    await expect(page.getByTestId('student-admin-editor')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Upravit žáka' })).toBeEnabled();
-    await page.getByRole('button', { name: 'Upravit žáka' }).click();
+    const editor = page.getByTestId('student-admin-editor');
+    await expect(editor).toBeVisible();
+    const editButton = editor.getByRole('button', { name: 'Upravit' });
+    await expect(editButton).toBeEnabled();
+    await editButton.click();
 
     const nameInput = page.getByLabel('Jméno a příjmení žáka');
     const emailInput = page.getByLabel('E-mail žáka');
