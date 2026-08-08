@@ -74,7 +74,19 @@ export type LoginPayload = {
   password: string;
 };
 
-const PUBLIC_ROUTES = ["/login", "/register", "/forgot-password", "/reset-password"];
+// Anonymous-safe pages must never probe /auth/me just to render public content.
+// Join is intentionally excluded: an existing cookie must be recovered there
+// so an authenticated invite flow can continue without bouncing through login.
+const PUBLIC_ROUTES = [
+  "/",
+  "/login",
+  "/register",
+  "/forgot-password",
+  "/reset-password",
+  "/public-library",
+  "/eduto",
+  "/handbook",
+];
 const isPublicRoutePath = (path: string) =>
   PUBLIC_ROUTES.includes(path) || path.startsWith("/reset-password/");
 
@@ -325,8 +337,7 @@ export const useAuth = (): UseAuthResult => {
         showToastOnce("Přihlášení proběhlo úspěšně! 🎉", { type: "success" });
       } catch (error) {
         // Rate limiting must read as such — not as "wrong credentials".
-        const status =
-          error instanceof HttpError ? error.status : undefined;
+        const status = error instanceof HttpError ? error.status : undefined;
         showToastOnce(
           status === 429
             ? "Příliš mnoho pokusů o přihlášení. Zkus to prosím za chvíli."
