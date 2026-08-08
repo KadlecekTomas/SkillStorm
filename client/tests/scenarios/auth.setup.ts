@@ -16,17 +16,16 @@ setup('authenticate all roles', async ({ baseURL }) => {
   mkdirSync(STORAGE_DIR, { recursive: true });
   const m = loadManifest();
 
-  // [role, email, orgId] — passing organizationId scopes the JWT to that org
-  // (a plain single-org login does NOT put organizationRole in the token, so
-  // role-gated pages would 403). scenar.* users belong to orgId; the other-org
-  // student belongs to foreignOrgId.
-  const roles: Array<[string, string, string]> = [
+  // [role, email, orgId] — organization users get an explicit tenant context;
+  // SUPERADMIN intentionally has no membership and therefore no organizationId.
+  const roles: Array<[string, string, string | null]> = [
     ['director', m.accounts.director, m.orgId],
     ['teacher', m.accounts.teacher, m.orgId],
     ['student8a', m.accounts.student8a, m.orgId],
     ['student2a', m.accounts.student2a, m.orgId],
     ['studentHs', m.accounts.studentHs, m.orgId],
     ['parent', m.accounts.parent, m.orgId],
+    ['superadmin', m.accounts.superadmin, null],
     ['otherOrgStudent', m.accounts.otherOrgStudent, m.foreignOrgId],
   ];
 
@@ -47,7 +46,11 @@ setup('authenticate all roles', async ({ baseURL }) => {
       baseURL: baseURL ?? 'http://127.0.0.1:3001',
     });
     const res = await ctx.post('/api/auth/login', {
-      data: { email, password: m.password, organizationId },
+      data: {
+        email,
+        password: m.password,
+        ...(organizationId ? { organizationId } : {}),
+      },
       headers: { 'X-Forwarded-For': randomIp() },
     });
     expect(res.ok(), `login for ${role} (${email})`).toBeTruthy();
