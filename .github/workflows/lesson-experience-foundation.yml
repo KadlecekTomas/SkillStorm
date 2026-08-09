@@ -1,0 +1,155 @@
+name: Lesson Experience Foundation
+
+on:
+  pull_request:
+    paths:
+      - 'server/prisma/schema.prisma'
+      - 'server/prisma/migrations/**'
+      - 'server/src/lesson-experience/**'
+      - 'server/src/activity-engine/**'
+      - 'server/src/audit/audit-metadata.policy.ts'
+      - 'server/src/app.module.ts'
+      - 'server/test/lesson-experience-fixtures.ts'
+      - 'server/test/e2e/lesson-experience-*.e2e-spec.ts'
+      - '.github/workflows/lesson-experience-foundation.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'server/prisma/schema.prisma'
+      - 'server/prisma/migrations/**'
+      - 'server/src/lesson-experience/**'
+      - 'server/src/activity-engine/**'
+      - 'server/src/audit/audit-metadata.policy.ts'
+      - 'server/src/app.module.ts'
+      - 'server/test/lesson-experience-fixtures.ts'
+      - 'server/test/e2e/lesson-experience-*.e2e-spec.ts'
+      - '.github/workflows/lesson-experience-foundation.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  lesson-experience-foundation:
+    name: Lesson D2-B invariants
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: skillstorm_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d skillstorm_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/skillstorm_test
+      DATABASE_URL_TEST: postgresql://postgres:postgres@localhost:5432/skillstorm_test
+      JWT_SECRET: lesson-ci-only
+      NODE_ENV: test
+      PORT: 0
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: server
+        run: npm ci
+
+      - name: Generate Prisma client
+        working-directory: server
+        run: npm run prisma:generate
+
+      - name: Validate Prisma schema
+        working-directory: server
+        run: npx prisma validate
+
+      - name: Deploy all migrations on a clean database
+        working-directory: server
+        run: npx prisma migrate deploy
+
+      - name: Strict backend typecheck
+        working-directory: server
+        run: npm run typecheck
+
+      - name: Run Lesson definition and audit unit contracts
+        working-directory: server
+        run: npm test -- lesson-publication.spec.ts lesson-audit.spec.ts --runInBand
+
+      - name: Run sealed lifecycle and raw-SQL history E2E
+        working-directory: server
+        run: npx jest --config ./test/jest-e2e.config.js --testPathPattern='lesson-experience-foundation.e2e-spec.ts' --runInBand
+
+      - name: Compatibility — reject unsupported Lesson delivery mode
+        working-directory: server
+        run: |
+          mkdir -p test-results/lesson-d2b
+          npx jest --config ./test/jest-e2e.config.js \
+            --testPathPattern='lesson-experience-compatibility.e2e-spec.ts' \
+            --testNamePattern='rejects a lesson mode' \
+            --runInBand --json \
+            --outputFile=test-results/lesson-d2b/mode-mismatch.json
+
+      - name: Annotate exact compatibility assertion failure
+        if: failure()
+        working-directory: server
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = 'test-results/lesson-d2b/mode-mismatch.json';
+          if (!fs.existsSync(path)) process.exit(0);
+          const report = JSON.parse(fs.readFileSync(path, 'utf8'));
+          const failed = (report.testResults || [])
+            .flatMap((result) => result.assertionResults || [])
+            .find((assertion) => assertion.status === 'failed');
+          const message = failed?.failureMessages?.join('\n') || report.testResults?.[0]?.message || 'Unknown Jest failure';
+          const escaped = String(message)
+            .replace(/%/g, '%25')
+            .replace(/\r/g, '%0D')
+            .replace(/\n/g, '%0A');
+          console.log(`::error title=Lesson D2-B mode compatibility::${escaped.slice(0, 7000)}`);
+          NODE
+
+      - name: Upload compatibility diagnostic on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lesson-d2b-compatibility-failure
+          path: server/test-results/lesson-d2b/*.json
+          if-no-files-found: ignore
+          retention-days: 3
+
+      - name: Compatibility — conceal foreign-tenant ActivityVersion
+        working-directory: server
+        run: npx jest --config ./test/jest-e2e.config.js --testPathPattern='lesson-experience-compatibility.e2e-spec.ts' --testNamePattern='conceals a foreign-tenant' --runInBand
+
+      - name: Compatibility — reject global Lesson to local Activity
+        working-directory: server
+        run: npx jest --config ./test/jest-e2e.config.js --testPathPattern='lesson-experience-compatibility.e2e-spec.ts' --testNamePattern='rejects organization-local content' --runInBand
+
+      - name: Compatibility — block publication on draft Activity dependency
+        working-directory: server
+        run: npx jest --config ./test/jest-e2e.config.js --testPathPattern='lesson-experience-compatibility.e2e-spec.ts' --testNamePattern='allows coordinated draft authoring' --runInBand
+
+      - name: Run version content-identity and concurrency E2E
+        working-directory: server
+        run: npx jest --config ./test/jest-e2e.config.js --testPathPattern='lesson-experience-concurrency.e2e-spec.ts' --runInBand
+
+      - name: Run HTTP RBAC and global-draft-secrecy E2E
+        working-directory: server
+        run: npx jest --config ./test/jest-e2e.config.js --testPathPattern='lesson-experience-rbac.e2e-spec.ts' --runInBand

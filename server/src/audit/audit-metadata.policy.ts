@@ -69,6 +69,14 @@ export const AUDIT_METADATA_ALLOWLIST = new Set<string>([
   'schemaVersion',
   'scope',
 
+  // Lesson Experience provenance — stable IDs, counts and hashes only.
+  // Prompts, learning objectives, teacher guidance and pedagogical rationale
+  // remain deliberately absent from audit metadata.
+  'lessonExperienceId',
+  'lessonExperienceVersionId',
+  'lessonExperienceMappingId',
+  'stageCount',
+
   // lightweight support tickets
   'category',
   'page',

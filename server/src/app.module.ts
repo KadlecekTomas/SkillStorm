@@ -57,6 +57,7 @@ import { ImportsModule } from './imports/imports.module';
 import { ProgressModule } from './progress/progress.module';
 import { CurriculumModule } from './curriculum/curriculum.module';
 import { ActivityModule } from './activity-engine/activity.module';
+import { LessonExperienceModule } from './lesson-experience/lesson-experience.module';
 import { resolveThrottleTracker } from './common/throttling/request-tracker';
 
 @Module({
@@ -136,6 +137,7 @@ import { resolveThrottleTracker } from './common/throttling/request-tracker';
     ProgressModule,
     CurriculumModule,
     ActivityModule,
+    LessonExperienceModule,
   ],
   providers: [
     { provide: APP_INTERCEPTOR, useClass: ResponseEnvelopeInterceptor },
