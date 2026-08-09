@@ -1,6 +1,9 @@
 import { expect, test } from '@playwright/test';
 import { storageStateFor } from './manifest';
 
+// Browser-contract scenarios: the D2-C backend itself is covered by real-Postgres
+// server E2E. These routes deliberately mock that verified HTTP boundary so this
+// file can focus on student/teacher UX reactions, revisions and privacy payloads.
 const SESSION_ID = '11111111-1111-4111-8111-111111111111';
 const STAGE_ID = '22222222-2222-4222-8222-222222222222';
 const ACTIVITY_VERSION_ID = '33333333-3333-4333-8333-333333333333';
