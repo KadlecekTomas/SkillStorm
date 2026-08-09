@@ -6,6 +6,8 @@ import { BuildPcLab } from './BuildPcLab';
 import {
   PC_COMPONENTS,
   isPlacementValid,
+  nextRequiredComponent,
+  type BuildPcScaffolding,
   type PcComponentId,
   type PcSlotId,
 } from './build-pc-engine';
@@ -30,6 +32,7 @@ export function BuildPcClassroomShell({ sessionId = null }: BuildPcClassroomShel
   const classroom = useBuildPcClassroom(sessionId);
   const selectedRef = useRef<PcComponentId | null>('cpu');
   const installedRef = useRef<Set<PcComponentId>>(new Set());
+  const scaffoldingRef = useRef<BuildPcScaffolding>('GUIDED');
 
   function rememberPlacement(componentId: PcComponentId, slotId: PcSlotId): void {
     if (!classroom.isClassroomMode || !classroom.canInteract) return;
@@ -47,7 +50,9 @@ export function BuildPcClassroomShell({ sessionId = null }: BuildPcClassroomShel
       installedCount: installedRef.current.size,
       completionIsMastery: false,
     });
-    selectedRef.current = null;
+    selectedRef.current = scaffoldingRef.current === 'INDEPENDENT'
+      ? null
+      : nextRequiredComponent(installedRef.current)?.id ?? null;
   }
 
   function handleClickCapture(event: MouseEvent<HTMLDivElement>): void {
@@ -58,10 +63,24 @@ export function BuildPcClassroomShell({ sessionId = null }: BuildPcClassroomShel
     if (button?.getAttribute('aria-label') === 'Resetovat sestavu') {
       installedRef.current = new Set();
       selectedRef.current = 'cpu';
+      scaffoldingRef.current = 'GUIDED';
       return;
     }
 
     if (!classroom.canInteract) return;
+
+    const buttonText = button?.textContent?.trim();
+    if (buttonText === 'Guided') {
+      scaffoldingRef.current = 'INDEPENDENT';
+      selectedRef.current = null;
+      return;
+    }
+    if (buttonText === 'Independent') {
+      scaffoldingRef.current = 'GUIDED';
+      selectedRef.current = nextRequiredComponent(installedRef.current)?.id ?? null;
+      return;
+    }
+
     const interactive = target.closest<HTMLElement>('[data-testid]');
     const testId = interactive?.dataset.testid ?? null;
 
