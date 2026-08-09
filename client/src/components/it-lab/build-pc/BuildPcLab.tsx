@@ -250,11 +250,11 @@ export function BuildPcLab(): JSX.Element {
                   key={component.id}
                   type="button"
                   draggable={!done}
-                  onDragStart={(event) => onDragStart(event, component.id)}
+                  onDragStartCapture={(event) => onDragStart(event, component.id)}
                   onClick={() => selectComponent(component.id)}
                   disabled={done}
                   data-testid={`component-${component.id}`}
-                  whileTap={done ? undefined : { scale: 0.98 }}
+                  whileTap={done ? { scale: 1 } : { scale: 0.98 }}
                   className={`group relative overflow-hidden rounded-2xl border p-3 text-left transition ${
                     done
                       ? 'border-emerald-400/20 bg-emerald-400/[0.07] opacity-70'
