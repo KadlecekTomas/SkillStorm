@@ -18,9 +18,25 @@ export class AlgorithmLabAutoPairService {
 
     const session = await this.prisma.liveSession.findUnique({
       where: { id: sessionId },
-      select: { mode: true },
+      select: {
+        mode: true,
+        lessonExperienceVersion: {
+          select: {
+            stages: {
+              where: { stageKey: 'ALGORITHM_LAB' },
+              take: 1,
+              select: { id: true },
+            },
+          },
+        },
+      },
     });
-    if (session?.mode !== LiveSessionMode.HYBRID) return joined;
+    if (
+      session?.mode !== LiveSessionMode.HYBRID ||
+      !session.lessonExperienceVersion?.stages.length
+    ) {
+      return joined;
+    }
 
     return this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${sessionId}:algorithm-auto-pair`}))`;
