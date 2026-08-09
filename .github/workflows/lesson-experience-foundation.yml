@@ -32,7 +32,7 @@ jobs:
   lesson-experience-foundation:
     name: Lesson D2-B invariants
     runs-on: ubuntu-latest
-    timeout-minutes: 18
+    timeout-minutes: 20
 
     services:
       postgres:
@@ -91,6 +91,18 @@ jobs:
         working-directory: server
         run: npm test -- lesson-publication.spec.ts lesson-audit.spec.ts --runInBand
 
-      - name: Run sealed lifecycle, compatibility, concurrency and HTTP governance E2E
+      - name: Run sealed lifecycle and raw-SQL history E2E
         working-directory: server
-        run: npx jest --config ./test/jest-e2e.config.js --testPathPattern='lesson-experience-(foundation|compatibility|concurrency|rbac).e2e-spec.ts' --runInBand
+        run: npx jest --config ./test/jest-e2e.config.js --testPathPattern='lesson-experience-foundation.e2e-spec.ts' --runInBand
+
+      - name: Run Activity compatibility and scope E2E
+        working-directory: server
+        run: npx jest --config ./test/jest-e2e.config.js --testPathPattern='lesson-experience-compatibility.e2e-spec.ts' --runInBand
+
+      - name: Run version content-identity and concurrency E2E
+        working-directory: server
+        run: npx jest --config ./test/jest-e2e.config.js --testPathPattern='lesson-experience-concurrency.e2e-spec.ts' --runInBand
+
+      - name: Run HTTP RBAC and global-draft-secrecy E2E
+        working-directory: server
+        run: npx jest --config ./test/jest-e2e.config.js --testPathPattern='lesson-experience-rbac.e2e-spec.ts' --runInBand
