@@ -60,6 +60,15 @@ export const AUDIT_METADATA_ALLOWLIST = new Set<string>([
   'frameworkOutcomeId',
   'outcomeAspectId',
 
+  // Activity Engine provenance — IDs, hashes, engine identifiers and enums only.
+  'activityId',
+  'activityVersionId',
+  'mappingId',
+  'contentChecksum',
+  'engineKey',
+  'schemaVersion',
+  'scope',
+
   // lightweight support tickets
   'category',
   'page',
