@@ -1,6 +1,6 @@
 import type { JSX } from 'react';
-import { BuildPcLab } from '@/components/it-lab/build-pc/BuildPcLab';
+import { BuildPcClassroomShell } from '@/components/it-lab/build-pc/BuildPcClassroomShell';
 
 export default function BuildAPcPage(): JSX.Element {
-  return <BuildPcLab />;
+  return <BuildPcClassroomShell />;
 }
