@@ -11,10 +11,13 @@ import type { JwtPayload } from '@/auth/types/jwt-payload';
 import { PrismaService } from '@/prisma/prisma.service';
 import { setupOrgContext } from 'test/helpers';
 
-function candidate(title: string, modes = [
-  ActivityDeliveryMode.BOARD_ONLY,
-  ActivityDeliveryMode.SHARED_DEVICES,
-]) {
+function candidate(
+  title: string,
+  modes = [
+    ActivityDeliveryMode.BOARD_ONLY,
+    ActivityDeliveryMode.SHARED_DEVICES,
+  ],
+) {
   return {
     engineKey: 'CORE_INTERACTION_V1',
     schemaVersion: 1,
@@ -162,5 +165,21 @@ describe('ActivityVersion concurrency and content identity (e2e)', () => {
     ]);
 
     expect([left.versionNo, right.versionNo].sort((a, b) => a - b)).toEqual([2, 3]);
+  });
+
+  it('turns a simultaneous identical snapshot race into one success and one controlled 409', async () => {
+    const results = await Promise.allSettled([
+      activities.createVersion(activityId, candidate('Identical race'), actor),
+      activities.createVersion(activityId, candidate('Identical race'), actor),
+    ]);
+
+    const fulfilled = results.filter((result) => result.status === 'fulfilled');
+    const rejected = results.filter(
+      (result): result is PromiseRejectedResult => result.status === 'rejected',
+    );
+
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    expect(rejected[0]!.reason).toMatchObject({ status: 409 });
   });
 });
