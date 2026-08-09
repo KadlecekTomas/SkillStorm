@@ -97,7 +97,22 @@ jobs:
 
       - name: Compatibility — reject unsupported Lesson delivery mode
         working-directory: server
-        run: npx jest --config ./test/jest-e2e.config.js --testPathPattern='lesson-experience-compatibility.e2e-spec.ts' --testNamePattern='rejects a lesson mode' --runInBand
+        run: |
+          mkdir -p test-results/lesson-d2b
+          npx jest --config ./test/jest-e2e.config.js \
+            --testPathPattern='lesson-experience-compatibility.e2e-spec.ts' \
+            --testNamePattern='rejects a lesson mode' \
+            --runInBand --json \
+            --outputFile=test-results/lesson-d2b/mode-mismatch.json
+
+      - name: Upload compatibility diagnostic on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lesson-d2b-compatibility-failure
+          path: server/test-results/lesson-d2b/*.json
+          if-no-files-found: ignore
+          retention-days: 3
 
       - name: Compatibility — conceal foreign-tenant ActivityVersion
         working-directory: server
