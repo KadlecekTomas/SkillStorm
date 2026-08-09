@@ -191,9 +191,9 @@ function commandId(type: ClassroomCommandType): string {
 }
 
 export const classroomSessionApi = {
-  joinStudent: (sessionId: string): Promise<unknown> =>
+  joinStudent: (sessionId: string, groupId?: string | null): Promise<unknown> =>
     fetchWithAuth<unknown>('POST', `/classroom-sessions/${sessionId}/join`, {
-      body: {},
+      body: groupId ? { groupId } : {},
     }),
 
   studentProjection: (sessionId: string): Promise<StudentClassroomSessionProjection> =>
