@@ -97,7 +97,7 @@ describe('Activity Engine D2-A publication contract', () => {
   });
 
   it('rejects a recommended mode that is not supported', () => {
-    const input = validCandidate();
+    const input: any = validCandidate();
     input.recommendedMode = ActivityDeliveryMode.DEVICES;
     expect(() =>
       validateActivityEngineCompatibility({
@@ -112,7 +112,7 @@ describe('Activity Engine D2-A publication contract', () => {
   });
 
   it('rejects publication without an explicit policy for every supported mode', () => {
-    const input = validCandidate();
+    const input: any = validCandidate();
     delete input.modePolicy.SHARED_DEVICES;
     expect(() => validateActivityPublicationMetadata(input)).toThrow();
   });
