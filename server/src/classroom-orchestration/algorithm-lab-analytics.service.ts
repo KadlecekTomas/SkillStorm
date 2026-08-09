@@ -25,12 +25,6 @@ function numberFromPayload(payload: unknown, key: string, fallback: number): num
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 }
 
-function stringFromPayload(payload: unknown, key: string): string | null {
-  if (!payload || typeof payload !== 'object') return null;
-  const value = (payload as Record<string, unknown>)[key];
-  return typeof value === 'string' ? value : null;
-}
-
 @Injectable()
 export class AlgorithmLabAnalyticsService {
   constructor(
@@ -57,7 +51,6 @@ export class AlgorithmLabAnalyticsService {
                 'TEST_FAILED',
                 'HINT_REQUESTED',
                 'DEBUG_HYPOTHESIS_SUBMITTED',
-                'CHECKPOINT_COMPLETED',
               ],
             },
           },
@@ -71,22 +64,19 @@ export class AlgorithmLabAnalyticsService {
         })
       : [];
 
-    const participantById = new Map(session.participants.map((participant) => [participant.id, participant]));
-    const groupByParticipant = new Map(
-      session.participants
-        .filter((participant) => participant.groupId)
-        .map((participant) => [participant.id, participant.groupId!]),
-    );
-
     const groups = session.groups.map((group) => {
       const members = session.participants
         .filter((participant) => participant.groupId === group.id)
         .sort((a, b) => a.joinedAt.localeCompare(b.joinedAt));
       const memberIds = new Set(members.map((member) => member.id));
-      const groupEvents = events.filter((event) => event.participantId && memberIds.has(event.participantId));
+      const groupEvents = events.filter(
+        (event) => event.participantId && memberIds.has(event.participantId),
+      );
       const latestRoleEvent = [...groupEvents]
         .reverse()
-        .find((event) => ROLE_EVENTS.includes(event.eventType as (typeof ROLE_EVENTS)[number]));
+        .find((event) =>
+          ROLE_EVENTS.includes(event.eventType as (typeof ROLE_EVENTS)[number]),
+        );
 
       const marker: CoopMarker = latestRoleEvent
         ? {
@@ -94,7 +84,10 @@ export class AlgorithmLabAnalyticsService {
               latestRoleEvent.eventType === 'COOP_ROLE_HANDOFF'
                 ? 'COOP_ROLE_HANDOFF'
                 : 'COOP_ROLE_ROTATED',
-            round: Math.max(1, numberFromPayload(latestRoleEvent.payload, 'round', 1)),
+            round: Math.max(
+              1,
+              numberFromPayload(latestRoleEvent.payload, 'round', 1),
+            ),
           }
         : null;
 
@@ -115,19 +108,35 @@ export class AlgorithmLabAnalyticsService {
       const latestProgram = [...currentRoundEvents]
         .reverse()
         .find((event) => event.eventType === PROGRAM_EVENT);
-      const programLength = Array.isArray((latestProgram?.payload as Record<string, unknown> | null)?.commands)
-        ? ((latestProgram?.payload as Record<string, unknown>).commands as unknown[]).length
+      const programCommands = (
+        latestProgram?.payload as Record<string, unknown> | null
+      )?.commands;
+      const programLength = Array.isArray(programCommands)
+        ? programCommands.length
         : 0;
 
-      const failures = currentRoundEvents.filter((event) => event.eventType === 'TEST_FAILED').length;
-      const hints = currentRoundEvents.filter((event) => event.eventType === 'HINT_REQUESTED').length;
-      const runs = currentRoundEvents.filter((event) => event.eventType === 'PROGRAM_RUN').length;
+      const failures = currentRoundEvents.filter(
+        (event) => event.eventType === 'TEST_FAILED',
+      ).length;
+      const hints = currentRoundEvents.filter(
+        (event) => event.eventType === 'HINT_REQUESTED',
+      ).length;
+      const runs = currentRoundEvents.filter(
+        (event) => event.eventType === 'PROGRAM_RUN',
+      ).length;
       const debugHypotheses = currentRoundEvents.filter(
         (event) => event.eventType === 'DEBUG_HYPOTHESIS_SUBMITTED',
       ).length;
-      const rotated = groupEvents.some((event) => event.eventType === 'COOP_ROLE_ROTATED');
-      const handedOff = currentRoundEvents.some((event) => event.eventType === 'COOP_ROLE_HANDOFF');
-      const pairOnline = members.filter((member) => member.status === LiveParticipantStatus.CONNECTED).length >= 2;
+      const rotated = groupEvents.some(
+        (event) => event.eventType === 'COOP_ROLE_ROTATED',
+      );
+      const handedOff = currentRoundEvents.some(
+        (event) => event.eventType === 'COOP_ROLE_HANDOFF',
+      );
+      const pairOnline =
+        members.filter(
+          (member) => member.status === LiveParticipantStatus.CONNECTED,
+        ).length >= 2;
 
       const milestones = {
         pairOnline,
@@ -138,9 +147,12 @@ export class AlgorithmLabAnalyticsService {
         askedForHelp: hints > 0 || debugHypotheses > 0,
       };
       const missionEnergy = Object.values(milestones).filter(Boolean).length;
-      const needsAttention = failures >= 2 || (failures >= 1 && hints >= 1) || members.some(
-        (member) => member.status !== LiveParticipantStatus.CONNECTED,
-      );
+      const needsAttention =
+        failures >= 2 ||
+        (failures >= 1 && hints >= 1) ||
+        members.some(
+          (member) => member.status !== LiveParticipantStatus.CONNECTED,
+        );
 
       return {
         groupId: group.id,
@@ -156,7 +168,11 @@ export class AlgorithmLabAnalyticsService {
           role: coop.roleByParticipantId[member.id] ?? 'OBSERVER',
         })),
         programLength,
-        programRevision: numberFromPayload(latestProgram?.payload, 'programRevision', 0),
+        programRevision: numberFromPayload(
+          latestProgram?.payload,
+          'programRevision',
+          0,
+        ),
         failures,
         hints,
         runs,
@@ -169,12 +185,23 @@ export class AlgorithmLabAnalyticsService {
     });
 
     const maxEnergy = Math.max(1, groups.length * 6);
-    const earnedEnergy = groups.reduce((sum, group) => sum + group.missionEnergy, 0);
-    const progressPct = Math.min(100, Math.round((earnedEnergy / maxEnergy) * 100));
-    const level = [...REACTOR_LEVELS].reverse().find((candidate) => progressPct >= candidate.min)!;
+    const earnedEnergy = groups.reduce(
+      (sum, group) => sum + group.missionEnergy,
+      0,
+    );
+    const progressPct = Math.min(
+      100,
+      Math.round((earnedEnergy / maxEnergy) * 100),
+    );
+    const level = [...REACTOR_LEVELS]
+      .reverse()
+      .find((candidate) => progressPct >= candidate.min)!;
 
     const ungrouped = session.participants
-      .filter((participant) => !participant.groupId || !groupIds.includes(participant.groupId))
+      .filter(
+        (participant) =>
+          !participant.groupId || !groupIds.includes(participant.groupId),
+      )
       .map((participant) => ({
         participantId: participant.id,
         nickname: participant.nickname ?? 'Žák',
@@ -190,11 +217,15 @@ export class AlgorithmLabAnalyticsService {
         stateRevision: session.stateRevision,
         lessonTitle: session.lesson.title,
         stageTitle:
-          session.lesson.stages.find((stage) => stage.id === session.currentLessonStageId)?.title ?? null,
+          session.lesson.stages.find(
+            (stage) => stage.id === session.currentLessonStageId,
+          )?.title ?? null,
       },
       summary: {
         groups: groups.length,
-        connectedPairs: groups.filter((group) => group.members.filter((member) => member.connected).length >= 2).length,
+        connectedPairs: groups.filter(
+          (group) => group.members.filter((member) => member.connected).length >= 2,
+        ).length,
         needsAttention: groups.filter((group) => group.needsAttention).length,
         waiting: groups.filter((group) => group.phase === 'WAITING').length,
         totalProgramRuns: groups.reduce((sum, group) => sum + group.runs, 0),
@@ -206,11 +237,17 @@ export class AlgorithmLabAnalyticsService {
         progressPct,
         level: level.key,
         label: level.label,
-        nextLevelAt: REACTOR_LEVELS.find((candidate) => candidate.min > progressPct)?.min ?? 100,
+        nextLevelAt:
+          REACTOR_LEVELS.find((candidate) => candidate.min > progressPct)?.min ??
+          100,
         rankingEnabled: false,
         masteryImpact: false,
       },
-      groups: groups.sort((a, b) => Number(b.needsAttention) - Number(a.needsAttention) || a.label.localeCompare(b.label)),
+      groups: groups.sort(
+        (a, b) =>
+          Number(b.needsAttention) - Number(a.needsAttention) ||
+          a.label.localeCompare(b.label),
+      ),
       ungrouped,
       privacy: {
         pointerStreams: 0,
