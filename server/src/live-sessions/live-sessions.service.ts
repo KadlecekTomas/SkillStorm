@@ -860,6 +860,7 @@ export class LiveSessionsService {
       countdownSec: true,
       classSectionId: true,
       campaignProgressId: true,
+      sourceKind: true,
       testId: true,
       hostId: true,
       startedAt: true,
@@ -886,7 +887,19 @@ export class LiveSessionsService {
         message: 'Bleskovku může ovládat jen učitel, který ji spustil.',
       });
     }
-    return session;
+    // Legacy Bleskovka service is deliberately Test-backed only. Lesson Experience
+    // sessions use the D2-C orchestration service and must not leak into old round APIs.
+    if (session.sourceKind !== 'LEGACY_TEST' || !session.testId || !session.test) {
+      throw new NotFoundException({
+        code: 'LIVE_SESSION_NOT_FOUND',
+        message: 'Bleskovka nebyla nalezena.',
+      });
+    }
+    return {
+      ...session,
+      testId: session.testId,
+      test: session.test,
+    };
   }
 
   private async getRound(sessionId: string, roundId: string) {
