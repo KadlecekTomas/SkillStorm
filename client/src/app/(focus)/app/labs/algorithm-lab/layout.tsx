@@ -3,12 +3,13 @@
 import {
   useCallback,
   useRef,
+  useState,
   type JSX,
   type MouseEvent,
   type ReactNode,
 } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Cloud, CloudOff, PauseCircle, Radio, ShieldCheck } from 'lucide-react';
+import { Cloud, CloudOff, PauseCircle, Radio, ShieldCheck, UsersRound } from 'lucide-react';
 import { useClassroomActivity } from '@/lib/use-classroom-activity';
 import type { AlgorithmCommand } from '@/lib/it-lab/algorithm-engine';
 
@@ -17,6 +18,8 @@ const commandByLabel: Record<string, AlgorithmCommand> = {
   '↶ Vlevo': 'LEFT',
   '↷ Vpravo': 'RIGHT',
 };
+
+type CoopRole = 'PLANNER' | 'PROGRAMMER';
 
 function textOf(element: Element | null): string {
   return element?.textContent?.trim() ?? '';
@@ -29,6 +32,10 @@ export default function AlgorithmLabLayout({ children }: { children: ReactNode }
   const programRef = useRef<AlgorithmCommand[]>([]);
   const missionRef = useRef(1);
   const runSerialRef = useRef(0);
+  const [coopRole, setCoopRole] = useState<CoopRole>('PLANNER');
+  const [rotationRound, setRotationRound] = useState(1);
+
+  const sharedDeviceMode = classroom.projection?.mode === 'SHARED_DEVICES';
 
   const publishOutcome = useCallback(
     (serial: number, program: AlgorithmCommand[]): void => {
@@ -59,6 +66,7 @@ export default function AlgorithmLabLayout({ children }: { children: ReactNode }
             ? { x: Number(robot.dataset.x), y: Number(robot.dataset.y) }
             : null,
           finalDirection: robot?.dataset.direction ?? null,
+          deliveryMode: classroom.projection?.mode ?? null,
         };
 
         if (resultText.includes('Algoritmus funguje.')) {
@@ -80,13 +88,30 @@ export default function AlgorithmLabLayout({ children }: { children: ReactNode }
               ? 'OUT_OF_BOUNDS'
               : 'TARGET_NOT_REACHED',
         });
+
+        if (sharedDeviceMode) {
+          setCoopRole('PLANNER');
+          setRotationRound((current) => current + 1);
+        }
       }, 250);
     },
-    [classroom],
+    [classroom, sharedDeviceMode],
   );
+
+  function isProgrammerAction(button: HTMLButtonElement, label: string): boolean {
+    return Boolean(
+      commandByLabel[label] ||
+      label === 'Vymazat vše' ||
+      label.includes('Spustit program krok po kroku') ||
+      button.getAttribute('aria-label')?.startsWith('Odstranit krok '),
+    );
+  }
 
   function handleClickCapture(event: MouseEvent<HTMLDivElement>): void {
     if (!classroom.isClassroomMode) return;
+
+    const target = event.target as HTMLElement;
+    if (target.closest('[data-coop-control="true"]')) return;
 
     if (!classroom.canInteract) {
       event.preventDefault();
@@ -94,10 +119,15 @@ export default function AlgorithmLabLayout({ children }: { children: ReactNode }
       return;
     }
 
-    const target = event.target as HTMLElement;
     const button = target.closest<HTMLButtonElement>('button');
     if (!button) return;
     const label = textOf(button);
+
+    if (sharedDeviceMode && coopRole === 'PLANNER' && isProgrammerAction(button, label)) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
 
     const command = commandByLabel[label];
     if (command) {
@@ -107,6 +137,7 @@ export default function AlgorithmLabLayout({ children }: { children: ReactNode }
         command,
         stepIndex: programRef.current.length,
         programLength: programRef.current.length,
+        collaborationRole: sharedDeviceMode ? coopRole : null,
       });
       return;
     }
@@ -130,6 +161,7 @@ export default function AlgorithmLabLayout({ children }: { children: ReactNode }
         mission: missionRef.current,
         program,
         programLength: program.length,
+        collaborationRole: sharedDeviceMode ? coopRole : null,
       });
       publishOutcome(runSerialRef.current, program);
       return;
@@ -138,6 +170,10 @@ export default function AlgorithmLabLayout({ children }: { children: ReactNode }
     if (label.includes('Transfer: další mise')) {
       missionRef.current += 1;
       programRef.current = [];
+      if (sharedDeviceMode) {
+        setCoopRole('PLANNER');
+        setRotationRound((current) => current + 1);
+      }
     }
   }
 
@@ -166,6 +202,58 @@ export default function AlgorithmLabLayout({ children }: { children: ReactNode }
             <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
             <span data-testid="algorithm-server-event-count">{classroom.confirmedEvents}</span> semantic events
           </span>
+        </div>
+      )}
+
+      {sharedDeviceMode && classroom.canInteract && (
+        <div
+          data-testid="algorithm-coop-banner"
+          className="fixed left-1/2 top-16 z-[75] w-[min(680px,calc(100vw-24px))] -translate-x-1/2 rounded-2xl border border-violet-300/20 bg-[#11172a]/95 p-3 text-white shadow-2xl backdrop-blur-xl"
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-violet-400/10 text-violet-200">
+                <UsersRound className="h-5 w-5" aria-hidden="true" />
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-200/60">
+                  Dvojice · kolo {rotationRound}
+                </p>
+                <p className="mt-1 text-sm font-black" data-testid="algorithm-coop-role">
+                  {coopRole === 'PLANNER' ? 'Planner plánuje' : 'Programmer ovládá zařízení'}
+                </p>
+                <p className="mt-1 text-xs leading-5 text-slate-400">
+                  {coopRole === 'PLANNER'
+                    ? 'Planner vysvětlí trasu nahlas a nesmí zatím skládat bloky. Až je plán jasný, předá zařízení.'
+                    : 'Programmer podle domluveného plánu sestaví a spustí program. Po chybě se role vrátí Plannerovi k diagnóze.'}
+                </p>
+              </div>
+            </div>
+            {coopRole === 'PLANNER' ? (
+              <button
+                type="button"
+                data-coop-control="true"
+                data-testid="algorithm-coop-handoff"
+                onClick={() => setCoopRole('PROGRAMMER')}
+                className="shrink-0 rounded-xl bg-violet-300 px-4 py-2 text-sm font-black text-slate-950 transition hover:bg-violet-200 focus:outline-none focus:ring-2 focus:ring-violet-100"
+              >
+                Plán hotový · předat →
+              </button>
+            ) : (
+              <button
+                type="button"
+                data-coop-control="true"
+                data-testid="algorithm-coop-return"
+                onClick={() => {
+                  setCoopRole('PLANNER');
+                  setRotationRound((current) => current + 1);
+                }}
+                className="shrink-0 rounded-xl border border-violet-300/30 px-4 py-2 text-sm font-bold text-violet-100 transition hover:bg-violet-300/10 focus:outline-none focus:ring-2 focus:ring-violet-200"
+              >
+                Vrátit Plannerovi
+              </button>
+            )}
+          </div>
         </div>
       )}
 
