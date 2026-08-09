@@ -20,6 +20,7 @@ import {
 } from '@/common/decorators/org-operation.decorator';
 import { AlgorithmLabAnalyticsService } from './algorithm-lab-analytics.service';
 import { AlgorithmLabAutoPairService } from './algorithm-lab-auto-pair.service';
+import { AlgorithmLabJoinCodeService } from './algorithm-lab-join-code.service';
 import { AlgorithmLabQuickStartService } from './algorithm-lab-quick-start.service';
 import { BuildPcAnalyticsService } from './build-pc-analytics.service';
 import { ClassroomOrchestrationService } from './classroom-orchestration.service';
@@ -45,6 +46,7 @@ export class ClassroomOrchestrationController {
     private readonly service: ClassroomOrchestrationService,
     private readonly algorithmLabAnalytics: AlgorithmLabAnalyticsService,
     private readonly algorithmLabAutoPair: AlgorithmLabAutoPairService,
+    private readonly algorithmLabJoinCode: AlgorithmLabJoinCodeService,
     private readonly algorithmLabQuickStart: AlgorithmLabQuickStartService,
     private readonly buildPcAnalytics: BuildPcAnalyticsService,
     private readonly networkedCoop: NetworkedCoopService,
@@ -77,6 +79,17 @@ export class ClassroomOrchestrationController {
   async quickStartAlgorithmLab(@Req() req: RequestWithUser) {
     const ctx = await this.orgContext.get(req);
     return this.algorithmLabQuickStart.launch(ctx);
+  }
+
+  @Get('algorithm-lab/resolve-code/:code')
+  @Permission(OrganizationRole.STUDENT)
+  @ApiOperation({ summary: 'Resolve a short Algorithm Lab classroom code inside the active organization' })
+  async resolveAlgorithmLabCode(
+    @Param('code') code: string,
+    @Req() req: RequestWithUser,
+  ) {
+    const ctx = await this.orgContext.get(req);
+    return this.algorithmLabJoinCode.resolve(code, ctx);
   }
 
   @Get(':id')
