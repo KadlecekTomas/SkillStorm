@@ -7,9 +7,6 @@ on:
 
 env:
   NODE_VERSION: "20"
-  # The scenario suite is driven ENTIRELY by DATABASE_URL_TEST: globalSetup
-  # recreates + migrates + seeds it, and the guard (server/scripts/db-safety.js)
-  # refuses anything whose DB name is not skillstorm_test.
   DATABASE_URL_TEST: postgresql://postgres:postgres@localhost:5432/skillstorm_test
   JWT_SECRET: ciSyntheticAccessSecret1234567890abcdef
   JWT_ACCESS_SECRET: ciSyntheticAccessSecret1234567890abcdef
@@ -21,8 +18,6 @@ env:
   API_URL: http://127.0.0.1:4200
   API_PROXY_TARGET: http://127.0.0.1:4200
   BASE_URL: http://127.0.0.1:3001
-  # Throttling stays ON: the rate-limit security scenario needs it. TRUST_PROXY
-  # lets the suite address distinct client IPs via X-Forwarded-For.
   DISABLE_THROTTLE: "0"
   TRUST_PROXY: "1"
   DISABLE_CSRF: "1"
@@ -77,16 +72,10 @@ jobs:
         run: npx playwright install --with-deps chromium
         working-directory: client
 
-      # Playwright launches webServer BEFORE globalSetup, so on a fresh CI
-      # database the backend would boot against zero tables and crash in
-      # onModuleInit (RBAC sync). Migrate explicitly first; globalSetup's own
-      # migrate+seed then run as no-op/refresh.
       - name: Migrate test database
         run: DATABASE_URL="$DATABASE_URL_TEST" npx prisma migrate deploy
         working-directory: server
 
-      # globalSetup recreates+migrates+seeds the DB; webServer boots
-      # backend :4200 (guarded to the test DB) + frontend :3001.
       - name: Run scenario suite
         run: npm run test:scenarios
         working-directory: client
@@ -97,6 +86,15 @@ jobs:
         with:
           name: skillstorm-build-a-pc-preview
           path: client/test-results/build-a-pc-*.png
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Algorithm Lab walkthrough screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: skillstorm-algorithm-lab-walkthrough
+          path: client/test-results/algorithm-lab-*.png
           if-no-files-found: error
           retention-days: 14
 
