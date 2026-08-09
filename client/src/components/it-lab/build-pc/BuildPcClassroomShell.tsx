@@ -51,8 +51,17 @@ export function BuildPcClassroomShell({ sessionId = null }: BuildPcClassroomShel
   }
 
   function handleClickCapture(event: MouseEvent<HTMLDivElement>): void {
-    if (!classroom.isClassroomMode || !classroom.canInteract) return;
+    if (!classroom.isClassroomMode) return;
     const target = event.target as HTMLElement;
+    const button = target.closest<HTMLButtonElement>('button');
+
+    if (button?.getAttribute('aria-label') === 'Resetovat sestavu') {
+      installedRef.current = new Set();
+      selectedRef.current = 'cpu';
+      return;
+    }
+
+    if (!classroom.canInteract) return;
     const interactive = target.closest<HTMLElement>('[data-testid]');
     const testId = interactive?.dataset.testid ?? null;
 
@@ -96,7 +105,7 @@ export function BuildPcClassroomShell({ sessionId = null }: BuildPcClassroomShel
         <div className="fixed left-1/2 top-3 z-[80] flex max-w-[calc(100vw-24px)] -translate-x-1/2 items-center gap-2 rounded-2xl border border-white/10 bg-[#07101f]/90 px-3 py-2 text-xs font-semibold text-slate-200 shadow-2xl backdrop-blur-xl">
           {classroom.error ? (
             <CloudOff className="h-4 w-4 shrink-0 text-rose-300" aria-hidden="true" />
-          ) : classroom.projection?.status === 'RUNNING' ? (
+          ) : classroom.projection?.status === 'RUNNING' && classroom.canInteract ? (
             <Radio className="h-4 w-4 shrink-0 text-emerald-300" aria-hidden="true" />
           ) : (
             <Cloud className="h-4 w-4 shrink-0 text-cyan-300" aria-hidden="true" />
