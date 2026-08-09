@@ -149,9 +149,12 @@ test.describe('Algorithm Lab classroom player', () => {
 });
 
 test.describe('Algorithm Lab networked pair', () => {
-  test('synchronizes Planner and Programmer across two browser devices and swaps roles', async ({ browser }) => {
+  test('synchronizes roles and live program state across two browser devices', async ({ browser }) => {
     let round = 1;
     let phase: 'PLAN' | 'PROGRAM' = 'PLAN';
+    let programRevision = 0;
+    let sharedCommands: Array<'FORWARD' | 'LEFT' | 'RIGHT'> = [];
+    let updatedByParticipantId: string | null = null;
 
     const roleFor = (participantId: string): 'PLANNER' | 'PROGRAMMER' => {
       const swapped = round % 2 === 0;
@@ -190,6 +193,14 @@ test.describe('Algorithm Lab networked pair', () => {
       ],
     });
 
+    const programProjection = () => ({
+      groupId: GROUP_ID,
+      round,
+      programRevision,
+      commands: sharedCommands,
+      updatedByParticipantId,
+    });
+
     const setupDevice = async (participantId: string) => {
       const context = await browser.newContext({ storageState: storageStateFor('student8a') });
       const page = await context.newPage();
@@ -210,6 +221,31 @@ test.describe('Algorithm Lab networked pair', () => {
           body: JSON.stringify(networkedStudentProjection(participantId)),
         });
       });
+      await page.route(`**/api/classroom-sessions/${SESSION_ID}/coop/program`, async (route) => {
+        if (route.request().method() === 'PUT') {
+          const body = route.request().postDataJSON() as {
+            expectedProgramRevision: number;
+            commands: Array<'FORWARD' | 'LEFT' | 'RIGHT'>;
+          };
+          expect(body.expectedProgramRevision).toBe(programRevision);
+          expect(roleFor(participantId)).toBe('PROGRAMMER');
+          expect(phase).toBe('PROGRAM');
+          programRevision += 1;
+          sharedCommands = body.commands;
+          updatedByParticipantId = participantId;
+          await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({ replayed: false, program: programProjection() }),
+          });
+          return;
+        }
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(programProjection()),
+        });
+      });
       await page.route(`**/api/classroom-sessions/${SESSION_ID}/coop`, async (route) => {
         await route.fulfill({
           status: 200,
@@ -223,6 +259,9 @@ test.describe('Algorithm Lab networked pair', () => {
         if (body.action === 'ROTATE') {
           round += 1;
           phase = 'PLAN';
+          programRevision = 0;
+          sharedCommands = [];
+          updatedByParticipantId = null;
         }
         await route.fulfill({
           status: 201,
@@ -256,6 +295,9 @@ test.describe('Algorithm Lab networked pair', () => {
     await expect(programmerDevice.page.getByTestId('algorithm-networked-coop-role')).toContainText(
       'Programmer čeká na plán',
     );
+    await expect(plannerDevice.page.getByTestId('algorithm-networked-program-mirror')).toContainText(
+      'zatím prázdný',
+    );
 
     await programmerDevice.page.getByRole('button', { name: '↑ Krok' }).click();
     await expect(programmerDevice.page.getByTestId('algorithm-step-1')).toHaveCount(0);
@@ -268,6 +310,17 @@ test.describe('Algorithm Lab networked pair', () => {
 
     await programmerDevice.page.getByRole('button', { name: '↑ Krok' }).click();
     await expect(programmerDevice.page.getByTestId('algorithm-step-1')).toBeVisible();
+    await expect(plannerDevice.page.getByTestId('algorithm-networked-program-step-1')).toHaveText('↑', {
+      timeout: 4_000,
+    });
+    await expect(plannerDevice.page.getByTestId('algorithm-networked-program-mirror')).toContainText(
+      'Program v1',
+    );
+
+    await programmerDevice.page.getByRole('button', { name: '↷ Vpravo' }).click();
+    await expect(plannerDevice.page.getByTestId('algorithm-networked-program-step-2')).toHaveText('↷', {
+      timeout: 4_000,
+    });
 
     await programmerDevice.page.getByTestId('algorithm-networked-coop-rotate').click();
     await expect(programmerDevice.page.getByTestId('algorithm-networked-coop-role')).toContainText(
@@ -278,13 +331,17 @@ test.describe('Algorithm Lab networked pair', () => {
       'Programmer čeká na plán',
       { timeout: 4_000 },
     );
+    await expect(plannerDevice.page.getByTestId('algorithm-networked-program-mirror')).toContainText(
+      'zatím prázdný',
+      { timeout: 4_000 },
+    );
 
     await plannerDevice.page.screenshot({
-      path: 'test-results/algorithm-lab-11-networked-device-a.png',
+      path: 'test-results/algorithm-lab-13-networked-live-mirror-a.png',
       fullPage: true,
     });
     await programmerDevice.page.screenshot({
-      path: 'test-results/algorithm-lab-12-networked-device-b.png',
+      path: 'test-results/algorithm-lab-14-networked-live-mirror-b.png',
       fullPage: true,
     });
 
