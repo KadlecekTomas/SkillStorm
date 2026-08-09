@@ -272,6 +272,13 @@ export const classroomSessionApi = {
       { body: {} },
     ),
 
+  resolveAlgorithmLabCode: (code: string): Promise<{ sessionId: string }> =>
+    fetchWithAuth<{ sessionId: string }>(
+      'GET',
+      `/classroom-sessions/algorithm-lab/resolve-code/${encodeURIComponent(code)}`,
+      { cache: 'no-store' },
+    ),
+
   joinStudent: (sessionId: string, groupId?: string | null): Promise<unknown> =>
     fetchWithAuth<unknown>('POST', `/classroom-sessions/${sessionId}/join`, {
       body: groupId ? { groupId } : {},
