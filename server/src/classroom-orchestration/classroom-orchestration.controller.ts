@@ -18,6 +18,7 @@ import {
   OrgOperation,
   OrgOperationType,
 } from '@/common/decorators/org-operation.decorator';
+import { AlgorithmLabAnalyticsService } from './algorithm-lab-analytics.service';
 import { BuildPcAnalyticsService } from './build-pc-analytics.service';
 import { ClassroomOrchestrationService } from './classroom-orchestration.service';
 import { NetworkedCoopProgramService } from './networked-coop-program.service';
@@ -40,6 +41,7 @@ import { NetworkedCoopTransitionDto } from './dto/networked-coop.dto';
 export class ClassroomOrchestrationController {
   constructor(
     private readonly service: ClassroomOrchestrationService,
+    private readonly algorithmLabAnalytics: AlgorithmLabAnalyticsService,
     private readonly buildPcAnalytics: BuildPcAnalyticsService,
     private readonly networkedCoop: NetworkedCoopService,
     private readonly networkedCoopProgram: NetworkedCoopProgramService,
@@ -89,6 +91,21 @@ export class ClassroomOrchestrationController {
   ) {
     const ctx = await this.orgContext.get(req);
     return this.buildPcAnalytics.get(id, ctx);
+  }
+
+  @Get(':id/algorithm-lab-analytics')
+  @Permission(
+    OrganizationRole.TEACHER,
+    OrganizationRole.DIRECTOR,
+    OrganizationRole.OWNER,
+  )
+  @ApiOperation({ summary: 'Algorithm Lab cooperation Mission Control analytics' })
+  async algorithmLabMissionAnalytics(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() req: RequestWithUser,
+  ) {
+    const ctx = await this.orgContext.get(req);
+    return this.algorithmLabAnalytics.get(id, ctx);
   }
 
   @Post(':id/commands')
