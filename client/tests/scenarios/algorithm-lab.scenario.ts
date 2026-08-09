@@ -1,10 +1,7 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { storageStateFor } from './manifest';
 
-const clickSequence = async (
-  page: Parameters<Parameters<typeof test>[1]>[0]['page'],
-  labels: string[],
-) => {
+const clickSequence = async (page: Page, labels: string[]) => {
   for (const label of labels) {
     await page.getByRole('button', { name: label }).click();
   }
@@ -30,7 +27,7 @@ test.describe('Interactive IT Lab — Algorithm Lab walkthrough', () => {
     await expect(page.getByTestId('algorithm-result')).toContainText('Robot do cíle nedorazil.');
     await page.screenshot({ path: 'test-results/algorithm-lab-03-diagnose.png', fullPage: true });
 
-    // Repair only the algorithm and prove mission 1 success.
+    // Repair the algorithm and prove mission 1 success.
     await page.getByRole('button', { name: 'Vymazat' }).click();
     await clickSequence(page, ['↑ Krok', '↑ Krok', '↷ Vpravo', '↑ Krok']);
     await page.getByRole('button', { name: '▶ Spustit program' }).click();
