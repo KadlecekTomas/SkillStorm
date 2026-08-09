@@ -51,53 +51,53 @@ model User {
 }
 
 model Organization {
-  id                 String                    @id @default(uuid()) @map("organization_id")
-  name               String                    @db.VarChar(255)
-  address            String?                   @db.VarChar(255)
-  city               String?                   @db.VarChar(100)
-  country            String?                   @db.VarChar(100)
-  type               OrganizationType          @default(SCHOOL)
-  status             OrganizationStatus        @default(PENDING)
-  ownerUserId        String?                   @unique @map("owner_user_id")
-  createdAt          DateTime                  @default(now()) @map("created_at")
-  updatedAt          DateTime                  @updatedAt @map("updated_at")
-  deletedAt          DateTime?                 @map("deleted_at")
-  owner              User?                     @relation("OrganizationOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
-  academicYears      AcademicYear[]
-  analyticsEvents    AnalyticsEvent[]
-  assignments        Assignment[]
-  enrollments        Enrollment[]
-  auditLogs          AuditLog[]
-  classSections      ClassSection[]
-  exportLogs         ExportLog[]
-  importBatches      ImportBatch[]
-  learningMaterials  LearningMaterial[]
-  materialPurchases  MaterialPurchase[]
-  memberships        Membership[]
-  settings           OrganizationSettings?
-  rolePermissions    RolePermission[]
-  students           Student[]
-  orgSubjects        OrgSubject[]
-  subscriptions      Subscription[]
-  teachers           Teacher[]
-  tests              Test[]
-  userPermissions    UserPermission[]
-  invitations        Invitation[]
-  invites            Invite[]
-  promotionLogs      PromotionLog[]
-  submissions        Submission[]
-  supportTickets     SupportTicket[]
-  userIdentities     UserIdentity[]
-  liveSessions       LiveSession[]
-  classPartaks       ClassPartak[]
-  campaignProgresses CampaignProgress[]
-  guardianRelations  GuardianStudentRelation[]
-  learningSessions   LearningSession[]
-  schoolCurriculumProfiles SchoolCurriculumProfile[]
+  id                        String                    @id @default(uuid()) @map("organization_id")
+  name                      String                    @db.VarChar(255)
+  address                   String?                   @db.VarChar(255)
+  city                      String?                   @db.VarChar(100)
+  country                   String?                   @db.VarChar(100)
+  type                      OrganizationType          @default(SCHOOL)
+  status                    OrganizationStatus        @default(PENDING)
+  ownerUserId               String?                   @unique @map("owner_user_id")
+  createdAt                 DateTime                  @default(now()) @map("created_at")
+  updatedAt                 DateTime                  @updatedAt @map("updated_at")
+  deletedAt                 DateTime?                 @map("deleted_at")
+  owner                     User?                     @relation("OrganizationOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  academicYears             AcademicYear[]
+  analyticsEvents           AnalyticsEvent[]
+  assignments               Assignment[]
+  enrollments               Enrollment[]
+  auditLogs                 AuditLog[]
+  classSections             ClassSection[]
+  exportLogs                ExportLog[]
+  importBatches             ImportBatch[]
+  learningMaterials         LearningMaterial[]
+  materialPurchases         MaterialPurchase[]
+  memberships               Membership[]
+  settings                  OrganizationSettings?
+  rolePermissions           RolePermission[]
+  students                  Student[]
+  orgSubjects               OrgSubject[]
+  subscriptions             Subscription[]
+  teachers                  Teacher[]
+  tests                     Test[]
+  userPermissions           UserPermission[]
+  invitations               Invitation[]
+  invites                   Invite[]
+  promotionLogs             PromotionLog[]
+  submissions               Submission[]
+  supportTickets            SupportTicket[]
+  userIdentities            UserIdentity[]
+  liveSessions              LiveSession[]
+  classPartaks              ClassPartak[]
+  campaignProgresses        CampaignProgress[]
+  guardianRelations         GuardianStudentRelation[]
+  learningSessions          LearningSession[]
+  schoolCurriculumProfiles  SchoolCurriculumProfile[]
   curriculumApplicabilities CurriculumApplicability[]
-  activities          Activity[]
+  activities                Activity[]
 
-  lessonExperiences  LessonExperience[]
+  lessonExperiences LessonExperience[]
 
   @@index([name])
   @@index([city])
@@ -206,6 +206,7 @@ model Membership {
   createdTests              Test[]
   xpEvents                  XpEvent[]
   hostedLiveSessions        LiveSession[]              @relation("HostedLiveSessions")
+  liveSessionCommands       LiveSessionCommand[]       @relation("LiveSessionCommandActor")
   liveParticipations        LiveSessionParticipant[]
   roleAssignments           MembershipRoleAssignment[]
   guardianRelations         GuardianStudentRelation[]  @relation("GuardianRelations")
@@ -688,22 +689,22 @@ model GuardianStudentRelation {
 }
 
 model AcademicYear {
-  id                   String                @id @default(uuid()) @map("academic_year_id")
-  orgId                String                @map("organization_id")
-  label                String
-  startsAt             DateTime
-  endsAt               DateTime
-  isCurrent            Boolean               @default(false)
-  createdAt            DateTime              @default(now()) @map("created_at")
-  deletedAt            DateTime?             @map("deleted_at")
-  organization         Organization          @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  assignments          Assignment[]
-  classSections        ClassSection[]
-  enrollments          Enrollment[]
-  invitations          Invitation[]
-  invites              Invite[]
-  tests                Test[]
-  teacherClassSections TeacherClassSection[]
+  id                        String                    @id @default(uuid()) @map("academic_year_id")
+  orgId                     String                    @map("organization_id")
+  label                     String
+  startsAt                  DateTime
+  endsAt                    DateTime
+  isCurrent                 Boolean                   @default(false)
+  createdAt                 DateTime                  @default(now()) @map("created_at")
+  deletedAt                 DateTime?                 @map("deleted_at")
+  organization              Organization              @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  assignments               Assignment[]
+  classSections             ClassSection[]
+  enrollments               Enrollment[]
+  invitations               Invitation[]
+  invites                   Invite[]
+  tests                     Test[]
+  teacherClassSections      TeacherClassSection[]
   curriculumApplicabilities CurriculumApplicability[]
 
   @@unique([orgId, label])
@@ -730,27 +731,27 @@ model PromotionLog {
 }
 
 model ClassSection {
-  id                 String                   @id @default(uuid()) @map("class_section_id")
-  orgId              String                   @map("organization_id")
-  yearId             String                   @map("academic_year_id")
-  grade              SchoolGrade
-  section            String
-  label              String?
-  teacherId          String?                  @map("teacher_id")
-  createdAt          DateTime                 @default(now()) @map("created_at")
-  assignments        Assignment[]
-  academicYear       AcademicYear             @relation(fields: [yearId], references: [id], onDelete: Cascade)
-  organization       Organization             @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  teacher            Teacher?                 @relation("Homeroom", fields: [teacherId], references: [id])
-  enrollments        Enrollment[]
-  orgSubjects        ClassSectionOrgSubject[]
-  studentClassrooms  StudentClassroom[]
-  invitations        Invitation[]
-  invites            Invite[]
-  teachers           TeacherClassSection[]
-  liveSessions       LiveSession[]
-  classPartak        ClassPartak?
-  campaignProgresses CampaignProgress[]
+  id                        String                    @id @default(uuid()) @map("class_section_id")
+  orgId                     String                    @map("organization_id")
+  yearId                    String                    @map("academic_year_id")
+  grade                     SchoolGrade
+  section                   String
+  label                     String?
+  teacherId                 String?                   @map("teacher_id")
+  createdAt                 DateTime                  @default(now()) @map("created_at")
+  assignments               Assignment[]
+  academicYear              AcademicYear              @relation(fields: [yearId], references: [id], onDelete: Cascade)
+  organization              Organization              @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  teacher                   Teacher?                  @relation("Homeroom", fields: [teacherId], references: [id])
+  enrollments               Enrollment[]
+  orgSubjects               ClassSectionOrgSubject[]
+  studentClassrooms         StudentClassroom[]
+  invitations               Invitation[]
+  invites                   Invite[]
+  teachers                  TeacherClassSection[]
+  liveSessions              LiveSession[]
+  classPartak               ClassPartak?
+  campaignProgresses        CampaignProgress[]
   curriculumApplicabilities CurriculumApplicability[]
 
   @@unique([orgId, yearId, grade, section])
@@ -1216,34 +1217,46 @@ model Response {
 /// vše běží na učitelově obrazovce, žádná data o jednotlivých žácích.
 /// Švy pro režim A (DEVICES) viz docs/live-sessions.md.
 model LiveSession {
-  id                 String                   @id @default(uuid()) @map("live_session_id")
-  organizationId     String                   @map("organization_id")
-  hostId             String                   @map("host_membership_id")
-  classSectionId     String?                  @map("class_section_id")
-  testId             String                   @map("test_id")
-  mode               LiveSessionMode          @default(BOARD_ONLY)
-  status             LiveSessionStatus        @default(DRAFT)
-  ageMode            LiveAgeMode              @map("age_mode")
-  countdownSec       Int?                     @map("countdown_sec")
-  startedAt          DateTime?                @map("started_at")
-  finishedAt         DateTime?                @map("finished_at")
-  xpAwarded          Boolean                  @default(false) @map("xp_awarded")
+  id                        String                   @id @default(uuid()) @map("live_session_id")
+  organizationId            String                   @map("organization_id")
+  hostId                    String                   @map("host_membership_id")
+  classSectionId            String?                  @map("class_section_id")
+  testId                    String?                  @map("test_id")
+  lessonExperienceVersionId String?                  @map("lesson_experience_version_id")
+  sourceKind                LiveSessionSourceKind    @default(LEGACY_TEST) @map("source_kind")
+  mode                      LiveSessionMode          @default(BOARD_ONLY)
+  status                    LiveSessionStatus        @default(DRAFT)
+  ageMode                   LiveAgeMode              @map("age_mode")
+  countdownSec              Int?                     @map("countdown_sec")
+  currentLessonStageId      String?                  @map("current_lesson_stage_id")
+  stateRevision             Int                      @default(0) @map("state_revision")
+  startedAt                 DateTime?                @map("started_at")
+  pausedAt                  DateTime?                @map("paused_at")
+  finishedAt                DateTime?                @map("finished_at")
+  xpAwarded                 Boolean                  @default(false) @map("xp_awarded")
   /// Volitelná vazba na kampaň — bleskovka bez kampaně funguje beze změny.
-  campaignProgressId String?                  @map("campaign_progress_id")
-  createdAt          DateTime                 @default(now()) @map("created_at")
-  updatedAt          DateTime                 @updatedAt @map("updated_at")
-  organization       Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  host               Membership               @relation("HostedLiveSessions", fields: [hostId], references: [id], onDelete: Cascade)
-  classSection       ClassSection?            @relation(fields: [classSectionId], references: [id], onDelete: SetNull)
-  test               Test                     @relation(fields: [testId], references: [id], onDelete: Restrict)
-  campaignProgress   CampaignProgress?        @relation(fields: [campaignProgressId], references: [id], onDelete: SetNull)
-  campaignStepUnlock CampaignStepUnlock?
-  rounds             LiveSessionRound[]
-  participants       LiveSessionParticipant[]
-  xpEvents           ClassPartakXpEvent[]
+  campaignProgressId        String?                  @map("campaign_progress_id")
+  createdAt                 DateTime                 @default(now()) @map("created_at")
+  updatedAt                 DateTime                 @updatedAt @map("updated_at")
+  organization              Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  host                      Membership               @relation("HostedLiveSessions", fields: [hostId], references: [id], onDelete: Cascade)
+  classSection              ClassSection?            @relation(fields: [classSectionId], references: [id], onDelete: SetNull)
+  test                      Test?                    @relation(fields: [testId], references: [id], onDelete: Restrict)
+  lessonExperienceVersion   LessonExperienceVersion? @relation(fields: [lessonExperienceVersionId], references: [id], onDelete: Restrict)
+  currentLessonStage        LessonStage?             @relation("CurrentLiveSessionStage", fields: [currentLessonStageId], references: [id], onDelete: Restrict)
+  campaignProgress          CampaignProgress?        @relation(fields: [campaignProgressId], references: [id], onDelete: SetNull)
+  campaignStepUnlock        CampaignStepUnlock?
+  rounds                    LiveSessionRound[]
+  participants              LiveSessionParticipant[]
+  groups                    LiveSessionGroup[]
+  commands                  LiveSessionCommand[]
+  semanticEvents            LiveSemanticEvent[]
+  learningEvidence          LiveLearningEvidence[]
+  xpEvents                  ClassPartakXpEvent[]
 
   @@index([organizationId, status])
   @@index([hostId, createdAt])
+  @@index([lessonExperienceVersionId, status])
   @@map("live_sessions")
 }
 
@@ -1290,18 +1303,106 @@ model LiveSessionRound {
 /// se neukládá vůbec nic. `nickname` je přezdívka zadaná při joinu (ne jméno),
 /// `membershipId` se vyplní jen u autentizovaného joinu. Viz docs/live-sessions.md.
 model LiveSessionParticipant {
-  id           String      @id @default(uuid()) @map("live_session_participant_id")
-  sessionId    String      @map("live_session_id")
-  nickname     String      @db.VarChar(50)
-  joinToken    String      @unique @map("join_token")
-  membershipId String?     @map("membership_id")
-  joinedAt     DateTime    @default(now()) @map("joined_at")
-  lastSeenAt   DateTime?   @map("last_seen_at")
-  session      LiveSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  membership   Membership? @relation(fields: [membershipId], references: [id], onDelete: SetNull)
+  id               String                 @id @default(uuid()) @map("live_session_participant_id")
+  sessionId        String                 @map("live_session_id")
+  nickname         String                 @db.VarChar(50)
+  joinToken        String                 @unique @map("join_token")
+  membershipId     String?                @map("membership_id")
+  groupId          String?                @map("live_session_group_id")
+  status           LiveParticipantStatus  @default(CONNECTED)
+  joinedAt         DateTime               @default(now()) @map("joined_at")
+  lastSeenAt       DateTime?              @map("last_seen_at")
+  disconnectedAt   DateTime?              @map("disconnected_at")
+  session          LiveSession            @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  membership       Membership?            @relation(fields: [membershipId], references: [id], onDelete: SetNull)
+  group            LiveSessionGroup?      @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  semanticEvents   LiveSemanticEvent[]
+  learningEvidence LiveLearningEvidence[]
 
-  @@index([sessionId])
+  @@unique([sessionId, membershipId])
+  @@index([sessionId, status])
+  @@index([groupId])
   @@map("live_session_participants")
+}
+
+model LiveSessionGroup {
+  id           String                   @id @default(uuid()) @map("live_session_group_id")
+  sessionId    String                   @map("live_session_id")
+  label        String                   @db.VarChar(80)
+  orderIndex   Int                      @map("order_index")
+  createdAt    DateTime                 @default(now()) @map("created_at")
+  session      LiveSession              @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  participants LiveSessionParticipant[]
+
+  @@unique([sessionId, orderIndex])
+  @@unique([sessionId, label])
+  @@index([sessionId])
+  @@map("live_session_groups")
+}
+
+model LiveSessionCommand {
+  id                String                 @id @default(uuid()) @map("live_session_command_id")
+  sessionId         String                 @map("live_session_id")
+  commandId         String                 @map("command_id") @db.VarChar(100)
+  type              LiveSessionCommandType
+  actorMembershipId String                 @map("actor_membership_id")
+  expectedRevision  Int?                   @map("expected_revision")
+  resultingRevision Int                    @map("resulting_revision")
+  fromStatus        LiveSessionStatus      @map("from_status")
+  toStatus          LiveSessionStatus      @map("to_status")
+  fromStageId       String?                @map("from_stage_id")
+  toStageId         String?                @map("to_stage_id")
+  createdAt         DateTime               @default(now()) @map("created_at")
+  session           LiveSession            @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  actor             Membership             @relation("LiveSessionCommandActor", fields: [actorMembershipId], references: [id], onDelete: Restrict)
+
+  @@unique([sessionId, commandId])
+  @@index([sessionId, createdAt])
+  @@map("live_session_commands")
+}
+
+model LiveSemanticEvent {
+  id              String                  @id @default(uuid()) @map("live_semantic_event_id")
+  sessionId       String                  @map("live_session_id")
+  participantId   String?                 @map("live_session_participant_id")
+  stageId         String                  @map("lesson_stage_id")
+  eventId         String                  @map("event_id") @db.VarChar(100)
+  eventType       String                  @map("event_type") @db.VarChar(80)
+  payload         Json?
+  sessionRevision Int                     @map("session_revision")
+  occurredAt      DateTime                @map("occurred_at")
+  receivedAt      DateTime                @default(now()) @map("received_at")
+  session         LiveSession             @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  participant     LiveSessionParticipant? @relation(fields: [participantId], references: [id], onDelete: SetNull)
+  stage           LessonStage             @relation(fields: [stageId], references: [id], onDelete: Restrict)
+  evidence        LiveLearningEvidence?
+
+  @@unique([sessionId, eventId])
+  @@index([sessionId, receivedAt])
+  @@index([participantId, receivedAt])
+  @@index([stageId])
+  @@map("live_semantic_events")
+}
+
+model LiveLearningEvidence {
+  id                  String                  @id @default(uuid()) @map("live_learning_evidence_id")
+  sessionId           String                  @map("live_session_id")
+  participantId       String?                 @map("live_session_participant_id")
+  stageId             String                  @map("lesson_stage_id")
+  sourceEventId       String                  @unique @map("source_event_id")
+  evidenceType        String                  @map("evidence_type") @db.VarChar(80)
+  payload             Json?
+  completionIsMastery Boolean                 @default(false) @map("completion_is_mastery")
+  createdAt           DateTime                @default(now()) @map("created_at")
+  session             LiveSession             @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  participant         LiveSessionParticipant? @relation(fields: [participantId], references: [id], onDelete: SetNull)
+  stage               LessonStage             @relation(fields: [stageId], references: [id], onDelete: Restrict)
+  sourceEvent         LiveSemanticEvent       @relation(fields: [sourceEventId], references: [id], onDelete: Restrict)
+
+  @@index([sessionId, createdAt])
+  @@index([participantId, createdAt])
+  @@index([stageId])
+  @@map("live_learning_evidence")
 }
 
 /// Kolektivní parťák třídy. XP POUZE za odehraná kola a dokončené bleskovky,
@@ -1626,7 +1727,6 @@ model AssignmentStudent {
   @@map("assignment_students")
 }
 
-
 // -----------------------------------------------------------------------------
 // Interactive Curriculum D1 — canonical framework + school ŠVP foundation.
 // Normative contract: docs/interactive-curriculum/CURRICULUM-DATA-CONTRACT.md
@@ -1772,19 +1872,19 @@ model FrameworkField {
 }
 
 model FrameworkOutcome {
-  id                 String                     @id @default(uuid()) @map("framework_outcome_id")
-  frameworkReleaseId String                     @map("framework_release_id")
-  fieldId            String                     @map("field_id")
-  externalCode       String                     @map("external_code") @db.VarChar(160)
-  title              String                     @db.VarChar(1000)
-  description        String?                    @db.Text
-  nodeGrade          Int?                       @map("node_grade")
-  metadata           Json?                      @map("metadata_json")
-  sourceAnchor       String?                    @map("source_anchor") @db.VarChar(500)
-  checksum           String                     @db.Char(64)
-  createdAt          DateTime                   @default(now()) @map("created_at")
-  release            CurriculumFrameworkRelease @relation(fields: [frameworkReleaseId], references: [id], onDelete: Restrict)
-  field              FrameworkField             @relation(fields: [fieldId], references: [id], onDelete: Restrict)
+  id                 String                      @id @default(uuid()) @map("framework_outcome_id")
+  frameworkReleaseId String                      @map("framework_release_id")
+  fieldId            String                      @map("field_id")
+  externalCode       String                      @map("external_code") @db.VarChar(160)
+  title              String                      @db.VarChar(1000)
+  description        String?                     @db.Text
+  nodeGrade          Int?                        @map("node_grade")
+  metadata           Json?                       @map("metadata_json")
+  sourceAnchor       String?                     @map("source_anchor") @db.VarChar(500)
+  checksum           String                      @db.Char(64)
+  createdAt          DateTime                    @default(now()) @map("created_at")
+  release            CurriculumFrameworkRelease  @relation(fields: [frameworkReleaseId], references: [id], onDelete: Restrict)
+  field              FrameworkField              @relation(fields: [fieldId], references: [id], onDelete: Restrict)
   aspects            OutcomeAspect[]
   schoolMappings     SchoolOutcomeMapping[]
   activityMappings   ActivityCurriculumMapping[]
@@ -1798,17 +1898,17 @@ model FrameworkOutcome {
 }
 
 model OutcomeAspect {
-  id                      String              @id @default(uuid()) @map("outcome_aspect_id")
-  frameworkOutcomeId      String              @map("framework_outcome_id")
-  code                    String              @db.VarChar(120)
-  title                   String              @db.VarChar(500)
-  description             String              @db.Text
-  requiredForFullCoverage Boolean             @default(true) @map("required_for_full_coverage")
-  reviewVersion           Int                 @default(1) @map("review_version")
-  status                  OutcomeAspectStatus @default(ACTIVE)
-  createdAt               DateTime            @default(now()) @map("created_at")
-  updatedAt               DateTime            @updatedAt @map("updated_at")
-  frameworkOutcome        FrameworkOutcome    @relation(fields: [frameworkOutcomeId], references: [id], onDelete: Restrict)
+  id                      String                      @id @default(uuid()) @map("outcome_aspect_id")
+  frameworkOutcomeId      String                      @map("framework_outcome_id")
+  code                    String                      @db.VarChar(120)
+  title                   String                      @db.VarChar(500)
+  description             String                      @db.Text
+  requiredForFullCoverage Boolean                     @default(true) @map("required_for_full_coverage")
+  reviewVersion           Int                         @default(1) @map("review_version")
+  status                  OutcomeAspectStatus         @default(ACTIVE)
+  createdAt               DateTime                    @default(now()) @map("created_at")
+  updatedAt               DateTime                    @updatedAt @map("updated_at")
+  frameworkOutcome        FrameworkOutcome            @relation(fields: [frameworkOutcomeId], references: [id], onDelete: Restrict)
   schoolMappings          SchoolOutcomeMapping[]
   activityMappings        ActivityCurriculumMapping[]
 
@@ -1904,24 +2004,24 @@ model SchoolOutcome {
 }
 
 model CurriculumApplicability {
-  id                        String                         @id @default(uuid()) @map("curriculum_applicability_id")
-  organizationId            String                         @map("organization_id")
-  schoolCurriculumVersionId String                         @map("school_curriculum_version_id")
-  frameworkReleaseId        String                         @map("framework_release_id")
-  academicYearId            String                         @map("academic_year_id")
+  id                        String                        @id @default(uuid()) @map("curriculum_applicability_id")
+  organizationId            String                        @map("organization_id")
+  schoolCurriculumVersionId String                        @map("school_curriculum_version_id")
+  frameworkReleaseId        String                        @map("framework_release_id")
+  academicYearId            String                        @map("academic_year_id")
   grade                     SchoolGrade?
-  classSectionId            String?                        @map("class_section_id")
-  validFrom                 DateTime?                      @map("valid_from")
-  validTo                   DateTime?                      @map("valid_to")
-  priority                  Int                            @default(0)
+  classSectionId            String?                       @map("class_section_id")
+  validFrom                 DateTime?                     @map("valid_from")
+  validTo                   DateTime?                     @map("valid_to")
+  priority                  Int                           @default(0)
   status                    CurriculumApplicabilityStatus @default(ACTIVE)
-  createdAt                 DateTime                       @default(now()) @map("created_at")
-  updatedAt                 DateTime                       @updatedAt @map("updated_at")
-  organization              Organization                   @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  schoolCurriculumVersion   SchoolCurriculumVersion        @relation(fields: [schoolCurriculumVersionId], references: [id], onDelete: Restrict)
-  frameworkRelease          CurriculumFrameworkRelease     @relation(fields: [frameworkReleaseId], references: [id], onDelete: Restrict)
-  academicYear              AcademicYear                   @relation(fields: [academicYearId], references: [id], onDelete: Restrict)
-  classSection              ClassSection?                  @relation(fields: [classSectionId], references: [id], onDelete: Restrict)
+  createdAt                 DateTime                      @default(now()) @map("created_at")
+  updatedAt                 DateTime                      @updatedAt @map("updated_at")
+  organization              Organization                  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  schoolCurriculumVersion   SchoolCurriculumVersion       @relation(fields: [schoolCurriculumVersionId], references: [id], onDelete: Restrict)
+  frameworkRelease          CurriculumFrameworkRelease    @relation(fields: [frameworkReleaseId], references: [id], onDelete: Restrict)
+  academicYear              AcademicYear                  @relation(fields: [academicYearId], references: [id], onDelete: Restrict)
+  classSection              ClassSection?                 @relation(fields: [classSectionId], references: [id], onDelete: Restrict)
 
   @@index([organizationId, academicYearId, status])
   @@index([classSectionId, academicYearId, status])
@@ -1966,7 +2066,6 @@ model SchoolOutcomeMapping {
   @@map("school_outcome_mappings")
 }
 
-
 // -----------------------------------------------------------------------------
 // Interactive Curriculum D2-A — reusable Activity Engine definition layer.
 // ActivityVersion is an immutable content snapshot. Editing means creating a
@@ -2006,17 +2105,17 @@ enum ActivityCurriculumMappingStatus {
 }
 
 model Activity {
-  id             String        @id @default(uuid()) @map("activity_id")
+  id             String            @id @default(uuid()) @map("activity_id")
   scope          ActivityScope
-  organizationId String?       @map("organization_id")
-  slug           String        @db.VarChar(160)
-  title          String        @db.VarChar(300)
-  description    String?       @db.Text
-  createdById    String        @map("created_by_id")
-  createdAt      DateTime      @default(now()) @map("created_at")
-  updatedAt      DateTime      @updatedAt @map("updated_at")
-  deletedAt      DateTime?     @map("deleted_at")
-  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  organizationId String?           @map("organization_id")
+  slug           String            @db.VarChar(160)
+  title          String            @db.VarChar(300)
+  description    String?           @db.Text
+  createdById    String            @map("created_by_id")
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime          @updatedAt @map("updated_at")
+  deletedAt      DateTime?         @map("deleted_at")
+  organization   Organization?     @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   versions       ActivityVersion[]
 
   @@index([organizationId, scope, deletedAt])
@@ -2025,39 +2124,39 @@ model Activity {
 }
 
 model ActivityVersion {
-  id                     String                @id @default(uuid()) @map("activity_version_id")
-  activityId             String                @map("activity_id")
-  versionNo              Int                   @map("version_no")
-  status                 ActivityVersionStatus @default(DRAFT)
-  engineKey              String                @map("engine_key") @db.VarChar(120)
-  schemaVersion          Int                   @map("schema_version")
-  title                  String                @db.VarChar(300)
-  description            String?               @db.Text
-  supportedModes         ActivityDeliveryMode[] @map("supported_modes")
-  recommendedMode        ActivityDeliveryMode  @map("recommended_mode")
-  interactionPrimitives  String[]              @map("interaction_primitives")
-  config                 Json                  @map("config_json")
-  capabilityRequirements Json                  @map("capability_requirements_json")
-  assetManifest          Json                  @map("asset_manifest_json")
-  accessibilityPlan      Json                  @map("accessibility_plan_json")
-  hardwareRequirements   Json                  @map("hardware_requirements_json")
-  modePolicy             Json                  @map("mode_policy_json")
-  privacyPlan            Json                  @map("privacy_plan_json")
-  safetyPlan             Json                  @map("safety_plan_json")
-  offlinePolicy          Json                  @map("offline_policy_json")
-  evidencePlan           Json                  @map("evidence_plan_json")
-  prerequisites          Json?                 @map("prerequisites_json")
-  contentChecksum        String                @map("content_checksum") @db.Char(64)
-  reviewedAt             DateTime?             @map("reviewed_at")
-  reviewedBy             String?               @map("reviewed_by")
-  publishedAt            DateTime?             @map("published_at")
-  publishedBy            String?               @map("published_by")
-  createdAt              DateTime              @default(now()) @map("created_at")
-  updatedAt              DateTime              @updatedAt @map("updated_at")
-  activity               Activity              @relation(fields: [activityId], references: [id], onDelete: Restrict)
+  id                     String                      @id @default(uuid()) @map("activity_version_id")
+  activityId             String                      @map("activity_id")
+  versionNo              Int                         @map("version_no")
+  status                 ActivityVersionStatus       @default(DRAFT)
+  engineKey              String                      @map("engine_key") @db.VarChar(120)
+  schemaVersion          Int                         @map("schema_version")
+  title                  String                      @db.VarChar(300)
+  description            String?                     @db.Text
+  supportedModes         ActivityDeliveryMode[]      @map("supported_modes")
+  recommendedMode        ActivityDeliveryMode        @map("recommended_mode")
+  interactionPrimitives  String[]                    @map("interaction_primitives")
+  config                 Json                        @map("config_json")
+  capabilityRequirements Json                        @map("capability_requirements_json")
+  assetManifest          Json                        @map("asset_manifest_json")
+  accessibilityPlan      Json                        @map("accessibility_plan_json")
+  hardwareRequirements   Json                        @map("hardware_requirements_json")
+  modePolicy             Json                        @map("mode_policy_json")
+  privacyPlan            Json                        @map("privacy_plan_json")
+  safetyPlan             Json                        @map("safety_plan_json")
+  offlinePolicy          Json                        @map("offline_policy_json")
+  evidencePlan           Json                        @map("evidence_plan_json")
+  prerequisites          Json?                       @map("prerequisites_json")
+  contentChecksum        String                      @map("content_checksum") @db.Char(64)
+  reviewedAt             DateTime?                   @map("reviewed_at")
+  reviewedBy             String?                     @map("reviewed_by")
+  publishedAt            DateTime?                   @map("published_at")
+  publishedBy            String?                     @map("published_by")
+  createdAt              DateTime                    @default(now()) @map("created_at")
+  updatedAt              DateTime                    @updatedAt @map("updated_at")
+  activity               Activity                    @relation(fields: [activityId], references: [id], onDelete: Restrict)
   curriculumMappings     ActivityCurriculumMapping[]
 
-  lessonStages         LessonStage[]
+  lessonStages LessonStage[]
 
   @@unique([activityId, versionNo])
   @@unique([activityId, contentChecksum])
@@ -2096,7 +2195,6 @@ model ActivityCurriculumMapping {
   @@index([frameworkReleaseId])
   @@map("activity_curriculum_mappings")
 }
-
 
 // -----------------------------------------------------------------------------
 // Interactive Curriculum D2-B — immutable Lesson Experience definition layer.
@@ -2147,17 +2245,17 @@ enum LessonExperienceCurriculumMappingStatus {
 }
 
 model LessonExperience {
-  id             String                @id @default(uuid()) @map("lesson_experience_id")
+  id             String                    @id @default(uuid()) @map("lesson_experience_id")
   scope          LessonExperienceScope
-  organizationId String?               @map("organization_id")
-  slug           String                @db.VarChar(160)
-  title          String                @db.VarChar(300)
-  description    String?               @db.Text
-  createdById    String                @map("created_by_id")
-  createdAt      DateTime              @default(now()) @map("created_at")
-  updatedAt      DateTime              @updatedAt @map("updated_at")
-  deletedAt      DateTime?             @map("deleted_at")
-  organization   Organization?         @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  organizationId String?                   @map("organization_id")
+  slug           String                    @db.VarChar(160)
+  title          String                    @db.VarChar(300)
+  description    String?                   @db.Text
+  createdById    String                    @map("created_by_id")
+  createdAt      DateTime                  @default(now()) @map("created_at")
+  updatedAt      DateTime                  @updatedAt @map("updated_at")
+  deletedAt      DateTime?                 @map("deleted_at")
+  organization   Organization?             @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   versions       LessonExperienceVersion[]
 
   @@index([organizationId, scope, deletedAt])
@@ -2166,35 +2264,36 @@ model LessonExperience {
 }
 
 model LessonExperienceVersion {
-  id                     String                        @id @default(uuid()) @map("lesson_experience_version_id")
-  lessonExperienceId     String                        @map("lesson_experience_id")
-  versionNo              Int                           @map("version_no")
-  status                 LessonExperienceVersionStatus @default(DRAFT)
-  schemaVersion          Int                           @default(1) @map("schema_version")
-  title                  String                        @db.VarChar(300)
-  summary                String?                       @db.Text
-  learningObjective      String                        @map("learning_objective") @db.Text
-  pedagogicalRationale   String                        @map("pedagogical_rationale") @db.Text
-  supportedModes         ActivityDeliveryMode[]        @map("supported_modes")
-  recommendedMode        ActivityDeliveryMode          @map("recommended_mode")
-  estimatedDurationMin   Int                           @map("estimated_duration_min")
-  teacherPlan            Json                          @map("teacher_plan_json")
-  hardwareRequirements   Json                          @map("hardware_requirements_json")
-  accessibilityPlan      Json                          @map("accessibility_plan_json")
-  privacyPlan            Json                          @map("privacy_plan_json")
-  offlinePolicy          Json                          @map("offline_policy_json")
-  assetManifest          Json                          @map("asset_manifest_json")
-  contentChecksum        String?                       @map("content_checksum") @db.Char(64)
-  sealedAt               DateTime?                     @map("sealed_at")
-  reviewedAt             DateTime?                     @map("reviewed_at")
-  reviewedBy             String?                       @map("reviewed_by")
-  publishedAt            DateTime?                     @map("published_at")
-  publishedBy            String?                       @map("published_by")
-  createdAt              DateTime                      @default(now()) @map("created_at")
-  updatedAt              DateTime                      @updatedAt @map("updated_at")
-  lessonExperience       LessonExperience              @relation(fields: [lessonExperienceId], references: [id], onDelete: Restrict)
-  stages                 LessonStage[]
-  curriculumMappings     LessonExperienceCurriculumMapping[]
+  id                   String                              @id @default(uuid()) @map("lesson_experience_version_id")
+  lessonExperienceId   String                              @map("lesson_experience_id")
+  versionNo            Int                                 @map("version_no")
+  status               LessonExperienceVersionStatus       @default(DRAFT)
+  schemaVersion        Int                                 @default(1) @map("schema_version")
+  title                String                              @db.VarChar(300)
+  summary              String?                             @db.Text
+  learningObjective    String                              @map("learning_objective") @db.Text
+  pedagogicalRationale String                              @map("pedagogical_rationale") @db.Text
+  supportedModes       ActivityDeliveryMode[]              @map("supported_modes")
+  recommendedMode      ActivityDeliveryMode                @map("recommended_mode")
+  estimatedDurationMin Int                                 @map("estimated_duration_min")
+  teacherPlan          Json                                @map("teacher_plan_json")
+  hardwareRequirements Json                                @map("hardware_requirements_json")
+  accessibilityPlan    Json                                @map("accessibility_plan_json")
+  privacyPlan          Json                                @map("privacy_plan_json")
+  offlinePolicy        Json                                @map("offline_policy_json")
+  assetManifest        Json                                @map("asset_manifest_json")
+  contentChecksum      String?                             @map("content_checksum") @db.Char(64)
+  sealedAt             DateTime?                           @map("sealed_at")
+  reviewedAt           DateTime?                           @map("reviewed_at")
+  reviewedBy           String?                             @map("reviewed_by")
+  publishedAt          DateTime?                           @map("published_at")
+  publishedBy          String?                             @map("published_by")
+  createdAt            DateTime                            @default(now()) @map("created_at")
+  updatedAt            DateTime                            @updatedAt @map("updated_at")
+  lessonExperience     LessonExperience                    @relation(fields: [lessonExperienceId], references: [id], onDelete: Restrict)
+  stages               LessonStage[]
+  curriculumMappings   LessonExperienceCurriculumMapping[]
+  liveSessions         LiveSession[]
 
   @@unique([lessonExperienceId, versionNo])
   @@index([lessonExperienceId, contentChecksum])
@@ -2221,6 +2320,9 @@ model LessonStage {
   createdAt                 DateTime                  @default(now()) @map("created_at")
   lessonExperienceVersion   LessonExperienceVersion   @relation(fields: [lessonExperienceVersionId], references: [id], onDelete: Restrict)
   activityVersion           ActivityVersion?          @relation(fields: [activityVersionId], references: [id], onDelete: Restrict)
+  currentLiveSessions       LiveSession[]             @relation("CurrentLiveSessionStage")
+  semanticEvents            LiveSemanticEvent[]
+  learningEvidence          LiveLearningEvidence[]
 
   @@unique([lessonExperienceVersionId, stageKey])
   @@unique([lessonExperienceVersionId, orderIndex])
@@ -2470,14 +2572,36 @@ enum RoundInteractionType {
 }
 
 enum LiveSessionMode {
-  BOARD_ONLY // režim B — MVP: vše na učitelově obrazovce
-  DEVICES // režim A — žáci na vlastních zařízeních (zatím neimplementováno)
+  BOARD_ONLY
+  SHARED_DEVICES
+  DEVICES
+  HYBRID
 }
 
 enum LiveSessionStatus {
   DRAFT
   RUNNING
+  PAUSED
   FINISHED
+}
+
+enum LiveSessionSourceKind {
+  LEGACY_TEST
+  LESSON_EXPERIENCE
+}
+
+enum LiveSessionCommandType {
+  START
+  PAUSE
+  RESUME
+  NEXT_STAGE
+  FINISH
+}
+
+enum LiveParticipantStatus {
+  CONNECTED
+  DISCONNECTED
+  LEFT
 }
 
 /// Věkový režim projekce bleskovky (čistě prezentační + tempo).
