@@ -1,4 +1,4 @@
-import { IsEnum, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export enum NetworkedCoopAction {
   HANDOFF = 'HANDOFF',
@@ -6,7 +6,8 @@ export enum NetworkedCoopAction {
 }
 
 export class NetworkedCoopTransitionDto {
-  @IsUUID()
+  @IsString()
+  @MaxLength(120)
   transitionId!: string;
 
   @IsEnum(NetworkedCoopAction)
