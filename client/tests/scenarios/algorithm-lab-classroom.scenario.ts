@@ -195,10 +195,12 @@ test.describe('Algorithm Lab networked pair', () => {
       const page = await context.newPage();
 
       await page.route(`**/api/classroom-sessions/${SESSION_ID}/join`, async (route) => {
+        const body = route.request().postDataJSON() as { groupId?: string };
+        expect(body.groupId).toBe(GROUP_ID);
         await route.fulfill({
           status: 201,
           contentType: 'application/json',
-          body: JSON.stringify({ id: participantId }),
+          body: JSON.stringify({ id: participantId, groupId: GROUP_ID }),
         });
       });
       await page.route(`**/api/classroom-sessions/${SESSION_ID}/me`, async (route) => {
@@ -241,7 +243,7 @@ test.describe('Algorithm Lab networked pair', () => {
         });
       });
 
-      await page.goto(`/app/labs/algorithm-lab?session=${SESSION_ID}`);
+      await page.goto(`/app/labs/algorithm-lab?session=${SESSION_ID}&group=${GROUP_ID}`);
       return { context, page };
     };
 
