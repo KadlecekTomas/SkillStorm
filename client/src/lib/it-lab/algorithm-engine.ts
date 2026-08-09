@@ -55,7 +55,8 @@ export const initialAlgorithmState = (): AlgorithmState => ({
   direction: 'EAST',
 });
 
-const samePosition = (a: GridPosition, b: GridPosition) => a.x === b.x && a.y === b.y;
+const samePosition = (a: GridPosition, b: GridPosition): boolean =>
+  a.x === b.x && a.y === b.y;
 
 export const executeAlgorithmStep = (
   current: AlgorithmState,
@@ -110,5 +111,7 @@ export const executeAlgorithmStep = (
   };
 };
 
-export const isTargetReached = (state: AlgorithmState, world: AlgorithmWorld) =>
-  samePosition(state.position, world.target);
+export const isTargetReached = (
+  state: AlgorithmState,
+  world: AlgorithmWorld,
+): boolean => samePosition(state.position, world.target);
