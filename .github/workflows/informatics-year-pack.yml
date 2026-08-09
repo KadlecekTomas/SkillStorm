@@ -1,0 +1,41 @@
+name: Informatics Year Pack
+
+on:
+  pull_request:
+    paths:
+      - 'docs/interactive-it-lab/YEAR-COVERAGE.md'
+      - 'scripts/validate-informatics-year-pack.mjs'
+      - 'package.json'
+      - '.github/workflows/informatics-year-pack.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'docs/interactive-it-lab/YEAR-COVERAGE.md'
+      - 'scripts/validate-informatics-year-pack.mjs'
+      - 'package.json'
+      - '.github/workflows/informatics-year-pack.yml'
+
+jobs:
+  validate:
+    name: 4-9 curriculum pack integrity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Validate source coverage and canonical outcome mappings
+        run: npm run content:informatics:validate
+      - name: Generate deterministic machine-readable pack
+        run: npm run content:informatics:generate
+      - name: Assert generated pack shape
+        run: |
+          node - <<'NODE'
+          const pack = require('./server/content/informatics/year-pack.v1.json');
+          if (pack.totals.grades !== 6) throw new Error(`Expected 6 grades, got ${pack.totals.grades}`);
+          if (pack.totals.coreLessons !== 192) throw new Error(`Expected 192 core lessons, got ${pack.totals.coreLessons}`);
+          if (pack.totals.zv5Outcomes !== 10) throw new Error(`Expected 10 ZV5 outcomes, got ${pack.totals.zv5Outcomes}`);
+          if (pack.totals.zv9Outcomes !== 14) throw new Error(`Expected 14 ZV9 outcomes, got ${pack.totals.zv9Outcomes}`);
+          if (pack.lessonFamilies.length !== 15) throw new Error(`Expected 15 reusable lesson families, got ${pack.lessonFamilies.length}`);
+          console.log('IT year pack:', pack.totals, 'families:', pack.lessonFamilies.length);
+          NODE
