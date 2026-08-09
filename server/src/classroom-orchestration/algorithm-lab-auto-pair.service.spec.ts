@@ -9,7 +9,7 @@ describe('AlgorithmLabAutoPairService', () => {
     role: OrganizationRole.STUDENT,
   } as OrgContext;
 
-  function harness(countInFirstGroup: number) {
+  function harness(countInFirstGroup: number, algorithmLab = true) {
     const tx = {
       $executeRaw: jest.fn(),
       liveSessionParticipant: {
@@ -29,7 +29,14 @@ describe('AlgorithmLabAutoPairService', () => {
       },
     };
     const prisma = {
-      liveSession: { findUnique: jest.fn().mockResolvedValue({ mode: LiveSessionMode.HYBRID }) },
+      liveSession: {
+        findUnique: jest.fn().mockResolvedValue({
+          mode: LiveSessionMode.HYBRID,
+          lessonExperienceVersion: {
+            stages: algorithmLab ? [{ id: 'stage-algorithm' }] : [],
+          },
+        }),
+      },
       $transaction: jest.fn().mockImplementation((fn) => fn(tx)),
     };
     const classroom = {
@@ -55,5 +62,13 @@ describe('AlgorithmLabAutoPairService', () => {
       data: { sessionId: 'session-1', label: 'Dvojice 2', orderIndex: 1 },
       select: { id: true, orderIndex: true },
     });
+  });
+
+  it('does not silently auto-pair another HYBRID lesson', async () => {
+    const { tx, prisma, classroom } = harness(0, false);
+    const service = new AlgorithmLabAutoPairService(prisma as never, classroom as never);
+
+    await expect(service.join('session-1', {}, ctx)).resolves.toMatchObject({ groupId: null });
+    expect(tx.liveSessionParticipant.update).not.toHaveBeenCalled();
   });
 });
