@@ -20,6 +20,12 @@ const commandByLabel: Record<string, AlgorithmCommand> = {
   '↷ Vpravo': 'RIGHT',
 };
 
+const commandGlyph: Record<AlgorithmCommand, string> = {
+  FORWARD: '↑',
+  LEFT: '↶',
+  RIGHT: '↷',
+};
+
 type CoopRole = 'PLANNER' | 'PROGRAMMER';
 
 function textOf(element: Element | null): string {
@@ -140,6 +146,10 @@ export default function AlgorithmLabLayout({ children }: { children: ReactNode }
     return true;
   }
 
+  function syncNetworkedProgram(): void {
+    if (networkedMode) void networked.syncProgram([...programRef.current]);
+  }
+
   function handleClickCapture(event: MouseEvent<HTMLDivElement>): void {
     if (!classroom.isClassroomMode) return;
 
@@ -165,6 +175,7 @@ export default function AlgorithmLabLayout({ children }: { children: ReactNode }
     const command = commandByLabel[label];
     if (command) {
       programRef.current = [...programRef.current, command];
+      syncNetworkedProgram();
       void classroom.emit('ALGORITHM_STEP_ADDED', {
         mission: missionRef.current,
         command,
@@ -178,6 +189,7 @@ export default function AlgorithmLabLayout({ children }: { children: ReactNode }
 
     if (label === 'Vymazat vše') {
       programRef.current = [];
+      syncNetworkedProgram();
       return;
     }
 
@@ -185,6 +197,7 @@ export default function AlgorithmLabLayout({ children }: { children: ReactNode }
     if (removeMatch) {
       const index = Number(removeMatch[1]) - 1;
       programRef.current = programRef.current.filter((_, currentIndex) => currentIndex !== index);
+      syncNetworkedProgram();
       return;
     }
 
@@ -299,14 +312,14 @@ export default function AlgorithmLabLayout({ children }: { children: ReactNode }
       {showNetworkedCoop && (
         <div
           data-testid="algorithm-networked-coop-banner"
-          className="fixed left-1/2 top-16 z-[75] w-[min(760px,calc(100vw-24px))] -translate-x-1/2 rounded-2xl border border-cyan-300/20 bg-[#0b1729]/95 p-3 text-white shadow-2xl backdrop-blur-xl"
+          className="fixed left-1/2 top-16 z-[75] w-[min(820px,calc(100vw-24px))] -translate-x-1/2 rounded-2xl border border-cyan-300/20 bg-[#0b1729]/95 p-3 text-white shadow-2xl backdrop-blur-xl"
         >
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-start gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex min-w-0 items-start gap-3">
               <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-cyan-400/10 text-cyan-200">
                 <UsersRound className="h-5 w-5" aria-hidden="true" />
               </div>
-              <div>
+              <div className="min-w-0">
                 <p className="text-[10px] font-black uppercase tracking-[0.18em] text-cyan-200/60">
                   Síťová dvojice · kolo {networked.state?.round ?? 1}
                 </p>
@@ -316,7 +329,7 @@ export default function AlgorithmLabLayout({ children }: { children: ReactNode }
                     : networked.state?.myRole === 'PLANNER'
                       ? networked.state.phase === 'PLAN'
                         ? 'Jsi Planner · navrhni řešení'
-                        : 'Planner čeká na Programmerův běh'
+                        : 'Planner sleduje živý program'
                       : networked.state?.myRole === 'PROGRAMMER'
                         ? networked.state.phase === 'PROGRAM'
                           ? 'Jsi Programmer · sestav a spusť program'
@@ -329,6 +342,24 @@ export default function AlgorithmLabLayout({ children }: { children: ReactNode }
                   {networked.state?.peers.map((peer) => `${peer.nickname}: ${peer.role}${peer.connected ? '' : ' · offline'}`).join(' · ') ||
                     'Role se načítají ze serveru. Po reconnectu se dvojice vrátí do stejného kola.'}
                 </p>
+                <div className="mt-2 flex flex-wrap items-center gap-1.5" data-testid="algorithm-networked-program-mirror">
+                  <span className="mr-1 text-[10px] font-black uppercase tracking-[0.14em] text-cyan-200/50">
+                    Program v{networked.program?.programRevision ?? 0}
+                  </span>
+                  {networked.program?.commands.length ? (
+                    networked.program.commands.map((command, index) => (
+                      <span
+                        key={`${networked.program?.programRevision ?? 0}-${index}-${command}`}
+                        data-testid={`algorithm-networked-program-step-${index + 1}`}
+                        className="grid h-7 min-w-7 place-items-center rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-2 text-xs font-black text-cyan-100"
+                      >
+                        {commandGlyph[command]}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-xs text-slate-500">zatím prázdný</span>
+                  )}
+                </div>
                 {networked.error && <p className="mt-1 text-xs text-rose-200">{networked.error}</p>}
               </div>
             </div>
