@@ -74,7 +74,7 @@ function splitTableRow(line) {
 
 function expandOutcomeRef(raw) {
   const value = stripTicks(raw).trim();
-  if (!value || value.toLowerCase() === 'bridge') return [];
+  if (!value || ['bridge', 'multi'].includes(value.toLowerCase())) return [];
 
   const all = value.match(/^ALL\s+(ZV5|ZV9)$/i);
   if (all) return Object.values(CANONICAL[all[1].toUpperCase()]);
