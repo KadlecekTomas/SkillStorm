@@ -106,7 +106,7 @@ function teacherProjection(
 test.describe('Build a PC classroom player', () => {
   test.use({ storageState: storageStateFor('student8a') });
 
-  test('emits semantic events, survives reset and obeys teacher pause', async ({ page }) => {
+  test('emits semantic events, mirrors Guided selection, survives reset and obeys teacher pause', async ({ page }) => {
     let status: 'RUNNING' | 'PAUSED' = 'RUNNING';
     const semanticBodies: Array<Record<string, unknown>> = [];
 
@@ -140,7 +140,15 @@ test.describe('Build a PC classroom player', () => {
     await page.getByTestId('slot-cpu-socket').click();
     await expect(page.getByTestId('server-event-count')).toHaveText('2');
 
+    // Guided mode auto-selects COOLER inside BuildPcLab. The classroom bridge must
+    // mirror that implicit selection so the next placement is not lost server-side.
+    await page.getByTestId('slot-cpu-cooler').click();
+    await expect(page.getByTestId('server-event-count')).toHaveText('4');
+    await expect(page.getByTestId('build-progress-label')).toHaveText('25 %');
+
     expect(semanticBodies.map((body) => body.eventType)).toEqual([
+      'COMPONENT_PLACED',
+      'CHECKPOINT_COMPLETED',
       'COMPONENT_PLACED',
       'CHECKPOINT_COMPLETED',
     ]);
@@ -154,7 +162,7 @@ test.describe('Build a PC classroom player', () => {
     await expect(page.getByTestId('build-progress-label')).toHaveText('0 %');
     await page.getByTestId('component-cpu').click();
     await page.getByTestId('slot-cpu-socket').click();
-    await expect(page.getByTestId('server-event-count')).toHaveText('4');
+    await expect(page.getByTestId('server-event-count')).toHaveText('6');
 
     status = 'PAUSED';
     await expect(page.getByTestId('classroom-blocking-overlay')).toBeVisible({ timeout: 5_000 });
