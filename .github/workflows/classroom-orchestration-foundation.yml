@@ -4,22 +4,22 @@ on:
   pull_request:
     paths:
       - 'server/prisma/schema.prisma'
-      - 'server/prisma/migrations/**classroom_orchestration**/**'
+      - 'server/prisma/migrations/**'
       - 'server/src/classroom-orchestration/**'
       - 'server/src/live-sessions/**'
       - 'server/src/app.module.ts'
-      - 'server/test/e2e/classroom-orchestration.e2e-spec.ts'
+      - 'server/test/e2e/classroom-orchestration*.e2e-spec.ts'
       - 'server/test/e2e/live-sessions.e2e-spec.ts'
       - '.github/workflows/classroom-orchestration-foundation.yml'
   push:
     branches: [main]
     paths:
       - 'server/prisma/schema.prisma'
-      - 'server/prisma/migrations/**classroom_orchestration**/**'
+      - 'server/prisma/migrations/**'
       - 'server/src/classroom-orchestration/**'
       - 'server/src/live-sessions/**'
       - 'server/src/app.module.ts'
-      - 'server/test/e2e/classroom-orchestration.e2e-spec.ts'
+      - 'server/test/e2e/classroom-orchestration*.e2e-spec.ts'
       - 'server/test/e2e/live-sessions.e2e-spec.ts'
       - '.github/workflows/classroom-orchestration-foundation.yml'
 
@@ -30,7 +30,7 @@ jobs:
   classroom-orchestration-foundation:
     name: Classroom D2-C invariants
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
 
     services:
       postgres:
@@ -96,3 +96,7 @@ jobs:
       - name: Run D2-C 30-participant orchestration simulation
         working-directory: server
         run: npx jest --config ./test/jest-e2e.config.js --testPathPattern='classroom-orchestration.e2e-spec.ts' --runInBand
+
+      - name: Run D2-C HTTP RBAC and tenant governance
+        working-directory: server
+        run: npx jest --config ./test/jest-e2e.config.js --testPathPattern='classroom-orchestration-rbac.e2e-spec.ts' --runInBand
