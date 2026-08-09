@@ -32,6 +32,12 @@ const teacherPlanSchema = z
   })
   .strict();
 
+const LEARNER_ACTION_STAGE_TYPES: ReadonlySet<LessonStageType> = new Set([
+  LessonStageType.PREDICTION,
+  LessonStageType.EXPLORATION,
+  LessonStageType.CHALLENGE,
+]);
+
 function parseOrThrow<T>(label: string, schema: z.ZodType<T>, value: unknown): T {
   const parsed = schema.safeParse(value);
   if (!parsed.success) {
@@ -111,11 +117,7 @@ export function validateLessonDefinition(input: CreateLessonExperienceVersionDto
     hasInteractiveStage ||= Boolean(stage.activityVersionId);
     hasEvidence ||= stage.stageType === LessonStageType.EVIDENCE;
     hasReflection ||= stage.stageType === LessonStageType.REFLECTION;
-    hasLearnerAction ||= [
-      LessonStageType.PREDICTION,
-      LessonStageType.EXPLORATION,
-      LessonStageType.CHALLENGE,
-    ].includes(stage.stageType);
+    hasLearnerAction ||= LEARNER_ACTION_STAGE_TYPES.has(stage.stageType);
   }
 
   if (duration > input.estimatedDurationMin) {
