@@ -707,7 +707,10 @@ export class ClassroomOrchestrationService {
           stageId: dto.stageId,
           eventId: dto.eventId,
           eventType: dto.eventType,
-          payload: dto.payload as Prisma.InputJsonValue | undefined,
+          payload:
+            dto.payload === undefined
+              ? Prisma.DbNull
+              : (dto.payload as Prisma.InputJsonValue),
           sessionRevision: session.stateRevision,
           occurredAt: new Date(dto.occurredAt),
         },
@@ -722,7 +725,10 @@ export class ClassroomOrchestrationService {
             stageId: dto.stageId,
             sourceEventId: event.id,
             evidenceType: dto.eventType,
-            payload: dto.payload as Prisma.InputJsonValue | undefined,
+            payload:
+            dto.payload === undefined
+              ? Prisma.DbNull
+              : (dto.payload as Prisma.InputJsonValue),
             completionIsMastery: false,
           },
         });
