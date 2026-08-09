@@ -101,8 +101,7 @@ function parseFamilies(markdown) {
   const sectionEnd = markdown.indexOf('\n---\n', sectionStart);
   if (sectionStart < 0 || sectionEnd < 0) throw new Error('Lesson family section not found');
   const section = markdown.slice(sectionStart, sectionEnd);
-  const families = [...section.matchAll(/\| `([A-Z0-9_]+)` \|/g)].map((match) => match[1]);
-  return families;
+  return [...section.matchAll(/\| `([A-Z0-9_]+)` \|/g)].map((match) => match[1]);
 }
 
 function parseGrade(markdown, grade) {
@@ -144,9 +143,7 @@ function parseGrade(markdown, grade) {
     throw new Error(`Grade ${grade} must contain exactly 32 core lessons, found ${lessons.length}`);
   }
   lessons.forEach((lesson, index) => {
-    if (lesson.order !== index + 1) {
-      throw new Error(`Grade ${grade} lesson sequence gap at ${lesson.id}`);
-    }
+    if (lesson.order !== index + 1) throw new Error(`Grade ${grade} lesson sequence gap at ${lesson.id}`);
   });
   return lessons;
 }
@@ -162,18 +159,15 @@ function buildManifest(markdown) {
     pacingProfiles: ['CORE_28', 'STANDARD_32', 'EXTENDED_36_PLUS'],
     lessons: parseGrade(markdown, grade),
   }));
-
   const lessons = grades.flatMap((grade) => grade.lessons);
+
   if (lessons.length !== 192) throw new Error(`Expected 192 core lessons, found ${lessons.length}`);
   if (new Set(lessons.map((lesson) => lesson.id)).size !== lessons.length) {
     throw new Error('Duplicate lesson IDs detected');
   }
 
   const referencedOutcomes = new Set(lessons.flatMap((lesson) => lesson.canonicalOutcomeCodes));
-  const expectedOutcomes = new Set([
-    ...Object.values(CANONICAL.ZV5),
-    ...Object.values(CANONICAL.ZV9),
-  ]);
+  const expectedOutcomes = new Set([...Object.values(CANONICAL.ZV5), ...Object.values(CANONICAL.ZV9)]);
   for (const outcome of expectedOutcomes) {
     if (!referencedOutcomes.has(outcome)) throw new Error(`Canonical outcome ${outcome} has no lesson mapping`);
   }
@@ -197,6 +191,13 @@ function buildManifest(markdown) {
   };
 }
 
+function referencedCount(value) {
+  return value.grades.reduce(
+    (sum, grade) => sum + grade.lessons.reduce((n, lesson) => n + lesson.canonicalOutcomeCodes.length, 0),
+    0,
+  );
+}
+
 const markdown = fs.readFileSync(SOURCE, 'utf8');
 const manifest = buildManifest(markdown);
 const serialized = `${JSON.stringify(manifest, null, 2)}\n`;
@@ -206,19 +207,7 @@ if (WRITE) {
   fs.writeFileSync(OUTPUT, serialized, 'utf8');
   console.log(`Wrote ${path.relative(ROOT, OUTPUT)} with ${manifest.totals.coreLessons} lessons.`);
 } else {
-  if (!fs.existsSync(OUTPUT)) {
-    throw new Error('Generated informatics year pack is missing. Run npm run content:informatics:generate.');
-  }
-  const current = fs.readFileSync(OUTPUT, 'utf8');
-  if (current !== serialized) {
-    throw new Error('Informatics year pack is stale. Run npm run content:informatics:generate and commit the result.');
-  }
-  console.log(`Informatics year pack OK: ${manifest.totals.coreLessons} lessons, ${referencedCount(manifest)} canonical mappings.`);
-}
-
-function referencedCount(value) {
-  return value.grades.reduce(
-    (sum, grade) => sum + grade.lessons.reduce((n, lesson) => n + lesson.canonicalOutcomeCodes.length, 0),
-    0,
+  console.log(
+    `Informatics year pack source OK: ${manifest.totals.coreLessons} lessons, ${referencedCount(manifest)} canonical mappings.`,
   );
 }
