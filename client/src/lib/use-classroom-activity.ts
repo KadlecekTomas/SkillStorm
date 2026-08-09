@@ -45,6 +45,7 @@ export type ClassroomActivityBridge = {
 export function useClassroomActivity(
   sessionId: string | null,
   eventPrefix: string,
+  groupId?: string | null,
 ): ClassroomActivityBridge {
   const [projection, setProjection] = useState<StudentClassroomSessionProjection | null>(null);
   const [loading, setLoading] = useState(Boolean(sessionId));
@@ -81,7 +82,7 @@ export function useClassroomActivity(
     const connect = async (): Promise<void> => {
       setLoading(true);
       try {
-        await classroomSessionApi.joinStudent(sessionId);
+        await classroomSessionApi.joinStudent(sessionId, groupId);
         if (cancelled) return;
         const next = await classroomSessionApi.studentProjection(sessionId);
         if (cancelled) return;
@@ -105,7 +106,7 @@ export function useClassroomActivity(
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [refresh, sessionId]);
+  }, [groupId, refresh, sessionId]);
 
   const interactiveStage = Boolean(projection?.currentStage?.activityVersionId);
 
