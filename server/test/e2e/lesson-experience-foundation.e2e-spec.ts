@@ -207,6 +207,22 @@ describe('Lesson Experience D2-B foundation invariants (e2e)', () => {
     );
 
     await lessons.submitForReview(lessonVersionId, actorA);
+
+    await expect(
+      prisma.$executeRawUnsafe(
+        `UPDATE lesson_experience_versions
+         SET status = 'PUBLISHED'
+         WHERE lesson_experience_version_id = $1::text`,
+        lessonVersionId,
+      ),
+    ).rejects.toThrow(/LESSON_EXPERIENCE_MAPPING_REQUIRED/);
+
+    const afterRawPublishAttempt = await prisma.lessonExperienceVersion.findUniqueOrThrow({
+      where: { id: lessonVersionId },
+      select: { status: true },
+    });
+    expect(afterRawPublishAttempt.status).toBe('REVIEW');
+
     await expect(lessons.publish(lessonVersionId, actorA)).rejects.toMatchObject({
       status: 409,
     });
