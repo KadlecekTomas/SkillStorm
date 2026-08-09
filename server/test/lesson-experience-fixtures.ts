@@ -10,8 +10,13 @@ import {
   SystemRole,
 } from '@prisma/client';
 import type { JwtPayload } from '@/auth/types/jwt-payload';
+import type { CreateActivityVersionDto } from '@/activity-engine/dto/activity.dto';
 import type { ActivityService } from '@/activity-engine/activity.service';
 import type { CurriculumService } from '@/curriculum/curriculum.service';
+import type {
+  CreateLessonExperienceVersionDto,
+  ProposeLessonCurriculumMappingDto,
+} from '@/lesson-experience/dto/lesson-experience.dto';
 
 export function lessonSchoolActor(ctx: any): JwtPayload {
   return {
@@ -33,7 +38,9 @@ export function lessonPlatformActor(ctx: any): JwtPayload {
   };
 }
 
-export function lessonActivityVersionInput(title = 'Lesson fixture Activity') {
+export function lessonActivityVersionInput(
+  title = 'Lesson fixture Activity',
+): CreateActivityVersionDto {
   return {
     engineKey: 'CORE_INTERACTION_V1',
     schemaVersion: 1,
@@ -88,7 +95,7 @@ export function lessonActivityVersionInput(title = 'Lesson fixture Activity') {
       fallback: 'Pokračuj lokálně a eventy odešli po návratu sítě.',
     },
     evidencePlan: {
-      completionIsMastery: false as const,
+      completionIsMastery: false,
       signals: [
         {
           type: 'PREDICTION_SUBMITTED',
@@ -101,13 +108,17 @@ export function lessonActivityVersionInput(title = 'Lesson fixture Activity') {
   };
 }
 
-export function lessonVersionInput(activityVersionId: string, title = 'Datová detektivka') {
+export function lessonVersionInput(
+  activityVersionId: string,
+  title = 'Datová detektivka',
+): CreateLessonExperienceVersionDto {
   return {
     schemaVersion: 1,
     title,
     summary: '35min lesson fixture',
     learningObjective: 'Žák vytvoří, porovná a zdůvodní datový model.',
-    pedagogicalRationale: 'Interaktivní manipulace umožní porovnat modely a jejich důsledky.',
+    pedagogicalRationale:
+      'Interaktivní manipulace umožní porovnat modely a jejich důsledky.',
     supportedModes: [ActivityDeliveryMode.BOARD_ONLY],
     recommendedMode: ActivityDeliveryMode.BOARD_ONLY,
     estimatedDurationMin: 35,
@@ -327,7 +338,10 @@ export async function createPublishedLessonActivity(
   return { activityId: activity.id, activityVersionId: version.id };
 }
 
-export const lessonPrimaryMapping = (outcomeId: string, aspectId: string) => ({
+export const lessonPrimaryMapping = (
+  outcomeId: string,
+  aspectId: string,
+): ProposeLessonCurriculumMappingDto => ({
   frameworkOutcomeId: outcomeId,
   outcomeAspectId: aspectId,
   mappingType: LessonExperienceCurriculumMappingType.PRIMARY,
