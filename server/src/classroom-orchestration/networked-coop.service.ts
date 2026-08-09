@@ -7,6 +7,7 @@ import {
 import {
   LiveParticipantStatus,
   LiveSessionMode,
+  LiveSessionSourceKind,
   LiveSessionStatus,
   OrganizationRole,
   Prisma,
@@ -158,10 +159,14 @@ export class NetworkedCoopService {
       },
     });
 
-    if (!participant || participant.session.organizationId !== ctx.organizationId) {
+    if (
+      !participant ||
+      participant.session.organizationId !== ctx.organizationId ||
+      participant.session.sourceKind !== LiveSessionSourceKind.LESSON_EXPERIENCE
+    ) {
       throw new NotFoundException({
         code: 'SESSION_PARTICIPANT_NOT_FOUND',
-        message: 'Účast v hodině nebyla nalezena.',
+        message: 'Účast v interaktivní hodině nebyla nalezena.',
       });
     }
     if (!participant.groupId) {
@@ -200,7 +205,7 @@ export class NetworkedCoopService {
             participantId: { in: peerIds },
             eventType: { in: [HANDOFF_EVENT, ROTATED_EVENT] },
           },
-          orderBy: [{ occurredAt: 'desc' }, { createdAt: 'desc' }],
+          orderBy: [{ occurredAt: 'desc' }, { receivedAt: 'desc' }],
           select: { eventType: true, payload: true },
         })
       : null;
