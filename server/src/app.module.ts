@@ -56,6 +56,7 @@ import { TeacherAccessModule } from './teacher-access/teacher-access.module';
 import { ImportsModule } from './imports/imports.module';
 import { ProgressModule } from './progress/progress.module';
 import { CurriculumModule } from './curriculum/curriculum.module';
+import { ActivityModule } from './activity-engine/activity.module';
 import { resolveThrottleTracker } from './common/throttling/request-tracker';
 
 @Module({
@@ -67,31 +68,23 @@ import { resolveThrottleTracker } from './common/throttling/request-tracker';
       inject: [ConfigService],
       useFactory: async (cfg: ConfigService) => {
         if (process.env.NODE_ENV === 'test') {
-          return { ttl: 0 }; // in-memory, bez expirace pro testy
+          return { ttl: 0 };
         }
         const url = cfg.get<string>('REDIS_URL');
         const ttlSeconds = cfg.get<number>('CACHE_TTL_SECONDS') ?? 600;
-        const ttl = ttlSeconds * 1000; // cache-manager v5: TTL v ms
+        const ttl = ttlSeconds * 1000;
         if (url) {
           const { redisStore } = await import('cache-manager-redis-yet');
           return { store: await redisStore({ url }), ttl };
         }
-        return { ttl }; // fallback in‑memory
+        return { ttl };
       },
     }),
     ThrottlerModule.forRoot({
-      // Route-level @Throttle() overrides the default limits, so the test
-      // toggle must disable the guard itself — otherwise e2e suites hit the
-      // hard login/register limits (tests share one IP: no trust proxy).
-      // Normal authenticated traffic is tracked per session instead of per
-      // public IP so a school NAT cannot make unrelated users throttle each
-      // other. Login/register/reset routes stay IP-scoped.
       getTracker: async (req) => resolveThrottleTracker(req),
       skipIf: () => process.env.DISABLE_THROTTLE === '1',
       throttlers: [
         {
-          // v5 ttl is MILLISECONDS — bare 60 meant a 60 ms window (i.e. no
-          // real limiting). seconds() makes the intent explicit.
           ttl: process.env.DISABLE_THROTTLE === '1' ? 1 : seconds(60),
           limit:
             process.env.DISABLE_THROTTLE === '1'
@@ -142,6 +135,7 @@ import { resolveThrottleTracker } from './common/throttling/request-tracker';
     ImportsModule,
     ProgressModule,
     CurriculumModule,
+    ActivityModule,
   ],
   providers: [
     { provide: APP_INTERCEPTOR, useClass: ResponseEnvelopeInterceptor },
