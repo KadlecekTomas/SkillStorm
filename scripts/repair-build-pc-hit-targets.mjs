@@ -35,7 +35,7 @@ const desktopPath = 'client/tests/scenarios/build-a-pc.scenario.ts';
 let desktop = readFileSync(desktopPath, 'utf8');
 const oldAssertion = "await expect(page.getByText('0 pointer streams')).toBeVisible();";
 const newAssertion = "await expect(page.getByTestId('pointer-stream-count')).toHaveText('0');";
-if ((desktop.match(new RegExp(oldAssertion.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&'), 'g')) ?? []).length !== 2) {
+if (desktop.split(oldAssertion).length - 1 !== 2) {
   throw new Error('Expected exactly two pointer-stream text assertions');
 }
 desktop = desktop.split(oldAssertion).join(newAssertion);
