@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useRef, useState, type JSX } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type JSX } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowRight, Keyboard, QrCode, UsersRound } from 'lucide-react';
 import { classroomSessionApi } from '@/lib/classroom-session-api';
