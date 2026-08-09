@@ -42,6 +42,17 @@ const teacherProjection = {
   participantSummary: { total: 4, connected: 3, disconnected: 1 },
 };
 
+const draftProjection = {
+  ...teacherProjection,
+  status: 'DRAFT',
+  stateRevision: 0,
+  startedAt: null,
+  currentLessonStageId: null,
+  groups: [],
+  participants: [],
+  participantSummary: { total: 0, connected: 0, disconnected: 0 },
+};
+
 const analytics = {
   sessionId: SESSION_ID,
   generatedAt: '2026-08-09T18:05:00.000Z',
@@ -141,6 +152,41 @@ const analytics = {
 test.describe('Algorithm Lab teacher Mission Control', () => {
   test.use({ storageState: storageStateFor('teacher') });
 
+  test('starts from one teacher action and exposes one common student link', async ({ page }) => {
+    await page.route('**/api/classroom-sessions/algorithm-lab/quick-start', async (route) => {
+      await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify(draftProjection) });
+    });
+    await page.route(`**/api/classroom-sessions/${SESSION_ID}/algorithm-lab-analytics`, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ...analytics,
+          session: { ...analytics.session, status: 'DRAFT', stateRevision: 0, stageTitle: null },
+          summary: { ...analytics.summary, groups: 0, connectedPairs: 0, needsAttention: 0, waiting: 0, totalProgramRuns: 0, totalFailures: 0 },
+          reactor: { ...analytics.reactor, earnedEnergy: 0, maxEnergy: 1, progressPct: 0, level: 'BOOT', label: 'Boot sequence', nextLevelAt: 25 },
+          groups: [],
+        }),
+      });
+    });
+    await page.route(`**/api/classroom-sessions/${SESSION_ID}`, async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(draftProjection) });
+    });
+
+    await page.goto('/app/labs/algorithm-lab/mission-control');
+    await expect(page.getByRole('heading', { name: 'Jedno tlačítko. Jedna společná hodina.' })).toBeVisible();
+    await page.getByTestId('algorithm-quick-start').click();
+
+    await expect(page).toHaveURL(new RegExp(`session=${SESSION_ID}`));
+    await expect(page.getByTestId('algorithm-class-link-card')).toBeVisible();
+    await expect(page.getByTestId('algorithm-class-link')).toContainText(`/app/labs/algorithm-lab?session=${SESSION_ID}`);
+
+    await page.screenshot({
+      path: 'test-results/algorithm-lab-16-one-click-classroom.png',
+      fullPage: true,
+    });
+  });
+
   test('prioritizes intervention and uses cooperative reactor instead of leaderboard', async ({ page }) => {
     await page.route(`**/api/classroom-sessions/${SESSION_ID}/algorithm-lab-analytics`, async (route) => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(analytics) });
@@ -156,6 +202,7 @@ test.describe('Algorithm Lab teacher Mission Control', () => {
     await expect(page.getByTestId(`algorithm-pair-${GROUP_A}`)).toContainText('Ada');
     await expect(page.getByText('Gamifikace bez leaderboardu')).toBeVisible();
     await expect(page.getByText('0 pointer streams')).toBeVisible();
+    await expect(page.getByTestId('algorithm-class-link-card')).toBeVisible();
 
     await page.screenshot({
       path: 'test-results/algorithm-lab-15-mission-control-reactor.png',
