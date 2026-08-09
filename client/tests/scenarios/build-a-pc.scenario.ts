@@ -45,6 +45,7 @@ test.describe('Interactive IT Lab — Build a PC', () => {
     await page.getByTestId('power-button').click();
     await expect(page.getByTestId('build-feedback')).toContainText('POST úspěšný', { timeout: 5_000 });
     await expect(page.getByTestId('power-button')).toContainText('POST OK');
+    await expect(page.getByText('0 pointer streams')).toBeVisible();
 
     await page.screenshot({ path: 'test-results/build-a-pc-desktop-post-ok.png', fullPage: true });
   });
