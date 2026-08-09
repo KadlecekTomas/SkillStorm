@@ -7,7 +7,7 @@ export enum NetworkedCoopAction {
 
 export class NetworkedCoopTransitionDto {
   @IsString()
-  @MaxLength(120)
+  @MaxLength(100)
   transitionId!: string;
 
   @IsEnum(NetworkedCoopAction)
