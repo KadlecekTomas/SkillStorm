@@ -194,7 +194,7 @@ export class ClassroomOrchestrationService {
     this.assertTeacher(ctx);
 
     const result = await this.prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${sessionId}))`;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${sessionId}))`;
 
       const session = await tx.liveSession.findUnique({
         where: { id: sessionId },
@@ -368,7 +368,7 @@ export class ClassroomOrchestrationService {
     }
 
     return this.prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${sessionId}))`;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${sessionId}))`;
       const session = await tx.liveSession.findUnique({
         where: { id: sessionId },
         include: lessonSessionInclude,
@@ -633,7 +633,7 @@ export class ClassroomOrchestrationService {
     }
 
     return this.prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`${sessionId}:${dto.eventId}`}))`;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${sessionId}:${dto.eventId}`}))`;
 
       const existing = await tx.liveSemanticEvent.findUnique({
         where: {
