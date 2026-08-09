@@ -115,6 +115,35 @@ export type BuildPcAnalyticsProjection = {
   }>;
 };
 
+export type NetworkedCoopRole = 'PLANNER' | 'PROGRAMMER' | 'WAITING' | 'OBSERVER';
+export type NetworkedCoopPhase = 'WAITING' | 'PLAN' | 'PROGRAM';
+
+export type NetworkedCoopProjection = {
+  sessionId: string;
+  sessionStatus: ClassroomSessionStatus;
+  sessionRevision: number;
+  stageId: string | null;
+  groupId: string;
+  participantId: string;
+  round: number;
+  phase: NetworkedCoopPhase;
+  myRole: NetworkedCoopRole;
+  canAct: boolean;
+  plannerParticipantId: string | null;
+  programmerParticipantId: string | null;
+  peers: Array<{
+    participantId: string;
+    nickname: string;
+    connected: boolean;
+    role: NetworkedCoopRole;
+  }>;
+};
+
+export type NetworkedCoopTransitionResult = {
+  replayed: boolean;
+  state: NetworkedCoopProjection;
+};
+
 export type LiveSemanticEventType =
   | 'PREDICTION_SUBMITTED'
   | 'ALGORITHM_STEP_ADDED'
@@ -149,18 +178,22 @@ export type ClassroomCommandResult = {
   session: TeacherClassroomSessionProjection;
 };
 
-function commandId(type: ClassroomCommandType): string {
+function uniqueId(prefix: string): string {
   const suffix =
     typeof crypto !== 'undefined' && 'randomUUID' in crypto
       ? crypto.randomUUID()
       : `${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`;
-  return `mission-${type.toLowerCase()}-${suffix}`;
+  return `${prefix}-${suffix}`;
+}
+
+function commandId(type: ClassroomCommandType): string {
+  return uniqueId(`mission-${type.toLowerCase()}`);
 }
 
 export const classroomSessionApi = {
-  joinStudent: (sessionId: string): Promise<unknown> =>
+  joinStudent: (sessionId: string, groupId?: string | null): Promise<unknown> =>
     fetchWithAuth<unknown>('POST', `/classroom-sessions/${sessionId}/join`, {
-      body: {},
+      body: groupId ? { groupId } : {},
     }),
 
   studentProjection: (sessionId: string): Promise<StudentClassroomSessionProjection> =>
@@ -182,6 +215,30 @@ export const classroomSessionApi = {
       'GET',
       `/classroom-sessions/${sessionId}/build-pc-analytics`,
       { cache: 'no-store' },
+    ),
+
+  networkedCoop: (sessionId: string): Promise<NetworkedCoopProjection> =>
+    fetchWithAuth<NetworkedCoopProjection>(
+      'GET',
+      `/classroom-sessions/${sessionId}/coop`,
+      { cache: 'no-store' },
+    ),
+
+  networkedCoopTransition: (
+    sessionId: string,
+    action: 'HANDOFF' | 'ROTATE',
+    reason?: string,
+  ): Promise<NetworkedCoopTransitionResult> =>
+    fetchWithAuth<NetworkedCoopTransitionResult>(
+      'POST',
+      `/classroom-sessions/${sessionId}/coop/transition`,
+      {
+        body: {
+          transitionId: uniqueId('coop'),
+          action,
+          ...(reason ? { reason } : {}),
+        },
+      },
     ),
 
   command: (

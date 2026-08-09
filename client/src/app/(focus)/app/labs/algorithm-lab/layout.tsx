@@ -11,6 +11,7 @@ import {
 import { useSearchParams } from 'next/navigation';
 import { Cloud, CloudOff, PauseCircle, Radio, ShieldCheck, UsersRound } from 'lucide-react';
 import { useClassroomActivity } from '@/lib/use-classroom-activity';
+import { useNetworkedCoop } from '@/lib/use-networked-coop';
 import type { AlgorithmCommand } from '@/lib/it-lab/algorithm-engine';
 
 const commandByLabel: Record<string, AlgorithmCommand> = {
@@ -28,7 +29,8 @@ function textOf(element: Element | null): string {
 export default function AlgorithmLabLayout({ children }: { children: ReactNode }): JSX.Element {
   const searchParams = useSearchParams();
   const sessionId = searchParams.get('session');
-  const classroom = useClassroomActivity(sessionId, 'algo');
+  const groupId = searchParams.get('group');
+  const classroom = useClassroomActivity(sessionId, 'algo', groupId);
   const programRef = useRef<AlgorithmCommand[]>([]);
   const missionRef = useRef(1);
   const runSerialRef = useRef(0);
@@ -36,6 +38,18 @@ export default function AlgorithmLabLayout({ children }: { children: ReactNode }
   const [rotationRound, setRotationRound] = useState(1);
 
   const sharedDeviceMode = classroom.projection?.mode === 'SHARED_DEVICES';
+  const networkedMode =
+    classroom.projection?.mode === 'HYBRID' && Boolean(classroom.projection.participant.groupId);
+  const networked = useNetworkedCoop(sessionId, networkedMode);
+
+  const collaborationRole = networkedMode
+    ? networked.state?.myRole ?? 'WAITING'
+    : sharedDeviceMode
+      ? coopRole
+      : null;
+  const collaborationRound = networkedMode
+    ? networked.state?.round ?? 1
+    : rotationRound;
 
   const publishOutcome = useCallback(
     (serial: number, program: AlgorithmCommand[]): void => {
@@ -67,6 +81,8 @@ export default function AlgorithmLabLayout({ children }: { children: ReactNode }
             : null,
           finalDirection: robot?.dataset.direction ?? null,
           deliveryMode: classroom.projection?.mode ?? null,
+          collaborationRole,
+          collaborationRound,
         };
 
         if (resultText.includes('Algoritmus funguje.')) {
@@ -89,13 +105,22 @@ export default function AlgorithmLabLayout({ children }: { children: ReactNode }
               : 'TARGET_NOT_REACHED',
         });
 
-        if (sharedDeviceMode) {
+        if (networkedMode) {
+          void networked.rotate('TEST_FAILED');
+        } else if (sharedDeviceMode) {
           setCoopRole('PLANNER');
           setRotationRound((current) => current + 1);
         }
       }, 250);
     },
-    [classroom, sharedDeviceMode],
+    [
+      classroom,
+      collaborationRole,
+      collaborationRound,
+      networked,
+      networkedMode,
+      sharedDeviceMode,
+    ],
   );
 
   function isProgrammerAction(button: HTMLButtonElement, label: string): boolean {
@@ -105,6 +130,14 @@ export default function AlgorithmLabLayout({ children }: { children: ReactNode }
       label.includes('Spustit program krok po kroku') ||
       button.getAttribute('aria-label')?.startsWith('Odstranit krok '),
     );
+  }
+
+  function programmerMayAct(): boolean {
+    if (networkedMode) {
+      return networked.state?.myRole === 'PROGRAMMER' && networked.state.phase === 'PROGRAM';
+    }
+    if (sharedDeviceMode) return coopRole === 'PROGRAMMER';
+    return true;
   }
 
   function handleClickCapture(event: MouseEvent<HTMLDivElement>): void {
@@ -123,7 +156,7 @@ export default function AlgorithmLabLayout({ children }: { children: ReactNode }
     if (!button) return;
     const label = textOf(button);
 
-    if (sharedDeviceMode && coopRole === 'PLANNER' && isProgrammerAction(button, label)) {
+    if ((sharedDeviceMode || networkedMode) && isProgrammerAction(button, label) && !programmerMayAct()) {
       event.preventDefault();
       event.stopPropagation();
       return;
@@ -137,7 +170,8 @@ export default function AlgorithmLabLayout({ children }: { children: ReactNode }
         command,
         stepIndex: programRef.current.length,
         programLength: programRef.current.length,
-        collaborationRole: sharedDeviceMode ? coopRole : null,
+        collaborationRole,
+        collaborationRound,
       });
       return;
     }
@@ -161,7 +195,8 @@ export default function AlgorithmLabLayout({ children }: { children: ReactNode }
         mission: missionRef.current,
         program,
         programLength: program.length,
-        collaborationRole: sharedDeviceMode ? coopRole : null,
+        collaborationRole,
+        collaborationRound,
       });
       publishOutcome(runSerialRef.current, program);
       return;
@@ -170,7 +205,9 @@ export default function AlgorithmLabLayout({ children }: { children: ReactNode }
     if (label.includes('Transfer: další mise')) {
       missionRef.current += 1;
       programRef.current = [];
-      if (sharedDeviceMode) {
+      if (networkedMode) {
+        void networked.rotate('MISSION_COMPLETED');
+      } else if (sharedDeviceMode) {
         setCoopRole('PLANNER');
         setRotationRound((current) => current + 1);
       }
@@ -178,6 +215,8 @@ export default function AlgorithmLabLayout({ children }: { children: ReactNode }
   }
 
   const blocked = classroom.isClassroomMode && !classroom.canInteract;
+  const showLocalCoop = sharedDeviceMode && classroom.canInteract;
+  const showNetworkedCoop = networkedMode && classroom.canInteract;
 
   return (
     <div
@@ -205,7 +244,7 @@ export default function AlgorithmLabLayout({ children }: { children: ReactNode }
         </div>
       )}
 
-      {sharedDeviceMode && classroom.canInteract && (
+      {showLocalCoop && (
         <div
           data-testid="algorithm-coop-banner"
           className="fixed left-1/2 top-16 z-[75] w-[min(680px,calc(100vw-24px))] -translate-x-1/2 rounded-2xl border border-violet-300/20 bg-[#11172a]/95 p-3 text-white shadow-2xl backdrop-blur-xl"
@@ -217,7 +256,7 @@ export default function AlgorithmLabLayout({ children }: { children: ReactNode }
               </div>
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-200/60">
-                  Dvojice · kolo {rotationRound}
+                  Sdílené zařízení · kolo {rotationRound}
                 </p>
                 <p className="mt-1 text-sm font-black" data-testid="algorithm-coop-role">
                   {coopRole === 'PLANNER' ? 'Planner plánuje' : 'Programmer ovládá zařízení'}
@@ -251,6 +290,68 @@ export default function AlgorithmLabLayout({ children }: { children: ReactNode }
                 className="shrink-0 rounded-xl border border-violet-300/30 px-4 py-2 text-sm font-bold text-violet-100 transition hover:bg-violet-300/10 focus:outline-none focus:ring-2 focus:ring-violet-200"
               >
                 Vrátit Plannerovi
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {showNetworkedCoop && (
+        <div
+          data-testid="algorithm-networked-coop-banner"
+          className="fixed left-1/2 top-16 z-[75] w-[min(760px,calc(100vw-24px))] -translate-x-1/2 rounded-2xl border border-cyan-300/20 bg-[#0b1729]/95 p-3 text-white shadow-2xl backdrop-blur-xl"
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-cyan-400/10 text-cyan-200">
+                <UsersRound className="h-5 w-5" aria-hidden="true" />
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-cyan-200/60">
+                  Síťová dvojice · kolo {networked.state?.round ?? 1}
+                </p>
+                <p className="mt-1 text-sm font-black" data-testid="algorithm-networked-coop-role">
+                  {networked.loading
+                    ? 'Synchronizuji role…'
+                    : networked.state?.myRole === 'PLANNER'
+                      ? networked.state.phase === 'PLAN'
+                        ? 'Jsi Planner · navrhni řešení'
+                        : 'Planner čeká na Programmerův běh'
+                      : networked.state?.myRole === 'PROGRAMMER'
+                        ? networked.state.phase === 'PROGRAM'
+                          ? 'Jsi Programmer · sestav a spusť program'
+                          : 'Programmer čeká na plán'
+                        : networked.state?.myRole === 'WAITING'
+                          ? 'Čekám na druhé zařízení dvojice'
+                          : 'Pozorovatel dvojice'}
+                </p>
+                <p className="mt-1 text-xs leading-5 text-slate-400">
+                  {networked.state?.peers.map((peer) => `${peer.nickname}: ${peer.role}${peer.connected ? '' : ' · offline'}`).join(' · ') ||
+                    'Role se načítají ze serveru. Po reconnectu se dvojice vrátí do stejného kola.'}
+                </p>
+                {networked.error && <p className="mt-1 text-xs text-rose-200">{networked.error}</p>}
+              </div>
+            </div>
+            {networked.state?.myRole === 'PLANNER' && networked.state.phase === 'PLAN' && (
+              <button
+                type="button"
+                data-coop-control="true"
+                data-testid="algorithm-networked-coop-handoff"
+                onClick={() => void networked.handoff()}
+                className="shrink-0 rounded-xl bg-cyan-300 px-4 py-2 text-sm font-black text-slate-950 transition hover:bg-cyan-200 focus:outline-none focus:ring-2 focus:ring-cyan-100"
+              >
+                Plán hotový · předat Programmerovi →
+              </button>
+            )}
+            {networked.state?.myRole === 'PROGRAMMER' && networked.state.phase === 'PROGRAM' && (
+              <button
+                type="button"
+                data-coop-control="true"
+                data-testid="algorithm-networked-coop-rotate"
+                onClick={() => void networked.rotate('MANUAL_HAND_BACK')}
+                className="shrink-0 rounded-xl border border-cyan-300/30 px-4 py-2 text-sm font-bold text-cyan-100 transition hover:bg-cyan-300/10 focus:outline-none focus:ring-2 focus:ring-cyan-200"
+              >
+                Uzavřít běh · prohodit role
               </button>
             )}
           </div>

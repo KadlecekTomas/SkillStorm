@@ -19,6 +19,7 @@ import {
 } from '@/common/decorators/org-operation.decorator';
 import { BuildPcAnalyticsService } from './build-pc-analytics.service';
 import { ClassroomOrchestrationService } from './classroom-orchestration.service';
+import { NetworkedCoopService } from './networked-coop.service';
 import {
   ClassroomCommandDto,
   CreateLessonLiveSessionDto,
@@ -26,6 +27,7 @@ import {
   JoinClassroomSessionDto,
   SemanticEventDto,
 } from './dto/classroom-orchestration.dto';
+import { NetworkedCoopTransitionDto } from './dto/networked-coop.dto';
 
 @ApiTags('classroom-sessions')
 @ApiBearerAuth()
@@ -36,6 +38,7 @@ export class ClassroomOrchestrationController {
   constructor(
     private readonly service: ClassroomOrchestrationService,
     private readonly buildPcAnalytics: BuildPcAnalyticsService,
+    private readonly networkedCoop: NetworkedCoopService,
     private readonly orgContext: OrgContextService,
   ) {}
 
@@ -148,6 +151,29 @@ export class ClassroomOrchestrationController {
   ) {
     const ctx = await this.orgContext.get(req);
     return this.service.getStudentProjection(id, ctx);
+  }
+
+  @Get(':id/coop')
+  @Permission(OrganizationRole.STUDENT)
+  @ApiOperation({ summary: 'Server-authoritative Planner/Programmer pair projection' })
+  async coopProjection(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() req: RequestWithUser,
+  ) {
+    const ctx = await this.orgContext.get(req);
+    return this.networkedCoop.get(id, ctx);
+  }
+
+  @Post(':id/coop/transition')
+  @Permission(OrganizationRole.STUDENT)
+  @ApiOperation({ summary: 'Idempotent Planner/Programmer handoff or role rotation' })
+  async coopTransition(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: NetworkedCoopTransitionDto,
+    @Req() req: RequestWithUser,
+  ) {
+    const ctx = await this.orgContext.get(req);
+    return this.networkedCoop.transition(id, dto, ctx);
   }
 
   @Post(':id/events')

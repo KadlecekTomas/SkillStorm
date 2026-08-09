@@ -4,6 +4,9 @@ import { storageStateFor } from './manifest';
 const SESSION_ID = '12111111-1111-4111-8111-111111111111';
 const STAGE_ID = '23222222-2222-4222-8222-222222222222';
 const ACTIVITY_VERSION_ID = '34333333-3333-4333-8333-333333333333';
+const GROUP_ID = '56555555-5555-4555-8555-555555555555';
+const PLANNER_ID = '67666666-6666-4666-8666-666666666666';
+const PROGRAMMER_ID = '78777777-7777-4777-8777-777777777777';
 
 function studentProjection(status: 'RUNNING' | 'PAUSED' = 'RUNNING') {
   return {
@@ -29,6 +32,19 @@ function studentProjection(status: 'RUNNING' | 'PAUSED' = 'RUNNING') {
       activityVersionId: ACTIVITY_VERSION_ID,
       completionType: 'CHECKPOINT',
       checkpoint: true,
+    },
+  };
+}
+
+function networkedStudentProjection(participantId: string) {
+  return {
+    ...studentProjection('RUNNING'),
+    mode: 'HYBRID',
+    participant: {
+      id: participantId,
+      groupId: GROUP_ID,
+      status: 'CONNECTED',
+      lastSeenAt: '2026-08-09T18:00:00.000Z',
     },
   };
 }
@@ -129,5 +145,150 @@ test.describe('Algorithm Lab classroom player', () => {
       path: 'test-results/algorithm-lab-09-classroom-paused.png',
       fullPage: true,
     });
+  });
+});
+
+test.describe('Algorithm Lab networked pair', () => {
+  test('synchronizes Planner and Programmer across two browser devices and swaps roles', async ({ browser }) => {
+    let round = 1;
+    let phase: 'PLAN' | 'PROGRAM' = 'PLAN';
+
+    const roleFor = (participantId: string): 'PLANNER' | 'PROGRAMMER' => {
+      const swapped = round % 2 === 0;
+      if (participantId === PLANNER_ID) return swapped ? 'PROGRAMMER' : 'PLANNER';
+      return swapped ? 'PLANNER' : 'PROGRAMMER';
+    };
+
+    const coopProjection = (participantId: string) => ({
+      sessionId: SESSION_ID,
+      sessionStatus: 'RUNNING',
+      sessionRevision: 1,
+      stageId: STAGE_ID,
+      groupId: GROUP_ID,
+      participantId,
+      round,
+      phase,
+      myRole: roleFor(participantId),
+      canAct:
+        (phase === 'PLAN' && roleFor(participantId) === 'PLANNER') ||
+        (phase === 'PROGRAM' && roleFor(participantId) === 'PROGRAMMER'),
+      plannerParticipantId: roleFor(PLANNER_ID) === 'PLANNER' ? PLANNER_ID : PROGRAMMER_ID,
+      programmerParticipantId: roleFor(PLANNER_ID) === 'PROGRAMMER' ? PLANNER_ID : PROGRAMMER_ID,
+      peers: [
+        {
+          participantId: PLANNER_ID,
+          nickname: 'Ada',
+          connected: true,
+          role: roleFor(PLANNER_ID),
+        },
+        {
+          participantId: PROGRAMMER_ID,
+          nickname: 'Karel',
+          connected: true,
+          role: roleFor(PROGRAMMER_ID),
+        },
+      ],
+    });
+
+    const setupDevice = async (participantId: string) => {
+      const context = await browser.newContext({ storageState: storageStateFor('student8a') });
+      const page = await context.newPage();
+
+      await page.route(`**/api/classroom-sessions/${SESSION_ID}/join`, async (route) => {
+        const body = route.request().postDataJSON() as { groupId?: string };
+        expect(body.groupId).toBe(GROUP_ID);
+        await route.fulfill({
+          status: 201,
+          contentType: 'application/json',
+          body: JSON.stringify({ id: participantId, groupId: GROUP_ID }),
+        });
+      });
+      await page.route(`**/api/classroom-sessions/${SESSION_ID}/me`, async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(networkedStudentProjection(participantId)),
+        });
+      });
+      await page.route(`**/api/classroom-sessions/${SESSION_ID}/coop`, async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(coopProjection(participantId)),
+        });
+      });
+      await page.route(`**/api/classroom-sessions/${SESSION_ID}/coop/transition`, async (route) => {
+        const body = route.request().postDataJSON() as { action: 'HANDOFF' | 'ROTATE' };
+        if (body.action === 'HANDOFF') phase = 'PROGRAM';
+        if (body.action === 'ROTATE') {
+          round += 1;
+          phase = 'PLAN';
+        }
+        await route.fulfill({
+          status: 201,
+          contentType: 'application/json',
+          body: JSON.stringify({ replayed: false, state: coopProjection(participantId) }),
+        });
+      });
+      await page.route(`**/api/classroom-sessions/${SESSION_ID}/events`, async (route) => {
+        const body = route.request().postDataJSON() as Record<string, unknown>;
+        await route.fulfill({
+          status: 201,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            replayed: false,
+            event: { id: 'event', eventId: body.eventId, eventType: body.eventType },
+            evidence: null,
+          }),
+        });
+      });
+
+      await page.goto(`/app/labs/algorithm-lab?session=${SESSION_ID}&group=${GROUP_ID}`);
+      return { context, page };
+    };
+
+    const plannerDevice = await setupDevice(PLANNER_ID);
+    const programmerDevice = await setupDevice(PROGRAMMER_ID);
+
+    await expect(plannerDevice.page.getByTestId('algorithm-networked-coop-role')).toContainText(
+      'Jsi Planner',
+    );
+    await expect(programmerDevice.page.getByTestId('algorithm-networked-coop-role')).toContainText(
+      'Programmer čeká na plán',
+    );
+
+    await programmerDevice.page.getByRole('button', { name: '↑ Krok' }).click();
+    await expect(programmerDevice.page.getByTestId('algorithm-step-1')).toHaveCount(0);
+
+    await plannerDevice.page.getByTestId('algorithm-networked-coop-handoff').click();
+    await expect(programmerDevice.page.getByTestId('algorithm-networked-coop-role')).toContainText(
+      'Jsi Programmer',
+      { timeout: 4_000 },
+    );
+
+    await programmerDevice.page.getByRole('button', { name: '↑ Krok' }).click();
+    await expect(programmerDevice.page.getByTestId('algorithm-step-1')).toBeVisible();
+
+    await programmerDevice.page.getByTestId('algorithm-networked-coop-rotate').click();
+    await expect(programmerDevice.page.getByTestId('algorithm-networked-coop-role')).toContainText(
+      'Jsi Planner',
+      { timeout: 4_000 },
+    );
+    await expect(plannerDevice.page.getByTestId('algorithm-networked-coop-role')).toContainText(
+      'Programmer čeká na plán',
+      { timeout: 4_000 },
+    );
+
+    await plannerDevice.page.screenshot({
+      path: 'test-results/algorithm-lab-11-networked-device-a.png',
+      fullPage: true,
+    });
+    await programmerDevice.page.screenshot({
+      path: 'test-results/algorithm-lab-12-networked-device-b.png',
+      fullPage: true,
+    });
+
+    await plannerDevice.context.close();
+    await programmerDevice.context.close();
   });
 });
