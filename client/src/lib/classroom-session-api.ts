@@ -50,11 +50,7 @@ export type TeacherClassroomSessionProjection = {
     versionNo: number;
     stages: ClassroomStage[];
   };
-  groups: Array<{
-    id: string;
-    label: string;
-    orderIndex: number;
-  }>;
+  groups: Array<{ id: string; label: string; orderIndex: number }>;
   participants: Array<{
     id: string;
     nickname: string | null;
@@ -65,11 +61,7 @@ export type TeacherClassroomSessionProjection = {
     lastSeenAt: string;
     disconnectedAt: string | null;
   }>;
-  participantSummary: {
-    total: number;
-    connected: number;
-    disconnected: number;
-  };
+  participantSummary: { total: number; connected: number; disconnected: number };
 };
 
 export type BuildPcAnalyticsProjection = {
@@ -113,6 +105,73 @@ export type BuildPcAnalyticsProjection = {
     stalled: boolean;
     needsAttention: boolean;
   }>;
+};
+
+export type AlgorithmLabAnalyticsProjection = {
+  sessionId: string;
+  generatedAt: string;
+  session: {
+    status: ClassroomSessionStatus;
+    mode: ClassroomDeliveryMode;
+    stateRevision: number;
+    lessonTitle: string;
+    stageTitle: string | null;
+  };
+  summary: {
+    groups: number;
+    connectedPairs: number;
+    needsAttention: number;
+    waiting: number;
+    totalProgramRuns: number;
+    totalFailures: number;
+  };
+  reactor: {
+    earnedEnergy: number;
+    maxEnergy: number;
+    progressPct: number;
+    level: 'BOOT' | 'PULSE' | 'ORBIT' | 'NOVA';
+    label: string;
+    nextLevelAt: number;
+    rankingEnabled: false;
+    masteryImpact: false;
+  };
+  groups: Array<{
+    groupId: string;
+    label: string;
+    round: number;
+    phase: 'WAITING' | 'PLAN' | 'PROGRAM';
+    plannerParticipantId: string | null;
+    programmerParticipantId: string | null;
+    members: Array<{
+      participantId: string;
+      nickname: string;
+      connected: boolean;
+      role: 'PLANNER' | 'PROGRAMMER' | 'WAITING' | 'OBSERVER';
+    }>;
+    programLength: number;
+    programRevision: number;
+    failures: number;
+    hints: number;
+    runs: number;
+    debugHypotheses: number;
+    needsAttention: boolean;
+    missionEnergy: number;
+    milestones: {
+      pairOnline: boolean;
+      handedOff: boolean;
+      programStarted: boolean;
+      debugLoop: boolean;
+      roleRotated: boolean;
+      askedForHelp: boolean;
+    };
+    lastEventAt: string | null;
+  }>;
+  ungrouped: Array<{ participantId: string; nickname: string; connected: boolean }>;
+  privacy: {
+    pointerStreams: 0;
+    publicLeaderboard: false;
+    rawScreenTelemetry: false;
+  };
 };
 
 export type NetworkedCoopRole = 'PLANNER' | 'PROGRAMMER' | 'WAITING' | 'OBSERVER';
@@ -229,6 +288,13 @@ export const classroomSessionApi = {
     fetchWithAuth<BuildPcAnalyticsProjection>(
       'GET',
       `/classroom-sessions/${sessionId}/build-pc-analytics`,
+      { cache: 'no-store' },
+    ),
+
+  algorithmLabAnalytics: (sessionId: string): Promise<AlgorithmLabAnalyticsProjection> =>
+    fetchWithAuth<AlgorithmLabAnalyticsProjection>(
+      'GET',
+      `/classroom-sessions/${sessionId}/algorithm-lab-analytics`,
       { cache: 'no-store' },
     ),
 
