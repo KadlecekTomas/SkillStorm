@@ -58,8 +58,8 @@ function generatorPolynomial(degree: number): number[] {
   for (let i = 0; i < degree; i += 1) {
     const next = new Array<number>(polynomial.length + 1).fill(0);
     for (let j = 0; j < polynomial.length; j += 1) {
-      next[j] ^= polynomial[j]!;
-      next[j + 1] ^= gfMultiply(polynomial[j]!, GF.exp[i]!);
+      next[j] = (next[j] ?? 0) ^ polynomial[j]!;
+      next[j + 1] = (next[j + 1] ?? 0) ^ gfMultiply(polynomial[j]!, GF.exp[i]!);
     }
     polynomial = next;
   }
@@ -73,7 +73,7 @@ function reedSolomon(data: number[], degree: number): number[] {
     const factor = working[i]!;
     if (factor === 0) continue;
     for (let j = 0; j < generator.length; j += 1) {
-      working[i + j] ^= gfMultiply(generator[j]!, factor);
+      working[i + j] = (working[i + j] ?? 0) ^ gfMultiply(generator[j]!, factor);
     }
   }
   return working.slice(data.length);
