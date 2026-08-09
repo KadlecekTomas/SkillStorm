@@ -12,6 +12,7 @@ import {
   AuditEntityType,
   CurriculumFrameworkReleaseStatus,
   MappingProposerType,
+  OrganizationRole,
   OutcomeAspectStatus,
   Prisma,
   SystemRole,
@@ -20,14 +21,17 @@ import { createHash } from 'node:crypto';
 import { AuditService } from '@/audit/audit.service';
 import type { JwtPayload } from '@/auth/types/jwt-payload';
 import { PrismaService } from '@/prisma/prisma.service';
+import {
+  listActivityEngines,
+  validateActivityEngineCompatibility,
+} from './activity-engine.registry';
+import { validateActivityPublicationMetadata } from './activity-publication';
 import type {
   CreateActivityDto,
   CreateActivityVersionDto,
   ProposeActivityCurriculumMappingDto,
   ReviewActivityCurriculumMappingDto,
 } from './dto/activity.dto';
-import { validateActivityEngineCompatibility } from './activity-engine.registry';
-import { validateActivityPublicationMetadata } from './activity-publication';
 
 const asJson = (value: unknown): Prisma.InputJsonValue =>
   value as Prisma.InputJsonValue;
@@ -50,6 +54,10 @@ function contentChecksum(value: unknown): string {
     .digest('hex');
 }
 
+function activeRole(actor: JwtPayload): OrganizationRole | undefined {
+  return actor.activeRole ?? actor.organizationRole;
+}
+
 @Injectable()
 export class ActivityService {
   constructor(
@@ -58,28 +66,19 @@ export class ActivityService {
   ) {}
 
   listEngines() {
-    const { listActivityEngines } = require('./activity-engine.registry') as typeof import('./activity-engine.registry');
     return listActivityEngines();
   }
 
   async listAvailable(actor: JwtPayload) {
-    const organizationId = actor.organizationId;
-    return this.prisma.activity.findMany({
+    const publishedGlobal = await this.prisma.activity.findMany({
       where: {
+        scope: ActivityScope.GLOBAL,
         deletedAt: null,
-        OR: [
-          {
-            scope: ActivityScope.GLOBAL,
-            versions: { some: { status: ActivityVersionStatus.PUBLISHED } },
-          },
-          ...(organizationId
-            ? [{ scope: ActivityScope.ORGANIZATION, organizationId }]
-            : []),
-        ],
+        versions: { some: { status: ActivityVersionStatus.PUBLISHED } },
       },
-      orderBy: [{ scope: 'asc' }, { title: 'asc' }],
       include: {
         versions: {
+          where: { status: ActivityVersionStatus.PUBLISHED },
           orderBy: { versionNo: 'desc' },
           select: {
             id: true,
@@ -96,17 +95,68 @@ export class ActivityService {
         },
       },
     });
+
+    const local = actor.organizationId
+      ? await this.prisma.activity.findMany({
+          where: {
+            scope: ActivityScope.ORGANIZATION,
+            organizationId: actor.organizationId,
+            deletedAt: null,
+          },
+          include: {
+            versions: {
+              orderBy: { versionNo: 'desc' },
+              select: {
+                id: true,
+                versionNo: true,
+                status: true,
+                engineKey: true,
+                schemaVersion: true,
+                title: true,
+                supportedModes: true,
+                recommendedMode: true,
+                contentChecksum: true,
+                publishedAt: true,
+              },
+            },
+          },
+        })
+      : [];
+
+    return [...publishedGlobal, ...local].sort((a, b) =>
+      a.title.localeCompare(b.title, 'cs'),
+    );
+  }
+
+  async listPlatformActivities(actor: JwtPayload) {
+    this.assertPlatformSuperadmin(actor);
+    return this.prisma.activity.findMany({
+      where: { scope: ActivityScope.GLOBAL, deletedAt: null },
+      orderBy: { title: 'asc' },
+      include: {
+        versions: {
+          orderBy: { versionNo: 'desc' },
+          include: {
+            curriculumMappings: { orderBy: { createdAt: 'asc' } },
+          },
+        },
+      },
+    });
   }
 
   createOrganizationActivity(dto: CreateActivityDto, actor: JwtPayload) {
+    this.assertAuthorRole(actor);
     const organizationId = this.requireOrganization(actor);
-    return this.createActivity(dto, actor, ActivityScope.ORGANIZATION, organizationId);
+    return this.createActivity(
+      dto,
+      actor,
+      ActivityScope.ORGANIZATION,
+      organizationId,
+    );
   }
 
   createGlobalActivity(dto: CreateActivityDto, actor: JwtPayload) {
-    if (actor.systemRole !== SystemRole.SUPERADMIN) {
-      throw new ForbiddenException('Globální Activity může vytvářet pouze SUPERADMIN.');
-    }
+    this.assertPlatformSuperadmin(actor);
     return this.createActivity(dto, actor, ActivityScope.GLOBAL, null);
   }
 
@@ -118,12 +168,7 @@ export class ActivityService {
   ) {
     const slug = dto.slug.trim().toLowerCase();
     const duplicate = await this.prisma.activity.findFirst({
-      where: {
-        scope,
-        organizationId,
-        slug,
-        deletedAt: null,
-      },
+      where: { scope, organizationId, slug, deletedAt: null },
       select: { id: true },
     });
     if (duplicate) {
@@ -155,13 +200,27 @@ export class ActivityService {
 
   async getActivity(activityId: string, actor: JwtPayload) {
     const activity = await this.requireVisibleActivity(activityId, actor);
+    const exposeAllVersions =
+      actor.systemRole === SystemRole.SUPERADMIN ||
+      activity.scope === ActivityScope.ORGANIZATION;
+
     return this.prisma.activity.findUniqueOrThrow({
       where: { id: activity.id },
       include: {
         versions: {
+          ...(exposeAllVersions
+            ? {}
+            : { where: { status: ActivityVersionStatus.PUBLISHED } }),
           orderBy: { versionNo: 'desc' },
           include: {
             curriculumMappings: {
+              ...(exposeAllVersions
+                ? {}
+                : {
+                    where: {
+                      status: ActivityCurriculumMappingStatus.APPROVED,
+                    },
+                  }),
               orderBy: { createdAt: 'asc' },
               select: {
                 id: true,
@@ -180,12 +239,33 @@ export class ActivityService {
     });
   }
 
+  async getPlatformActivity(activityId: string, actor: JwtPayload) {
+    this.assertPlatformSuperadmin(actor);
+    const activity = await this.prisma.activity.findFirst({
+      where: {
+        id: activityId,
+        scope: ActivityScope.GLOBAL,
+        deletedAt: null,
+      },
+      include: {
+        versions: {
+          orderBy: { versionNo: 'desc' },
+          include: {
+            curriculumMappings: { orderBy: { createdAt: 'asc' } },
+          },
+        },
+      },
+    });
+    if (!activity) throw new NotFoundException('Activity nenalezena.');
+    return activity;
+  }
+
   async createVersion(
     activityId: string,
     dto: CreateActivityVersionDto,
     actor: JwtPayload,
   ) {
-    const activity = await this.requireManageableActivity(activityId, actor);
+    const activity = await this.requireAuthorableActivity(activityId, actor);
     validateActivityEngineCompatibility({
       engineKey: dto.engineKey,
       schemaVersion: dto.schemaVersion,
@@ -200,9 +280,9 @@ export class ActivityService {
       schemaVersion: dto.schemaVersion,
       title: dto.title.trim(),
       description: dto.description?.trim() ?? null,
-      supportedModes: [...new Set(dto.supportedModes)],
+      supportedModes: [...new Set(dto.supportedModes)].sort(),
       recommendedMode: dto.recommendedMode,
-      interactionPrimitives: [...new Set(dto.interactionPrimitives)],
+      interactionPrimitives: [...new Set(dto.interactionPrimitives)].sort(),
       config: dto.config,
       capabilityRequirements: dto.capabilityRequirements,
       assetManifest: dto.assetManifest,
@@ -219,7 +299,10 @@ export class ActivityService {
 
     const existing = await this.prisma.activityVersion.findUnique({
       where: {
-        activityId_contentChecksum: { activityId: activity.id, contentChecksum: checksum },
+        activityId_contentChecksum: {
+          activityId: activity.id,
+          contentChecksum: checksum,
+        },
       },
       select: { id: true, versionNo: true },
     });
@@ -231,6 +314,7 @@ export class ActivityService {
     }
 
     const version = await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${activity.id}, 0))`;
       const latest = await tx.activityVersion.findFirst({
         where: { activityId: activity.id },
         orderBy: { versionNo: 'desc' },
@@ -289,8 +373,14 @@ export class ActivityService {
     dto: ProposeActivityCurriculumMappingDto,
     actor: JwtPayload,
   ) {
-    const { version, activity } = await this.requireManageableVersion(versionId, actor);
-    if (version.status !== ActivityVersionStatus.DRAFT && version.status !== ActivityVersionStatus.REVIEW) {
+    const { version, activity } = await this.requireAuthorableVersion(
+      versionId,
+      actor,
+    );
+    if (
+      version.status !== ActivityVersionStatus.DRAFT &&
+      version.status !== ActivityVersionStatus.REVIEW
+    ) {
       throw new ConflictException({ code: 'ACTIVITY_VERSION_MAPPING_FROZEN' });
     }
 
@@ -299,8 +389,12 @@ export class ActivityService {
       include: { release: true },
     });
     if (!outcome) throw new NotFoundException('Framework outcome nenalezen.');
-    if (outcome.release.status !== CurriculumFrameworkReleaseStatus.VERIFIED) {
-      throw new ConflictException({ code: 'ACTIVITY_MAPPING_RELEASE_NOT_VERIFIED' });
+    if (
+      outcome.release.status !== CurriculumFrameworkReleaseStatus.VERIFIED
+    ) {
+      throw new ConflictException({
+        code: 'ACTIVITY_MAPPING_RELEASE_NOT_VERIFIED',
+      });
     }
 
     let aspectReviewVersion: number | null = null;
@@ -309,17 +403,26 @@ export class ActivityService {
         where: { id: dto.outcomeAspectId },
       });
       if (!aspect || aspect.frameworkOutcomeId !== outcome.id) {
-        throw new BadRequestException({ code: 'ACTIVITY_MAPPING_ASPECT_OUTCOME_MISMATCH' });
+        throw new BadRequestException({
+          code: 'ACTIVITY_MAPPING_ASPECT_OUTCOME_MISMATCH',
+        });
       }
       if (aspect.status !== OutcomeAspectStatus.ACTIVE) {
-        throw new ConflictException({ code: 'ACTIVITY_MAPPING_ASPECT_RETIRED' });
+        throw new ConflictException({
+          code: 'ACTIVITY_MAPPING_ASPECT_RETIRED',
+        });
       }
       aspectReviewVersion = aspect.reviewVersion;
     }
 
     const proposedByType = dto.proposedByType ?? MappingProposerType.HUMAN;
-    if (proposedByType !== MappingProposerType.HUMAN && actor.systemRole !== SystemRole.SUPERADMIN) {
-      throw new ForbiddenException('SYSTEM/AI návrh může zapisovat pouze platformní governance cesta.');
+    if (
+      proposedByType !== MappingProposerType.HUMAN &&
+      actor.systemRole !== SystemRole.SUPERADMIN
+    ) {
+      throw new ForbiddenException(
+        'SYSTEM/AI návrh může zapisovat pouze platformní governance cesta.',
+      );
     }
 
     const mapping = await this.prisma.activityCurriculumMapping.create({
@@ -365,13 +468,15 @@ export class ActivityService {
       where: { id: mappingId },
       include: { activityVersion: { include: { activity: true } } },
     });
-    if (!mapping) throw new NotFoundException('Activity curriculum mapping nenalezen.');
-    await this.assertCanManage(mapping.activityVersion.activity, actor);
+    if (!mapping) {
+      throw new NotFoundException('Activity curriculum mapping nenalezen.');
+    }
+    this.assertPublisherForActivity(mapping.activityVersion.activity, actor);
     if (mapping.status !== ActivityCurriculumMappingStatus.PROPOSED) {
       throw new ConflictException({ code: 'ACTIVITY_MAPPING_ALREADY_REVIEWED' });
     }
 
-    return this.prisma.activityCurriculumMapping.update({
+    const reviewed = await this.prisma.activityCurriculumMapping.update({
       where: { id: mapping.id },
       data: {
         status: dto.status,
@@ -380,15 +485,33 @@ export class ActivityService {
         reviewedAt: new Date(),
       },
     });
+
+    await this.audit.log({
+      action: 'ACTIVITY_CURRICULUM_MAPPING_REVIEWED',
+      entityType: AuditEntityType.ACTIVITY,
+      entityId: reviewed.id,
+      userId: actor.userId,
+      organizationId: mapping.activityVersion.activity.organizationId,
+      systemRole: actor.systemRole ?? null,
+      metadata: asJson({
+        activityVersionId: mapping.activityVersionId,
+        mappingId: reviewed.id,
+        status: reviewed.status,
+      }),
+    });
+    return reviewed;
   }
 
   async submitForReview(versionId: string, actor: JwtPayload) {
-    const { version } = await this.requireManageableVersion(versionId, actor);
+    const { version, activity } = await this.requireAuthorableVersion(
+      versionId,
+      actor,
+    );
     if (version.status !== ActivityVersionStatus.DRAFT) {
       throw new ConflictException({ code: 'ACTIVITY_VERSION_NOT_DRAFT' });
     }
     validateActivityPublicationMetadata(version);
-    return this.prisma.activityVersion.update({
+    const review = await this.prisma.activityVersion.update({
       where: { id: version.id },
       data: {
         status: ActivityVersionStatus.REVIEW,
@@ -396,10 +519,28 @@ export class ActivityService {
         reviewedBy: actor.userId,
       },
     });
+
+    await this.audit.log({
+      action: 'ACTIVITY_VERSION_SUBMITTED_FOR_REVIEW',
+      entityType: AuditEntityType.ACTIVITY,
+      entityId: review.id,
+      userId: actor.userId,
+      organizationId: activity.organizationId,
+      systemRole: actor.systemRole ?? null,
+      metadata: asJson({
+        activityId: activity.id,
+        activityVersionId: review.id,
+        contentChecksum: review.contentChecksum,
+      }),
+    });
+    return review;
   }
 
   async publish(versionId: string, actor: JwtPayload) {
-    const { version, activity } = await this.requireManageableVersion(versionId, actor);
+    const { version, activity } = await this.requirePublishableVersion(
+      versionId,
+      actor,
+    );
     if (version.status !== ActivityVersionStatus.REVIEW) {
       throw new ConflictException({ code: 'ACTIVITY_VERSION_NOT_IN_REVIEW' });
     }
@@ -407,23 +548,33 @@ export class ActivityService {
 
     const mappings = await this.prisma.activityCurriculumMapping.findMany({
       where: { activityVersionId: version.id },
-      include: { frameworkOutcome: true, outcomeAspect: true, frameworkRelease: true },
+      include: {
+        frameworkOutcome: true,
+        outcomeAspect: true,
+        frameworkRelease: true,
+      },
     });
     const approved = mappings.filter(
       (mapping) => mapping.status === ActivityCurriculumMappingStatus.APPROVED,
     );
     if (approved.length === 0) {
-      throw new ConflictException({ code: 'ACTIVITY_PUBLICATION_CURRICULUM_MAPPING_REQUIRED' });
+      throw new ConflictException({
+        code: 'ACTIVITY_PUBLICATION_CURRICULUM_MAPPING_REQUIRED',
+      });
     }
     for (const mapping of approved) {
       if (
-        mapping.frameworkRelease.status !== CurriculumFrameworkReleaseStatus.VERIFIED ||
+        mapping.frameworkRelease.status !==
+          CurriculumFrameworkReleaseStatus.VERIFIED ||
         mapping.frameworkOutcome.checksum !== mapping.frameworkOutcomeChecksum ||
         (mapping.outcomeAspect &&
           (mapping.outcomeAspect.status !== OutcomeAspectStatus.ACTIVE ||
-            mapping.outcomeAspect.reviewVersion !== mapping.outcomeAspectReviewVersion))
+            mapping.outcomeAspect.reviewVersion !==
+              mapping.outcomeAspectReviewVersion))
       ) {
-        throw new ConflictException({ code: 'ACTIVITY_PUBLICATION_MAPPING_STALE' });
+        throw new ConflictException({
+          code: 'ACTIVITY_PUBLICATION_MAPPING_STALE',
+        });
       }
     }
 
@@ -454,35 +605,78 @@ export class ActivityService {
   }
 
   async retire(versionId: string, actor: JwtPayload) {
-    const { version } = await this.requireManageableVersion(versionId, actor);
+    const { version, activity } = await this.requirePublishableVersion(
+      versionId,
+      actor,
+    );
     if (version.status !== ActivityVersionStatus.PUBLISHED) {
       throw new ConflictException({ code: 'ACTIVITY_VERSION_NOT_PUBLISHED' });
     }
-    return this.prisma.activityVersion.update({
+    const retired = await this.prisma.activityVersion.update({
       where: { id: version.id },
       data: { status: ActivityVersionStatus.RETIRED },
     });
+    await this.audit.log({
+      action: 'ACTIVITY_VERSION_RETIRED',
+      entityType: AuditEntityType.ACTIVITY,
+      entityId: retired.id,
+      userId: actor.userId,
+      organizationId: activity.organizationId,
+      systemRole: actor.systemRole ?? null,
+      metadata: asJson({
+        activityId: activity.id,
+        activityVersionId: retired.id,
+        contentChecksum: retired.contentChecksum,
+      }),
+    });
+    return retired;
   }
 
   private async requireVisibleActivity(activityId: string, actor: JwtPayload) {
+    if (actor.systemRole === SystemRole.SUPERADMIN) {
+      const platformVisible = await this.prisma.activity.findFirst({
+        where: { id: activityId, deletedAt: null },
+      });
+      if (!platformVisible) throw new NotFoundException('Activity nenalezena.');
+      return platformVisible;
+    }
+
     const activity = await this.prisma.activity.findFirst({
-      where: { id: activityId, deletedAt: null },
+      where: {
+        id: activityId,
+        deletedAt: null,
+        OR: [
+          {
+            scope: ActivityScope.GLOBAL,
+            versions: { some: { status: ActivityVersionStatus.PUBLISHED } },
+          },
+          ...(actor.organizationId
+            ? [
+                {
+                  scope: ActivityScope.ORGANIZATION,
+                  organizationId: actor.organizationId,
+                },
+              ]
+            : []),
+        ],
+      },
     });
     if (!activity) throw new NotFoundException('Activity nenalezena.');
-    if (activity.scope === ActivityScope.GLOBAL) return activity;
-    if (!actor.organizationId || activity.organizationId !== actor.organizationId) {
-      throw new NotFoundException('Activity nenalezena.');
-    }
     return activity;
   }
 
-  private async requireManageableActivity(activityId: string, actor: JwtPayload) {
+  private async requireAuthorableActivity(
+    activityId: string,
+    actor: JwtPayload,
+  ) {
+    this.assertAuthorRole(actor);
     const activity = await this.requireVisibleActivity(activityId, actor);
-    await this.assertCanManage(activity, actor);
+    this.assertTenantOrPlatform(activity, actor);
     return activity;
   }
 
-  private async requireManageableVersion(versionId: string, actor: JwtPayload) {
+  private async requireAuthorableVersion(versionId: string, actor: JwtPayload) {
+    this.assertAuthorRole(actor);
     const version = await this.prisma.activityVersion.findUnique({
       where: { id: versionId },
       include: { activity: true },
@@ -490,11 +684,27 @@ export class ActivityService {
     if (!version || version.activity.deletedAt) {
       throw new NotFoundException('ActivityVersion nenalezena.');
     }
-    await this.assertCanManage(version.activity, actor);
+    this.assertTenantOrPlatform(version.activity, actor);
     return { version, activity: version.activity };
   }
 
-  private async assertCanManage(
+  private async requirePublishableVersion(
+    versionId: string,
+    actor: JwtPayload,
+  ) {
+    this.assertPublisherRole(actor);
+    const version = await this.prisma.activityVersion.findUnique({
+      where: { id: versionId },
+      include: { activity: true },
+    });
+    if (!version || version.activity.deletedAt) {
+      throw new NotFoundException('ActivityVersion nenalezena.');
+    }
+    this.assertTenantOrPlatform(version.activity, actor);
+    return { version, activity: version.activity };
+  }
+
+  private assertTenantOrPlatform(
     activity: { scope: ActivityScope; organizationId: string | null },
     actor: JwtPayload,
   ) {
@@ -505,6 +715,46 @@ export class ActivityService {
       activity.organizationId !== actor.organizationId
     ) {
       throw new NotFoundException('Activity nenalezena.');
+    }
+  }
+
+  private assertAuthorRole(actor: JwtPayload) {
+    if (actor.systemRole === SystemRole.SUPERADMIN) return;
+    const role = activeRole(actor);
+    if (
+      role !== OrganizationRole.OWNER &&
+      role !== OrganizationRole.DIRECTOR &&
+      role !== OrganizationRole.TEACHER
+    ) {
+      throw new ForbiddenException(
+        'Activity authoring není pro tuto roli povolený.',
+      );
+    }
+  }
+
+  private assertPublisherRole(actor: JwtPayload) {
+    if (actor.systemRole === SystemRole.SUPERADMIN) return;
+    const role = activeRole(actor);
+    if (role !== OrganizationRole.OWNER && role !== OrganizationRole.DIRECTOR) {
+      throw new ForbiddenException(
+        'Activity publication vyžaduje vedení školy.',
+      );
+    }
+  }
+
+  private assertPublisherForActivity(
+    activity: { scope: ActivityScope; organizationId: string | null },
+    actor: JwtPayload,
+  ) {
+    this.assertPublisherRole(actor);
+    this.assertTenantOrPlatform(activity, actor);
+  }
+
+  private assertPlatformSuperadmin(actor: JwtPayload) {
+    if (actor.systemRole !== SystemRole.SUPERADMIN) {
+      throw new ForbiddenException(
+        'Globální Activity governance je dostupná pouze SUPERADMIN.',
+      );
     }
   }
 
