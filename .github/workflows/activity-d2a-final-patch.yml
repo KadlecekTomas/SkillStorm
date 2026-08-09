@@ -1,0 +1,38 @@
+name: Activity D2-A Final Patch
+
+on:
+  push:
+    branches: [agent/lesson-experience-d2]
+    paths:
+      - 'scripts/internal/patch-activity-d2a-final.mjs'
+      - '.github/workflows/activity-d2a-final-patch.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: agent/lesson-experience-d2
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Apply exact invariant patch
+        run: node scripts/internal/patch-activity-d2a-final.mjs
+      - name: Verify helper removal and intended diff
+        run: |
+          test ! -e scripts/internal/patch-activity-d2a-final.mjs
+          test ! -e .github/workflows/activity-d2a-final-patch.yml
+          git diff --check
+          git diff -- server/src/activity-engine/activity.service.ts
+      - name: Commit production-only result
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'fix(activity): close D2-A concurrency and review races'
+          git push origin HEAD:agent/lesson-experience-d2
