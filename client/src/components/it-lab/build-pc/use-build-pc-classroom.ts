@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
 import { HttpError } from '@/lib/http/client';
 import {
   classroomSessionApi,
@@ -43,9 +42,7 @@ export type BuildPcClassroomBridge = {
   refresh: () => Promise<void>;
 };
 
-export function useBuildPcClassroom(): BuildPcClassroomBridge {
-  const searchParams = useSearchParams();
-  const sessionId = searchParams.get('session');
+export function useBuildPcClassroom(sessionId: string | null): BuildPcClassroomBridge {
   const [projection, setProjection] = useState<StudentClassroomSessionProjection | null>(null);
   const [loading, setLoading] = useState(Boolean(sessionId));
   const [error, setError] = useState<string | null>(null);
