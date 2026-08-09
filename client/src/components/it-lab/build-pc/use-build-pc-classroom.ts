@@ -104,12 +104,18 @@ export function useBuildPcClassroom(sessionId: string | null): BuildPcClassroomB
     };
   }, [refresh, sessionId]);
 
+  const interactiveStage = Boolean(projection?.currentStage?.activityVersionId);
+
   const emit = useCallback(
     async (
       type: LiveSemanticEventType,
       payload?: Record<string, unknown>,
     ): Promise<boolean> => {
-      if (!sessionId || !projection?.currentStage || projection.status !== 'RUNNING') {
+      if (
+        !sessionId ||
+        !projection?.currentStage?.activityVersionId ||
+        projection.status !== 'RUNNING'
+      ) {
         return false;
       }
 
@@ -155,20 +161,25 @@ export function useBuildPcClassroom(sessionId: string | null): BuildPcClassroomB
     [projection, refresh, sessionId],
   );
 
-  const canInteract = !sessionId || projection?.status === 'RUNNING';
+  const canInteract = !sessionId || (projection?.status === 'RUNNING' && interactiveStage);
   const sessionLabel = useMemo(() => {
     if (!sessionId) return 'Solo trénink';
     if (loading) return 'Připojuji hodinu…';
     if (projection?.status === 'DRAFT') return 'Čeká se na spuštění učitelem';
     if (projection?.status === 'PAUSED') return 'Hodina je pozastavena';
     if (projection?.status === 'FINISHED') return 'Hodina byla ukončena';
+    if (projection?.status === 'RUNNING' && !interactiveStage) {
+      return projection.currentStage?.title
+        ? `Live · ${projection.currentStage.title} · čeká se na aktivitu`
+        : 'Live · čeká se na interaktivní stage';
+    }
     if (projection?.status === 'RUNNING') {
       return projection.currentStage?.title
         ? `Live · ${projection.currentStage.title}`
         : 'Live hodina';
     }
     return error ? 'Spojení s hodinou selhalo' : 'Classroom session';
-  }, [error, loading, projection, sessionId]);
+  }, [error, interactiveStage, loading, projection, sessionId]);
 
   return {
     sessionId,
