@@ -63,11 +63,19 @@ export class NetworkedCoopService {
 
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${sessionId}:${participant.groupId}:coop`}))`;
 
+      const expectedEventType =
+        dto.action === NetworkedCoopAction.HANDOFF ? HANDOFF_EVENT : ROTATED_EVENT;
       const replay = await tx.liveSemanticEvent.findUnique({
         where: { sessionId_eventId: { sessionId, eventId: dto.transitionId } },
-        select: { id: true },
+        select: { id: true, eventType: true },
       });
       if (replay) {
+        if (replay.eventType !== expectedEventType) {
+          throw new ConflictException({
+            code: 'COOP_TRANSITION_ID_REUSED',
+            message: 'Stejné transitionId už bylo použito pro jinou změnu role.',
+          });
+        }
         return {
           replayed: true,
           state: await this.loadProjection(tx, sessionId, ctx),
