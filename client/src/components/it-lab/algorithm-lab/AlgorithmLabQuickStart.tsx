@@ -46,26 +46,25 @@ export function AlgorithmLabQuickStart(): JSX.Element {
         </div>
 
         <p className="mt-5 max-w-2xl text-sm leading-7 text-slate-300 sm:text-base">
-          SkillStorm připraví multiplayerovou hodinu v režimu dvojic. Žáci dostanou jeden společný odkaz,
-          systém je automaticky spojí po dvou a role Planner / Programmer řídí server. Učitel nemusí vytvářet
-          skupiny ani kopírovat ID.
+          Klikni na Připravit hodinu. Pak pošli celé třídě jeden odkaz. SkillStorm žáky sám rozdělí do dvojic
+          a ty už jen sleduješ průběh a spustíš hodinu, až budou připraveni.
         </p>
 
         <div className="mt-6 grid gap-3 sm:grid-cols-3">
           <div className="rounded-2xl border border-white/8 bg-black/15 p-4">
             <UsersRound className="h-5 w-5 text-cyan-200" aria-hidden="true" />
-            <p className="mt-3 text-sm font-black">Automatické dvojice</p>
-            <p className="mt-1 text-xs leading-5 text-slate-500">1. + 2. příchozí, 3. + 4. příchozí… bez nastavování.</p>
+            <p className="mt-3 text-sm font-black">Dvojice automaticky</p>
+            <p className="mt-1 text-xs leading-5 text-slate-500">Žádné vytváření skupin. Žáci se spojí po dvou sami.</p>
           </div>
           <div className="rounded-2xl border border-white/8 bg-black/15 p-4">
             <Radio className="h-5 w-5 text-violet-200" aria-hidden="true" />
-            <p className="mt-3 text-sm font-black">Mission Control</p>
-            <p className="mt-1 text-xs leading-5 text-slate-500">Připojení, role, chyby a Reactor jsou na jedné obrazovce.</p>
+            <p className="mt-3 text-sm font-black">Vše na jednom místě</p>
+            <p className="mt-1 text-xs leading-5 text-slate-500">Vidíš připojení, dvojice, průběh i místa, kde je potřeba pomoct.</p>
           </div>
           <div className="rounded-2xl border border-white/8 bg-black/15 p-4">
             <ShieldCheck className="h-5 w-5 text-emerald-200" aria-hidden="true" />
-            <p className="mt-3 text-sm font-black">Bez šmírování</p>
-            <p className="mt-1 text-xs leading-5 text-slate-500">Žádný screen stream, kurzor ani veřejný žebříček výkonu.</p>
+            <p className="mt-3 text-sm font-black">Soukromí zachováno</p>
+            <p className="mt-1 text-xs leading-5 text-slate-500">Bez sledování obrazovek, kurzoru a veřejného pořadí žáků.</p>
           </div>
         </div>
 
@@ -82,12 +81,12 @@ export function AlgorithmLabQuickStart(): JSX.Element {
           onClick={() => void prepareClassroom()}
           className="mt-7 flex w-full items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-violet-300 to-cyan-300 px-6 py-4 text-base font-black text-slate-950 shadow-[0_18px_60px_rgba(103,232,249,.18)] transition hover:brightness-105 focus:outline-none focus:ring-2 focus:ring-cyan-100 disabled:cursor-wait disabled:opacity-60 sm:text-lg"
         >
-          {starting ? 'Připravuji hodinu…' : 'Připravit Algorithm Lab'}
+          {starting ? 'Připravuji hodinu…' : 'Připravit hodinu'}
           {!starting && <ArrowRight className="h-5 w-5" aria-hidden="true" />}
         </button>
 
         <p className="mt-3 text-center text-[11px] leading-5 text-slate-600">
-          Hodina se nejdřív připraví jako DRAFT. Spustíš ji až v Mission Control, když budou žáci připraveni.
+          Nic se nespustí samo. Start hodiny potvrdíš až na další obrazovce.
         </p>
       </section>
     </main>
