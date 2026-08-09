@@ -83,10 +83,10 @@ jobs:
         working-directory: server
         run: npm run typecheck
 
-      - name: Run engine and publication unit contracts
+      - name: Run engine, publication and audit unit contracts
         working-directory: server
-        run: npm test -- activity-publication.spec.ts --runInBand
+        run: npm test -- activity-publication.spec.ts activity-audit.spec.ts --runInBand
 
-      - name: Run tenant, mapping, immutability and HTTP governance E2E
+      - name: Run tenant, mapping, immutability, concurrency and HTTP governance E2E
         working-directory: server
-        run: npx jest --config ./test/jest-e2e.config.js --testPathPattern='activity-engine-(foundation|rbac).e2e-spec.ts' --runInBand
+        run: npx jest --config ./test/jest-e2e.config.js --testPathPattern='activity-engine-(foundation|rbac|concurrency).e2e-spec.ts' --runInBand
