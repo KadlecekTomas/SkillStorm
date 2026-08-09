@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Get,
   Param,
   ParseUUIDPipe,
   Post,
@@ -9,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '@/auth/guards/jwt-auth.guard';
+import { NoHttpCache } from '@/common/cache/no-http-cache.decorator';
 import { AllowAnyOrgStatus } from '@/common/decorators/allow-any-org-status.decorator';
 import {
   PlatformAccessLevel,
@@ -35,6 +37,23 @@ import {
 @RequirePlatformAccess(PlatformAccessLevel.MUTATION)
 export class ActivityPlatformController {
   constructor(private readonly activities: ActivityService) {}
+
+  @Get()
+  @NoHttpCache()
+  @ApiOperation({ summary: 'List all global Activity drafts, reviews and releases' })
+  list(@Req() req: RequestWithUser) {
+    return ok(this.activities.listPlatformActivities(req.user));
+  }
+
+  @Get(':activityId')
+  @NoHttpCache()
+  @ApiOperation({ summary: 'Read one global Activity including unpublished versions' })
+  get(
+    @Param('activityId', new ParseUUIDPipe()) activityId: string,
+    @Req() req: RequestWithUser,
+  ) {
+    return ok(this.activities.getPlatformActivity(activityId, req.user));
+  }
 
   @Post()
   @ApiOperation({ summary: 'Create a global Activity shell' })
