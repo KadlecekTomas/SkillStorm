@@ -22,8 +22,12 @@ function slotFromTestId(testId: string | null): PcSlotId | null {
   return testId.slice('slot-'.length) as PcSlotId;
 }
 
-export function BuildPcClassroomShell(): JSX.Element {
-  const classroom = useBuildPcClassroom();
+type BuildPcClassroomShellProps = {
+  sessionId?: string | null;
+};
+
+export function BuildPcClassroomShell({ sessionId = null }: BuildPcClassroomShellProps): JSX.Element {
+  const classroom = useBuildPcClassroom(sessionId);
   const selectedRef = useRef<PcComponentId | null>('cpu');
   const installedRef = useRef<Set<PcComponentId>>(new Set());
 
@@ -101,7 +105,7 @@ export function BuildPcClassroomShell(): JSX.Element {
           <span className="hidden h-4 w-px bg-white/10 sm:block" />
           <span className="hidden items-center gap-1 text-[10px] uppercase tracking-[0.12em] text-slate-500 sm:flex">
             <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
-            {classroom.confirmedEvents} server events
+            <span data-testid="server-event-count">{classroom.confirmedEvents}</span> server events
           </span>
         </div>
       )}
