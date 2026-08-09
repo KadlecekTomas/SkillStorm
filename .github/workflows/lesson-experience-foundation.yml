@@ -91,6 +91,6 @@ jobs:
         working-directory: server
         run: npm test -- lesson-publication.spec.ts lesson-audit.spec.ts --runInBand
 
-      - name: Run sealed lifecycle, concurrency and HTTP governance E2E
+      - name: Run sealed lifecycle, compatibility, concurrency and HTTP governance E2E
         working-directory: server
-        run: npx jest --config ./test/jest-e2e.config.js --testPathPattern='lesson-experience-(foundation|concurrency|rbac).e2e-spec.ts' --runInBand
+        run: npx jest --config ./test/jest-e2e.config.js --testPathPattern='lesson-experience-(foundation|compatibility|concurrency|rbac).e2e-spec.ts' --runInBand
