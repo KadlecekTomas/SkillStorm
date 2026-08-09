@@ -6,6 +6,7 @@ on:
       - agent/classroom-orchestration-d2c
     paths:
       - 'scripts/repair-classroom-advisory-locks.mjs'
+      - 'server/prisma/migrations/20260809114500_fix_live_evidence_trigger/migration.sql'
       - '.github/workflows/classroom-d2c-lock-repair.yml'
 
 permissions:
