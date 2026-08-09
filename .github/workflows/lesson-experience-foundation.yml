@@ -105,6 +105,26 @@ jobs:
             --runInBand --json \
             --outputFile=test-results/lesson-d2b/mode-mismatch.json
 
+      - name: Annotate exact compatibility assertion failure
+        if: failure()
+        working-directory: server
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = 'test-results/lesson-d2b/mode-mismatch.json';
+          if (!fs.existsSync(path)) process.exit(0);
+          const report = JSON.parse(fs.readFileSync(path, 'utf8'));
+          const failed = (report.testResults || [])
+            .flatMap((result) => result.assertionResults || [])
+            .find((assertion) => assertion.status === 'failed');
+          const message = failed?.failureMessages?.join('\n') || report.testResults?.[0]?.message || 'Unknown Jest failure';
+          const escaped = String(message)
+            .replace(/%/g, '%25')
+            .replace(/\r/g, '%0D')
+            .replace(/\n/g, '%0A');
+          console.log(`::error title=Lesson D2-B mode compatibility::${escaped.slice(0, 7000)}`);
+          NODE
+
       - name: Upload compatibility diagnostic on failure
         if: failure()
         uses: actions/upload-artifact@v4
