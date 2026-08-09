@@ -315,6 +315,28 @@ export class ActivityService {
 
     const version = await this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${activity.id}, 0))`;
+
+      // Re-check content identity only after the per-Activity transaction lock.
+      // The optimistic pre-check above is useful for the common case, but two
+      // simultaneous identical requests can both pass it before either writes.
+      // This locked check turns that race into the public 409 contract instead
+      // of leaking a Prisma/PostgreSQL unique-constraint error.
+      const lockedDuplicate = await tx.activityVersion.findUnique({
+        where: {
+          activityId_contentChecksum: {
+            activityId: activity.id,
+            contentChecksum: checksum,
+          },
+        },
+        select: { id: true, versionNo: true },
+      });
+      if (lockedDuplicate) {
+        throw new ConflictException({
+          code: 'ACTIVITY_VERSION_DUPLICATE_CONTENT',
+          existing: lockedDuplicate,
+        });
+      }
+
       const latest = await tx.activityVersion.findFirst({
         where: { activityId: activity.id },
         orderBy: { versionNo: 'desc' },
@@ -472,6 +494,12 @@ export class ActivityService {
       throw new NotFoundException('Activity curriculum mapping nenalezen.');
     }
     this.assertPublisherForActivity(mapping.activityVersion.activity, actor);
+    if (
+      mapping.activityVersion.status !== ActivityVersionStatus.DRAFT &&
+      mapping.activityVersion.status !== ActivityVersionStatus.REVIEW
+    ) {
+      throw new ConflictException({ code: 'ACTIVITY_VERSION_MAPPING_FROZEN' });
+    }
     if (mapping.status !== ActivityCurriculumMappingStatus.PROPOSED) {
       throw new ConflictException({ code: 'ACTIVITY_MAPPING_ALREADY_REVIEWED' });
     }
@@ -554,6 +582,17 @@ export class ActivityService {
         frameworkRelease: true,
       },
     });
+    if (
+      mappings.some(
+        (mapping) =>
+          mapping.status === ActivityCurriculumMappingStatus.PROPOSED,
+      )
+    ) {
+      throw new ConflictException({
+        code: 'ACTIVITY_PUBLICATION_MAPPING_REVIEW_PENDING',
+      });
+    }
+
     const approved = mappings.filter(
       (mapping) => mapping.status === ActivityCurriculumMappingStatus.APPROVED,
     );
