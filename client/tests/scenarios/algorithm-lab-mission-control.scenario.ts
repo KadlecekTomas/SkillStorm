@@ -166,7 +166,7 @@ test.describe('Algorithm Lab teacher Mission Control', () => {
 });
 
 test.describe('Algorithm Lab classroom code entry', () => {
-  test.use({ storageState: storageStateFor('student') });
+  test.use({ storageState: storageStateFor('student8a') });
 
   test('resolves a scanned classroom code and enters the exact live session', async ({ page }) => {
     await page.route('**/api/classroom-sessions/algorithm-lab/resolve-code/1211-1111', async (route) => {
