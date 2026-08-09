@@ -29,7 +29,8 @@ function textOf(element: Element | null): string {
 export default function AlgorithmLabLayout({ children }: { children: ReactNode }): JSX.Element {
   const searchParams = useSearchParams();
   const sessionId = searchParams.get('session');
-  const classroom = useClassroomActivity(sessionId, 'algo');
+  const groupId = searchParams.get('group');
+  const classroom = useClassroomActivity(sessionId, 'algo', groupId);
   const programRef = useRef<AlgorithmCommand[]>([]);
   const missionRef = useRef(1);
   const runSerialRef = useRef(0);
