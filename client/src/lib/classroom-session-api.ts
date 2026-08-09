@@ -72,9 +72,53 @@ export type TeacherClassroomSessionProjection = {
   };
 };
 
+export type BuildPcAnalyticsProjection = {
+  sessionId: string;
+  generatedAt: string;
+  classSummary: {
+    total: number;
+    connected: number;
+    completed: number;
+    needsAttention: number;
+    averageProgressPct: number;
+    totalHints: number;
+    totalRejectedPlacements: number;
+  };
+  topMisconception: {
+    key: string;
+    label: string;
+    count: number;
+    participantCount: number;
+  } | null;
+  misconceptionClusters: Array<{
+    key: string;
+    label: string;
+    componentId: string | null;
+    slotId: string | null;
+    count: number;
+    participantCount: number;
+  }>;
+  participants: Array<{
+    participantId: string;
+    nickname: string;
+    status: 'CONNECTED' | 'DISCONNECTED';
+    installedCount: number;
+    totalComponents: number;
+    progressPct: number;
+    hintCount: number;
+    rejectedPlacements: number;
+    lastCheckpoint: string | null;
+    lastEventAt: string | null;
+    completed: boolean;
+    stalled: boolean;
+    needsAttention: boolean;
+  }>;
+};
+
 export type LiveSemanticEventType =
   | 'PREDICTION_SUBMITTED'
   | 'COMPONENT_PLACED'
+  | 'PLACEMENT_REJECTED'
   | 'MEASUREMENT_TAKEN'
   | 'MODEL_CHANGED'
   | 'HINT_REQUESTED'
@@ -126,6 +170,13 @@ export const classroomSessionApi = {
     fetchWithAuth<TeacherClassroomSessionProjection>(
       'GET',
       `/classroom-sessions/${sessionId}`,
+      { cache: 'no-store' },
+    ),
+
+  buildPcAnalytics: (sessionId: string): Promise<BuildPcAnalyticsProjection> =>
+    fetchWithAuth<BuildPcAnalyticsProjection>(
+      'GET',
+      `/classroom-sessions/${sessionId}/build-pc-analytics`,
       { cache: 'no-store' },
     ),
 

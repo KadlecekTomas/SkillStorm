@@ -33,10 +33,19 @@ export function BuildPcClassroomShell({ sessionId = null }: BuildPcClassroomShel
   const selectedRef = useRef<PcComponentId | null>('cpu');
   const installedRef = useRef<Set<PcComponentId>>(new Set());
   const scaffoldingRef = useRef<BuildPcScaffolding>('GUIDED');
+  const hintOpenRef = useRef(true);
 
   function rememberPlacement(componentId: PcComponentId, slotId: PcSlotId): void {
     if (!classroom.isClassroomMode || !classroom.canInteract) return;
-    if (!isPlacementValid(componentId, slotId) || installedRef.current.has(componentId)) return;
+    if (installedRef.current.has(componentId)) return;
+
+    if (!isPlacementValid(componentId, slotId)) {
+      void classroom.emit('PLACEMENT_REJECTED', {
+        componentId,
+        slotId,
+      });
+      return;
+    }
 
     installedRef.current.add(componentId);
     void classroom.emit('COMPONENT_PLACED', {
@@ -64,6 +73,7 @@ export function BuildPcClassroomShell({ sessionId = null }: BuildPcClassroomShel
       installedRef.current = new Set();
       selectedRef.current = 'cpu';
       scaffoldingRef.current = 'GUIDED';
+      hintOpenRef.current = true;
       return;
     }
 
@@ -78,6 +88,16 @@ export function BuildPcClassroomShell({ sessionId = null }: BuildPcClassroomShel
     if (buttonText === 'Independent') {
       scaffoldingRef.current = 'GUIDED';
       selectedRef.current = nextRequiredComponent(installedRef.current)?.id ?? null;
+      return;
+    }
+    if (buttonText?.includes('Diagnostická nápověda')) {
+      if (!hintOpenRef.current) {
+        void classroom.emit('HINT_REQUESTED', {
+          checkpoint: nextRequiredComponent(installedRef.current)?.id ?? 'POST_OK',
+          installedCount: installedRef.current.size,
+        });
+      }
+      hintOpenRef.current = !hintOpenRef.current;
       return;
     }
 

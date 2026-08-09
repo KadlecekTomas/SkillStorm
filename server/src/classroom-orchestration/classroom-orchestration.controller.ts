@@ -17,6 +17,7 @@ import {
   OrgOperation,
   OrgOperationType,
 } from '@/common/decorators/org-operation.decorator';
+import { BuildPcAnalyticsService } from './build-pc-analytics.service';
 import { ClassroomOrchestrationService } from './classroom-orchestration.service';
 import {
   ClassroomCommandDto,
@@ -34,6 +35,7 @@ import {
 export class ClassroomOrchestrationController {
   constructor(
     private readonly service: ClassroomOrchestrationService,
+    private readonly buildPcAnalytics: BuildPcAnalyticsService,
     private readonly orgContext: OrgContextService,
   ) {}
 
@@ -65,6 +67,21 @@ export class ClassroomOrchestrationController {
   ) {
     const ctx = await this.orgContext.get(req);
     return this.service.getTeacherProjection(id, ctx);
+  }
+
+  @Get(':id/build-pc-analytics')
+  @Permission(
+    OrganizationRole.TEACHER,
+    OrganizationRole.DIRECTOR,
+    OrganizationRole.OWNER,
+  )
+  @ApiOperation({ summary: 'Privacy-safe Build a PC Mission Control analytics' })
+  async buildPcMissionAnalytics(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() req: RequestWithUser,
+  ) {
+    const ctx = await this.orgContext.get(req);
+    return this.buildPcAnalytics.get(id, ctx);
   }
 
   @Post(':id/commands')
