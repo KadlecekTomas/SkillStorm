@@ -39,61 +39,65 @@ const CANONICAL = {
 };
 
 const EXPECTED_FAMILIES = [
-  'DATA_DETECTIVE',
-  'MODEL_LAB',
-  'ALGORITHM_FACTORY',
-  'BLOCK_PROGRAMMING',
-  'DEBUG_LAB',
-  'INFORMATION_SYSTEMS',
-  'TABLE_DATA_LAB',
-  'INSIDE_COMPUTER',
-  'BUILD_A_PC',
-  'NETWORK_BUILDER',
-  'CYBER_DECISION',
-  'ML_LAB',
-  'TREND_EXPLAINER',
-  'PROJECT_SPRINT',
-  'PORTFOLIO_REVIEW',
+  'DATA_DETECTIVE', 'MODEL_LAB', 'ALGORITHM_FACTORY', 'BLOCK_PROGRAMMING', 'DEBUG_LAB',
+  'INFORMATION_SYSTEMS', 'TABLE_DATA_LAB', 'INSIDE_COMPUTER', 'BUILD_A_PC', 'NETWORK_BUILDER',
+  'CYBER_DECISION', 'ML_LAB', 'TREND_EXPLAINER', 'PROJECT_SPRINT', 'PORTFOLIO_REVIEW',
 ];
 
 function stripTicks(value) {
   const trimmed = value.trim();
-  return trimmed.startsWith('`') && trimmed.endsWith('`')
-    ? trimmed.slice(1, -1)
-    : trimmed;
+  return trimmed.startsWith('`') && trimmed.endsWith('`') ? trimmed.slice(1, -1) : trimmed;
 }
 
 function splitTableRow(line) {
-  return line
-    .trim()
-    .replace(/^\|/, '')
-    .replace(/\|$/, '')
-    .split('|')
-    .map((cell) => stripTicks(cell.trim()));
+  return line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((cell) => stripTicks(cell.trim()));
 }
 
-function expandOutcomeRef(raw) {
+function canonicalFor(level, suffix) {
+  const value = CANONICAL[level][suffix];
+  if (!value) throw new Error(`Unknown ${level} outcome suffix: ${suffix}`);
+  return value;
+}
+
+function expandLocalShorthand(value, level) {
+  if (/^\d{3}$/.test(value)) return [canonicalFor(level, value)];
+  if (/^\d{3}(?:\/\d{3})+$/.test(value)) {
+    return value.split('/').map((suffix) => canonicalFor(level, suffix));
+  }
+  const range = value.match(/^(\d{3})-(\d{3})$/);
+  if (range) {
+    const start = Number(range[1]);
+    const end = Number(range[2]);
+    if (end < start) throw new Error(`Invalid outcome range: ${value}`);
+    return Array.from({ length: end - start + 1 }, (_, index) =>
+      canonicalFor(level, String(start + index).padStart(3, '0')),
+    );
+  }
+  return null;
+}
+
+function expandOutcomeRef(raw, grade) {
   const value = stripTicks(raw).trim();
   if (!value || ['bridge', 'multi'].includes(value.toLowerCase())) return [];
 
   const all = value.match(/^ALL\s+(ZV5|ZV9)$/i);
   if (all) return Object.values(CANONICAL[all[1].toUpperCase()]);
 
-  const matches = [...value.matchAll(/(ZV5|ZV9)-(\d{3}(?:\/\d{3})*)/gi)];
-  if (matches.length === 0) {
-    throw new Error(`Unsupported outcome reference: ${value}`);
+  const explicit = [...value.matchAll(/(ZV5|ZV9)-(\d{3}(?:\/\d{3})*)/gi)];
+  if (explicit.length > 0) {
+    const out = [];
+    for (const match of explicit) {
+      const level = match[1].toUpperCase();
+      for (const suffix of match[2].split('/')) out.push(canonicalFor(level, suffix));
+    }
+    return [...new Set(out)];
   }
 
-  const out = [];
-  for (const match of matches) {
-    const level = match[1].toUpperCase();
-    for (const suffix of match[2].split('/')) {
-      const canonical = CANONICAL[level][suffix];
-      if (!canonical) throw new Error(`Unknown ${level} outcome suffix: ${suffix}`);
-      out.push(canonical);
-    }
-  }
-  return [...new Set(out)];
+  const inferredLevel = grade <= 5 ? 'ZV5' : 'ZV9';
+  const shorthand = expandLocalShorthand(value, inferredLevel);
+  if (shorthand) return [...new Set(shorthand)];
+
+  throw new Error(`Unsupported outcome reference: ${value}`);
 }
 
 function parseFamilies(markdown) {
@@ -108,11 +112,9 @@ function parseGrade(markdown, grade) {
   const heading = `# ${grade}. ${grade}. ročník`;
   const start = markdown.indexOf(heading);
   if (start < 0) throw new Error(`Grade ${grade} heading not found`);
-
   const nextHeading = grade < 9 ? `# ${grade + 1}. ${grade + 1}. ročník` : '# 10.';
   const next = markdown.indexOf(nextHeading, start + heading.length);
   const section = markdown.slice(start, next < 0 ? undefined : next);
-
   const standard = section.indexOf('STANDARD_32');
   if (standard < 0) throw new Error(`Grade ${grade} STANDARD_32 table not found`);
   const tail = section.slice(standard).split('\n');
@@ -134,14 +136,12 @@ function parseGrade(markdown, grade) {
       experience: cells[2],
       requiredEvidence: cells[3],
       outcomeRef: cells[4],
-      canonicalOutcomeCodes: expandOutcomeRef(cells[4]),
+      canonicalOutcomeCodes: expandOutcomeRef(cells[4], grade),
       coverageState: 'COVERED',
     });
   }
 
-  if (lessons.length !== 32) {
-    throw new Error(`Grade ${grade} must contain exactly 32 core lessons, found ${lessons.length}`);
-  }
+  if (lessons.length !== 32) throw new Error(`Grade ${grade} must contain exactly 32 core lessons, found ${lessons.length}`);
   lessons.forEach((lesson, index) => {
     if (lesson.order !== index + 1) throw new Error(`Grade ${grade} lesson sequence gap at ${lesson.id}`);
   });
@@ -153,22 +153,17 @@ function buildManifest(markdown) {
   if (JSON.stringify(families) !== JSON.stringify(EXPECTED_FAMILIES)) {
     throw new Error(`Lesson-family registry drifted. Expected ${EXPECTED_FAMILIES.length}, found ${families.length}`);
   }
-
   const grades = [4, 5, 6, 7, 8, 9].map((grade) => ({
     grade,
     pacingProfiles: ['CORE_28', 'STANDARD_32', 'EXTENDED_36_PLUS'],
     lessons: parseGrade(markdown, grade),
   }));
   const lessons = grades.flatMap((grade) => grade.lessons);
-
   if (lessons.length !== 192) throw new Error(`Expected 192 core lessons, found ${lessons.length}`);
-  if (new Set(lessons.map((lesson) => lesson.id)).size !== lessons.length) {
-    throw new Error('Duplicate lesson IDs detected');
-  }
+  if (new Set(lessons.map((lesson) => lesson.id)).size !== lessons.length) throw new Error('Duplicate lesson IDs detected');
 
   const referencedOutcomes = new Set(lessons.flatMap((lesson) => lesson.canonicalOutcomeCodes));
-  const expectedOutcomes = new Set([...Object.values(CANONICAL.ZV5), ...Object.values(CANONICAL.ZV9)]);
-  for (const outcome of expectedOutcomes) {
+  for (const outcome of [...Object.values(CANONICAL.ZV5), ...Object.values(CANONICAL.ZV9)]) {
     if (!referencedOutcomes.has(outcome)) throw new Error(`Canonical outcome ${outcome} has no lesson mapping`);
   }
 
@@ -207,7 +202,5 @@ if (WRITE) {
   fs.writeFileSync(OUTPUT, serialized, 'utf8');
   console.log(`Wrote ${path.relative(ROOT, OUTPUT)} with ${manifest.totals.coreLessons} lessons.`);
 } else {
-  console.log(
-    `Informatics year pack source OK: ${manifest.totals.coreLessons} lessons, ${referencedCount(manifest)} canonical mappings.`,
-  );
+  console.log(`Informatics year pack source OK: ${manifest.totals.coreLessons} lessons, ${referencedCount(manifest)} canonical mappings.`);
 }
