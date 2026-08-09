@@ -1,0 +1,96 @@
+name: Lesson Experience Foundation
+
+on:
+  pull_request:
+    paths:
+      - 'server/prisma/schema.prisma'
+      - 'server/prisma/migrations/**'
+      - 'server/src/lesson-experience/**'
+      - 'server/src/activity-engine/**'
+      - 'server/src/audit/audit-metadata.policy.ts'
+      - 'server/src/app.module.ts'
+      - 'server/test/lesson-experience-fixtures.ts'
+      - 'server/test/e2e/lesson-experience-*.e2e-spec.ts'
+      - '.github/workflows/lesson-experience-foundation.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'server/prisma/schema.prisma'
+      - 'server/prisma/migrations/**'
+      - 'server/src/lesson-experience/**'
+      - 'server/src/activity-engine/**'
+      - 'server/src/audit/audit-metadata.policy.ts'
+      - 'server/src/app.module.ts'
+      - 'server/test/lesson-experience-fixtures.ts'
+      - 'server/test/e2e/lesson-experience-*.e2e-spec.ts'
+      - '.github/workflows/lesson-experience-foundation.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  lesson-experience-foundation:
+    name: Lesson D2-B invariants
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: skillstorm_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d skillstorm_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/skillstorm_test
+      DATABASE_URL_TEST: postgresql://postgres:postgres@localhost:5432/skillstorm_test
+      JWT_SECRET: lesson-ci-only
+      NODE_ENV: test
+      PORT: 0
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: server
+        run: npm ci
+
+      - name: Generate Prisma client
+        working-directory: server
+        run: npm run prisma:generate
+
+      - name: Validate Prisma schema
+        working-directory: server
+        run: npx prisma validate
+
+      - name: Deploy all migrations on a clean database
+        working-directory: server
+        run: npx prisma migrate deploy
+
+      - name: Strict backend typecheck
+        working-directory: server
+        run: npm run typecheck
+
+      - name: Run Lesson definition and audit unit contracts
+        working-directory: server
+        run: npm test -- lesson-publication.spec.ts lesson-audit.spec.ts --runInBand
+
+      - name: Run sealed lifecycle, concurrency and HTTP governance E2E
+        working-directory: server
+        run: npx jest --config ./test/jest-e2e.config.js --testPathPattern='lesson-experience-(foundation|concurrency|rbac).e2e-spec.ts' --runInBand
