@@ -1,4 +1,5 @@
 import type { JSX } from 'react';
+import { AlgorithmLabClassroomShare } from '@/components/it-lab/algorithm-lab/AlgorithmLabClassroomShare';
 import { AlgorithmLabMissionControl } from '@/components/it-lab/algorithm-lab/AlgorithmLabMissionControl';
 import { AlgorithmLabQuickStart } from '@/components/it-lab/algorithm-lab/AlgorithmLabQuickStart';
 
@@ -11,5 +12,10 @@ export default async function MissionControlPage({ searchParams }: MissionContro
   const sessionId = Array.isArray(params.session) ? params.session[0] : params.session;
 
   if (!sessionId) return <AlgorithmLabQuickStart />;
-  return <AlgorithmLabMissionControl sessionId={sessionId} />;
+  return (
+    <>
+      <AlgorithmLabMissionControl sessionId={sessionId} />
+      <AlgorithmLabClassroomShare sessionId={sessionId} />
+    </>
+  );
 }
