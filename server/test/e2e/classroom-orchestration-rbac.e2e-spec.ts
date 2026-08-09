@@ -9,6 +9,7 @@ import {
   LiveSessionMode,
   MappingProposerType,
   OrganizationStatus,
+  SchoolGrade,
 } from '@prisma/client';
 import * as request from 'supertest';
 import { AppModule } from '@/app.module';
@@ -79,6 +80,38 @@ describe('D2-C Classroom Orchestration HTTP governance (e2e)', () => {
     await prisma.organization.updateMany({
       where: { id: { in: [ctx.organization.id, foreign.organization.id] } },
       data: { status: OrganizationStatus.ACTIVE },
+    });
+
+    // Classroom routes are EXECUTION operations. Exercise them only after the
+    // fixture satisfies the same R2 school-readiness contract as production.
+    const [currentYear, foreignCurrentYear] = await Promise.all([
+      prisma.academicYear.findFirst({
+        where: { orgId: ctx.organization.id, isCurrent: true },
+        select: { id: true },
+      }),
+      prisma.academicYear.findFirst({
+        where: { orgId: foreign.organization.id, isCurrent: true },
+        select: { id: true },
+      }),
+    ]);
+    if (!currentYear || !foreignCurrentYear) {
+      throw new Error('Classroom HTTP fixture is missing a current academic year.');
+    }
+    await prisma.classSection.createMany({
+      data: [
+        {
+          orgId: ctx.organization.id,
+          yearId: currentYear.id,
+          grade: SchoolGrade.GRADE_7,
+          section: 'H',
+        },
+        {
+          orgId: foreign.organization.id,
+          yearId: foreignCurrentYear.id,
+          grade: SchoolGrade.GRADE_7,
+          section: 'F',
+        },
+      ],
     });
 
     teacherToken = ctx.actor.accessToken;
@@ -245,7 +278,7 @@ describe('D2-C Classroom Orchestration HTTP governance (e2e)', () => {
       .expect(403);
   });
 
-  it('lets the actual student join while leadership can control the session', async () => {
+  it('lets the actual student join while leadership cannot steal host control', async () => {
     await api()
       .post(`/classroom-sessions/${sessionId}/join`)
       .set('Authorization', auth(studentToken))
@@ -261,8 +294,8 @@ describe('D2-C Classroom Orchestration HTTP governance (e2e)', () => {
         expectedRevision: 0,
       });
 
-    // The service contract deliberately keeps runtime control host-only even for
-    // leadership. HTTP role permission alone must not bypass session ownership.
+    // Leadership has route permission, but host ownership remains a separate
+    // runtime invariant. A director/owner must not silently steal a live lesson.
     expect(started.status).toBe(403);
 
     await api()
