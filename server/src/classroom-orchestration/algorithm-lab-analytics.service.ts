@@ -67,7 +67,10 @@ export class AlgorithmLabAnalyticsService {
     const groups = session.groups.map((group) => {
       const members = session.participants
         .filter((participant) => participant.groupId === group.id)
-        .sort((a, b) => a.joinedAt.localeCompare(b.joinedAt));
+        .sort(
+          (a, b) =>
+            new Date(a.joinedAt).getTime() - new Date(b.joinedAt).getTime(),
+        );
       const memberIds = new Set(members.map((member) => member.id));
       const groupEvents = events.filter(
         (event) => event.participantId && memberIds.has(event.participantId),
