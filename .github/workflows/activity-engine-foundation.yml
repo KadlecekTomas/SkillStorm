@@ -87,6 +87,6 @@ jobs:
         working-directory: server
         run: npm test -- activity-publication.spec.ts --runInBand
 
-      - name: Run tenant, mapping and immutability E2E
+      - name: Run tenant, mapping, immutability and HTTP governance E2E
         working-directory: server
-        run: npx jest --config ./test/jest-e2e.config.js --testPathPattern='activity-engine-foundation.e2e-spec.ts' --runInBand
+        run: npx jest --config ./test/jest-e2e.config.js --testPathPattern='activity-engine-(foundation|rbac).e2e-spec.ts' --runInBand
