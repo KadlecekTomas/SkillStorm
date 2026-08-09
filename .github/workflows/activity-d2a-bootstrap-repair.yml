@@ -1,0 +1,65 @@
+name: Activity D2-A Bootstrap Repair
+
+on:
+  push:
+    branches: [agent/lesson-experience-d2]
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: agent/lesson-experience-d2
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Repair exact Organization marker and apply bootstrap
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('scripts/internal/apply-activity-d2a-schema.mjs')
+          source = path.read_text()
+          old = """schema = replaceOnce(
+            schema,
+            '  curriculumApplicabilities CurriculumApplicability[]\\n',
+            '  curriculumApplicabilities CurriculumApplicability[]\\n  activities          Activity[]\\n',
+            'Organization activity relation',
+          );"""
+          new = """schema = replaceOnce(
+            schema,
+            '  schoolCurriculumProfiles SchoolCurriculumProfile[]\\n  curriculumApplicabilities CurriculumApplicability[]\\n\\n  @@index([name])',
+            '  schoolCurriculumProfiles SchoolCurriculumProfile[]\\n  curriculumApplicabilities CurriculumApplicability[]\\n  activities          Activity[]\\n\\n  @@index([name])',
+            'Organization activity relation',
+          );"""
+          if source.count(old) != 1:
+              raise SystemExit(f'Expected exactly one old Organization marker block, found {source.count(old)}')
+          path.write_text(source.replace(old, new))
+          PY
+          node scripts/internal/apply-activity-d2a-schema.mjs
+
+      - name: Validate production-only result
+        run: |
+          test -f server/prisma/migrations/20260809010500_activity_engine_d2a/migration.sql
+          grep -q '^model Activity {' server/prisma/schema.prisma
+          grep -q '^model ActivityVersion {' server/prisma/schema.prisma
+          grep -q '^model ActivityCurriculumMapping {' server/prisma/schema.prisma
+          test ! -e scripts/internal/apply-activity-d2a-schema.mjs
+          test ! -e .github/workflows/activity-d2a-schema-bootstrap.yml
+          rm .github/workflows/activity-d2a-bootstrap-repair.yml
+          test ! -e .github/workflows/activity-d2a-bootstrap-repair.yml
+
+      - name: Commit production-only result
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "feat(activity): add D2-A activity schema foundation"
+          git push origin HEAD:agent/lesson-experience-d2
