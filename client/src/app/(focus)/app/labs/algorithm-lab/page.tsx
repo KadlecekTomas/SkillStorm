@@ -1,13 +1,12 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type JSX } from 'react';
 import {
   directionGlyph,
   executeAlgorithmStep,
   initialAlgorithmState,
   isTargetReached,
   type AlgorithmCommand,
-  type AlgorithmDirection,
   type AlgorithmState,
   type AlgorithmWorld,
   type GridPosition,
@@ -52,11 +51,13 @@ const labels: Record<AlgorithmCommand, string> = {
   RIGHT: '↷ Vpravo',
 };
 
-const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+const sleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => window.setTimeout(resolve, ms));
 
-const samePosition = (a: GridPosition, b: GridPosition) => a.x === b.x && a.y === b.y;
+const samePosition = (a: GridPosition, b: GridPosition): boolean =>
+  a.x === b.x && a.y === b.y;
 
-export default function AlgorithmLabPage() {
+export default function AlgorithmLabPage(): JSX.Element {
   const [missionIndex, setMissionIndex] = useState(0);
   const [program, setProgram] = useState<AlgorithmCommand[]>([]);
   const [state, setState] = useState<AlgorithmState>(initialAlgorithmState());
@@ -66,10 +67,15 @@ export default function AlgorithmLabPage() {
   const [trail, setTrail] = useState<GridPosition[]>([{ x: 0, y: 0 }]);
   const [executionLog, setExecutionLog] = useState<string[]>([]);
   const [attempt, setAttempt] = useState(1);
-  const mission = missions[missionIndex];
+  const mission = missions[missionIndex] ?? missions[0]!;
 
   const world: AlgorithmWorld = useMemo(
-    () => ({ width: 4, height: 4, target: mission.target, obstacles: mission.obstacles }),
+    () => ({
+      width: 4,
+      height: 4,
+      target: mission.target,
+      ...(mission.obstacles ? { obstacles: mission.obstacles } : {}),
+    }),
     [mission],
   );
 
@@ -80,7 +86,7 @@ export default function AlgorithmLabPage() {
     return 'Připraveno ke spuštění';
   }, [activeStep, isRunning, program.length, result]);
 
-  const prepareEdit = (incrementAttempt = false) => {
+  const prepareEdit = (incrementAttempt = false): void => {
     setState(initialAlgorithmState());
     setActiveStep(null);
     setResult(null);
@@ -89,26 +95,26 @@ export default function AlgorithmLabPage() {
     if (incrementAttempt) setAttempt((current) => current + 1);
   };
 
-  const add = (command: AlgorithmCommand) => {
+  const add = (command: AlgorithmCommand): void => {
     if (isRunning) return;
     if (result) prepareEdit(true);
     setProgram((current) => [...current, command]);
   };
 
-  const removeStep = (index: number) => {
+  const removeStep = (index: number): void => {
     if (isRunning) return;
     prepareEdit(Boolean(result));
     setProgram((current) => current.filter((_, currentIndex) => currentIndex !== index));
   };
 
-  const reset = () => {
+  const reset = (): void => {
     if (isRunning) return;
     setProgram([]);
     setAttempt(1);
     prepareEdit();
   };
 
-  const nextMission = () => {
+  const nextMission = (): void => {
     if (isRunning) return;
     setMissionIndex((current) => (current + 1) % missions.length);
     setProgram([]);
@@ -116,7 +122,7 @@ export default function AlgorithmLabPage() {
     prepareEdit();
   };
 
-  const runProgram = async () => {
+  const runProgram = async (): Promise<void> => {
     if (isRunning || program.length === 0) return;
 
     let currentState = initialAlgorithmState();
@@ -128,11 +134,14 @@ export default function AlgorithmLabPage() {
     setIsRunning(true);
 
     for (let index = 0; index < program.length; index += 1) {
+      const command = program[index];
+      if (!command) continue;
+
       setActiveStep(index);
       await sleep(500);
 
-      const step = executeAlgorithmStep(currentState, program[index], world, index + 1);
-      const commandLabel = labels[program[index]];
+      const step = executeAlgorithmStep(currentState, command, world, index + 1);
+      const commandLabel = labels[command];
 
       if (!step.valid) {
         const reason = step.reason === 'OBSTACLE' ? 'kolize s překážkou' : 'opuštění arény';
@@ -152,7 +161,7 @@ export default function AlgorithmLabPage() {
 
       currentState = step.state;
       setState(currentState);
-      if (program[index] === 'FORWARD') {
+      if (command === 'FORWARD') {
         currentTrail.push({ ...currentState.position });
         setTrail([...currentTrail]);
       }
