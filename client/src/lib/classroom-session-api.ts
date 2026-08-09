@@ -265,6 +265,13 @@ function commandId(type: ClassroomCommandType): string {
 }
 
 export const classroomSessionApi = {
+  quickStartAlgorithmLab: (): Promise<TeacherClassroomSessionProjection> =>
+    fetchWithAuth<TeacherClassroomSessionProjection>(
+      'POST',
+      '/classroom-sessions/algorithm-lab/quick-start',
+      { body: {} },
+    ),
+
   joinStudent: (sessionId: string, groupId?: string | null): Promise<unknown> =>
     fetchWithAuth<unknown>('POST', `/classroom-sessions/${sessionId}/join`, {
       body: groupId ? { groupId } : {},
