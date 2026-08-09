@@ -141,4 +141,19 @@ describe('Activity D2-A HTTP governance boundaries (e2e)', () => {
     globalActivityId = response.body?.id ?? response.body?.data?.id;
     expect(globalActivityId).toEqual(expect.any(String));
   });
+
+  it('does not leak an unpublished global draft into the school library', async () => {
+    await api()
+      .get(`/activities/${globalActivityId}`)
+      .set('Authorization', auth(teacherToken))
+      .expect(404);
+
+    const platformView = await api()
+      .get(`/platform/activities/${globalActivityId}`)
+      .set('Authorization', auth(superadminToken))
+      .expect(200);
+
+    const payload = platformView.body?.data ?? platformView.body;
+    expect(payload?.id).toBe(globalActivityId);
+  });
 });
