@@ -338,12 +338,12 @@ describe('Activity Engine D2-A invariants (e2e)', () => {
     expect(retired.status).toBe('RETIRED');
   });
 
-  it('does not allow a school actor to create global content', async () => {
-    await expect(
+  it('does not allow a school actor to create global content', () => {
+    expect(() =>
       activities.createGlobalActivity(
         { slug: 'forbidden-global', title: 'Forbidden global' },
         actorA,
       ),
-    ).rejects.toMatchObject({ status: 403 });
+    ).toThrow(/SUPERADMIN/);
   });
 });
