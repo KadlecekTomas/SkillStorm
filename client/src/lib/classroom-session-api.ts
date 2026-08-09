@@ -2,6 +2,7 @@ import { fetchWithAuth } from '@/lib/http/client';
 
 export type ClassroomSessionStatus = 'DRAFT' | 'RUNNING' | 'PAUSED' | 'FINISHED';
 export type ClassroomDeliveryMode = 'BOARD_ONLY' | 'SHARED_DEVICES' | 'DEVICES' | 'HYBRID';
+export type ClassroomCommandType = 'START' | 'PAUSE' | 'RESUME' | 'NEXT_STAGE' | 'FINISH';
 
 export type ClassroomStage = {
   id: string;
@@ -94,6 +95,20 @@ export type SemanticEventResult = {
   evidence: { id: string; evidenceType: string } | null;
 };
 
+export type ClassroomCommandResult = {
+  replayed: boolean;
+  resultingRevision: number;
+  session: TeacherClassroomSessionProjection;
+};
+
+function commandId(type: ClassroomCommandType): string {
+  const suffix =
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`;
+  return `mission-${type.toLowerCase()}-${suffix}`;
+}
+
 export const classroomSessionApi = {
   joinStudent: (sessionId: string): Promise<unknown> =>
     fetchWithAuth<unknown>('POST', `/classroom-sessions/${sessionId}/join`, {
@@ -112,6 +127,23 @@ export const classroomSessionApi = {
       'GET',
       `/classroom-sessions/${sessionId}`,
       { cache: 'no-store' },
+    ),
+
+  command: (
+    sessionId: string,
+    type: ClassroomCommandType,
+    expectedRevision: number,
+  ): Promise<ClassroomCommandResult> =>
+    fetchWithAuth<ClassroomCommandResult>(
+      'POST',
+      `/classroom-sessions/${sessionId}/commands`,
+      {
+        body: {
+          commandId: commandId(type),
+          type,
+          expectedRevision,
+        },
+      },
     ),
 
   sendSemanticEvent: (
