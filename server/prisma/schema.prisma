@@ -95,6 +95,7 @@ model Organization {
   learningSessions   LearningSession[]
   schoolCurriculumProfiles SchoolCurriculumProfile[]
   curriculumApplicabilities CurriculumApplicability[]
+  activities          Activity[]
 
   @@index([name])
   @@index([city])
@@ -1725,6 +1726,7 @@ model CurriculumFrameworkRelease {
   outcomes          FrameworkOutcome[]
   applicabilities   CurriculumApplicability[]
   schoolMappings    SchoolOutcomeMapping[]           @relation("SchoolOutcomeMappingRelease")
+  activityMappings  ActivityCurriculumMapping[]      @relation("ActivityCurriculumMappingRelease")
 
   @@unique([frameworkId, releaseCode])
   @@unique([frameworkId, sourceChecksum])
@@ -1781,6 +1783,7 @@ model FrameworkOutcome {
   field              FrameworkField             @relation(fields: [fieldId], references: [id], onDelete: Restrict)
   aspects            OutcomeAspect[]
   schoolMappings     SchoolOutcomeMapping[]
+  activityMappings   ActivityCurriculumMapping[]
 
   @@unique([frameworkReleaseId, externalCode])
   @@index([fieldId])
@@ -1801,6 +1804,7 @@ model OutcomeAspect {
   updatedAt               DateTime            @updatedAt @map("updated_at")
   frameworkOutcome        FrameworkOutcome    @relation(fields: [frameworkOutcomeId], references: [id], onDelete: Restrict)
   schoolMappings          SchoolOutcomeMapping[]
+  activityMappings        ActivityCurriculumMapping[]
 
   @@unique([frameworkOutcomeId, code])
   @@index([frameworkOutcomeId, status])
@@ -1954,6 +1958,135 @@ model SchoolOutcomeMapping {
   @@map("school_outcome_mappings")
 }
 
+
+// -----------------------------------------------------------------------------
+// Interactive Curriculum D2-A — reusable Activity Engine definition layer.
+// ActivityVersion is an immutable content snapshot. Editing means creating a
+// new version; status/review/publication metadata are the only mutable fields.
+// -----------------------------------------------------------------------------
+
+enum ActivityScope {
+  GLOBAL
+  ORGANIZATION
+}
+
+enum ActivityVersionStatus {
+  DRAFT
+  REVIEW
+  PUBLISHED
+  RETIRED
+}
+
+enum ActivityDeliveryMode {
+  BOARD_ONLY
+  SHARED_DEVICES
+  DEVICES
+  HYBRID
+}
+
+enum ActivityCurriculumMappingType {
+  PRIMARY
+  SUPPORTING
+  RELATED
+}
+
+enum ActivityCurriculumMappingStatus {
+  PROPOSED
+  APPROVED
+  REJECTED
+  STALE
+}
+
+model Activity {
+  id             String        @id @default(uuid()) @map("activity_id")
+  scope          ActivityScope
+  organizationId String?       @map("organization_id")
+  slug           String        @db.VarChar(160)
+  title          String        @db.VarChar(300)
+  description    String?       @db.Text
+  createdById    String        @map("created_by_id")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+  deletedAt      DateTime?     @map("deleted_at")
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  versions       ActivityVersion[]
+
+  @@index([organizationId, scope, deletedAt])
+  @@index([scope, deletedAt])
+  @@map("activities")
+}
+
+model ActivityVersion {
+  id                     String                @id @default(uuid()) @map("activity_version_id")
+  activityId             String                @map("activity_id")
+  versionNo              Int                   @map("version_no")
+  status                 ActivityVersionStatus @default(DRAFT)
+  engineKey              String                @map("engine_key") @db.VarChar(120)
+  schemaVersion          Int                   @map("schema_version")
+  title                  String                @db.VarChar(300)
+  description            String?               @db.Text
+  supportedModes         ActivityDeliveryMode[] @map("supported_modes")
+  recommendedMode        ActivityDeliveryMode  @map("recommended_mode")
+  interactionPrimitives  String[]              @map("interaction_primitives")
+  config                 Json                  @map("config_json")
+  capabilityRequirements Json                  @map("capability_requirements_json")
+  assetManifest          Json                  @map("asset_manifest_json")
+  accessibilityPlan      Json                  @map("accessibility_plan_json")
+  hardwareRequirements   Json                  @map("hardware_requirements_json")
+  modePolicy             Json                  @map("mode_policy_json")
+  privacyPlan            Json                  @map("privacy_plan_json")
+  safetyPlan             Json                  @map("safety_plan_json")
+  offlinePolicy          Json                  @map("offline_policy_json")
+  evidencePlan           Json                  @map("evidence_plan_json")
+  prerequisites          Json?                 @map("prerequisites_json")
+  contentChecksum        String                @map("content_checksum") @db.Char(64)
+  reviewedAt             DateTime?             @map("reviewed_at")
+  reviewedBy             String?               @map("reviewed_by")
+  publishedAt            DateTime?             @map("published_at")
+  publishedBy            String?               @map("published_by")
+  createdAt              DateTime              @default(now()) @map("created_at")
+  updatedAt              DateTime              @updatedAt @map("updated_at")
+  activity               Activity              @relation(fields: [activityId], references: [id], onDelete: Restrict)
+  curriculumMappings     ActivityCurriculumMapping[]
+
+  @@unique([activityId, versionNo])
+  @@unique([activityId, contentChecksum])
+  @@index([activityId, status])
+  @@index([engineKey, schemaVersion])
+  @@index([status, publishedAt])
+  @@map("activity_versions")
+}
+
+model ActivityCurriculumMapping {
+  id                         String                          @id @default(uuid()) @map("activity_curriculum_mapping_id")
+  activityVersionId          String                          @map("activity_version_id")
+  frameworkOutcomeId         String                          @map("framework_outcome_id")
+  outcomeAspectId            String?                         @map("outcome_aspect_id")
+  mappingType                ActivityCurriculumMappingType   @map("mapping_type")
+  status                     ActivityCurriculumMappingStatus @default(PROPOSED)
+  rationale                  String                          @db.Text
+  proposedByType             MappingProposerType             @default(HUMAN) @map("proposed_by_type")
+  proposedById               String?                         @map("proposed_by_id")
+  reviewRationale            String?                         @map("review_rationale") @db.Text
+  reviewedBy                 String?                         @map("reviewed_by")
+  reviewedAt                 DateTime?                       @map("reviewed_at")
+  frameworkReleaseId         String                          @map("framework_release_id")
+  frameworkOutcomeChecksum   String                          @map("framework_outcome_checksum") @db.Char(64)
+  outcomeAspectReviewVersion Int?                            @map("outcome_aspect_review_version")
+  createdAt                  DateTime                        @default(now()) @map("created_at")
+  updatedAt                  DateTime                        @updatedAt @map("updated_at")
+  activityVersion            ActivityVersion                 @relation(fields: [activityVersionId], references: [id], onDelete: Restrict)
+  frameworkOutcome           FrameworkOutcome                @relation(fields: [frameworkOutcomeId], references: [id], onDelete: Restrict)
+  outcomeAspect              OutcomeAspect?                  @relation(fields: [outcomeAspectId], references: [id], onDelete: Restrict)
+  frameworkRelease           CurriculumFrameworkRelease      @relation("ActivityCurriculumMappingRelease", fields: [frameworkReleaseId], references: [id], onDelete: Restrict)
+
+  @@index([activityVersionId, status])
+  @@index([frameworkOutcomeId, status])
+  @@index([outcomeAspectId, status])
+  @@index([frameworkReleaseId])
+  @@map("activity_curriculum_mappings")
+}
+
 enum SystemRole {
   SUPERADMIN
   DEVOPS
@@ -2090,6 +2223,7 @@ enum AuditEntityType {
   CATALOG_TOPIC
   PROGRESS
   CURRICULUM
+  ACTIVITY
 }
 
 enum SupportTicketStatus {
