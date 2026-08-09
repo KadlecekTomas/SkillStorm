@@ -32,7 +32,7 @@ jobs:
   lesson-experience-foundation:
     name: Lesson D2-B invariants
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     services:
       postgres:
@@ -95,9 +95,21 @@ jobs:
         working-directory: server
         run: npx jest --config ./test/jest-e2e.config.js --testPathPattern='lesson-experience-foundation.e2e-spec.ts' --runInBand
 
-      - name: Run Activity compatibility and scope E2E
+      - name: Compatibility — reject unsupported Lesson delivery mode
         working-directory: server
-        run: npx jest --config ./test/jest-e2e.config.js --testPathPattern='lesson-experience-compatibility.e2e-spec.ts' --runInBand
+        run: npx jest --config ./test/jest-e2e.config.js --testPathPattern='lesson-experience-compatibility.e2e-spec.ts' --testNamePattern='rejects a lesson mode' --runInBand
+
+      - name: Compatibility — conceal foreign-tenant ActivityVersion
+        working-directory: server
+        run: npx jest --config ./test/jest-e2e.config.js --testPathPattern='lesson-experience-compatibility.e2e-spec.ts' --testNamePattern='conceals a foreign-tenant' --runInBand
+
+      - name: Compatibility — reject global Lesson to local Activity
+        working-directory: server
+        run: npx jest --config ./test/jest-e2e.config.js --testPathPattern='lesson-experience-compatibility.e2e-spec.ts' --testNamePattern='rejects organization-local content' --runInBand
+
+      - name: Compatibility — block publication on draft Activity dependency
+        working-directory: server
+        run: npx jest --config ./test/jest-e2e.config.js --testPathPattern='lesson-experience-compatibility.e2e-spec.ts' --testNamePattern='allows coordinated draft authoring' --runInBand
 
       - name: Run version content-identity and concurrency E2E
         working-directory: server
