@@ -353,7 +353,18 @@ export function BuildPcLab(): JSX.Element {
                                 ? 'animate-pulse border-violet-300/70 bg-violet-400/15 shadow-[0_0_35px_rgba(167,139,250,0.25)]'
                                 : 'border-white/10 bg-black/20 hover:border-white/25 hover:bg-white/[0.06]'
                           }`}
-                          style={{ left: `${slot.x}%`, top: `${slot.y}%`, width: `${slot.width}%`, height: `${slot.height}%` }}
+                          style={{
+                            left: `${slot.x}%`,
+                            top: `${slot.y}%`,
+                            width: `${slot.width}%`,
+                            height: `${slot.height}%`,
+                            zIndex:
+                              slot.id === 'cpu-socket' && !installed.has('cpu')
+                                ? 30
+                                : slot.id === 'cpu-cooler' && installed.has('cpu')
+                                  ? 30
+                                  : 10,
+                          }}
                           aria-label={`${slot.label}: ${slot.hint}`}
                         >
                           <AnimatePresence mode="wait">
@@ -496,7 +507,7 @@ export function BuildPcLab(): JSX.Element {
               <div className="mt-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-600">semantic events</div>
             </div>
             <div className="rounded-xl bg-black/20 px-2 py-3">
-              <div className="text-lg font-black text-white">0</div>
+              <div data-testid="pointer-stream-count" className="text-lg font-black text-white">0</div>
               <div className="mt-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-600">pointer streams</div>
             </div>
           </div>

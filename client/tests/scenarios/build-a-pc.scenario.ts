@@ -9,7 +9,7 @@ test.describe('Interactive IT Lab — Build a PC', () => {
 
     await expect(page.getByRole('heading', { name: 'Build a PC · První boot' })).toBeVisible();
     await expect(page.getByTestId('build-progress-label')).toHaveText('0 %');
-    await expect(page.getByText('0 pointer streams')).toBeVisible();
+    await expect(page.getByTestId('pointer-stream-count')).toHaveText('0');
 
     await page.screenshot({ path: 'test-results/build-a-pc-desktop-start.png', fullPage: true });
 
@@ -45,7 +45,7 @@ test.describe('Interactive IT Lab — Build a PC', () => {
     await page.getByTestId('power-button').click();
     await expect(page.getByTestId('build-feedback')).toContainText('POST úspěšný', { timeout: 5_000 });
     await expect(page.getByTestId('power-button')).toContainText('POST OK');
-    await expect(page.getByText('0 pointer streams')).toBeVisible();
+    await expect(page.getByTestId('pointer-stream-count')).toHaveText('0');
 
     await page.screenshot({ path: 'test-results/build-a-pc-desktop-post-ok.png', fullPage: true });
   });
