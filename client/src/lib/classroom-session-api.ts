@@ -117,6 +117,10 @@ export type BuildPcAnalyticsProjection = {
 
 export type LiveSemanticEventType =
   | 'PREDICTION_SUBMITTED'
+  | 'ALGORITHM_STEP_ADDED'
+  | 'PROGRAM_RUN'
+  | 'TEST_FAILED'
+  | 'DEBUG_HYPOTHESIS_SUBMITTED'
   | 'COMPONENT_PLACED'
   | 'PLACEMENT_REJECTED'
   | 'MEASUREMENT_TAKEN'
