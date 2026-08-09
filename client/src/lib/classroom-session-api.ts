@@ -144,6 +144,21 @@ export type NetworkedCoopTransitionResult = {
   state: NetworkedCoopProjection;
 };
 
+export type CoopAlgorithmCommand = 'FORWARD' | 'LEFT' | 'RIGHT';
+
+export type NetworkedCoopProgram = {
+  groupId: string;
+  round: number;
+  programRevision: number;
+  commands: CoopAlgorithmCommand[];
+  updatedByParticipantId: string | null;
+};
+
+export type NetworkedCoopProgramUpdateResult = {
+  replayed: boolean;
+  program: NetworkedCoopProgram;
+};
+
 export type LiveSemanticEventType =
   | 'PREDICTION_SUBMITTED'
   | 'ALGORITHM_STEP_ADDED'
@@ -237,6 +252,30 @@ export const classroomSessionApi = {
           transitionId: uniqueId('coop'),
           action,
           ...(reason ? { reason } : {}),
+        },
+      },
+    ),
+
+  networkedCoopProgram: (sessionId: string): Promise<NetworkedCoopProgram> =>
+    fetchWithAuth<NetworkedCoopProgram>(
+      'GET',
+      `/classroom-sessions/${sessionId}/coop/program`,
+      { cache: 'no-store' },
+    ),
+
+  updateNetworkedCoopProgram: (
+    sessionId: string,
+    expectedProgramRevision: number,
+    commands: CoopAlgorithmCommand[],
+  ): Promise<NetworkedCoopProgramUpdateResult> =>
+    fetchWithAuth<NetworkedCoopProgramUpdateResult>(
+      'PUT',
+      `/classroom-sessions/${sessionId}/coop/program`,
+      {
+        body: {
+          operationId: uniqueId('coop-program'),
+          expectedProgramRevision,
+          commands,
         },
       },
     ),
