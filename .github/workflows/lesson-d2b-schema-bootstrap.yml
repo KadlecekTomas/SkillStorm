@@ -10,6 +10,9 @@ on:
 permissions:
   contents: write
 
+env:
+  DATABASE_URL: postgresql://postgres:postgres@localhost:5432/skillstorm_test
+
 jobs:
   apply:
     runs-on: ubuntu-latest
