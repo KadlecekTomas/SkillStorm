@@ -5,6 +5,7 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Put,
   Req,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -19,6 +20,7 @@ import {
 } from '@/common/decorators/org-operation.decorator';
 import { BuildPcAnalyticsService } from './build-pc-analytics.service';
 import { ClassroomOrchestrationService } from './classroom-orchestration.service';
+import { NetworkedCoopProgramService } from './networked-coop-program.service';
 import { NetworkedCoopService } from './networked-coop.service';
 import {
   ClassroomCommandDto,
@@ -27,6 +29,7 @@ import {
   JoinClassroomSessionDto,
   SemanticEventDto,
 } from './dto/classroom-orchestration.dto';
+import { UpdateNetworkedCoopProgramDto } from './dto/networked-coop-program.dto';
 import { NetworkedCoopTransitionDto } from './dto/networked-coop.dto';
 
 @ApiTags('classroom-sessions')
@@ -39,6 +42,7 @@ export class ClassroomOrchestrationController {
     private readonly service: ClassroomOrchestrationService,
     private readonly buildPcAnalytics: BuildPcAnalyticsService,
     private readonly networkedCoop: NetworkedCoopService,
+    private readonly networkedCoopProgram: NetworkedCoopProgramService,
     private readonly orgContext: OrgContextService,
   ) {}
 
@@ -174,6 +178,29 @@ export class ClassroomOrchestrationController {
   ) {
     const ctx = await this.orgContext.get(req);
     return this.networkedCoop.transition(id, dto, ctx);
+  }
+
+  @Get(':id/coop/program')
+  @Permission(OrganizationRole.STUDENT)
+  @ApiOperation({ summary: 'Read the authoritative shared Algorithm Lab program' })
+  async coopProgram(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() req: RequestWithUser,
+  ) {
+    const ctx = await this.orgContext.get(req);
+    return this.networkedCoopProgram.get(id, ctx);
+  }
+
+  @Put(':id/coop/program')
+  @Permission(OrganizationRole.STUDENT)
+  @ApiOperation({ summary: 'Update shared Algorithm Lab program as active Programmer' })
+  async updateCoopProgram(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: UpdateNetworkedCoopProgramDto,
+    @Req() req: RequestWithUser,
+  ) {
+    const ctx = await this.orgContext.get(req);
+    return this.networkedCoopProgram.update(id, dto, ctx);
   }
 
   @Post(':id/events')
