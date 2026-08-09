@@ -5,6 +5,8 @@
     "audit": "node scripts/audit-project.js",
     "check:rbac": "node bin/skillstorm-rbac-check.js",
     "docs:validate": "node scripts/validate-docs.mjs",
+    "content:informatics:validate": "node scripts/validate-informatics-year-pack.mjs",
+    "content:informatics:generate": "node scripts/validate-informatics-year-pack.mjs --write",
     "test:gamification": "cd server && npm run test:gamification"
   }
 }
