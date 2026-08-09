@@ -140,8 +140,6 @@ test.describe('Build a PC classroom player', () => {
     await page.getByTestId('slot-cpu-socket').click();
     await expect(page.getByTestId('server-event-count')).toHaveText('2');
 
-    // Guided mode auto-selects COOLER inside BuildPcLab. The classroom bridge must
-    // mirror that implicit selection so the next placement is not lost server-side.
     await page.getByTestId('slot-cpu-cooler').click();
     await expect(page.getByTestId('server-event-count')).toHaveText('4');
     await expect(page.getByTestId('build-progress-label')).toHaveText('25 %');
@@ -204,6 +202,8 @@ test.describe('Build a PC Teacher Mission Control', () => {
     await expect(page.getByRole('heading', { name: 'Mission Control · Build a PC' })).toBeVisible();
     await expect(page.getByTestId('mission-status')).toHaveText('DRAFT');
     await expect(page.getByTestId('mission-connected')).toHaveText('1/2');
+    const previewLink = page.getByRole('link', { name: 'Solo náhled hry' });
+    await expect(previewLink).toHaveAttribute('href', '/app/labs/build-a-pc');
 
     await page.getByTestId('mission-start').click();
     await expect(page.getByTestId('mission-status')).toHaveText('RUNNING');
