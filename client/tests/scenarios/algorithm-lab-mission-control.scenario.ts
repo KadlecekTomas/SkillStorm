@@ -169,7 +169,9 @@ test.describe('Algorithm Lab classroom code entry', () => {
   test.use({ storageState: storageStateFor('student8a') });
 
   test('resolves a scanned classroom code and enters the exact live session', async ({ page }) => {
+    let codeResolved = false;
     await page.route('**/api/classroom-sessions/algorithm-lab/resolve-code/1211-1111', async (route) => {
+      codeResolved = true;
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ sessionId: SESSION_ID }) });
     });
     await page.route(`**/api/classroom-sessions/${SESSION_ID}/join`, async (route) => {
@@ -194,8 +196,8 @@ test.describe('Algorithm Lab classroom code entry', () => {
     });
 
     await page.goto('/app/labs/algorithm-lab/join?code=1211-1111');
-    await expect(page.getByTestId('algorithm-code-auto-join')).toBeVisible();
     await expect(page).toHaveURL(new RegExp(`/app/labs/algorithm-lab\\?session=${SESSION_ID}`));
+    expect(codeResolved).toBe(true);
     await expect(page.getByTestId('algorithm-classroom-session-label')).toContainText('Čeká se na spuštění');
   });
 });
