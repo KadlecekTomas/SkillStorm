@@ -19,6 +19,9 @@ import {
   OrgOperationType,
 } from '@/common/decorators/org-operation.decorator';
 import { AlgorithmLabAnalyticsService } from './algorithm-lab-analytics.service';
+import { AlgorithmLabAutoPairService } from './algorithm-lab-auto-pair.service';
+import { AlgorithmLabJoinCodeService } from './algorithm-lab-join-code.service';
+import { AlgorithmLabQuickStartService } from './algorithm-lab-quick-start.service';
 import { BuildPcAnalyticsService } from './build-pc-analytics.service';
 import { ClassroomOrchestrationService } from './classroom-orchestration.service';
 import { NetworkedCoopProgramService } from './networked-coop-program.service';
@@ -42,6 +45,9 @@ export class ClassroomOrchestrationController {
   constructor(
     private readonly service: ClassroomOrchestrationService,
     private readonly algorithmLabAnalytics: AlgorithmLabAnalyticsService,
+    private readonly algorithmLabAutoPair: AlgorithmLabAutoPairService,
+    private readonly algorithmLabJoinCode: AlgorithmLabJoinCodeService,
+    private readonly algorithmLabQuickStart: AlgorithmLabQuickStartService,
     private readonly buildPcAnalytics: BuildPcAnalyticsService,
     private readonly networkedCoop: NetworkedCoopService,
     private readonly networkedCoopProgram: NetworkedCoopProgramService,
@@ -61,6 +67,29 @@ export class ClassroomOrchestrationController {
   ) {
     const ctx = await this.orgContext.get(req);
     return this.service.createLessonSession(dto, ctx);
+  }
+
+  @Post('algorithm-lab/quick-start')
+  @Permission(
+    OrganizationRole.TEACHER,
+    OrganizationRole.DIRECTOR,
+    OrganizationRole.OWNER,
+  )
+  @ApiOperation({ summary: 'Prepare Algorithm Lab classroom in one teacher action' })
+  async quickStartAlgorithmLab(@Req() req: RequestWithUser) {
+    const ctx = await this.orgContext.get(req);
+    return this.algorithmLabQuickStart.launch(ctx);
+  }
+
+  @Get('algorithm-lab/resolve-code/:code')
+  @Permission(OrganizationRole.STUDENT)
+  @ApiOperation({ summary: 'Resolve a short Algorithm Lab classroom code inside the active organization' })
+  async resolveAlgorithmLabCode(
+    @Param('code') code: string,
+    @Req() req: RequestWithUser,
+  ) {
+    const ctx = await this.orgContext.get(req);
+    return this.algorithmLabJoinCode.resolve(code, ctx);
   }
 
   @Get(':id')
@@ -142,14 +171,14 @@ export class ClassroomOrchestrationController {
 
   @Post(':id/join')
   @Permission(OrganizationRole.STUDENT)
-  @ApiOperation({ summary: 'Join or reconnect current student device' })
+  @ApiOperation({ summary: 'Join or reconnect current student device with automatic HYBRID pairing' })
   async join(
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() dto: JoinClassroomSessionDto,
     @Req() req: RequestWithUser,
   ) {
     const ctx = await this.orgContext.get(req);
-    return this.service.joinAsStudent(id, dto, ctx);
+    return this.algorithmLabAutoPair.join(id, dto, ctx);
   }
 
   @Post(':id/disconnect')
