@@ -1,0 +1,28 @@
+# CI-only overlay for black-box school product certification.
+# The application containers are still built from docker-compose.prod.yml;
+# this file only exposes the disposable *_test PostgreSQL database to the
+# host-side deterministic scenario seeder and disables restart loops in CI.
+services:
+  postgres:
+    restart: "no"
+    ports:
+      - "127.0.0.1:${CERT_POSTGRES_PORT:-55432}:5432"
+
+  redis:
+    restart: "no"
+
+  backend:
+    restart: "no"
+    healthcheck:
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  frontend:
+    restart: "no"
+    healthcheck:
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
