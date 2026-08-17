@@ -63,6 +63,7 @@ import {
   isSchoolSharedIpLogin,
   resolveSchoolAuthIpTracker,
   resolveThrottleTracker,
+  type ThrottleRequest,
 } from './common/throttling/request-tracker';
 
 @Module({
@@ -120,7 +121,7 @@ import {
           skipIf: (context) =>
             process.env.DISABLE_THROTTLE === '1' ||
             !isSchoolSharedIpLogin(
-              context.switchToHttp().getRequest<Record<string, unknown>>(),
+              context.switchToHttp().getRequest<ThrottleRequest>(),
             ),
         },
       ],
