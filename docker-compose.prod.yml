@@ -50,6 +50,11 @@ services:
       JWT_REFRESH_SECRET: ${PROD_JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
       COOKIE_SECRET: ${PROD_COOKIE_SECRET:?COOKIE_SECRET is required}
       REDIS_URL: redis://redis:6379
+      # The backend is reachable only on the internal Docker network and all
+      # browser traffic arrives through the single Next.js frontend hop. Trust
+      # exactly that one hop so req.ip reflects the real client instead of the
+      # frontend container; do not use a blanket `true` trust policy.
+      TRUST_PROXY: "1"
       RUN_MIGRATIONS: ${PROD_RUN_MIGRATIONS:?RUN_MIGRATIONS must be set to 0 or 1}
       RUN_SEED: ${PROD_RUN_SEED:?RUN_SEED must be set to 0 or 1}
       DEMO_SEED: "0"
