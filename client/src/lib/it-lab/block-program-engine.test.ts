@@ -52,6 +52,40 @@ describe('block program engine', () => {
     ]);
   });
 
+  it('separates stable source nodes from runtime repeat iterations', () => {
+    const expansion = expandBlockProgram([
+      {
+        type: 'REPEAT',
+        count: 2,
+        body: [
+          { type: 'COMMAND', command: 'FORWARD' },
+          {
+            type: 'REPEAT',
+            count: 2,
+            body: [{ type: 'COMMAND', command: 'RIGHT' }],
+          },
+        ],
+      },
+    ]);
+
+    expect(expansion.steps.map((step) => step.nodePath)).toEqual([
+      [0, 0],
+      [0, 1, 0],
+      [0, 1, 0],
+      [0, 0],
+      [0, 1, 0],
+      [0, 1, 0],
+    ]);
+    expect(expansion.steps.map((step) => step.iterationPath)).toEqual([
+      [0],
+      [0, 0],
+      [0, 1],
+      [1],
+      [1, 0],
+      [1, 1],
+    ]);
+  });
+
   it('rejects invalid repeat counts instead of silently normalizing them', () => {
     const expansion = expandBlockProgram([
       {
@@ -147,6 +181,8 @@ describe('block program engine', () => {
     expect(result.failureReason).toBe('OUTSIDE_ARENA');
     expect(result.steps).toHaveLength(2);
     expect(result.steps[1]?.sourcePath).toEqual([0, 1, 0]);
+    expect(result.steps[1]?.nodePath).toEqual([0, 0]);
+    expect(result.steps[1]?.iterationPath).toEqual([1]);
     expect(result.state.position).toEqual({ x: 1, y: 0 });
   });
 });
