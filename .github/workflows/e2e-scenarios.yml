@@ -98,6 +98,15 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      - name: Upload product proof videos
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: skillstorm-product-proof-videos
+          path: client/test-results/proof-videos/*.webm
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Upload people management screenshots
         if: always()
         uses: actions/upload-artifact@v4
