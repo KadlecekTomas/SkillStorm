@@ -116,8 +116,9 @@ export default function BlockProgrammingDebugPage(): JSX.Element {
   const diagnosisCorrect = hypothesis === 'EXTRA_REPEAT';
   const repaired = count === 3;
   const missionSolved = Boolean(result?.valid && samePosition(result.state.position, world.target));
-  const failedExecution = result?.failureType === 'WORLD_RULE';
   const failedStep = failureEvidence?.steps.at(-1) ?? null;
+  const traceResult = result ?? failureEvidence;
+  const showBreakpoint = Boolean(failedStep && (!result || result.failureType === 'WORLD_RULE'));
 
   const transferResult = useMemo(() => {
     if (transferAnswer === null) return null;
@@ -233,9 +234,9 @@ export default function BlockProgrammingDebugPage(): JSX.Element {
               </div>
 
               <div data-testid="debug-trace" className="mt-4 max-h-72 space-y-2 overflow-auto rounded-2xl bg-slate-950/70 p-3">
-                {!result ? (
+                {!traceResult ? (
                   <p className="p-2 text-sm text-slate-500">Nejdřív program spusť. Trace je důkaz, ne nápověda před pokusem.</p>
-                ) : result.steps.map((step) => (
+                ) : traceResult.steps.map((step) => (
                   <div
                     key={`${step.stepNumber}-${step.sourcePath.join('.')}`}
                     data-testid={`debug-trace-step-${step.stepNumber}`}
@@ -250,9 +251,9 @@ export default function BlockProgrammingDebugPage(): JSX.Element {
                 ))}
               </div>
 
-              {failedExecution && failedStep && (
+              {showBreakpoint && failedStep && (
                 <div data-testid="debug-failure-evidence" className="mt-3 rounded-2xl border border-rose-300/25 bg-rose-300/10 p-4 text-sm text-rose-100">
-                  <strong>Breakpoint:</strong> krok {failedStep.stepNumber} vznikl ze zdroje <strong>{formatProvenance(failedStep)}</strong> a skončil stavem <strong>{failedStep.reason}</strong>.
+                  <strong>{result?.failureType === 'WORLD_RULE' ? 'Breakpoint:' : 'Původní breakpoint:'}</strong> krok {failedStep.stepNumber} vznikl ze zdroje <strong>{formatProvenance(failedStep)}</strong> a skončil stavem <strong>{failedStep.reason}</strong>.
                 </div>
               )}
             </div>
@@ -284,40 +285,34 @@ export default function BlockProgrammingDebugPage(): JSX.Element {
                     );
                   }
 
+                  const sourceClass = isFailureSource
+                    ? missionSolved
+                      ? 'border-emerald-300/35 bg-emerald-300/10'
+                      : 'border-rose-300/40 bg-rose-300/10'
+                    : 'border-violet-300/20 bg-violet-300/10';
+
                   return (
-                    <div
-                      key={index}
-                      data-testid="debug-repeat-block"
-                      className={`rounded-2xl border p-3 ${isFailureSource ? 'border-rose-300/40 bg-rose-300/10' : 'border-violet-300/20 bg-violet-300/10'}`}
-                    >
+                    <div key={index} data-testid="debug-repeat-block" className={`rounded-2xl border p-3 ${sourceClass}`}>
                       <div className="flex flex-wrap items-center justify-between gap-3">
                         <div>
                           <span className="mr-3 text-xs text-slate-500">{index + 1}</span>
                           <strong>Opakuj <span data-testid="debug-repeat-count">{node.count}×</span></strong>
                         </div>
                         <div className="flex items-center gap-2">
-                          <button
-                            data-testid="debug-repeat-minus"
-                            aria-label="Snížit počet opakování"
-                            disabled={!diagnosisCorrect}
-                            onClick={() => changeRepeat(-1)}
-                            className="rounded-lg bg-slate-950/60 p-1.5 disabled:cursor-not-allowed disabled:opacity-30"
-                          >
+                          <button data-testid="debug-repeat-minus" aria-label="Snížit počet opakování" disabled={!diagnosisCorrect} onClick={() => changeRepeat(-1)} className="rounded-lg bg-slate-950/60 p-1.5 disabled:cursor-not-allowed disabled:opacity-30">
                             <Minus className="h-4 w-4" aria-hidden="true" />
                           </button>
-                          <button
-                            data-testid="debug-repeat-plus"
-                            aria-label="Zvýšit počet opakování"
-                            disabled={!diagnosisCorrect}
-                            onClick={() => changeRepeat(1)}
-                            className="rounded-lg bg-slate-950/60 p-1.5 disabled:cursor-not-allowed disabled:opacity-30"
-                          >
+                          <button data-testid="debug-repeat-plus" aria-label="Zvýšit počet opakování" disabled={!diagnosisCorrect} onClick={() => changeRepeat(1)} className="rounded-lg bg-slate-950/60 p-1.5 disabled:cursor-not-allowed disabled:opacity-30">
                             <Plus className="h-4 w-4" aria-hidden="true" />
                           </button>
                         </div>
                       </div>
                       <div className="mt-2 rounded-xl bg-slate-950/50 px-3 py-2 text-sm font-bold text-violet-100">↳ Krok vpřed</div>
-                      {isFailureSource && <p className="mt-2 text-xs font-bold text-rose-200">Trace ukazuje na tento zdrojový blok.</p>}
+                      {isFailureSource && (
+                        <p className={`mt-2 text-xs font-bold ${missionSolved ? 'text-emerald-200' : 'text-rose-200'}`}>
+                          {missionSolved ? 'Původní chyba vznikla v tomto bloku. Oprava je ověřena.' : 'Trace ukazuje na tento zdrojový blok.'}
+                        </p>
+                      )}
                     </div>
                   );
                 })}
@@ -338,12 +333,7 @@ export default function BlockProgrammingDebugPage(): JSX.Element {
               ) : (
                 <div className="mt-4 space-y-2" data-testid="debug-hypotheses">
                   {hypothesisCopy.map((option) => (
-                    <button
-                      key={option.value}
-                      data-testid={`debug-hypothesis-${option.value.toLowerCase()}`}
-                      onClick={() => setHypothesis(option.value)}
-                      className={`w-full rounded-2xl border px-4 py-3 text-left text-sm font-bold transition ${hypothesis === option.value ? 'border-cyan-300/50 bg-cyan-300/10 text-cyan-50' : 'border-white/10 bg-slate-950/50 text-slate-300 hover:border-white/20'}`}
-                    >
+                    <button key={option.value} data-testid={`debug-hypothesis-${option.value.toLowerCase()}`} onClick={() => setHypothesis(option.value)} className={`w-full rounded-2xl border px-4 py-3 text-left text-sm font-bold transition ${hypothesis === option.value ? 'border-cyan-300/50 bg-cyan-300/10 text-cyan-50' : 'border-white/10 bg-slate-950/50 text-slate-300 hover:border-white/20'}`}>
                       {option.label}
                     </button>
                   ))}
@@ -381,12 +371,7 @@ export default function BlockProgrammingDebugPage(): JSX.Element {
                   <p className="mt-1 text-sm text-slate-300">Robot stojí na [0,0], cíl je [3,0] a zeď je až na [4,0]. Kolikrát má smyčka opakovat „Krok vpřed“?</p>
                   <div className="mt-3 grid grid-cols-3 gap-2">
                     {[2, 3, 4].map((answer) => (
-                      <button
-                        key={answer}
-                        data-testid={`debug-transfer-${answer}`}
-                        onClick={() => setTransferAnswer(answer)}
-                        className={`rounded-xl border px-3 py-2 font-black ${transferAnswer === answer ? 'border-emerald-200/50 bg-emerald-200/15' : 'border-white/10 bg-slate-950/50'}`}
-                      >
+                      <button key={answer} data-testid={`debug-transfer-${answer}`} onClick={() => setTransferAnswer(answer)} className={`rounded-xl border px-3 py-2 font-black ${transferAnswer === answer ? 'border-emerald-200/50 bg-emerald-200/15' : 'border-white/10 bg-slate-950/50'}`}>
                         {answer}×
                       </button>
                     ))}
