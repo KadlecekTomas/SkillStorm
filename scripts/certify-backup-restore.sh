@@ -52,13 +52,22 @@ query_db() {
     -Atqc "$1"
 }
 
+# Content-sensitive fingerprint of the school-critical relational core. Each
+# table contributes both a row count and a stable hash of every complete row,
+# ordered by primary id. This catches silent value corruption that a count-only
+# restore check would miss (for example a changed answer, role, assignment state
+# or question payload).
 fingerprint_query='SELECT json_build_object(
-  '\''organizations'\'', (SELECT count(*) FROM "Organization"),
-  '\''users'\'', (SELECT count(*) FROM "User"),
-  '\''memberships'\'', (SELECT count(*) FROM "Membership"),
-  '\''assignments'\'', (SELECT count(*) FROM "Assignment"),
-  '\''submissions'\'', (SELECT count(*) FROM "Submission"),
-  '\''responses'\'', (SELECT count(*) FROM "Response")
+  '\''organizations'\'', (SELECT json_build_object('\''count'\'', count(*), '\''hash'\'', coalesce(md5(string_agg(md5(row_to_json(t)::text), '\'''\'' ORDER BY t.id::text)), md5('\'''\''))) FROM "Organization" t),
+  '\''users'\'', (SELECT json_build_object('\''count'\'', count(*), '\''hash'\'', coalesce(md5(string_agg(md5(row_to_json(t)::text), '\'''\'' ORDER BY t.id::text)), md5('\'''\''))) FROM "User" t),
+  '\''memberships'\'', (SELECT json_build_object('\''count'\'', count(*), '\''hash'\'', coalesce(md5(string_agg(md5(row_to_json(t)::text), '\'''\'' ORDER BY t.id::text)), md5('\'''\''))) FROM "Membership" t),
+  '\''classSections'\'', (SELECT json_build_object('\''count'\'', count(*), '\''hash'\'', coalesce(md5(string_agg(md5(row_to_json(t)::text), '\'''\'' ORDER BY t.id::text)), md5('\'''\''))) FROM "ClassSection" t),
+  '\''enrollments'\'', (SELECT json_build_object('\''count'\'', count(*), '\''hash'\'', coalesce(md5(string_agg(md5(row_to_json(t)::text), '\'''\'' ORDER BY t.id::text)), md5('\'''\''))) FROM "Enrollment" t),
+  '\''tests'\'', (SELECT json_build_object('\''count'\'', count(*), '\''hash'\'', coalesce(md5(string_agg(md5(row_to_json(t)::text), '\'''\'' ORDER BY t.id::text)), md5('\'''\''))) FROM "Test" t),
+  '\''questions'\'', (SELECT json_build_object('\''count'\'', count(*), '\''hash'\'', coalesce(md5(string_agg(md5(row_to_json(t)::text), '\'''\'' ORDER BY t.id::text)), md5('\'''\''))) FROM "Question" t),
+  '\''assignments'\'', (SELECT json_build_object('\''count'\'', count(*), '\''hash'\'', coalesce(md5(string_agg(md5(row_to_json(t)::text), '\'''\'' ORDER BY t.id::text)), md5('\'''\''))) FROM "Assignment" t),
+  '\''submissions'\'', (SELECT json_build_object('\''count'\'', count(*), '\''hash'\'', coalesce(md5(string_agg(md5(row_to_json(t)::text), '\'''\'' ORDER BY t.id::text)), md5('\'''\''))) FROM "Submission" t),
+  '\''responses'\'', (SELECT json_build_object('\''count'\'', count(*), '\''hash'\'', coalesce(md5(string_agg(md5(row_to_json(t)::text), '\'''\'' ORDER BY t.id::text)), md5('\'''\''))) FROM "Response" t)
 )::text;'
 
 log "BACKUP_RESTORE_CERTIFICATION_START"
@@ -67,7 +76,7 @@ log "organization=$ORG_ID"
 log "assignment=$ASSIGNMENT_ID"
 
 BEFORE_FINGERPRINT="$(query_db "$fingerprint_query")"
-log "before=$BEFORE_FINGERPRINT"
+log "before_content_fingerprint=$BEFORE_FINGERPRINT"
 
 ORG_BEFORE="$(query_db "SELECT count(*) FROM \"Organization\" WHERE id = '$ORG_ID';")"
 ASSIGNMENT_BEFORE="$(query_db "SELECT count(*) FROM \"Assignment\" WHERE id = '$ASSIGNMENT_ID';")"
@@ -118,11 +127,12 @@ cat "$BACKUP" | "${COMPOSE[@]}" exec -T postgres pg_restore \
   --exit-on-error
 
 AFTER_FINGERPRINT="$(query_db "$fingerprint_query")"
-log "after=$AFTER_FINGERPRINT"
+log "after_content_fingerprint=$AFTER_FINGERPRINT"
 if [[ "$AFTER_FINGERPRINT" != "$BEFORE_FINGERPRINT" ]]; then
-  log "ERROR: database fingerprint differs after restore"
+  log "ERROR: school-critical content fingerprint differs after restore"
   exit 1
 fi
+log "critical_content_fingerprint_restored=true"
 
 ORG_AFTER="$(query_db "SELECT count(*) FROM \"Organization\" WHERE id = '$ORG_ID';")"
 ASSIGNMENT_AFTER="$(query_db "SELECT count(*) FROM \"Assignment\" WHERE id = '$ASSIGNMENT_ID';")"
