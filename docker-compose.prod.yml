@@ -50,7 +50,11 @@ services:
       JWT_REFRESH_SECRET: ${PROD_JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
       COOKIE_SECRET: ${PROD_COOKIE_SECRET:?COOKIE_SECRET is required}
       REDIS_URL: redis://redis:6379
-      TRUST_PROXY: "1"
+      # Production cookies require HTTPS, so the supported topology is:
+      # client -> external TLS proxy -> Next.js -> NestJS. Express must trust
+      # exactly those two controlled hops to recover the real client address.
+      # Override only if the deployment topology is deliberately different.
+      TRUST_PROXY: ${PROD_TRUST_PROXY:-2}
       RUN_MIGRATIONS: ${PROD_RUN_MIGRATIONS:?RUN_MIGRATIONS must be set to 0 or 1}
       RUN_SEED: ${PROD_RUN_SEED:?RUN_SEED must be set to 0 or 1}
       DEMO_SEED: "0"
