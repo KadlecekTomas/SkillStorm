@@ -74,10 +74,11 @@ export default function () {
   const email = students[__VU - 1];
   if (!email) fail(`No deterministic 8.A account mapped to VU ${__VU}`);
 
-  // Give every simulated student a unique client IP. Behind the production
-  // Next proxy this is a deliberate proof of correct trust-proxy/throttling
-  // configuration: a whole school must not collapse into one login bucket.
-  const forwardedIp = `10.88.${Math.floor((__VU - 1) / 250)}.${(__VU - 1) % 250 + 1}`;
+  // Real schools commonly NAT an entire classroom (or the whole school) behind
+  // one public IPv4 address. Every VU therefore deliberately presents the same
+  // upstream address. A school-ready login policy must protect brute-force paths
+  // without locking out legitimate distinct accounts at the bell.
+  const schoolPublicIp = '203.0.113.42';
 
   const login = http.post(
     `${BASE_URL}/api/auth/login`,
@@ -89,7 +90,7 @@ export default function () {
     {
       headers: {
         'Content-Type': 'application/json',
-        'X-Forwarded-For': forwardedIp,
+        'X-Forwarded-For': schoolPublicIp,
         'x-cid': `school-load-login-${__VU}`,
       },
       tags: { name: 'POST /api/auth/login' },
@@ -98,10 +99,10 @@ export default function () {
   loginDuration.add(login.timings.duration);
   check(login, {
     '30-student login succeeds': (r) => r.status === 200 || r.status === 201,
-    'login is never throttled': (r) => r.status !== 429,
+    'legitimate school NAT login is never throttled': (r) => r.status !== 429,
   });
   if (login.status === 429) {
-    fail(`Student ${__VU} was throttled at login. Check reverse-proxy trust configuration.`);
+    fail(`Student ${__VU} was throttled behind the shared school NAT address. Login throttling is not classroom-safe.`);
   }
   if (login.status < 200 || login.status >= 300) {
     fail(`Login failed for ${email}: status=${login.status} body=${String(login.body).slice(0, 300)}`);
