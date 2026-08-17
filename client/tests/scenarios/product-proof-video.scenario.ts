@@ -10,13 +10,12 @@ const PROOF_VIDEO_PATH = join(
   'skillstorm-broken-loop-proof.webm',
 );
 
-async function beat(page: Page, milliseconds = 550) {
+async function beat(page: Page, milliseconds = 700) {
   await page.waitForTimeout(milliseconds);
 }
 
-// Video changes the worker fixture and therefore must be configured at file scope,
-// not inside test.describe(). Keep this scenario isolated so the rest of the
-// scenario suite does not record successful runs.
+// Keep video recording isolated to this human-readable product proof. The normal
+// scenario suite stays fast; this one deliberately uses the slow runtime speed.
 test.use({
   storageState: storageStateFor('student8a'),
   viewport: { width: 1440, height: 900 },
@@ -24,67 +23,82 @@ test.use({
 });
 
 test.describe('SkillStorm product proof video', () => {
-  test('records Broken Loop diagnosis, repair and transfer as a reusable CI artifact', async ({ page }, testInfo) => {
+  test('records visible Broken Loop execution, diagnosis, repair and transfer', async ({ page }, testInfo) => {
     const video = page.video();
     expect(video, 'Proof scenario must run with Playwright video recording enabled.').not.toBeNull();
 
     await page.goto('/app/labs/algorithm-lab/block-programming/debug');
     await expect(page.getByRole('heading', { name: 'Broken Loop' })).toBeVisible();
-    await beat(page, 900);
+    await beat(page, 1_400);
 
-    // 1. Run the intentionally broken program and expose concrete trace evidence.
+    // Slow mode is intentional here. This artifact is for a human to understand
+    // what the algorithm does, not merely evidence that a click path completed.
+    await page.getByTestId('debug-speed-slow').click();
+    await beat(page, 500);
     await page.getByTestId('debug-run').click();
+
+    // Let the viewer see the loop execute one iteration at a time. The robot,
+    // active source block and trace all advance from the same runtime step.
+    await expect(page.getByTestId('debug-trace-step-1')).toBeVisible();
+    await expect(page.getByTestId('debug-robot')).toHaveAttribute('data-x', '1');
+    await beat(page, 450);
+    await expect(page.getByTestId('debug-trace-step-2')).toBeVisible();
+    await beat(page, 450);
+    await expect(page.getByTestId('debug-trace-step-3')).toBeVisible();
+    await expect(page.getByTestId('debug-active-iteration')).toContainText('3/4');
+
     await expect(page.getByTestId('debug-failure-evidence')).toContainText('krok 4');
     await expect(page.getByTestId('debug-failure-evidence')).toContainText('blok 1 · opakování 4 · příkaz 1');
-    await expect(page.getByTestId('debug-failure-evidence')).toContainText('OBSTACLE');
-    await page.getByTestId('debug-failure-evidence').scrollIntoViewIfNeeded();
-    await beat(page, 1_100);
+    await expect(page.getByTestId('debug-trace-step-4')).toContainText('OBSTACLE');
+    await page.getByTestId('debug-repeat-block').scrollIntoViewIfNeeded();
+    await beat(page, 1_800);
 
-    // 2. Demonstrate that guessing is rejected by the learning flow.
+    // Guessing is rejected. The correct diagnosis is grounded in the trace.
     await page.getByTestId('debug-hypothesis-wrong_turn').click();
     await expect(page.getByTestId('debug-diagnosis')).toContainText('nevysvětluje');
-    await beat(page, 900);
+    await beat(page, 1_300);
 
-    // 3. Select the evidence-backed hypothesis and repair the source block.
     await page.getByTestId('debug-hypothesis-extra_repeat').click();
     await expect(page.getByTestId('debug-diagnosis')).toContainText('Diagnóza sedí s trace');
-    await beat(page, 700);
+    await beat(page, 1_300);
 
     await page.getByTestId('debug-repeat-minus').click();
     await expect(page.getByTestId('debug-repeat-count')).toHaveText('3×');
     await expect(page.getByTestId('debug-repair-status')).toContainText('připraveno k ověření');
-    await beat(page, 900);
+    await beat(page, 1_300);
 
-    // 4. Re-run the repaired program and prove the robot reaches the target.
+    // Run the repaired algorithm slowly so the complete route is visible rather
+    // than teleporting the robot to [4,2].
     await page.getByTestId('debug-run').click();
+    await expect(page.getByTestId('debug-trace-step-3')).toBeVisible();
+    await beat(page, 500);
+    await expect(page.getByTestId('debug-trace-step-6')).toBeVisible();
+    await beat(page, 500);
     await expect(page.getByTestId('debug-robot')).toHaveAttribute('data-x', '4');
     await expect(page.getByTestId('debug-robot')).toHaveAttribute('data-y', '2');
     await expect(page.getByTestId('debug-mission-success')).toContainText('Program už funguje.');
     await page.getByTestId('debug-mission-success').scrollIntoViewIfNeeded();
-    await beat(page, 1_100);
+    await beat(page, 1_800);
 
-    // 5. Show that completion is not mastery: first fail the changed case,
-    // then solve it correctly to unlock transfer evidence.
+    // Completion is not mastery: show a wrong changed-case answer before the
+    // correct transfer answer unlocks mastery evidence.
     await page.getByTestId('debug-transfer-4').click();
     await expect(page.getByTestId('debug-transfer-result')).toContainText('Příliš mnoho opakování');
     await expect(page.getByTestId('debug-mastery')).toHaveCount(0);
-    await beat(page, 850);
+    await beat(page, 1_200);
 
     await page.getByTestId('debug-transfer-3').click();
     await expect(page.getByTestId('debug-transfer-result')).toContainText('Správně');
     await expect(page.getByTestId('debug-mastery')).toContainText('Princip ověřen na změněné situaci.');
     await page.getByTestId('debug-mastery').scrollIntoViewIfNeeded();
-    await beat(page, 1_300);
+    await beat(page, 1_800);
 
-    // Closing the page ends recording. video.saveAs() waits for the finalized
-    // browser-side recording before writing the stable CI artifact path.
     await mkdir(dirname(PROOF_VIDEO_PATH), { recursive: true });
     await page.close();
     await video!.saveAs(PROOF_VIDEO_PATH);
 
-    // A successful UI test with a zero-byte recording is not acceptable proof.
     const proofVideo = await stat(PROOF_VIDEO_PATH);
-    expect(proofVideo.size, 'Proof video must contain a finalized WebM recording.').toBeGreaterThan(10_000);
+    expect(proofVideo.size, 'Proof video must contain a finalized WebM recording.').toBeGreaterThan(100_000);
 
     await testInfo.attach('skillstorm-broken-loop-proof', {
       path: PROOF_VIDEO_PATH,
