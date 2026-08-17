@@ -1,14 +1,12 @@
 import { defineConfig, devices } from '@playwright/test';
 
 /**
- * Black-box certification against the production Docker stack.
+ * Black-box certification against the production Docker stack through the
+ * same HTTPS edge shape required by production Secure cookies.
  *
- * Important differences from playwright.scenarios.config.ts:
- * - does NOT start Next/Nest dev servers;
- * - expects docker-compose.prod.yml runner images to already be healthy;
- * - exercises only curated school-critical journeys that are forbidden from
- *   mocking SkillStorm's own /api boundary;
- * - records video for every certification test as release evidence.
+ * The CI TLS edge uses an ephemeral internal CA, so certificate-chain trust is
+ * ignored here; HTTPS itself remains mandatory and all Secure-cookie behavior
+ * is exercised normally.
  */
 export default defineConfig({
   testDir: './tests/scenarios',
@@ -24,8 +22,9 @@ export default defineConfig({
   globalSetup: require.resolve('./tests/scenarios/global-setup.ts'),
 
   use: {
-    baseURL: process.env.BASE_URL || 'http://127.0.0.1:3000',
+    baseURL: process.env.BASE_URL || 'https://localhost:3443',
     headless: true,
+    ignoreHTTPSErrors: true,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'on',
