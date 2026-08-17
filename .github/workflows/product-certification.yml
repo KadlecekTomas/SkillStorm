@@ -98,6 +98,16 @@ jobs:
       - name: Boot disposable database infrastructure first
         run: docker compose -f docker-compose.prod.yml -f docker-compose.certification.yml up -d postgres redis --wait --wait-timeout 120
 
+      - name: Prove host-only PostgreSQL bridge is reachable
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapped="$(docker compose -f docker-compose.prod.yml -f docker-compose.certification.yml port postgres 5432)"
+          echo "postgres_host_mapping=$mapped"
+          test "$mapped" = "127.0.0.1:${CERT_POSTGRES_PORT}"
+          npx wait-on --timeout 30000 "tcp:127.0.0.1:${CERT_POSTGRES_PORT}"
+        working-directory: client
+
       - name: Preseed deterministic school and SUPERADMIN
         shell: bash
         run: |
