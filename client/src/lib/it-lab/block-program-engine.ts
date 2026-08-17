@@ -11,9 +11,19 @@ export type BlockProgramNode =
   | { type: 'COMMAND'; command: AlgorithmCommand }
   | { type: 'REPEAT'; count: number; body: BlockProgramNode[] };
 
-export type BlockExecutionStep = AlgorithmStepResult & {
+export type BlockStepProvenance = {
+  /**
+   * Legacy mixed path kept for compatibility with the first Loop Mission.
+   * It interleaves AST node indexes with runtime repeat indexes.
+   */
   sourcePath: number[];
+  /** Stable AST-only path to the command that produced the executed step. */
+  nodePath: number[];
+  /** Runtime iteration indexes for every repeat surrounding the command. */
+  iterationPath: number[];
 };
+
+export type BlockExecutionStep = AlgorithmStepResult & BlockStepProvenance;
 
 export type BlockProgramValidationReason =
   | 'INVALID_REPEAT_COUNT'
@@ -31,8 +41,12 @@ export type BlockProgramFailureReason =
   | 'OUTSIDE_ARENA'
   | 'OBSTACLE';
 
+export type ExpandedBlockStep = {
+  command: AlgorithmCommand;
+} & BlockStepProvenance;
+
 export type ExpandedBlockProgram = {
-  steps: Array<{ command: AlgorithmCommand; sourcePath: number[] }>;
+  steps: ExpandedBlockStep[];
   valid: boolean;
   failureReason: BlockProgramValidationReason | 'STEP_LIMIT_EXCEEDED' | null;
 };
@@ -78,22 +92,37 @@ function validateNodes(
 
 function flattenNodes(
   nodes: BlockProgramNode[],
-  output: Array<{ command: AlgorithmCommand; sourcePath: number[] }>,
-  path: number[] = [],
+  output: ExpandedBlockStep[],
+  sourcePrefix: number[] = [],
+  nodePrefix: number[] = [],
+  iterationPath: number[] = [],
 ): boolean {
   for (let index = 0; index < nodes.length; index += 1) {
     const node = nodes[index];
     if (!node) continue;
 
-    const sourcePath = [...path, index];
+    const sourcePath = [...sourcePrefix, index];
+    const nodePath = [...nodePrefix, index];
+
     if (node.type === 'COMMAND') {
       if (output.length >= MAX_EXPANDED_STEPS) return false;
-      output.push({ command: node.command, sourcePath });
+      output.push({
+        command: node.command,
+        sourcePath,
+        nodePath,
+        iterationPath: [...iterationPath],
+      });
       continue;
     }
 
     for (let iteration = 0; iteration < node.count; iteration += 1) {
-      const complete = flattenNodes(node.body, output, [...sourcePath, iteration]);
+      const complete = flattenNodes(
+        node.body,
+        output,
+        [...sourcePath, iteration],
+        nodePath,
+        [...iterationPath, iteration],
+      );
       if (!complete) return false;
     }
   }
@@ -111,7 +140,7 @@ export function expandBlockProgram(nodes: BlockProgramNode[]): ExpandedBlockProg
     };
   }
 
-  const steps: Array<{ command: AlgorithmCommand; sourcePath: number[] }> = [];
+  const steps: ExpandedBlockStep[] = [];
   const complete = flattenNodes(nodes, steps);
 
   return {
@@ -143,7 +172,12 @@ export function executeBlockProgram(nodes: BlockProgramNode[], world: AlgorithmW
     if (!item) continue;
 
     const result = executeAlgorithmStep(state, item.command, world, index + 1);
-    steps.push({ ...result, sourcePath: item.sourcePath });
+    steps.push({
+      ...result,
+      sourcePath: item.sourcePath,
+      nodePath: item.nodePath,
+      iterationPath: item.iterationPath,
+    });
     if (!result.valid) {
       const failureReason: 'OUTSIDE_ARENA' | 'OBSTACLE' =
         result.reason === 'OBSTACLE' ? 'OBSTACLE' : 'OUTSIDE_ARENA';
