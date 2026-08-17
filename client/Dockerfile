@@ -1,9 +1,9 @@
-FROM node:20-slim AS deps
+FROM node:24.19.0-slim AS deps
 WORKDIR /app
 COPY package*.json package-lock.json* ./
 RUN npm ci
 
-FROM node:20-slim AS builder
+FROM node:24.19.0-slim AS builder
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 ARG API_PROXY_TARGET
@@ -12,7 +12,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build
 
-FROM node:20-slim AS runner
+FROM node:24.19.0-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
