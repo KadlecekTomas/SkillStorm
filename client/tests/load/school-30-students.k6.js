@@ -3,7 +3,7 @@ import { check, fail } from 'k6';
 import { Rate, Trend } from 'k6/metrics';
 import { SharedArray } from 'k6/data';
 
-const BASE_URL = __ENV.BASE_URL || 'http://127.0.0.1:3000';
+const BASE_URL = __ENV.BASE_URL || 'https://localhost:3443';
 const manifest = JSON.parse(open('../scenarios/.manifest.json'));
 
 const students = new SharedArray('8.A students', () => manifest.students8A.slice());
@@ -18,6 +18,9 @@ const sessionDuration = new Trend('school_test_session_duration', true);
 const autosaveDuration = new Trend('school_autosave_duration', true);
 
 export const options = {
+  // Caddy uses an ephemeral internal CA in CI. Ignore only CA verification;
+  // HTTPS remains mandatory so production Secure cookies are exercised.
+  insecureSkipTLSVerify: true,
   scenarios: {
     class_bell_8a: {
       executor: 'per-vu-iterations',
@@ -169,8 +172,6 @@ export default function () {
     fail(`First autosave failed for ${email}: status=${autosave1.status} body=${String(autosave1.body).slice(0, 300)}`);
   }
 
-  // Same questionId on purpose: the production contract says autosave is
-  // idempotent per question, so this must update rather than duplicate.
   const autosave2 = http.patch(
     `${BASE_URL}/api/submissions/${submissionId}/responses`,
     JSON.stringify({
