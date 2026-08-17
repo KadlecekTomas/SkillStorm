@@ -43,6 +43,8 @@ test('login throttling protects one account without collapsing proxy IP buckets'
   browser,
   manifest,
 }) => {
+  const resolvedBaseURL = baseURL ?? 'https://localhost:3443';
+  const ignoreCIOnlyCa = resolvedBaseURL.startsWith('https://');
   const throttledIp = '198.51.100.7';
   const independentIp = '198.51.100.8';
   const loginUrl = '/api/auth/login';
@@ -52,7 +54,8 @@ test('login throttling protects one account without collapsing proxy IP buckets'
   };
 
   const api = await playwrightRequest.newContext({
-    baseURL: baseURL ?? 'http://127.0.0.1:3001',
+    baseURL: resolvedBaseURL,
+    ignoreHTTPSErrors: ignoreCIOnlyCa,
     extraHTTPHeaders: { 'X-Forwarded-For': throttledIp },
   });
   let sawThrottle = false;
@@ -67,10 +70,11 @@ test('login throttling protects one account without collapsing proxy IP buckets'
   expect(sawThrottle, 'same account + same IP eventually returns 429').toBeTruthy();
 
   const throttledContext = await browser.newContext({
+    ignoreHTTPSErrors: ignoreCIOnlyCa,
     extraHTTPHeaders: { 'X-Forwarded-For': throttledIp },
   });
   const page = await throttledContext.newPage();
-  await page.goto('/login', { waitUntil: 'commit' });
+  await page.goto(`${resolvedBaseURL}/login`, { waitUntil: 'commit' });
   const email = page.getByLabel(/e-?mail/i);
   await expect(email).toBeVisible({ timeout: 20_000 });
   await email.fill(manifest.accounts.teacher);
@@ -88,7 +92,8 @@ test('login throttling protects one account without collapsing proxy IP buckets'
   await throttledContext.close();
 
   const independent = await playwrightRequest.newContext({
-    baseURL: baseURL ?? 'http://127.0.0.1:3001',
+    baseURL: resolvedBaseURL,
+    ignoreHTTPSErrors: ignoreCIOnlyCa,
     extraHTTPHeaders: { 'X-Forwarded-For': independentIp },
   });
   const independentLogin = await independent.post(loginUrl, {
