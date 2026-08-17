@@ -2,7 +2,7 @@ name: School Product Certification
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, feature/school-product-certification]
   push:
     branches: [main]
   workflow_dispatch:
@@ -53,7 +53,7 @@ jobs:
   school-product-certification:
     name: School Product Certification (production stack)
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 55
 
     steps:
       - name: Checkout exact candidate commit
@@ -104,6 +104,17 @@ jobs:
         run: npx playwright test --config playwright.product-certification.config.ts
         working-directory: client
 
+      - name: Setup pinned k6
+        uses: grafana/setup-k6-action@v1.2.1
+        with:
+          k6-version: "2.1.0"
+
+      - name: Certify 30 concurrent students in 8.A
+        run: k6 run tests/load/school-30-students.k6.js
+        working-directory: client
+        env:
+          BASE_URL: ${{ env.BASE_URL }}
+
       - name: Capture production stack logs on failure
         if: failure()
         run: docker compose -f docker-compose.prod.yml -f docker-compose.certification.yml logs --no-color > product-certification-compose.log
@@ -118,6 +129,7 @@ jobs:
             client/test-results/**/*.webm
             client/test-results/**/*.zip
             client/test-results/**/*.png
+            client/test-results/k6-school-30-students-summary.json
           if-no-files-found: warn
           retention-days: 21
 
