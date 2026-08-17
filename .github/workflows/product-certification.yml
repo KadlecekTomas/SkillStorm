@@ -22,16 +22,12 @@ env:
   SCENARIO_REUSE_DB: "1"
   SCENARIO_PRESEEDED: "1"
 
-  # Disposable production-shaped environment. Use the exact database name
-  # accepted by the no-bypass DB safety guard; isolation comes from the
-  # ephemeral PostgreSQL container/volume, not from weakening the whitelist.
   PROD_POSTGRES_USER: skillstorm_cert
   PROD_POSTGRES_PASSWORD: ciSyntheticCertificationPostgresPassword123456
   PROD_POSTGRES_DB: skillstorm_test
   PROD_DATABASE_URL: postgresql://skillstorm_cert:ciSyntheticCertificationPostgresPassword123456@postgres:5432/skillstorm_test?schema=public
   DATABASE_URL_TEST: postgresql://skillstorm_cert:ciSyntheticCertificationPostgresPassword123456@127.0.0.1:55432/skillstorm_test?schema=public
 
-  # Disposable CI credentials satisfying the same production secret policy.
   PROD_JWT_ACCESS_SECRET: C1A9f4E7b2D8k6M3q5R0u7W4x9Z2n8P6s3V5
   PROD_JWT_REFRESH_SECRET: H8K2m5Q9v3X7c1B6n4R0t8Y5p2W9d7F3a6J1
   PROD_COOKIE_SECRET: N7P4x9C2k6V1m8R5q3Y0b7D4s9H2w6T8f5L3
@@ -53,9 +49,9 @@ env:
 
 jobs:
   school-product-certification:
-    name: School Product Certification (HTTPS production stack)
+    name: School Product Certification (HTTPS + recovery)
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 70
 
     steps:
       - name: Checkout exact candidate commit
@@ -149,6 +145,9 @@ jobs:
         env:
           BASE_URL: ${{ env.BASE_URL }}
 
+      - name: Certify destructive PostgreSQL backup and HTTPS restore
+        run: bash scripts/certify-backup-restore.sh
+
       - name: Capture production stack logs on failure
         if: failure()
         run: docker compose -f docker-compose.prod.yml -f docker-compose.certification.yml logs --no-color > product-certification-compose.log
@@ -164,6 +163,7 @@ jobs:
             client/test-results/**/*.zip
             client/test-results/**/*.png
             client/test-results/k6-school-30-students-summary.json
+            client/test-results/backup-restore-certification/report.txt
           if-no-files-found: warn
           retention-days: 21
 
