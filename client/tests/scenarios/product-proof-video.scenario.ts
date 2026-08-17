@@ -1,7 +1,6 @@
 import { mkdir, stat } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
-import { storageStateFor } from './manifest';
 
 const PROOF_VIDEO_PATH = join(
   process.cwd(),
@@ -13,14 +12,6 @@ const PROOF_VIDEO_PATH = join(
 async function beat(page: Page, milliseconds = 700) {
   await page.waitForTimeout(milliseconds);
 }
-
-// Keep video recording isolated to this human-readable product proof. The normal
-// scenario suite stays fast; this one deliberately uses the slow runtime speed.
-test.use({
-  storageState: storageStateFor('student8a'),
-  viewport: { width: 1440, height: 900 },
-  video: 'on',
-});
 
 test.describe('SkillStorm product proof video', () => {
   test('records visible Broken Loop execution, diagnosis, repair and transfer', async ({ page }, testInfo) => {
