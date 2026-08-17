@@ -1,12 +1,24 @@
 # CI-only overlay for black-box school product certification.
-# The application containers are still built from docker-compose.prod.yml;
-# this file only exposes the disposable *_test PostgreSQL database to the
-# host-side deterministic scenario seeder and disables restart loops in CI.
+# The application containers are still built from docker-compose.prod.yml.
+# This file adds only certification mechanics: a loopback-only host bridge for
+# deterministic DB seeding and faster/no-restart health behavior in CI.
+#
+# PostgreSQL remains on the production `internal` network for backend traffic.
+# The extra `certification_seed` bridge is joined by PostgreSQL alone; neither
+# Next nor Nest is attached to it. Its published port is bound to 127.0.0.1,
+# so it is reachable by the ephemeral GitHub runner but not externally.
+networks:
+  certification_seed:
+    driver: bridge
+
 services:
   postgres:
     restart: "no"
     ports:
       - "127.0.0.1:${CERT_POSTGRES_PORT:-55432}:5432"
+    networks:
+      - internal
+      - certification_seed
 
   redis:
     restart: "no"
