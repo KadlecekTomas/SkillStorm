@@ -98,7 +98,7 @@ jobs:
         working-directory: client
 
       - name: Run school-critical black-box journeys
-        run: npm run test:product-certification
+        run: npx playwright test --config playwright.product-certification.config.ts
         working-directory: client
 
       - name: Capture production stack logs on failure
