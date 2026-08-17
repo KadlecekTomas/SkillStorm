@@ -1,4 +1,4 @@
-import { copyFile, mkdir } from 'node:fs/promises';
+import { mkdir, stat } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import { storageStateFor } from './manifest';
@@ -76,12 +76,15 @@ test.describe('SkillStorm product proof video', () => {
     await page.getByTestId('debug-mastery').scrollIntoViewIfNeeded();
     await beat(page, 1_300);
 
-    // Playwright finalizes the video when the page closes. Copy it to a stable
-    // artifact path so GitHub Actions does not expose an opaque test-output name.
-    await page.close();
-    const sourceVideoPath = await video!.path();
+    // Closing the page ends recording. video.saveAs() waits for the finalized
+    // browser-side recording before writing the stable CI artifact path.
     await mkdir(dirname(PROOF_VIDEO_PATH), { recursive: true });
-    await copyFile(sourceVideoPath, PROOF_VIDEO_PATH);
+    await page.close();
+    await video!.saveAs(PROOF_VIDEO_PATH);
+
+    // A successful UI test with a zero-byte recording is not acceptable proof.
+    const proofVideo = await stat(PROOF_VIDEO_PATH);
+    expect(proofVideo.size, 'Proof video must contain a finalized WebM recording.').toBeGreaterThan(10_000);
 
     await testInfo.attach('skillstorm-broken-loop-proof', {
       path: PROOF_VIDEO_PATH,
