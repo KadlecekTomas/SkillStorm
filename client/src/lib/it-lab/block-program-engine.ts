@@ -145,13 +145,15 @@ export function executeBlockProgram(nodes: BlockProgramNode[], world: AlgorithmW
     const result = executeAlgorithmStep(state, item.command, world, index + 1);
     steps.push({ ...result, sourcePath: item.sourcePath });
     if (!result.valid) {
+      const failureReason: 'OUTSIDE_ARENA' | 'OBSTACLE' =
+        result.reason === 'OBSTACLE' ? 'OBSTACLE' : 'OUTSIDE_ARENA';
       return {
         state,
         steps,
         valid: false,
         failedStep: index + 1,
         failureType: 'WORLD_RULE',
-        failureReason: result.reason,
+        failureReason,
       };
     }
     state = result.state;
