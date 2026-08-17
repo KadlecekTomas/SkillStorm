@@ -19,6 +19,7 @@ env:
   CERT_POSTGRES_PORT: "55432"
   BASE_URL: http://127.0.0.1:3000
   SCENARIO_REUSE_DB: "1"
+  SCENARIO_PRESEEDED: "1"
 
   # Disposable production-shaped environment. The scenario seed has a hard
   # *_test database guard and therefore cannot wipe a real database.
@@ -53,7 +54,7 @@ jobs:
   school-product-certification:
     name: School Product Certification (production stack)
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 55
 
     steps:
       - name: Checkout exact candidate commit
@@ -93,8 +94,21 @@ jobs:
       - name: Validate production-shaped Docker topology
         run: docker compose -f docker-compose.prod.yml -f docker-compose.certification.yml config --quiet
 
+      - name: Boot disposable database infrastructure first
+        run: docker compose -f docker-compose.prod.yml -f docker-compose.certification.yml up -d postgres redis --wait --wait-timeout 120
+
+      - name: Preseed deterministic school and SUPERADMIN
+        shell: bash
+        run: |
+          set -euo pipefail
+          SCENARIO_PRESEEDED=0 SCENARIO_REUSE_DB=0 \
+            ./server/node_modules/.bin/ts-node \
+            --transpile-only \
+            --compiler-options '{"module":"CommonJS","moduleResolution":"node"}' \
+            -e "require('./client/tests/scenarios/global-setup.ts').default().catch((error) => { console.error(error); process.exit(1); })"
+
       - name: Build and boot exact production runner images
-        run: docker compose -f docker-compose.prod.yml -f docker-compose.certification.yml up -d --build --wait --wait-timeout 240
+        run: docker compose -f docker-compose.prod.yml -f docker-compose.certification.yml up -d --build backend frontend --wait --wait-timeout 240
 
       - name: Prove public production surface is reachable
         run: npx wait-on --timeout 60000 http://127.0.0.1:3000
