@@ -14,13 +14,16 @@ async function beat(page: Page, milliseconds = 550) {
   await page.waitForTimeout(milliseconds);
 }
 
-test.describe('SkillStorm product proof video', () => {
-  test.use({
-    storageState: storageStateFor('student8a'),
-    viewport: { width: 1440, height: 900 },
-    video: 'on',
-  });
+// Video changes the worker fixture and therefore must be configured at file scope,
+// not inside test.describe(). Keep this scenario isolated so the rest of the
+// scenario suite does not record successful runs.
+test.use({
+  storageState: storageStateFor('student8a'),
+  viewport: { width: 1440, height: 900 },
+  video: 'on',
+});
 
+test.describe('SkillStorm product proof video', () => {
   test('records Broken Loop diagnosis, repair and transfer as a reusable CI artifact', async ({ page }, testInfo) => {
     const video = page.video();
     expect(video, 'Proof scenario must run with Playwright video recording enabled.').not.toBeNull();
