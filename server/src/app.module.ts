@@ -59,7 +59,11 @@ import { CurriculumModule } from './curriculum/curriculum.module';
 import { ActivityModule } from './activity-engine/activity.module';
 import { LessonExperienceModule } from './lesson-experience/lesson-experience.module';
 import { ClassroomOrchestrationModule } from './classroom-orchestration/classroom-orchestration.module';
-import { resolveThrottleTracker } from './common/throttling/request-tracker';
+import {
+  isSchoolSharedIpLogin,
+  resolveSchoolAuthIpTracker,
+  resolveThrottleTracker,
+} from './common/throttling/request-tracker';
 
 @Module({
   imports: [
@@ -87,6 +91,7 @@ import { resolveThrottleTracker } from './common/throttling/request-tracker';
       skipIf: () => process.env.DISABLE_THROTTLE === '1',
       throttlers: [
         {
+          name: 'default',
           ttl: process.env.DISABLE_THROTTLE === '1' ? 1 : seconds(60),
           limit:
             process.env.DISABLE_THROTTLE === '1'
@@ -95,6 +100,28 @@ import { resolveThrottleTracker } from './common/throttling/request-tracker';
                   process.env.DEMO_MODE === 'true'
                 ? 1000
                 : 100,
+        },
+        {
+          // A whole school may legitimately share one public NAT address.
+          // Password login therefore gets two simultaneous controls:
+          // - route-level `default` limit: tight per IP+account protection;
+          // - this coarse shared-IP budget: anti-spray protection across many
+          //   different accounts without blocking a normal 30-seat class.
+          name: 'schoolAuthIp',
+          ttl: process.env.DISABLE_THROTTLE === '1' ? 1 : seconds(900),
+          limit:
+            process.env.DISABLE_THROTTLE === '1'
+              ? 10000
+              : process.env.DEMO_MODE === '1' ||
+                  process.env.DEMO_MODE === 'true'
+                ? 1000
+                : 120,
+          getTracker: async (req) => resolveSchoolAuthIpTracker(req),
+          skipIf: (context) =>
+            process.env.DISABLE_THROTTLE === '1' ||
+            !isSchoolSharedIpLogin(
+              context.switchToHttp().getRequest<Record<string, unknown>>(),
+            ),
         },
       ],
     }),
