@@ -39,6 +39,25 @@ function containsRepeat(nodes: BlockProgramNode[]): boolean {
   return nodes.some((node) => node.type === 'REPEAT');
 }
 
+function formatSourcePath(path: number[]): string {
+  if (path.length === 0) return 'program';
+
+  const labels = [`blok ${path[0]! + 1}`];
+  for (let index = 1; index < path.length; index += 1) {
+    const value = path[index]! + 1;
+    const isIteration = index % 2 === 1;
+    const isLast = index === path.length - 1;
+
+    if (isIteration) {
+      labels.push(`opakování ${value}`);
+    } else {
+      labels.push(`${isLast ? 'příkaz' : 'blok smyčky'} ${value}`);
+    }
+  }
+
+  return labels.join(' · ');
+}
+
 function validationMessage(reason: ReturnType<typeof expandBlockProgram>['failureReason']): string | null {
   if (reason === 'EMPTY_REPEAT_BODY') return 'Každá smyčka musí obsahovat alespoň jeden příkaz.';
   if (reason === 'INVALID_REPEAT_COUNT') return `Počet opakování musí být 1–${MAX_REPEAT_COUNT}.`;
@@ -135,7 +154,7 @@ export default function BlockProgrammingPage(): JSX.Element {
           </div>
         </header>
 
-        <div className="grid gap-5 xl:grid-cols-[1.05fr_0.95fr]">
+        <div className="grid items-start gap-5 xl:grid-cols-[1.05fr_0.95fr]">
           <section className="rounded-[30px] border border-white/10 bg-white/[0.035] p-5 shadow-2xl">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
@@ -171,13 +190,13 @@ export default function BlockProgrammingPage(): JSX.Element {
 
             <div className="mt-4 rounded-2xl border border-white/10 bg-slate-950/70 p-4">
               <p className="text-xs font-black uppercase tracking-[0.15em] text-slate-500">Průběh vykonání</p>
-              <div data-testid="block-trace" className="mt-2 max-h-40 space-y-1 overflow-auto text-sm text-slate-300">
+              <div data-testid="block-trace" className="mt-2 max-h-56 space-y-1 overflow-auto text-sm text-slate-300">
                 {!result ? (
                   <p className="text-slate-600">Spusť program a uvidíš rozbalené kroky smyčky.</p>
                 ) : result.steps.map((step) => (
                   <p key={`${step.stepNumber}-${step.sourcePath.join('.')}`}>
                     {step.stepNumber}. {commandLabel[step.command]} → [{step.state.position.x},{step.state.position.y}] {directionGlyph[step.state.direction]}
-                    <span className="text-slate-600"> · blok {step.sourcePath.join(' › ')}</span>
+                    <span className="text-slate-600"> · {formatSourcePath(step.sourcePath)}</span>
                     {step.valid ? '' : ` · ${step.reason}`}
                   </p>
                 ))}
@@ -284,11 +303,13 @@ export default function BlockProgrammingPage(): JSX.Element {
                         ? `Program selhal na vykonaném kroku ${result.failedStep}. Najdi blok, ze kterého tento krok vznikl.`
                         : !result.valid
                           ? 'Program nejde bezpečně spustit. Oprav jeho strukturu a zkus to znovu.'
-                          : !targetReached
-                            ? `Robot skončil na [${result.state.position.x},${result.state.position.y}]. Cíl je [4,2].`
-                            : 'Do cíle ses dostal, ale cílem této mise je nahradit opakující se příkazy blokem Opakuj.'}
+                          : targetReached && usedRepeat
+                            ? 'Smyčka se správně rozbalila do konkrétních kroků a robot skončil v cíli. Další mise ověří, zda princip použiješ i na jiné trase.'
+                            : !targetReached
+                              ? `Robot skončil na [${result.state.position.x},${result.state.position.y}]. Cíl je [4,2].`
+                              : 'Do cíle ses dostal, ale cílem této mise je nahradit opakující se příkazy blokem Opakuj.'}
                     </p>
-                    <p className="mt-3 text-xs font-bold text-slate-500">Počet spuštění: {runCount} · completion ≠ mastery</p>
+                    <p className="mt-3 text-xs font-bold text-slate-500">Počet spuštění: {runCount} · splnění ≠ zvládnutí</p>
                   </div>
                 </div>
               </div>
