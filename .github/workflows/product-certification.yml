@@ -105,8 +105,7 @@ jobs:
           mapped="$(docker compose -f docker-compose.prod.yml -f docker-compose.certification.yml port postgres 5432)"
           echo "postgres_host_mapping=$mapped"
           test "$mapped" = "127.0.0.1:${CERT_POSTGRES_PORT}"
-          npx wait-on --timeout 30000 "tcp:127.0.0.1:${CERT_POSTGRES_PORT}"
-        working-directory: client
+          ./client/node_modules/.bin/wait-on --timeout 30000 "tcp:127.0.0.1:${CERT_POSTGRES_PORT}"
 
       - name: Preseed deterministic school and SUPERADMIN
         shell: bash
