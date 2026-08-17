@@ -17,7 +17,8 @@ concurrency:
 env:
   NODE_VERSION: "20"
   CERT_POSTGRES_PORT: "55432"
-  BASE_URL: http://127.0.0.1:3000
+  CERT_HTTPS_PORT: "3443"
+  BASE_URL: https://localhost:3443
   SCENARIO_REUSE_DB: "1"
   SCENARIO_PRESEEDED: "1"
 
@@ -37,10 +38,11 @@ env:
   PROD_METRICS_INGEST_KEY: Z6R2c8M5v1K9p4X7n3B0q6W2y8H5d1F9a4T7
   PROD_RUN_MIGRATIONS: "1"
   PROD_RUN_SEED: "0"
-  PROD_PUBLIC_APP_URL: http://127.0.0.1:3000
-  PROD_API_URL: http://127.0.0.1:3000
+  PROD_PUBLIC_APP_URL: https://localhost:3443
+  PROD_API_URL: https://localhost:3443
   PROD_API_PROXY_TARGET: http://backend:4200
-  PROD_CORS_ORIGINS: http://127.0.0.1:3000
+  PROD_CORS_ORIGINS: https://localhost:3443
+  PROD_TRUST_PROXY: "2"
   PROD_ALLOW_CROSS_SITE_COOKIES: "0"
   PROD_ALLOW_PUBLIC_ORG_CREATION: "false"
   PROD_FRONTEND_PORT: "3000"
@@ -51,9 +53,9 @@ env:
 
 jobs:
   school-product-certification:
-    name: School Product Certification (production stack)
+    name: School Product Certification (HTTPS production stack)
     runs-on: ubuntu-latest
-    timeout-minutes: 55
+    timeout-minutes: 60
 
     steps:
       - name: Checkout exact candidate commit
@@ -96,6 +98,15 @@ jobs:
       - name: Boot disposable database infrastructure first
         run: docker compose -f docker-compose.prod.yml -f docker-compose.certification.yml up -d postgres redis --wait --wait-timeout 120
 
+      - name: Prove host-only PostgreSQL bridge is reachable
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapped="$(docker compose -f docker-compose.prod.yml -f docker-compose.certification.yml port postgres 5432)"
+          echo "postgres_host_mapping=$mapped"
+          test "$mapped" = "127.0.0.1:${CERT_POSTGRES_PORT}"
+          ./client/node_modules/.bin/wait-on --timeout 30000 "tcp:127.0.0.1:${CERT_POSTGRES_PORT}"
+
       - name: Preseed deterministic school and SUPERADMIN
         shell: bash
         run: |
@@ -106,14 +117,24 @@ jobs:
             --compiler-options '{"module":"CommonJS","moduleResolution":"node"}' \
             -e "require('./client/tests/scenarios/global-setup.ts').default().catch((error) => { console.error(error); process.exit(1); })"
 
-      - name: Build and boot exact production runner images
-        run: docker compose -f docker-compose.prod.yml -f docker-compose.certification.yml up -d --build backend frontend --wait --wait-timeout 240
+      - name: Build and boot exact production runners plus TLS edge
+        run: docker compose -f docker-compose.prod.yml -f docker-compose.certification.yml up -d --build backend frontend certification_tls --wait --wait-timeout 240
 
-      - name: Prove public production surface is reachable
-        run: npx wait-on --timeout 60000 http://127.0.0.1:3000
-        working-directory: client
+      - name: Prove HTTPS production surface is reachable
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 30); do
+            if curl --silent --show-error --fail --insecure --max-time 5 "$BASE_URL" >/dev/null; then
+              echo "https_surface_ready=true"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "HTTPS production surface did not become reachable" >&2
+          exit 1
 
-      - name: Run school-critical black-box journeys
+      - name: Run school-critical HTTPS black-box journeys
         run: npx playwright test --config playwright.product-certification.config.ts
         working-directory: client
 
@@ -122,7 +143,7 @@ jobs:
         with:
           k6-version: "2.1.0"
 
-      - name: Certify 30 concurrent students in 8.A
+      - name: Certify 30 concurrent students in 8.A over HTTPS
         run: k6 run tests/load/school-30-students.k6.js
         working-directory: client
         env:
