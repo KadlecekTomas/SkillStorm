@@ -38,9 +38,9 @@ test.describe('Algorithm Lab block debugging', () => {
     await expect(page.getByTestId('debug-robot')).toHaveAttribute('data-x', '3');
     await expect(page.getByTestId('debug-trace-step-4')).toContainText('OBSTACLE');
     await expect(page.getByTestId('debug-active-iteration')).toHaveText('opakování 4/4');
+    await expect(page.getByTestId('debug-active-source')).toContainText('blok 1 · opakování 4 · příkaz 1');
     await expect(page.getByTestId('debug-failure-evidence')).toContainText('krok 4');
     await expect(page.getByTestId('debug-failure-evidence')).toContainText('blok 1 · opakování 4 · příkaz 1');
-    await expect(page.getByTestId('debug-repeat-block')).toContainText('Trace ukazuje na tento zdrojový blok.');
 
     await page.screenshot({ path: 'test-results/algorithm-lab-22-broken-loop-failure.png', fullPage: true });
 
