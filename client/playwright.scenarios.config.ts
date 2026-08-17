@@ -12,6 +12,7 @@ const { assertTestDatabaseUrl } = require('../server/scripts/db-safety.js');
  *   globalSetup  → recreate + migrate + seed skillstorm_test (Prisma/psql)
  *   webServer    → backend :4200 (guarded to the test DB) + frontend :3001
  *   setup project → log in each role → storageState
+ *   product-proof → isolated fresh browser worker for deterministic video
  *   scenario projects (desktop + mobile) depend on setup
  */
 const E2E_DATABASE_URL = assertTestDatabaseUrl(
@@ -86,8 +87,23 @@ export default defineConfig({
   projects: [
     { name: 'setup', testMatch: /auth\.setup\.ts/ },
     {
+      // Video recording changes Playwright worker fixtures and launches a fresh
+      // browser process. Run it immediately after auth setup so it cannot inherit
+      // memory pressure from the long visual-release matrix.
+      name: 'product-proof',
+      testMatch: /product-proof-video\.scenario\.ts/,
+      dependencies: ['setup'],
+      use: {
+        ...devices['Desktop Chrome'],
+        storageState: storage('student8a'),
+        viewport: { width: 1440, height: 900 },
+        video: 'on',
+      },
+    },
+    {
       name: 'desktop',
       testMatch: /.*\.scenario\.ts/,
+      testIgnore: /product-proof-video\.scenario\.ts/,
       dependencies: ['setup'],
       use: { ...devices['Desktop Chrome'] },
     },
