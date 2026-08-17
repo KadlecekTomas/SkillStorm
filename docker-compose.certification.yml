@@ -1,12 +1,16 @@
 # CI-only overlay for black-box school product certification.
 # The application containers are still built from docker-compose.prod.yml.
 # This file adds only certification mechanics: a loopback-only host bridge for
-# deterministic DB seeding and faster/no-restart health behavior in CI.
+# deterministic DB seeding, an ephemeral TLS edge, and faster/no-restart health
+# behavior in CI.
 #
 # PostgreSQL remains on the production `internal` network for backend traffic.
 # The extra `certification_seed` bridge is joined by PostgreSQL alone; neither
-# Next nor Nest is attached to it. Its published port is bound to 127.0.0.1,
-# so it is reachable by the ephemeral GitHub runner but not externally.
+# Next nor Nest is attached to it. Its published port is bound to 127.0.0.1.
+#
+# Caddy represents the real external HTTPS reverse proxy expected by the
+# production env contract. Its local CA is intentionally ephemeral; browser/k6
+# verification ignores only this CI CA trust error, not TLS itself.
 networks:
   certification_seed:
     driver: bridge
@@ -38,3 +42,16 @@ services:
       timeout: 5s
       retries: 12
       start_period: 10s
+
+  certification_tls:
+    image: caddy:2.11.4-alpine
+    restart: "no"
+    depends_on:
+      frontend:
+        condition: service_healthy
+    volumes:
+      - ./certification/Caddyfile:/etc/caddy/Caddyfile:ro
+    ports:
+      - "127.0.0.1:${CERT_HTTPS_PORT:-3443}:3443"
+    networks:
+      - public
