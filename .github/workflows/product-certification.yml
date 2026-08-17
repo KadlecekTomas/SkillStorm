@@ -19,6 +19,7 @@ env:
   CERT_POSTGRES_PORT: "55432"
   BASE_URL: http://127.0.0.1:3000
   SCENARIO_REUSE_DB: "1"
+  SCENARIO_PRESEEDED: "1"
 
   # Disposable production-shaped environment. The scenario seed has a hard
   # *_test database guard and therefore cannot wipe a real database.
@@ -28,9 +29,7 @@ env:
   PROD_DATABASE_URL: postgresql://skillstorm_cert:ciSyntheticCertificationPostgresPassword123456@postgres:5432/skillstorm_cert_test?schema=public
   DATABASE_URL_TEST: postgresql://skillstorm_cert:ciSyntheticCertificationPostgresPassword123456@127.0.0.1:55432/skillstorm_cert_test?schema=public
 
-  # These values are disposable CI credentials, but intentionally satisfy the
-  # same production secret policy as a real deployment. Do not weaken the
-  # validator for certification runs.
+  # Disposable CI credentials satisfying the same production secret policy.
   PROD_JWT_ACCESS_SECRET: C1A9f4E7b2D8k6M3q5R0u7W4x9Z2n8P6s3V5
   PROD_JWT_REFRESH_SECRET: H8K2m5Q9v3X7c1B6n4R0t8Y5p2W9d7F3a6J1
   PROD_COOKIE_SECRET: N7P4x9C2k6V1m8R5q3Y0b7D4s9H2w6T8f5L3
@@ -93,8 +92,21 @@ jobs:
       - name: Validate production-shaped Docker topology
         run: docker compose -f docker-compose.prod.yml -f docker-compose.certification.yml config --quiet
 
+      - name: Boot disposable database infrastructure first
+        run: docker compose -f docker-compose.prod.yml -f docker-compose.certification.yml up -d postgres redis --wait --wait-timeout 120
+
+      - name: Preseed deterministic school and SUPERADMIN
+        shell: bash
+        run: |
+          set -euo pipefail
+          SCENARIO_PRESEEDED=0 SCENARIO_REUSE_DB=0 \
+            ./server/node_modules/.bin/ts-node \
+            --transpile-only \
+            --compiler-options '{"module":"CommonJS","moduleResolution":"node"}' \
+            -e "require('./client/tests/scenarios/global-setup.ts').default().catch((error) => { console.error(error); process.exit(1); })"
+
       - name: Build and boot exact production runner images
-        run: docker compose -f docker-compose.prod.yml -f docker-compose.certification.yml up -d --build --wait --wait-timeout 240
+        run: docker compose -f docker-compose.prod.yml -f docker-compose.certification.yml up -d --build backend frontend --wait --wait-timeout 240
 
       - name: Prove public production surface is reachable
         run: npx wait-on --timeout 60000 http://127.0.0.1:3000
