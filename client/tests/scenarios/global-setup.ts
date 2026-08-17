@@ -1,13 +1,14 @@
 import { execSync } from 'node:child_process';
-import { writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { assertTestDatabaseUrl } = require('../../../server/scripts/db-safety.js');
 
 /**
- * Scenario suite global setup — runs ONCE before webServer boots.
+ * Scenario suite global setup — runs ONCE before scenario execution.
  *
+ * Normal scenario mode:
  * 1. Enforces the *_test DB guard (no dev/prod DB, no bypass).
  * 2. Brings the schema up to date (migrate deploy) and runs the deterministic
  *    scenario seed (server/prisma/seed/scenarios-e2e.seed.ts), whose own wipe
@@ -16,12 +17,51 @@ const { assertTestDatabaseUrl } = require('../../../server/scripts/db-safety.js'
  * 4. Captures the combined manifest (accounts, ids) to
  *    tests/scenarios/.manifest.json for auth.setup + specs.
  *
+ * Product-certification preseed mode:
+ * - the exact same setup function is invoked BEFORE the production backend is
+ *   started, so the production SUPERADMIN invariant can be satisfied by real
+ *   seeded data instead of weakening bootstrap validation;
+ * - Playwright later invokes globalSetup again with SCENARIO_PRESEEDED=1 and
+ *   only validates/reuses the manifest, avoiding a destructive reseed while
+ *   the production application is serving traffic.
+ *
  * DB work is pure Prisma (migrate deploy + seed) — no psql needed. Crucially
- * it NEVER drops the database: Playwright brings up the webServer (backend)
- * around the same time, and a DROP would force-close its live connections so
- * the first login fails with "Server has closed the connection".
+ * it NEVER drops the database: Playwright may run against an already-started
+ * backend and a DROP would force-close live connections.
  */
 export const MANIFEST_PATH = join(__dirname, '.manifest.json');
+
+function validatePreseededManifest(): void {
+  if (!existsSync(MANIFEST_PATH)) {
+    throw new Error(
+      `SCENARIO_PRESEEDED=1 but manifest does not exist: ${MANIFEST_PATH}`,
+    );
+  }
+
+  const manifest = JSON.parse(readFileSync(MANIFEST_PATH, 'utf8')) as {
+    orgId?: string;
+    students8A?: unknown[];
+    accounts?: { superadmin?: string };
+    superadminUserId?: string;
+  };
+
+  if (
+    !manifest.orgId ||
+    !Array.isArray(manifest.students8A) ||
+    manifest.students8A.length !== 30 ||
+    !manifest.accounts?.superadmin ||
+    !manifest.superadminUserId
+  ) {
+    throw new Error(
+      'Preseeded scenario manifest is incomplete; expected org, 30 students and SUPERADMIN fixture.',
+    );
+  }
+
+  // eslint-disable-next-line no-console
+  console.log(
+    `[scenarios] reusing preseeded org=${manifest.orgId} (8.A ${manifest.students8A.length}, superadmin=1)`,
+  );
+}
 
 export default async function globalSetup() {
   const dbUrl = assertTestDatabaseUrl(
@@ -29,6 +69,12 @@ export default async function globalSetup() {
       'postgresql://postgres:postgres@localhost:5432/skillstorm_test?schema=public',
     'scenarios global-setup',
   );
+
+  if (process.env.SCENARIO_PRESEEDED === '1') {
+    validatePreseededManifest();
+    return;
+  }
+
   const serverDir = join(__dirname, '..', '..', '..', 'server');
   const url = new URL(dbUrl);
   const dbName = decodeURIComponent(url.pathname.replace(/^\//, ''));
