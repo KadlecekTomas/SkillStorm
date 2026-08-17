@@ -28,10 +28,13 @@ env:
   PROD_DATABASE_URL: postgresql://skillstorm_cert:ciSyntheticCertificationPostgresPassword123456@postgres:5432/skillstorm_cert_test?schema=public
   DATABASE_URL_TEST: postgresql://skillstorm_cert:ciSyntheticCertificationPostgresPassword123456@127.0.0.1:55432/skillstorm_cert_test?schema=public
 
-  PROD_JWT_ACCESS_SECRET: ciSyntheticCertificationAccessSecret1234567890abcdef
-  PROD_JWT_REFRESH_SECRET: ciSyntheticCertificationRefreshSecret1234567890abcdef
-  PROD_COOKIE_SECRET: ciSyntheticCertificationCookieSecret1234567890abcdef
-  PROD_METRICS_INGEST_KEY: ciSyntheticCertificationMetricsKey1234567890abcdef
+  # These values are disposable CI credentials, but intentionally satisfy the
+  # same production secret policy as a real deployment. Do not weaken the
+  # validator for certification runs.
+  PROD_JWT_ACCESS_SECRET: C1A9f4E7b2D8k6M3q5R0u7W4x9Z2n8P6s3V5
+  PROD_JWT_REFRESH_SECRET: H8K2m5Q9v3X7c1B6n4R0t8Y5p2W9d7F3a6J1
+  PROD_COOKIE_SECRET: N7P4x9C2k6V1m8R5q3Y0b7D4s9H2w6T8f5L3
+  PROD_METRICS_INGEST_KEY: Z6R2c8M5v1K9p4X7n3B0q6W2y8H5d1F9a4T7
   PROD_RUN_MIGRATIONS: "1"
   PROD_RUN_SEED: "0"
   PROD_PUBLIC_APP_URL: http://127.0.0.1:3000
