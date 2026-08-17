@@ -1,0 +1,132 @@
+name: School Product Certification
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: school-product-certification-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "20"
+  CERT_POSTGRES_PORT: "55432"
+  BASE_URL: http://127.0.0.1:3000
+  SCENARIO_REUSE_DB: "1"
+
+  # Disposable production-shaped environment. The scenario seed has a hard
+  # *_test database guard and therefore cannot wipe a real database.
+  PROD_POSTGRES_USER: skillstorm_cert
+  PROD_POSTGRES_PASSWORD: ciSyntheticCertificationPostgresPassword123456
+  PROD_POSTGRES_DB: skillstorm_cert_test
+  PROD_DATABASE_URL: postgresql://skillstorm_cert:ciSyntheticCertificationPostgresPassword123456@postgres:5432/skillstorm_cert_test?schema=public
+  DATABASE_URL_TEST: postgresql://skillstorm_cert:ciSyntheticCertificationPostgresPassword123456@127.0.0.1:55432/skillstorm_cert_test?schema=public
+
+  PROD_JWT_ACCESS_SECRET: ciSyntheticCertificationAccessSecret1234567890abcdef
+  PROD_JWT_REFRESH_SECRET: ciSyntheticCertificationRefreshSecret1234567890abcdef
+  PROD_COOKIE_SECRET: ciSyntheticCertificationCookieSecret1234567890abcdef
+  PROD_METRICS_INGEST_KEY: ciSyntheticCertificationMetricsKey1234567890abcdef
+  PROD_RUN_MIGRATIONS: "1"
+  PROD_RUN_SEED: "0"
+  PROD_PUBLIC_APP_URL: http://127.0.0.1:3000
+  PROD_API_URL: http://127.0.0.1:3000
+  PROD_API_PROXY_TARGET: http://backend:4200
+  PROD_CORS_ORIGINS: http://127.0.0.1:3000
+  PROD_ALLOW_CROSS_SITE_COOKIES: "0"
+  PROD_ALLOW_PUBLIC_ORG_CREATION: "false"
+  PROD_FRONTEND_PORT: "3000"
+  PROD_ENABLE_RBAC_TELEMETRY_CLIENT: "0"
+  PROD_BETA_MODE: ""
+  PROD_SUPERADMIN_EMAIL: ""
+  PROD_SUPERADMIN_PASSWORD: ""
+
+jobs:
+  school-product-certification:
+    name: School Product Certification (production stack)
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+
+    steps:
+      - name: Checkout exact candidate commit
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            server/package-lock.json
+            client/package-lock.json
+
+      - name: Install backend certification tooling
+        run: npm ci --include=dev
+        working-directory: server
+
+      - name: Generate Prisma client for deterministic school seed
+        run: npm run prisma:generate
+        working-directory: server
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL_TEST }}
+
+      - name: Install frontend certification tooling
+        run: npm ci --include=dev
+        working-directory: client
+
+      - name: Install real Chromium
+        run: npx playwright install --with-deps chromium
+        working-directory: client
+
+      - name: Enforce no internal API mocks in certification journeys
+        run: node scripts/assert-product-certification-no-api-mocks.mjs
+        working-directory: client
+
+      - name: Validate production-shaped Docker topology
+        run: docker compose -f docker-compose.prod.yml -f docker-compose.certification.yml config --quiet
+
+      - name: Build and boot exact production runner images
+        run: docker compose -f docker-compose.prod.yml -f docker-compose.certification.yml up -d --build --wait --wait-timeout 240
+
+      - name: Prove public production surface is reachable
+        run: npx wait-on --timeout 60000 http://127.0.0.1:3000
+        working-directory: client
+
+      - name: Run school-critical black-box journeys
+        run: npm run test:product-certification
+        working-directory: client
+
+      - name: Capture production stack logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.prod.yml -f docker-compose.certification.yml logs --no-color > product-certification-compose.log
+
+      - name: Upload human-reviewable certification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: school-product-certification-evidence
+          path: |
+            client/playwright-report-product-certification
+            client/test-results/**/*.webm
+            client/test-results/**/*.zip
+            client/test-results/**/*.png
+          if-no-files-found: warn
+          retention-days: 21
+
+      - name: Upload production stack failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: school-product-certification-stack-logs
+          path: product-certification-compose.log
+          if-no-files-found: error
+          retention-days: 21
+
+      - name: Destroy disposable certification environment
+        if: always()
+        run: docker compose -f docker-compose.prod.yml -f docker-compose.certification.yml down -v --remove-orphans
