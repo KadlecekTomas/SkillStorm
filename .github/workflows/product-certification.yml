@@ -21,13 +21,14 @@ env:
   SCENARIO_REUSE_DB: "1"
   SCENARIO_PRESEEDED: "1"
 
-  # Disposable production-shaped environment. The scenario seed has a hard
-  # *_test database guard and therefore cannot wipe a real database.
+  # Disposable production-shaped environment. Use the exact database name
+  # accepted by the no-bypass DB safety guard; isolation comes from the
+  # ephemeral PostgreSQL container/volume, not from weakening the whitelist.
   PROD_POSTGRES_USER: skillstorm_cert
   PROD_POSTGRES_PASSWORD: ciSyntheticCertificationPostgresPassword123456
-  PROD_POSTGRES_DB: skillstorm_cert_test
-  PROD_DATABASE_URL: postgresql://skillstorm_cert:ciSyntheticCertificationPostgresPassword123456@postgres:5432/skillstorm_cert_test?schema=public
-  DATABASE_URL_TEST: postgresql://skillstorm_cert:ciSyntheticCertificationPostgresPassword123456@127.0.0.1:55432/skillstorm_cert_test?schema=public
+  PROD_POSTGRES_DB: skillstorm_test
+  PROD_DATABASE_URL: postgresql://skillstorm_cert:ciSyntheticCertificationPostgresPassword123456@postgres:5432/skillstorm_test?schema=public
+  DATABASE_URL_TEST: postgresql://skillstorm_cert:ciSyntheticCertificationPostgresPassword123456@127.0.0.1:55432/skillstorm_test?schema=public
 
   # Disposable CI credentials satisfying the same production secret policy.
   PROD_JWT_ACCESS_SECRET: C1A9f4E7b2D8k6M3q5R0u7W4x9Z2n8P6s3V5
