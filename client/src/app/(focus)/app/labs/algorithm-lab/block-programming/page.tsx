@@ -36,7 +36,7 @@ function samePosition(a: GridPosition, b: GridPosition): boolean {
 }
 
 function containsRepeat(nodes: BlockProgramNode[]): boolean {
-  return nodes.some((node) => node.type === 'REPEAT' && (true || containsRepeat(node.body)));
+  return nodes.some((node) => node.type === 'REPEAT');
 }
 
 function validationMessage(reason: ReturnType<typeof expandBlockProgram>['failureReason']): string | null {
