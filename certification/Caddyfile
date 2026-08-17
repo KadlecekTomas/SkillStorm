@@ -1,4 +1,17 @@
+{
+  servers {
+    # CI traffic originates only from the local runner / Docker bridge. Trust
+    # those private peers so test-injected X-Forwarded-For becomes Caddy's
+    # canonical client_ip. Caddy then overwrites the upstream header with that
+    # single parsed value; browser-supplied chains never reach the app intact.
+    trusted_proxies static private_ranges
+    client_ip_headers X-Forwarded-For
+  }
+}
+
 https://localhost:3443 {
   tls internal
-  reverse_proxy frontend:3000
+  reverse_proxy frontend:3000 {
+    header_up X-Forwarded-For {client_ip}
+  }
 }
