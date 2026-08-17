@@ -50,6 +50,7 @@ services:
       JWT_REFRESH_SECRET: ${PROD_JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
       COOKIE_SECRET: ${PROD_COOKIE_SECRET:?COOKIE_SECRET is required}
       REDIS_URL: redis://redis:6379
+      TRUST_PROXY: "1"
       RUN_MIGRATIONS: ${PROD_RUN_MIGRATIONS:?RUN_MIGRATIONS must be set to 0 or 1}
       RUN_SEED: ${PROD_RUN_SEED:?RUN_SEED must be set to 0 or 1}
       DEMO_SEED: "0"
