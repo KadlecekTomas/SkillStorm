@@ -11,6 +11,8 @@ test.describe('Interactive IT Lab — Data Lab', () => {
     await expect(page.getByTestId('data-issues-count')).toHaveText('3');
     await expect(page.getByTestId('data-decision-r2')).toBeDisabled();
 
+    await page.screenshot({ path: 'test-results/data-lab-01-dirty.png', fullPage: true });
+
     // Corrections must come from the visible source evidence, not a magic reset.
     await page.getByTestId('data-cell-r3-code').fill('A-103');
     await expect(page.getByTestId('data-issues-count')).toHaveText('2');
@@ -42,6 +44,6 @@ test.describe('Interactive IT Lab — Data Lab', () => {
     await expect(page.getByTestId('data-system-result')).toContainText('Informační systém převádí vstupní data');
     await expect(page.getByTestId('data-mastery')).toContainText('Princip ověřen na celé datové cestě');
 
-    await page.screenshot({ path: 'test-results/data-lab-01-mastery.png', fullPage: true });
+    await page.screenshot({ path: 'test-results/data-lab-02-mastery.png', fullPage: true });
   });
 });
