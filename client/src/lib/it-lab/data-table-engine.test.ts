@@ -22,6 +22,12 @@ const dirtyRows: TableRow[] = [
   { id: 'r5', values: { code: 'A-105', borrower: '', daysBorrowed: 3, returned: false } },
 ];
 
+function cleanRows(): TableRow[] {
+  let rows = updateTableCell(dirtyRows, 'r3', 'code', 'A-103');
+  rows = updateTableCell(rows, 'r4', 'daysBorrowed', 12);
+  return updateTableCell(rows, 'r5', 'borrower', 'Klára');
+}
+
 describe('data table engine', () => {
   it('finds only the actionable dirty-data cells', () => {
     expect(validateTable(dirtyRows, columns)).toEqual([
@@ -32,19 +38,15 @@ describe('data table engine', () => {
   });
 
   it('becomes clean after the three evidence-backed corrections', () => {
-    let rows = updateTableCell(dirtyRows, 'r3', 'code', 'A-103');
-    rows = updateTableCell(rows, 'r4', 'daysBorrowed', 12);
-    rows = updateTableCell(rows, 'r5', 'borrower', 'Klára');
-
-    expect(validateTable(rows, columns)).toEqual([]);
+    expect(validateTable(cleanRows(), columns)).toEqual([]);
   });
 
-  it('derives information from clean records instead of hard-coded UI answers', () => {
-    const overdue = queryTable(dirtyRows, [
+  it('derives information from corrected records instead of hard-coded UI answers', () => {
+    const overdue = queryTable(cleanRows(), [
       { columnKey: 'returned', operator: 'EQ', value: false },
       { columnKey: 'daysBorrowed', operator: 'GTE', value: 14 },
     ]);
 
-    expect(overdue.map((row) => row.values.borrower)).toEqual(['Matěj', 'Jonáš']);
+    expect(overdue.map((row) => row.values.borrower)).toEqual(['Matěj']);
   });
 });
