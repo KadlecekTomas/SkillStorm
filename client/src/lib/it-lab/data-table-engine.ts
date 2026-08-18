@@ -36,6 +36,16 @@ export type TablePredicate = {
   value: TableValue;
 };
 
+export type InformationSystemStage = 'INPUT' | 'VALIDATE' | 'STORE' | 'QUERY' | 'OUTPUT';
+
+export const INFORMATION_SYSTEM_PIPELINE: readonly InformationSystemStage[] = [
+  'INPUT',
+  'VALIDATE',
+  'STORE',
+  'QUERY',
+  'OUTPUT',
+] as const;
+
 function isMissing(value: TableValue | undefined): boolean {
   return value === undefined || value === null || value === '';
 }
@@ -142,4 +152,25 @@ function predicateMatches(row: TableRow, predicate: TablePredicate): boolean {
 
 export function queryTable(rows: TableRow[], predicates: TablePredicate[]): TableRow[] {
   return rows.filter((row) => predicates.every((predicate) => predicateMatches(row, predicate)));
+}
+
+function predicateKey(predicate: TablePredicate): string {
+  return `${predicate.columnKey}:${predicate.operator}:${typeof predicate.value}:${String(predicate.value)}`;
+}
+
+export function samePredicateSet(
+  actual: readonly TablePredicate[],
+  expected: readonly TablePredicate[],
+): boolean {
+  if (actual.length !== expected.length) return false;
+  const left = actual.map(predicateKey).sort();
+  const right = expected.map(predicateKey).sort();
+  return left.every((value, index) => value === right[index]);
+}
+
+export function isInformationSystemPipelineValid(stages: readonly string[]): boolean {
+  return (
+    stages.length === INFORMATION_SYSTEM_PIPELINE.length &&
+    stages.every((stage, index) => stage === INFORMATION_SYSTEM_PIPELINE[index])
+  );
 }
