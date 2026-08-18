@@ -4,46 +4,73 @@ import { storageStateFor } from './manifest';
 test.describe('Interactive IT Lab — Data Lab', () => {
   test.use({ storageState: storageStateFor('student8a') });
 
-  test('cleans evidence before deriving information and system output', async ({ page }) => {
+  test('proves data cleaning, table rules, query building, system pipeline and transfer', async ({ page }) => {
     await page.goto('/app/labs/data-lab');
 
     await expect(page.getByTestId('data-lab-heading')).toHaveText('Data Lab');
     await expect(page.getByTestId('data-issues-count')).toHaveText('3');
-    await expect(page.getByTestId('data-decision-r2')).toBeDisabled();
-
+    await expect(page.getByTestId('data-rule-unique_id')).toBeDisabled();
     await page.screenshot({ path: 'test-results/data-lab-01-dirty.png', fullPage: true });
 
-    // Corrections must come from the visible source evidence, not a magic reset.
+    // Data Detective: source-backed corrections must reduce the actual validator.
     await page.getByTestId('data-cell-r3-code').fill('A-103');
     await expect(page.getByTestId('data-issues-count')).toHaveText('2');
-
     await page.getByTestId('data-cell-r4-daysBorrowed').fill('12');
     await expect(page.getByTestId('data-issues-count')).toHaveText('1');
-
     await page.getByTestId('data-cell-r5-borrower').fill('Klára');
-    await expect(page.getByTestId('data-issues-count')).toHaveText('0');
     await expect(page.getByTestId('data-clean')).toContainText('konzistentní');
-    await expect(page.getByTestId('data-decision-r2')).toBeEnabled();
+    await expect(page.getByTestId('data-rule-unique_id')).toBeEnabled();
+    await page.screenshot({ path: 'test-results/data-lab-02-clean.png', fullPage: true });
 
-    // A plausible but unsupported answer is rejected.
-    await page.getByTestId('data-decision-r4').click();
-    await expect(page.getByTestId('data-decision-result')).toContainText('neodpovídá oběma podmínkám');
-    await expect(page.getByTestId('data-system-reminders')).toBeDisabled();
+    // Table Lab: a superficially strict but invalid rule must not unlock the query.
+    await page.getByTestId('data-rule-unique_book').click();
+    await expect(page.getByTestId('data-rules-result')).toContainText('Ještě ne');
+    await expect(page.getByTestId('data-query-returned-false')).toBeDisabled();
+    await page.getByTestId('data-rule-unique_book').click();
+    await page.getByTestId('data-rule-unique_id').click();
+    await page.getByTestId('data-rule-required_borrower').click();
+    await page.getByTestId('data-rule-days_range').click();
+    await expect(page.getByTestId('data-rules-result')).toContainText('Schéma chrání');
+    await expect(page.getByTestId('data-query-returned-false')).toBeEnabled();
 
-    // The correct decision is derived from returned=false AND days>=14.
-    await page.getByTestId('data-decision-r2').click();
-    await expect(page.getByTestId('data-decision-result')).toContainText('Matěj má 18 dní');
-    await expect(page.getByTestId('data-system-reminders')).toBeEnabled();
+    // Query Builder: the result comes from the learner's structured predicates.
+    await page.getByTestId('data-query-returned-false').click();
+    await page.getByTestId('data-query-days-7').click();
+    await expect(page.getByTestId('data-query-result')).toContainText('2 záznamů');
+    await expect(page.getByTestId('data-query-result')).toContainText('Matěj, Jonáš');
+    await expect(page.getByTestId('data-pipeline-input')).toBeDisabled();
 
-    // Understanding the information system is separate learning evidence.
-    await page.getByTestId('data-system-raw').click();
-    await expect(page.getByTestId('data-system-result')).toContainText('není užitečný výstup');
+    await page.getByTestId('data-query-days-14').click();
+    await expect(page.getByTestId('data-query-result')).toContainText('1 záznamů');
+    await expect(page.getByTestId('data-query-result')).toContainText('Matěj');
+    await expect(page.getByTestId('data-pipeline-input')).toBeEnabled();
+    await page.screenshot({ path: 'test-results/data-lab-03-query.png', fullPage: true });
+
+    // Information System Builder: wrong order is rejected before the canonical pipeline.
+    await page.getByTestId('data-pipeline-store').click();
+    await page.getByTestId('data-pipeline-input').click();
+    await page.getByTestId('data-pipeline-validate').click();
+    await page.getByTestId('data-pipeline-query').click();
+    await page.getByTestId('data-pipeline-output').click();
+    await expect(page.getByTestId('data-pipeline-result')).toContainText('není bezpečná nebo logická');
+    await expect(page.getByTestId('data-transfer-t1')).toBeDisabled();
+
+    await page.getByTestId('data-pipeline-clear').click();
+    for (const stage of ['input', 'validate', 'store', 'query', 'output']) {
+      await page.getByTestId(`data-pipeline-${stage}`).click();
+    }
+    await expect(page.getByTestId('data-pipeline-result')).toContainText('Systém nejdřív přijme data');
+    await expect(page.getByTestId('data-transfer-t1')).toBeEnabled();
+    await page.screenshot({ path: 'test-results/data-lab-04-system.png', fullPage: true });
+
+    // Transfer: completion is not mastery. Changed data must be evaluated again.
+    await page.getByTestId('data-transfer-t2').click();
+    await expect(page.getByTestId('data-transfer-result')).toContainText('počet dní sám o sobě nestačí');
     await expect(page.getByTestId('data-mastery')).toHaveCount(0);
 
-    await page.getByTestId('data-system-reminders').click();
-    await expect(page.getByTestId('data-system-result')).toContainText('Informační systém převádí vstupní data');
-    await expect(page.getByTestId('data-mastery')).toContainText('Princip ověřen na celé datové cestě');
-
-    await page.screenshot({ path: 'test-results/data-lab-02-mastery.png', fullPage: true });
+    await page.getByTestId('data-transfer-t1').click();
+    await expect(page.getByTestId('data-transfer-result')).toContainText('Tereza splňuje obě podmínky');
+    await expect(page.getByTestId('data-mastery')).toContainText('Data → pravidla → dotaz → systém → transfer');
+    await page.screenshot({ path: 'test-results/data-lab-05-mastery.png', fullPage: true });
   });
 });
