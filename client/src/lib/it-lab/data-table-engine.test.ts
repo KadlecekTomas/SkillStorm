@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
   INFORMATION_SYSTEM_PIPELINE,
+  inspectIdentityConsistency,
   isInformationSystemPipelineValid,
   queryTable,
   samePredicateSet,
   updateTableCell,
   validateTable,
+  validateTableAgainstEvidence,
   type TableColumn,
+  type TableEvidenceAssertion,
   type TablePredicate,
   type TableRow,
 } from './data-table-engine';
@@ -24,6 +27,12 @@ const dirtyRows: TableRow[] = [
   { id: 'r3', values: { code: 'A-102', borrower: 'Ema', daysBorrowed: 9, returned: true } },
   { id: 'r4', values: { code: 'A-104', borrower: 'Jonáš', daysBorrowed: 42, returned: false } },
   { id: 'r5', values: { code: 'A-105', borrower: '', daysBorrowed: 3, returned: false } },
+];
+
+const evidenceAssertions: TableEvidenceAssertion[] = [
+  { rowId: 'r3', columnKey: 'code', expectedValue: 'A-103' },
+  { rowId: 'r4', columnKey: 'daysBorrowed', expectedValue: 12 },
+  { rowId: 'r5', columnKey: 'borrower', expectedValue: 'Klára' },
 ];
 
 const reminderRule: TablePredicate[] = [
@@ -46,8 +55,39 @@ describe('data table engine', () => {
     ]);
   });
 
-  it('becomes clean after the three evidence-backed corrections', () => {
-    expect(validateTable(cleanRows(), columns)).toEqual([]);
+  it('keeps source-backed cells unresolved when a learner invents schema-valid replacements', () => {
+    let rows = updateTableCell(dirtyRows, 'r3', 'code', 'A-999');
+    rows = updateTableCell(rows, 'r4', 'daysBorrowed', 10);
+    rows = updateTableCell(rows, 'r5', 'borrower', 'Eva');
+
+    expect(validateTable(rows, columns)).toEqual([]);
+    expect(validateTableAgainstEvidence(rows, columns, evidenceAssertions)).toEqual([
+      expect.objectContaining({ rowId: 'r3', columnKey: 'code', kind: 'EVIDENCE_MISMATCH' }),
+      expect.objectContaining({ rowId: 'r4', columnKey: 'daysBorrowed', kind: 'EVIDENCE_MISMATCH' }),
+      expect.objectContaining({ rowId: 'r5', columnKey: 'borrower', kind: 'EVIDENCE_MISMATCH' }),
+    ]);
+  });
+
+  it('becomes clean only after the three evidence-backed corrections', () => {
+    expect(validateTableAgainstEvidence(cleanRows(), columns, evidenceAssertions)).toEqual([]);
+  });
+
+  it('distinguishes an exact duplicate from conflicting records sharing one identity', () => {
+    const exactRows: TableRow[] = [
+      { id: 'a', values: { code: 'X-1', borrower: 'Ada', daysBorrowed: 4, returned: false } },
+      { id: 'b', values: { code: 'X-1', borrower: 'Ada', daysBorrowed: 4, returned: false } },
+    ];
+    const conflictingRows: TableRow[] = [
+      { id: 'a', values: { code: 'X-1', borrower: 'Ada', daysBorrowed: 4, returned: false } },
+      { id: 'b', values: { code: 'X-1', borrower: 'Ben', daysBorrowed: 9, returned: true } },
+    ];
+
+    expect(inspectIdentityConsistency(exactRows, columns, 'code')).toEqual([
+      expect.objectContaining({ kind: 'EXACT_DUPLICATE', rowIds: ['a', 'b'] }),
+    ]);
+    expect(inspectIdentityConsistency(conflictingRows, columns, 'code')).toEqual([
+      expect.objectContaining({ kind: 'CONFLICTING_IDENTITY', rowIds: ['a', 'b'] }),
+    ]);
   });
 
   it('derives information from corrected records instead of hard-coded UI answers', () => {
