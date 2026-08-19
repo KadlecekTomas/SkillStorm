@@ -12,6 +12,14 @@ test.describe('Interactive IT Lab — Data Lab', () => {
     await expect(page.getByTestId('data-rule-unique_id')).toBeDisabled();
     await page.screenshot({ path: 'test-results/data-lab-01-dirty.png', fullPage: true });
 
+    // Schema-valid fabricated replacements must not satisfy source-backed evidence.
+    await page.getByTestId('data-cell-r3-code').fill('A-999');
+    await page.getByTestId('data-cell-r4-daysBorrowed').fill('10');
+    await page.getByTestId('data-cell-r5-borrower').fill('Eva');
+    await expect(page.getByTestId('data-issues-count')).toHaveText('3');
+    await expect(page.getByTestId('data-rule-unique_id')).toBeDisabled();
+    await expect(page.getByText('Zdrojový podklad potvrzuje pro Emu ID A-103.')).toBeVisible();
+
     // Data Detective: source-backed corrections must reduce the actual validator.
     await page.getByTestId('data-cell-r3-code').fill('A-103');
     await expect(page.getByTestId('data-issues-count')).toHaveText('2');
