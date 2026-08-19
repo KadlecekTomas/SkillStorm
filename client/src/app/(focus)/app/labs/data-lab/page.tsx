@@ -7,9 +7,10 @@ import {
   queryTable,
   samePredicateSet,
   updateTableCell,
-  validateTable,
+  validateTableAgainstEvidence,
   type InformationSystemStage,
   type TableColumn,
+  type TableEvidenceAssertion,
   type TableIssue,
   type TablePredicate,
   type TableRow,
@@ -43,6 +44,27 @@ const evidenceNotes = [
   'Výpůjční lístek Emy má ID A-103.',
   'Jonáš má knihu vypůjčenou 12 dní, ne 42.',
   'Na lístku A-105 je čtenářka Klára.',
+];
+
+const evidenceAssertions: TableEvidenceAssertion[] = [
+  {
+    rowId: 'r3',
+    columnKey: 'code',
+    expectedValue: 'A-103',
+    message: 'Zdrojový podklad potvrzuje pro Emu ID A-103.',
+  },
+  {
+    rowId: 'r4',
+    columnKey: 'daysBorrowed',
+    expectedValue: 12,
+    message: 'Zdrojový podklad potvrzuje 12 dní.',
+  },
+  {
+    rowId: 'r5',
+    columnKey: 'borrower',
+    expectedValue: 'Klára',
+    message: 'Zdrojový podklad potvrzuje čtenářku Kláru.',
+  },
 ];
 
 const tableRuleOptions = [
@@ -107,7 +129,10 @@ export default function DataLabPage(): JSX.Element {
   const [pipeline, setPipeline] = useState<PipelineChoice[]>([]);
   const [transferAnswer, setTransferAnswer] = useState<string | null>(null);
 
-  const issues = useMemo(() => validateTable(rows, columns), [rows]);
+  const issues = useMemo(
+    () => validateTableAgainstEvidence(rows, columns, evidenceAssertions),
+    [rows],
+  );
   const isClean = issues.length === 0;
   const tableRulesCorrect = sameStringSet(selectedTableRules, requiredTableRuleIds);
 
