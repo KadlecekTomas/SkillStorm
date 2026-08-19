@@ -133,6 +133,7 @@ export default function DataLabPage(): JSX.Element {
   );
   const isClean = issues.length === 0;
   const tableRulesCorrect = sameStringSet(selectedTableRules, requiredTableRuleIds);
+  const tableRulesComplete = isClean && tableRulesCorrect;
 
   const learnerPredicates = useMemo<TablePredicate[]>(() => {
     if (returnedFilter === null || daysThreshold === null) return [];
@@ -144,26 +145,33 @@ export default function DataLabPage(): JSX.Element {
 
   const queryConfigured = learnerPredicates.length === 2;
   const queryResults = useMemo(
-    () => (isClean && tableRulesCorrect && queryConfigured ? queryTable(rows, learnerPredicates) : []),
-    [isClean, learnerPredicates, queryConfigured, rows, tableRulesCorrect],
+    () => (tableRulesComplete && queryConfigured ? queryTable(rows, learnerPredicates) : []),
+    [learnerPredicates, queryConfigured, rows, tableRulesComplete],
   );
   const queryCorrect = queryConfigured && samePredicateSet(learnerPredicates, reminderRule);
+  const queryComplete = tableRulesComplete && queryCorrect;
   const pipelineCorrect = isInformationSystemPipelineValid(pipeline);
+  const pipelineComplete = queryComplete && pipelineCorrect;
   const transferExpected = useMemo(() => queryTable(transferRows, reminderRule), []);
   const transferCorrect = transferAnswer !== null && transferExpected.some((row) => row.id === transferAnswer);
-  const mastery = isClean && tableRulesCorrect && queryCorrect && pipelineCorrect && transferCorrect;
+  const transferComplete = pipelineComplete && transferCorrect;
+  const mastery = transferComplete;
 
-  function clearDownstream(): void {
-    setReturnedFilter(null);
-    setDaysThreshold(null);
+  function clearAfterQuery(): void {
     setPipeline([]);
     setTransferAnswer(null);
+  }
+
+  function clearAfterRules(): void {
+    setReturnedFilter(null);
+    setDaysThreshold(null);
+    clearAfterQuery();
   }
 
   function updateCell(rowId: string, columnKey: string, value: TableValue): void {
     setRows((current) => updateTableCell(current, rowId, columnKey, value));
     setSelectedTableRules([]);
-    clearDownstream();
+    clearAfterRules();
   }
 
   function toggleTableRule(id: TableRuleId): void {
@@ -171,12 +179,29 @@ export default function DataLabPage(): JSX.Element {
     setSelectedTableRules((current) =>
       current.includes(id) ? current.filter((item) => item !== id) : [...current, id],
     );
-    clearDownstream();
+    clearAfterRules();
+  }
+
+  function updateReturnedFilter(value: boolean): void {
+    if (!tableRulesComplete) return;
+    setReturnedFilter(value);
+    clearAfterQuery();
+  }
+
+  function updateDaysThreshold(value: number): void {
+    if (!tableRulesComplete) return;
+    setDaysThreshold(value);
+    clearAfterQuery();
   }
 
   function appendPipelineStage(stage: PipelineChoice): void {
-    if (!queryCorrect || pipeline.length >= 5 || pipeline.includes(stage)) return;
+    if (!queryComplete || pipeline.length >= 5 || pipeline.includes(stage)) return;
     setPipeline((current) => [...current, stage]);
+    setTransferAnswer(null);
+  }
+
+  function clearPipeline(): void {
+    setPipeline([]);
     setTransferAnswer(null);
   }
 
@@ -208,10 +233,10 @@ export default function DataLabPage(): JSX.Element {
         <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
           {[
             ['1', 'Data', isClean ? 'HOTOVO' : `${issues.length} chyby`],
-            ['2', 'Pravidla', tableRulesCorrect ? 'HOTOVO' : 'čeká'],
-            ['3', 'Dotaz', queryCorrect ? 'HOTOVO' : 'čeká'],
-            ['4', 'Systém', pipelineCorrect ? 'HOTOVO' : 'čeká'],
-            ['5', 'Transfer', transferCorrect ? 'HOTOVO' : 'čeká'],
+            ['2', 'Pravidla', tableRulesComplete ? 'HOTOVO' : 'čeká'],
+            ['3', 'Dotaz', queryComplete ? 'HOTOVO' : 'čeká'],
+            ['4', 'Systém', pipelineComplete ? 'HOTOVO' : 'čeká'],
+            ['5', 'Transfer', transferComplete ? 'HOTOVO' : 'čeká'],
           ].map(([number, label, status]) => (
             <div key={number} className={`rounded-2xl border p-4 ${status === 'HOTOVO' ? 'border-emerald-300/30 bg-emerald-300/10' : 'border-white/10 bg-slate-900/80'}`}>
               <p className="text-xs font-black uppercase tracking-wider text-slate-500">Checkpoint {number}</p>
@@ -302,7 +327,7 @@ export default function DataLabPage(): JSX.Element {
             )}
           </section>
 
-          <section data-testid="data-stage-query" className={`rounded-3xl border p-5 ${tableRulesCorrect ? 'border-violet-300/20 bg-violet-300/[0.05]' : 'border-white/10 bg-slate-900/75 opacity-55'}`}>
+          <section data-testid="data-stage-query" className={`rounded-3xl border p-5 ${tableRulesComplete ? 'border-violet-300/20 bg-violet-300/[0.05]' : 'border-white/10 bg-slate-900/75 opacity-55'}`}>
             <p className="text-xs font-black uppercase tracking-[0.18em] text-violet-300">3 · Query Builder</p>
             <h2 className="mt-1 text-xl font-black">Sestav pravidlo pro upomínku</h2>
             <p className="mt-2 text-sm text-slate-300">Knihovna chce upozornit jen na <strong>nevrácené</strong> výpůjčky staré <strong>alespoň 14 dní</strong>. Sestav dotaz, nehádej jméno.</p>
@@ -311,21 +336,21 @@ export default function DataLabPage(): JSX.Element {
               <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-3">
                 <p className="text-xs font-black uppercase tracking-wider text-slate-500">Vráceno =</p>
                 <div className="mt-2 grid grid-cols-2 gap-2">
-                  <button disabled={!tableRulesCorrect} data-testid="data-query-returned-false" onClick={() => setReturnedFilter(false)} className={`rounded-xl px-3 py-2 text-sm font-black ${returnedFilter === false ? 'bg-violet-300 text-slate-950' : 'bg-white/5 text-slate-200'}`}>NE</button>
-                  <button disabled={!tableRulesCorrect} data-testid="data-query-returned-true" onClick={() => setReturnedFilter(true)} className={`rounded-xl px-3 py-2 text-sm font-black ${returnedFilter === true ? 'bg-violet-300 text-slate-950' : 'bg-white/5 text-slate-200'}`}>ANO</button>
+                  <button disabled={!tableRulesComplete} data-testid="data-query-returned-false" onClick={() => updateReturnedFilter(false)} className={`rounded-xl px-3 py-2 text-sm font-black ${returnedFilter === false ? 'bg-violet-300 text-slate-950' : 'bg-white/5 text-slate-200'}`}>NE</button>
+                  <button disabled={!tableRulesComplete} data-testid="data-query-returned-true" onClick={() => updateReturnedFilter(true)} className={`rounded-xl px-3 py-2 text-sm font-black ${returnedFilter === true ? 'bg-violet-300 text-slate-950' : 'bg-white/5 text-slate-200'}`}>ANO</button>
                 </div>
               </div>
               <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-3">
                 <p className="text-xs font-black uppercase tracking-wider text-slate-500">Dní ≥</p>
                 <div className="mt-2 grid grid-cols-3 gap-2">
                   {[7, 14, 21].map((threshold) => (
-                    <button key={threshold} disabled={!tableRulesCorrect} data-testid={`data-query-days-${threshold}`} onClick={() => setDaysThreshold(threshold)} className={`rounded-xl px-3 py-2 text-sm font-black ${daysThreshold === threshold ? 'bg-violet-300 text-slate-950' : 'bg-white/5 text-slate-200'}`}>{threshold}</button>
+                    <button key={threshold} disabled={!tableRulesComplete} data-testid={`data-query-days-${threshold}`} onClick={() => updateDaysThreshold(threshold)} className={`rounded-xl px-3 py-2 text-sm font-black ${daysThreshold === threshold ? 'bg-violet-300 text-slate-950' : 'bg-white/5 text-slate-200'}`}>{threshold}</button>
                   ))}
                 </div>
               </div>
             </div>
 
-            {queryConfigured && tableRulesCorrect && (
+            {queryConfigured && tableRulesComplete && (
               <div data-testid="data-query-result" className={`mt-4 rounded-2xl p-4 ${queryCorrect ? 'bg-emerald-300/10 text-emerald-100' : 'bg-rose-300/10 text-rose-100'}`}>
                 <p className="text-xs font-black uppercase tracking-wider">Výsledek dotazu · {queryResults.length} záznamů</p>
                 <p className="mt-1 font-black">{queryResults.length ? queryResults.map(borrowerName).join(', ') : 'Nikdo'}</p>
@@ -335,7 +360,7 @@ export default function DataLabPage(): JSX.Element {
           </section>
         </div>
 
-        <section data-testid="data-stage-system" className={`mt-5 rounded-3xl border p-5 ${queryCorrect ? 'border-fuchsia-300/20 bg-fuchsia-300/[0.05]' : 'border-white/10 bg-slate-900/75 opacity-55'}`}>
+        <section data-testid="data-stage-system" className={`mt-5 rounded-3xl border p-5 ${queryComplete ? 'border-fuchsia-300/20 bg-fuchsia-300/[0.05]' : 'border-white/10 bg-slate-900/75 opacity-55'}`}>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <div className="flex items-center gap-2">
@@ -345,14 +370,14 @@ export default function DataLabPage(): JSX.Element {
               <h2 className="mt-1 text-xl font-black">Postav datovou cestu systému</h2>
               <p className="mt-2 text-sm text-slate-300">Klikni na pět kroků ve správném pořadí. Jeden z nabízených kroků do bezpečného systému vůbec nepatří.</p>
             </div>
-            <button data-testid="data-pipeline-clear" disabled={!queryCorrect || pipeline.length === 0} onClick={() => setPipeline([])} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-black disabled:opacity-35">Vyčistit pipeline</button>
+            <button data-testid="data-pipeline-clear" disabled={!queryComplete || pipeline.length === 0} onClick={clearPipeline} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-black disabled:opacity-35">Vyčistit pipeline</button>
           </div>
 
           <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
             {pipelineOptions.map((option) => {
               const used = pipeline.includes(option.id);
               return (
-                <button key={option.id} disabled={!queryCorrect || used || pipeline.length >= 5} data-testid={`data-pipeline-${option.id.toLowerCase().replace('_', '-')}`} onClick={() => appendPipelineStage(option.id)} className="rounded-2xl border border-white/10 bg-slate-950/60 p-4 text-left disabled:cursor-not-allowed disabled:opacity-30">
+                <button key={option.id} disabled={!queryComplete || used || pipeline.length >= 5} data-testid={`data-pipeline-${option.id.toLowerCase().replace('_', '-')}`} onClick={() => appendPipelineStage(option.id)} className="rounded-2xl border border-white/10 bg-slate-950/60 p-4 text-left disabled:cursor-not-allowed disabled:opacity-30">
                   <span className="block font-black text-fuchsia-100">{option.label}</span>
                   <span className="mt-1 block text-xs text-slate-400">{option.detail}</span>
                 </button>
@@ -375,7 +400,7 @@ export default function DataLabPage(): JSX.Element {
           )}
         </section>
 
-        <section data-testid="data-stage-transfer" className={`mt-5 rounded-3xl border p-5 ${pipelineCorrect ? 'border-emerald-300/20 bg-emerald-300/[0.05]' : 'border-white/10 bg-slate-900/75 opacity-55'}`}>
+        <section data-testid="data-stage-transfer" className={`mt-5 rounded-3xl border p-5 ${pipelineComplete ? 'border-emerald-300/20 bg-emerald-300/[0.05]' : 'border-white/10 bg-slate-900/75 opacity-55'}`}>
           <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-300">5 · Transfer</p>
           <h2 className="mt-1 text-xl font-black">Nová třída, stejný princip</h2>
           <p className="mt-2 text-sm text-slate-300">Bez nápovědy použij stejné pravidlo <strong>nevráceno AND ≥ 14 dní</strong> na nový dataset. Completion z předchozí tabulky nestačí.</p>
@@ -389,7 +414,7 @@ export default function DataLabPage(): JSX.Element {
 
           <div className="mt-4 grid gap-2 sm:grid-cols-3">
             {transferRows.map((row) => (
-              <button key={row.id} disabled={!pipelineCorrect} data-testid={`data-transfer-${row.id}`} onClick={() => setTransferAnswer(row.id)} className={`rounded-2xl border px-4 py-3 text-left font-black disabled:opacity-35 ${transferAnswer === row.id ? 'border-emerald-300/40 bg-emerald-300/10' : 'border-white/10 bg-slate-950/60'}`}>{borrowerName(row)}</button>
+              <button key={row.id} disabled={!pipelineComplete} data-testid={`data-transfer-${row.id}`} onClick={() => setTransferAnswer(row.id)} className={`rounded-2xl border px-4 py-3 text-left font-black disabled:opacity-35 ${transferAnswer === row.id ? 'border-emerald-300/40 bg-emerald-300/10' : 'border-white/10 bg-slate-950/60'}`}>{borrowerName(row)}</button>
             ))}
           </div>
 
