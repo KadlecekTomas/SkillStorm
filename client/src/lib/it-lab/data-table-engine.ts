@@ -21,13 +21,30 @@ export type TableIssueKind =
   | 'MISSING_REQUIRED'
   | 'TYPE_MISMATCH'
   | 'DUPLICATE'
-  | 'OUT_OF_RANGE';
+  | 'OUT_OF_RANGE'
+  | 'EVIDENCE_MISMATCH';
 
 export type TableIssue = {
   rowId: string;
   columnKey: string;
   kind: TableIssueKind;
   message: string;
+};
+
+export type TableEvidenceAssertion = {
+  rowId: string;
+  columnKey: string;
+  expectedValue: TableValue;
+  message?: string;
+};
+
+export type TableIdentityIssueKind = 'EXACT_DUPLICATE' | 'CONFLICTING_IDENTITY';
+
+export type TableIdentityIssue = {
+  kind: TableIdentityIssueKind;
+  columnKey: string;
+  value: TableValue;
+  rowIds: string[];
 };
 
 export type TablePredicate = {
@@ -58,6 +75,12 @@ function matchesType(value: TableValue, type: TableFieldType): boolean {
 
 function uniqueValueKey(value: TableValue): string {
   return `${typeof value}:${String(value)}`;
+}
+
+function stableRowFingerprint(row: TableRow, columns: TableColumn[]): string {
+  return columns
+    .map((column) => `${column.key}=${uniqueValueKey(row.values[column.key] ?? null)}`)
+    .join('|');
 }
 
 export function validateTable(rows: TableRow[], columns: TableColumn[]): TableIssue[] {
@@ -124,6 +147,70 @@ export function validateTable(rows: TableRow[], columns: TableColumn[]): TableIs
         }
       }
     }
+  }
+
+  return issues;
+}
+
+export function validateTableAgainstEvidence(
+  rows: TableRow[],
+  columns: TableColumn[],
+  evidence: readonly TableEvidenceAssertion[],
+): TableIssue[] {
+  const schemaIssues = validateTable(rows, columns);
+  const schemaIssueCells = new Set(
+    schemaIssues.map((issue) => `${issue.rowId}:${issue.columnKey}`),
+  );
+  const rowById = new Map(rows.map((row) => [row.id, row]));
+  const columnByKey = new Map(columns.map((column) => [column.key, column]));
+  const evidenceIssues: TableIssue[] = [];
+
+  for (const assertion of evidence) {
+    const cellKey = `${assertion.rowId}:${assertion.columnKey}`;
+    if (schemaIssueCells.has(cellKey)) continue;
+
+    const row = rowById.get(assertion.rowId);
+    const column = columnByKey.get(assertion.columnKey);
+    if (!row || !column || row.values[assertion.columnKey] !== assertion.expectedValue) {
+      evidenceIssues.push({
+        rowId: assertion.rowId,
+        columnKey: assertion.columnKey,
+        kind: 'EVIDENCE_MISMATCH',
+        message: assertion.message ?? `${column?.label ?? assertion.columnKey} neodpovídá zdrojovému podkladu.`,
+      });
+    }
+  }
+
+  return [...schemaIssues, ...evidenceIssues];
+}
+
+export function inspectIdentityConsistency(
+  rows: TableRow[],
+  columns: TableColumn[],
+  identityKey: string,
+): TableIdentityIssue[] {
+  const groups = new Map<string, TableRow[]>();
+
+  for (const row of rows) {
+    const identity = row.values[identityKey];
+    if (isMissing(identity)) continue;
+    const key = uniqueValueKey(identity as TableValue);
+    groups.set(key, [...(groups.get(key) ?? []), row]);
+  }
+
+  const issues: TableIdentityIssue[] = [];
+  for (const group of groups.values()) {
+    if (group.length < 2) continue;
+
+    const fingerprints = new Set(
+      group.map((row) => stableRowFingerprint(row, columns)),
+    );
+    issues.push({
+      kind: fingerprints.size === 1 ? 'EXACT_DUPLICATE' : 'CONFLICTING_IDENTITY',
+      columnKey: identityKey,
+      value: group[0]?.values[identityKey] ?? null,
+      rowIds: group.map((row) => row.id),
+    });
   }
 
   return issues;
