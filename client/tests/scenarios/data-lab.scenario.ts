@@ -90,6 +90,18 @@ test.describe('Interactive IT Lab — Data Lab', () => {
     }
     await expect(page.getByTestId('data-pipeline-result')).toContainText('Systém nejdřív přijme data');
     await expect(page.getByTestId('data-transfer-t1')).toBeEnabled();
+
+    // Changing an upstream query must destroy the already-completed pipeline and transfer eligibility.
+    await page.getByTestId('data-query-days-7').click();
+    await expect(page.getByTestId('data-pipeline-sequence')).toContainText('1. —');
+    await expect(page.getByTestId('data-transfer-t1')).toBeDisabled();
+    await page.getByTestId('data-query-days-14').click();
+    await expect(page.getByTestId('data-pipeline-sequence')).toContainText('1. —');
+    await expect(page.getByTestId('data-transfer-t1')).toBeDisabled();
+    for (const stage of ['input', 'validate', 'store', 'query', 'output']) {
+      await page.getByTestId(`data-pipeline-${stage}`).click();
+    }
+    await expect(page.getByTestId('data-transfer-t1')).toBeEnabled();
     await page.screenshot({ path: 'test-results/data-lab-04-system.png', fullPage: true });
 
     // Transfer: completion is not mastery. Changed data must be evaluated again.
@@ -99,6 +111,19 @@ test.describe('Interactive IT Lab — Data Lab', () => {
 
     await page.getByTestId('data-transfer-t1').click();
     await expect(page.getByTestId('data-transfer-result')).toContainText('Tereza splňuje obě podmínky');
+    await expect(page.getByTestId('data-mastery')).toContainText('Data → pravidla → dotaz → systém → transfer');
+
+    // Clearing the pipeline must also invalidate a previously correct transfer answer.
+    await page.getByTestId('data-pipeline-clear').click();
+    await expect(page.getByTestId('data-transfer-result')).toHaveCount(0);
+    await expect(page.getByTestId('data-transfer-t1')).toBeDisabled();
+    await expect(page.getByTestId('data-mastery')).toHaveCount(0);
+    for (const stage of ['input', 'validate', 'store', 'query', 'output']) {
+      await page.getByTestId(`data-pipeline-${stage}`).click();
+    }
+    await expect(page.getByTestId('data-transfer-t1')).toBeEnabled();
+    await expect(page.getByTestId('data-mastery')).toHaveCount(0);
+    await page.getByTestId('data-transfer-t1').click();
     await expect(page.getByTestId('data-mastery')).toContainText('Data → pravidla → dotaz → systém → transfer');
     await page.screenshot({ path: 'test-results/data-lab-05-mastery.png', fullPage: true });
   });
