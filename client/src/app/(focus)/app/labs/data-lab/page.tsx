@@ -34,6 +34,10 @@ const initialRows: TableRow[] = [
   { id: 'r5', values: { code: 'A-105', borrower: '', className: '4.A', item: 'Datový detektiv', daysBorrowed: 3, returned: false } },
 ];
 
+let canonicalRows = updateTableCell(initialRows, 'r3', 'code', 'A-103');
+canonicalRows = updateTableCell(canonicalRows, 'r4', 'daysBorrowed', 12);
+canonicalRows = updateTableCell(canonicalRows, 'r5', 'borrower', 'Klára');
+
 const transferRows: TableRow[] = [
   { id: 't1', values: { code: 'B-201', borrower: 'Tereza', className: '5.A', item: 'Sítě kolem nás', daysBorrowed: 16, returned: false } },
   { id: 't2', values: { code: 'B-202', borrower: 'David', className: '5.A', item: 'Robotické mise', daysBorrowed: 22, returned: true } },
@@ -46,26 +50,20 @@ const evidenceNotes = [
   'Na lístku A-105 je čtenářka Klára.',
 ];
 
-const evidenceAssertions: TableEvidenceAssertion[] = [
-  {
-    rowId: 'r3',
-    columnKey: 'code',
-    expectedValue: 'A-103',
-    message: 'Zdrojový podklad potvrzuje pro Emu ID A-103.',
-  },
-  {
-    rowId: 'r4',
-    columnKey: 'daysBorrowed',
-    expectedValue: 12,
-    message: 'Zdrojový podklad potvrzuje 12 dní.',
-  },
-  {
-    rowId: 'r5',
-    columnKey: 'borrower',
-    expectedValue: 'Klára',
-    message: 'Zdrojový podklad potvrzuje čtenářku Kláru.',
-  },
-];
+const evidenceMessages: Record<string, string> = {
+  'r3:code': 'Zdrojový podklad potvrzuje pro Emu ID A-103.',
+  'r4:daysBorrowed': 'Zdrojový podklad potvrzuje 12 dní.',
+  'r5:borrower': 'Zdrojový podklad potvrzuje čtenářku Kláru.',
+};
+
+const evidenceAssertions: TableEvidenceAssertion[] = canonicalRows.flatMap((row) =>
+  columns.map((column) => ({
+    rowId: row.id,
+    columnKey: column.key,
+    expectedValue: row.values[column.key] ?? null,
+    message: evidenceMessages[`${row.id}:${column.key}`] ?? `${column.label} neodpovídá zdrojovému podkladu.`,
+  })),
+);
 
 const tableRuleOptions = [
   { id: 'UNIQUE_ID', label: 'ID záznamu musí být jedinečné', detail: 'jinak nejde bezpečně rozlišit dva záznamy' },
