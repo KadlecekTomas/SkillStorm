@@ -12,6 +12,13 @@ test.describe('Interactive IT Lab — Data Lab', () => {
     await expect(page.getByTestId('data-rule-unique_id')).toBeDisabled();
     await page.screenshot({ path: 'test-results/data-lab-01-dirty.png', fullPage: true });
 
+    // A learner must not be able to alter an already-correct source record to change the later query result.
+    await page.getByTestId('data-cell-r2-daysBorrowed').fill('1');
+    await expect(page.getByTestId('data-issues-count')).toHaveText('4');
+    await expect(page.getByText('Dní neodpovídá zdrojovému podkladu.')).toBeVisible();
+    await page.getByTestId('data-cell-r2-daysBorrowed').fill('18');
+    await expect(page.getByTestId('data-issues-count')).toHaveText('3');
+
     // Schema-valid fabricated replacements must not satisfy source-backed evidence.
     await page.getByTestId('data-cell-r3-code').fill('A-999');
     await page.getByTestId('data-cell-r4-daysBorrowed').fill('10');
