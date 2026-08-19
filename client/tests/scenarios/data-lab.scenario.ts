@@ -48,6 +48,20 @@ test.describe('Interactive IT Lab — Data Lab', () => {
     await expect(page.getByTestId('data-rules-result')).toContainText('Schéma chrání');
     await expect(page.getByTestId('data-query-returned-false')).toBeEnabled();
 
+    // Editing evidence after a downstream checkpoint must invalidate that checkpoint and everything after it.
+    await page.getByTestId('data-cell-r2-daysBorrowed').fill('1');
+    await expect(page.getByTestId('data-issues-count')).toHaveText('1');
+    await expect(page.getByTestId('data-rules-result')).toHaveCount(0);
+    await expect(page.getByTestId('data-query-returned-false')).toBeDisabled();
+    await page.getByTestId('data-cell-r2-daysBorrowed').fill('18');
+    await expect(page.getByTestId('data-clean')).toContainText('konzistentní');
+    await expect(page.getByTestId('data-query-returned-false')).toBeDisabled();
+    await page.getByTestId('data-rule-unique_id').click();
+    await page.getByTestId('data-rule-required_borrower').click();
+    await page.getByTestId('data-rule-days_range').click();
+    await expect(page.getByTestId('data-rules-result')).toContainText('Schéma chrání');
+    await expect(page.getByTestId('data-query-returned-false')).toBeEnabled();
+
     // Query Builder: the result comes from the learner's structured predicates.
     await page.getByTestId('data-query-returned-false').click();
     await page.getByTestId('data-query-days-7').click();
