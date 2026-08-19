@@ -162,6 +162,7 @@ export default function DataLabPage(): JSX.Element {
 
   function updateCell(rowId: string, columnKey: string, value: TableValue): void {
     setRows((current) => updateTableCell(current, rowId, columnKey, value));
+    setSelectedTableRules([]);
     clearDownstream();
   }
 
