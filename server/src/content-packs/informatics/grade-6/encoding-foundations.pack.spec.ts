@@ -3,6 +3,7 @@ import { fzsChodovicka2023Grade6InformaticsAdapter } from '@/content-packs/infor
 import { validateLessonDefinition } from '@/lesson-experience/lesson-publication';
 import type { CreateLessonExperienceVersionDto } from '@/lesson-experience/dto/lesson-experience.dto';
 import { grade6EncodingFoundationsPack } from './encoding-foundations.pack';
+import { grade6EncodingYearPlanExpansion } from './encoding-foundations.year-plan';
 
 const RESOLVED_ACTIVITY_VERSION_ID = '00000000-0000-4000-8000-000000000001';
 
@@ -88,6 +89,28 @@ describe('grade6EncodingFoundationsPack', () => {
         expect(mapping.outcomeExternalCode).not.toMatch(
           /^[0-9a-f]{8}-[0-9a-f-]{27}$/i,
         );
+      }
+    }
+  });
+
+  it('expands the existing IT-0 year pack instead of creating a second year plan', () => {
+    const lessonSlugs = new Set(
+      grade6EncodingFoundationsPack.lessons.map((lesson) => lesson.shell.slug),
+    );
+
+    expect(grade6EncodingYearPlanExpansion.parentYearPackId).toBe(
+      'skillstorm-informatics-zs-4-9',
+    );
+    expect(grade6EncodingYearPlanExpansion.strategy).toBe('EXPAND');
+    expect(
+      grade6EncodingYearPlanExpansion.mappings.map(
+        (mapping) => mapping.yearPlanLessonId,
+      ),
+    ).toEqual(['IT-G6-L04', 'IT-G6-L05']);
+
+    for (const mapping of grade6EncodingYearPlanExpansion.mappings) {
+      for (const lessonRef of mapping.lessonRefs) {
+        expect(lessonSlugs.has(lessonRef)).toBe(true);
       }
     }
   });
