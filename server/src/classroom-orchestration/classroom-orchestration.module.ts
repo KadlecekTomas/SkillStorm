@@ -8,6 +8,7 @@ import { AlgorithmLabQuickStartService } from './algorithm-lab-quick-start.servi
 import { BuildPcAnalyticsService } from './build-pc-analytics.service';
 import { ClassroomOrchestrationController } from './classroom-orchestration.controller';
 import { ClassroomOrchestrationService } from './classroom-orchestration.service';
+import { ClassroomStudentAccessService } from './classroom-student-access.service';
 import { NetworkedCoopProgramService } from './networked-coop-program.service';
 import { NetworkedCoopService } from './networked-coop.service';
 
@@ -21,6 +22,7 @@ import { NetworkedCoopService } from './networked-coop.service';
     AlgorithmLabQuickStartService,
     BuildPcAnalyticsService,
     ClassroomOrchestrationService,
+    ClassroomStudentAccessService,
     NetworkedCoopProgramService,
     NetworkedCoopService,
     PrismaService,
@@ -31,6 +33,7 @@ import { NetworkedCoopService } from './networked-coop.service';
     AlgorithmLabJoinCodeService,
     AlgorithmLabQuickStartService,
     ClassroomOrchestrationService,
+    ClassroomStudentAccessService,
     NetworkedCoopProgramService,
     NetworkedCoopService,
   ],
