@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { test as base, expect, type Page, type BrowserContext } from '@playwright/test';
 import { loadManifest, storageStateFor, type ScenarioManifest } from './manifest';
 
@@ -5,17 +6,21 @@ import { loadManifest, storageStateFor, type ScenarioManifest } from './manifest
  * Shared fixtures for the scenario suite.
  *
  * - `manifest`: seeded accounts + ids.
- * - `asRole(role)`: opens a fresh context already authenticated as that role
- *   via the storageState saved in auth.setup — no re-login per test.
- * - `loginPage(email)`: a raw login (for session-expiry / rate-limit specs
- *   that must exercise the login form itself).
+ * - `asRole(role)`: opens a fresh context already authenticated as that role.
+ *
+ * HTTPS certification uses an ephemeral CI CA. Contexts created manually from
+ * the raw browser fixture must opt into ignoring that CA trust error themselves;
+ * project-level `use.ignoreHTTPSErrors` is not relied on for these contexts.
+ *
+ * Authenticated state-changing requests also carry the browser-readable CSRF
+ * token from the matching storage state. This mirrors the real frontend
+ * contract instead of bypassing CSRF in production-shaped tests.
  */
 type Fixtures = {
   manifest: ScenarioManifest;
   asRole: (role: RoleKey) => Promise<{ context: BrowserContext; page: Page }>;
 };
 
-/** A random public-ish client IP for X-Forwarded-For (throttle isolation). */
 function randomClientIp(): string {
   return `10.${1 + Math.floor(Math.random() * 254)}.${Math.floor(
     Math.random() * 254,
@@ -32,22 +37,35 @@ export type RoleKey =
   | 'superadmin'
   | 'otherOrgStudent';
 
+type StorageState = {
+  cookies?: Array<{ name?: string; value?: string }>;
+};
+
+export function csrfHeadersFor(role: RoleKey): Record<string, string> {
+  const state = JSON.parse(
+    readFileSync(storageStateFor(role), 'utf8'),
+  ) as StorageState;
+  const csrf = state.cookies?.find((cookie) => cookie.name === 'ss_csrf')?.value;
+  if (!csrf) {
+    throw new Error(`Missing ss_csrf cookie in scenario storage state for ${role}`);
+  }
+  return { 'x-csrf-token': csrf };
+}
+
 export const test = base.extend<Fixtures>({
   manifest: async ({}, use) => {
     await use(loadManifest());
   },
-  asRole: async ({ browser }, use) => {
+  asRole: async ({ browser, baseURL }, use) => {
     const opened: BrowserContext[] = [];
     const factory = async (role: RoleKey) => {
-      // Backend throttling is ON (the rate-limit block needs it). Give every
-      // functional context a fresh RANDOM client IP (TRUST_PROXY=1 honours
-      // X-Forwarded-For). A per-test counter would REUSE the same IPs across
-      // tests within the 60s global-limit window — a heavy flow (the backbone
-      // teacher fires dozens of requests) then exhausts that IP's bucket and a
-      // later test on the same IP gets 429. Random IPs never collide.
       const context = await browser.newContext({
         storageState: storageStateFor(role),
-        extraHTTPHeaders: { 'X-Forwarded-For': randomClientIp() },
+        extraHTTPHeaders: {
+          'X-Forwarded-For': randomClientIp(),
+          ...csrfHeadersFor(role),
+        },
+        ignoreHTTPSErrors: Boolean(baseURL?.startsWith('https://')),
       });
       opened.push(context);
       const page = await context.newPage();
@@ -60,7 +78,6 @@ export const test = base.extend<Fixtures>({
 
 export { expect };
 
-/** Perform a real UI login on the given (unauthenticated) page. */
 export async function uiLogin(page: Page, email: string, password: string) {
   await page.goto('/login', { waitUntil: 'commit' });
   await page.getByLabel(/e-?mail/i).fill(email);
@@ -68,7 +85,6 @@ export async function uiLogin(page: Page, email: string, password: string) {
   await page.getByRole('button', { name: /sign in|přihlásit/i }).click();
 }
 
-/** Open the student's first active assignment in Focus Test Mode. */
 export async function openActiveAssignment(page: Page): Promise<string> {
   const res = await page.request.get('/api/assignments/overview');
   expect(res.ok(), 'assignments/overview should load').toBeTruthy();

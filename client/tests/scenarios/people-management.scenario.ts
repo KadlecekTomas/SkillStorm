@@ -1,4 +1,5 @@
 import { expect, request as playwrightRequest, test } from '@playwright/test';
+import { csrfHeadersFor } from './fixtures';
 import { loadManifest, storageStateFor } from './manifest';
 
 const SIZES = [
@@ -128,9 +129,14 @@ test.describe('school people management', () => {
       expect(updated?.name).toBe(nextName);
       expect(updated?.email).toBe(nextEmail);
     } finally {
-      await page.request.patch(`/api/school-people/${teacher!.membershipId}`, {
-        data: { name: originalName, email: originalEmail },
-      });
+      const restoreResponse = await page.request.patch(
+        `/api/school-people/${teacher!.membershipId}`,
+        {
+          data: { name: originalName, email: originalEmail },
+          headers: csrfHeadersFor('director'),
+        },
+      );
+      expect(restoreResponse.ok(), 'staff fixture cleanup restores original identity').toBeTruthy();
     }
   });
 
@@ -187,22 +193,30 @@ test.describe('school people management', () => {
       expect(readBack.membership.user.name).toBe(nextName);
       expect(readBack.membership.user.email).toBe(nextEmail);
     } finally {
-      await page.request.patch(`/api/students/${studentId}/profile`, {
+      const restoreResponse = await page.request.patch(`/api/students/${studentId}/profile`, {
         data: { name: originalName, email: originalEmail },
+        headers: csrfHeadersFor('director'),
       });
+      expect(restoreResponse.ok(), 'student fixture cleanup restores original identity').toBeTruthy();
     }
   });
 
   test('teacher cannot issue a leadership invite through the API', async () => {
+    const baseURL = process.env.BASE_URL || 'http://127.0.0.1:3001';
     const teacherRequest = await playwrightRequest.newContext({
-      baseURL: process.env.BASE_URL || 'http://127.0.0.1:3001',
+      baseURL,
       storageState: storageStateFor('teacher'),
+      ignoreHTTPSErrors: baseURL.startsWith('https://'),
+      extraHTTPHeaders: csrfHeadersFor('teacher'),
     });
     try {
       const response = await teacherRequest.post('/api/invites', {
         data: { type: 'ORG_ONLY', role: 'DIRECTOR' },
       });
-      expect(response.status()).toBe(403);
+      expect(
+        response.status(),
+        'leadership invite is forbidden by RBAC after CSRF validation succeeds',
+      ).toBe(403);
     } finally {
       await teacherRequest.dispose();
     }

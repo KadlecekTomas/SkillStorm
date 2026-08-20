@@ -8,10 +8,10 @@ export type ThrottleRequest = {
   url?: string;
   cookies?: Record<string, string | undefined>;
   headers?: Record<string, unknown>;
+  body?: Record<string, unknown>;
 };
 
 const IP_SCOPED_AUTH_PATHS = new Set([
-  '/auth/login',
   '/auth/register',
   '/auth/sso/google',
   '/auth/refresh',
@@ -19,10 +19,16 @@ const IP_SCOPED_AUTH_PATHS = new Set([
   '/auth/reset-password',
 ]);
 
+const SCHOOL_SHARED_IP_LOGIN_PATHS = new Set(['/auth/login']);
+
 function normalizedPath(req: ThrottleRequest): string {
   const raw = req.originalUrl || req.url || '';
   const pathname = raw.split('?')[0] ?? '';
   return pathname.replace(/^\/api(?=\/)/, '');
+}
+
+function sha256(value: string): string {
+  return createHash('sha256').update(value).digest('hex');
 }
 
 function bearerToken(req: ThrottleRequest): string | null {
@@ -34,16 +40,41 @@ function bearerToken(req: ThrottleRequest): string | null {
   return token || null;
 }
 
+function normalizedLoginEmail(req: ThrottleRequest): string | null {
+  const email = req.body?.email;
+  if (typeof email !== 'string') return null;
+  const normalized = email.trim().toLowerCase();
+  return normalized || null;
+}
+
+export function isSchoolSharedIpLogin(req: ThrottleRequest): boolean {
+  return SCHOOL_SHARED_IP_LOGIN_PATHS.has(normalizedPath(req));
+}
+
+export function resolveSchoolAuthIpTracker(req: ThrottleRequest): string {
+  return `ip:${req.ip || 'unknown'}`;
+}
+
 /**
- * School networks commonly put many teachers/tablets behind one public IP.
- * A pure IP tracker would therefore let one busy classroom throttle another.
- * Sensitive public auth routes remain IP-scoped, while normal authenticated
- * traffic is isolated per access-token session. The token is never stored in
- * the throttle key; only a one-way SHA-256 digest is used.
+ * School networks commonly put many users behind one public IP.
+ *
+ * Normal authenticated traffic is isolated per access-token session. Password
+ * login keeps its tight route-level limit, but scopes it to IP + normalized
+ * account rather than IP alone so distinct pupils behind one NAT do not block
+ * one another. The account identifier is represented only by a SHA-256 digest.
+ * A second named throttler supplies the coarse shared-IP anti-spray budget.
  */
 export function resolveThrottleTracker(req: ThrottleRequest): string {
   const ip = req.ip || 'unknown';
-  if (IP_SCOPED_AUTH_PATHS.has(normalizedPath(req))) {
+  const path = normalizedPath(req);
+
+  if (SCHOOL_SHARED_IP_LOGIN_PATHS.has(path)) {
+    const email = normalizedLoginEmail(req);
+    if (!email) return `ip:${ip}`;
+    return `login-account:${sha256(`${ip}|${email}`)}`;
+  }
+
+  if (IP_SCOPED_AUTH_PATHS.has(path)) {
     return `ip:${ip}`;
   }
 
@@ -52,6 +83,5 @@ export function resolveThrottleTracker(req: ThrottleRequest): string {
     return `ip:${ip}`;
   }
 
-  const digest = createHash('sha256').update(token).digest('hex');
-  return `session:${digest}`;
+  return `session:${sha256(token)}`;
 }

@@ -1,8 +1,8 @@
-FROM node:20-slim AS base
+FROM node:24.19.0-slim AS base
 WORKDIR /app
 ENV NODE_ENV=production
 
-FROM node:20-slim AS deps
+FROM node:24.19.0-slim AS deps
 WORKDIR /app
 COPY package*.json ./
 COPY prisma ./prisma
@@ -10,7 +10,7 @@ RUN apt-get update -y && apt-get install -y openssl ca-certificates && rm -rf /v
 RUN npm ci
 RUN npx prisma generate
 
-FROM node:20-slim AS builder
+FROM node:24.19.0-slim AS builder
 WORKDIR /app
 RUN apt-get update -y && apt-get install -y openssl ca-certificates && rm -rf /var/lib/apt/lists/*
 COPY --from=deps /app/node_modules ./node_modules
@@ -26,7 +26,7 @@ RUN npx prisma generate
 # Default: run full seed (override in compose if needed)
 CMD ["npx", "ts-node", "prisma/seed/full-walkthrough-seed.ts"]
 
-FROM node:20-slim AS runner
+FROM node:24.19.0-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=4200
