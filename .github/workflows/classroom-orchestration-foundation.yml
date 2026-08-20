@@ -9,6 +9,7 @@ on:
       - 'server/src/live-sessions/**'
       - 'server/src/app.module.ts'
       - 'server/test/e2e/classroom-orchestration*.e2e-spec.ts'
+      - 'server/test/e2e/classroom-enrollment-boundary*.e2e-spec.ts'
       - 'server/test/e2e/live-sessions.e2e-spec.ts'
       - '.github/workflows/classroom-orchestration-foundation.yml'
   push:
@@ -20,6 +21,7 @@ on:
       - 'server/src/live-sessions/**'
       - 'server/src/app.module.ts'
       - 'server/test/e2e/classroom-orchestration*.e2e-spec.ts'
+      - 'server/test/e2e/classroom-enrollment-boundary*.e2e-spec.ts'
       - 'server/test/e2e/live-sessions.e2e-spec.ts'
       - '.github/workflows/classroom-orchestration-foundation.yml'
 
@@ -89,6 +91,10 @@ jobs:
         working-directory: server
         run: npm test -- classroom-orchestration.constants.spec.ts --runInBand
 
+      - name: Algorithm Lab code anti-enumeration boundary
+        working-directory: server
+        run: npm test -- algorithm-lab-join-code.service.spec.ts --runInBand
+
       - name: Preserve legacy BOARD_ONLY Bleskovka
         working-directory: server
         run: npx jest --config ./test/jest-e2e.config.js --testPathPattern='live-sessions.e2e-spec.ts' --runInBand
@@ -100,3 +106,7 @@ jobs:
       - name: Run D2-C HTTP RBAC and tenant governance
         working-directory: server
         run: npx jest --config ./test/jest-e2e.config.js --testPathPattern='classroom-orchestration-rbac.e2e-spec.ts' --runInBand
+
+      - name: Run class-bound enrollment RBAC against PostgreSQL
+        working-directory: server
+        run: npx jest --config ./test/jest-e2e.config.js --testPathPattern='classroom-enrollment-boundary.rbac.e2e-spec.ts' --runInBand
