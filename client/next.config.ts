@@ -25,6 +25,23 @@ const nextConfig: NextConfig = {
   // Readable stack traces in Sentry: ship browser source maps. Upload to
   // Sentry (optional) is documented in docs/ops/monitoring.md.
   productionBrowserSourceMaps: true,
+  // Legacy dashboard bookmarks must redirect before React rendering/hydration.
+  // Temporary redirects avoid permanently caching aliases while the app routes
+  // continue to evolve.
+  async redirects() {
+    return [
+      { source: "/dashboard", destination: "/app", permanent: false },
+      { source: "/dashboard/tests", destination: "/app/tests", permanent: false },
+      {
+        source: "/dashboard/assignments",
+        destination: "/app/assignments",
+        permanent: false,
+      },
+      { source: "/dashboard/settings", destination: "/app/settings", permanent: false },
+      { source: "/dashboard/subjects", destination: "/app/settings", permanent: false },
+      { source: "/dashboard/teachers", destination: "/app/people", permanent: false },
+    ];
+  },
   // Closed beta: noindex in production so search engines do not index
   async headers() {
     if (process.env.NODE_ENV !== "production") return [];
