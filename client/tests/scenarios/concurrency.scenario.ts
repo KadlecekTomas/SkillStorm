@@ -15,17 +15,6 @@ import type { Browser, BrowserContext, Page } from '@playwright/test';
 
 const PARALLEL = 10;
 
-type StudentListItem = {
-  membership?: {
-    user?: {
-      email?: string | null;
-      name?: string | null;
-    } | null;
-  } | null;
-};
-
-type StudentListPayload = { data?: StudentListItem[] };
-
 /**
  * A browser context authenticated as `email` via the login API. Uses a fresh
  * RANDOM client IP so the login never shares a throttle bucket — with a fixed
@@ -53,6 +42,22 @@ async function authedContext(
   expect(res.ok(), `login ${email}`).toBeTruthy();
   const page = await context.newPage();
   return { context, page };
+}
+
+/**
+ * Resolve the current display name from the authenticated student's own
+ * identity endpoint. The concurrency oracle must not require broader teacher
+ * directory access and must not depend on placeholder/demo copy.
+ */
+async function currentUserName(page: Page): Promise<string> {
+  const response = await page.request.get('/api/auth/me');
+  expect(response.ok(), 'student can read own authenticated identity').toBeTruthy();
+  const body = await response.json();
+  const data = body.data ?? body;
+  const user = data.user ?? data;
+  const name = String(user.name ?? user.fullName ?? '').trim();
+  expect(name, 'student self identity exposes a display name').toBeTruthy();
+  return name;
 }
 
 /** Answer all three questions of the shared 8.A assignment and submit. */
@@ -91,44 +96,6 @@ async function answerAndSubmit(page: Page, assignmentId: string): Promise<void> 
   await finished;
 }
 
-/**
- * Resolve the current display names through the product API instead of
- * coupling the concurrency oracle to presentation/demo copy.
- */
-async function studentNamesForEmails(
-  page: Page,
-  emails: string[],
-): Promise<Set<string>> {
-  const names = new Set<string>();
-
-  for (const email of emails) {
-    const response = await page.request.get(
-      `/api/students?search=${encodeURIComponent(email)}&limit=5`,
-    );
-    expect(response.ok(), `student lookup ${email}`).toBeTruthy();
-    const body = (await response.json()) as
-      | StudentListPayload
-      | StudentListItem[]
-      | { data?: StudentListPayload | StudentListItem[] };
-    const unwrapped =
-      body && typeof body === 'object' && !Array.isArray(body) && 'data' in body
-        ? body.data
-        : body;
-    const rows = Array.isArray(unwrapped)
-      ? unwrapped
-      : Array.isArray(unwrapped?.data)
-        ? unwrapped.data
-        : [];
-    const student =
-      rows.find((row) => row.membership?.user?.email === email) ?? rows[0];
-    const name = student?.membership?.user?.name?.trim();
-    expect(name, `student display name ${email}`).toBeTruthy();
-    names.add(name!);
-  }
-
-  return names;
-}
-
 test('10 students answer the same assignment in parallel — none lost', async ({
   browser,
   manifest,
@@ -143,6 +110,12 @@ test('10 students answer the same assignment in parallel — none lost', async (
     emails.map((email) =>
       authedContext(browser, email, manifest.password, manifest.orgId),
     ),
+  );
+  const ourNames = new Set(
+    await Promise.all(sessions.map(({ page }) => currentUserName(page))),
+  );
+  expect(ourNames.size, 'all 10 concurrent students have distinct identities').toBe(
+    PARALLEL,
   );
 
   // 5xx guard across every context
@@ -163,7 +136,6 @@ test('10 students answer the same assignment in parallel — none lost', async (
   // ground truth via the teacher results API: 10 submitted, each with 3 answers
   const { page: teacher } = await asRole('teacher');
   const testId = await testIdOfAssignment(teacher, manifest.assignment8AId);
-  const ourNames = await studentNamesForEmails(teacher, emails);
   const byTest = await teacher.request.get(`/api/tests/${testId}/results`);
   expect(byTest.ok()).toBeTruthy();
   const items = ((await byTest.json()).data.items ?? []) as Array<{
