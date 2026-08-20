@@ -1,0 +1,77 @@
+name: Temporary UUID runtime dependency repair
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - synchronize
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.head_ref == 'chore/remove-dead-typeorm'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Use Node 24.19.0
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.19.0
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Add UUID as explicit runtime dependency
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd server
+          npm install uuid@9.0.1 --save --package-lock-only --ignore-scripts
+          node <<'NODE'
+          const fs = require('fs');
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          const lock = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'));
+          if (pkg.dependencies?.uuid !== '^9.0.1') {
+            throw new Error(`Expected uuid ^9.0.1 runtime dependency, got ${pkg.dependencies?.uuid}`);
+          }
+          if ('typeorm' in (pkg.dependencies ?? {}) || '@nestjs/typeorm' in (pkg.dependencies ?? {})) {
+            throw new Error('TypeORM dependencies must remain removed');
+          }
+          const rootDeps = lock.packages?.['']?.dependencies ?? {};
+          if (rootDeps.uuid !== '^9.0.1') {
+            throw new Error(`Expected uuid ^9.0.1 in lock root, got ${rootDeps.uuid}`);
+          }
+          if ('typeorm' in rootDeps || '@nestjs/typeorm' in rootDeps) {
+            throw new Error('TypeORM must remain absent from lock root');
+          }
+          const typeormEntries = Object.keys(lock.packages ?? {}).filter(k => /(?:^|\/)typeorm(?:\/|$)/i.test(k));
+          if (typeormEntries.length) {
+            throw new Error(`TypeORM lock entries returned: ${typeormEntries.join(', ')}`);
+          }
+          NODE
+          npm ci --ignore-scripts
+          node -e "const { v4 } = require('uuid'); const id = v4(); if (!/^[0-9a-f-]{36}$/i.test(id)) process.exit(1); console.log('uuid runtime OK:', id)"
+          npm run prisma:generate
+          npm run typecheck
+          npm audit --omit=dev --json > /tmp/audit-after-uuid.json || true
+          node -e "const r=require('/tmp/audit-after-uuid.json'); console.log('runtime audit after uuid repair:', JSON.stringify(r.metadata?.vulnerabilities ?? {}))"
+          git diff --check
+
+      - name: Commit npm-generated UUID repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/uuid-runtime-dependency-temp.yml
+          git add server/package.json server/package-lock.json .github/workflows/uuid-runtime-dependency-temp.yml
+          git diff --cached --stat
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "fix: declare uuid runtime dependency"
+          git push origin HEAD:chore/remove-dead-typeorm
