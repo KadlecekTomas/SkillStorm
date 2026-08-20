@@ -1,21 +1,27 @@
 name: Temporary TypeORM lockfile regeneration
 
 on:
-  push:
+  pull_request:
     branches:
-      - chore/remove-dead-typeorm
-    paths:
-      - .github/workflows/typeorm-lockfile-temp.yml
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
 
 permissions:
   contents: write
 
 jobs:
   regenerate:
+    if: github.head_ref == 'chore/remove-dead-typeorm'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout branch
+      - name: Checkout exact PR head
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
 
       - name: Use Node 24.19.0
         uses: actions/setup-node@v4
