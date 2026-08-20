@@ -59,7 +59,6 @@
     "@nestjs/schedule": "^6.0.1",
     "@nestjs/swagger": "^7.0.0",
     "@nestjs/throttler": "^5.1.1",
-    "@nestjs/typeorm": "^10.0.0",
     "@prisma/client": "^6.13.0",
     "@sentry/node": "^10.65.0",
     "bcryptjs": "^3.0.3",
@@ -74,7 +73,7 @@
     "reflect-metadata": "^0.1.13",
     "rxjs": "^7.8.1",
     "ts-node": "^10.9.1",
-    "typeorm": "^0.3.16",
+    "uuid": "^11.1.0",
     "xlsx": "^0.18.5",
     "zod": "^4.1.5"
   },
