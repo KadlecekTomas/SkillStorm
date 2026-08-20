@@ -92,13 +92,13 @@ async function renameScenarioPeople(): Promise<void> {
 }
 
 async function modernizeSchoolYear(organizationId: string): Promise<void> {
+  // Presentation can show the upcoming 2026/2027 label, but the deterministic
+  // scenario seed owns the deliberately broad executable date window. CI may
+  // run before 1 September, and product guards must keep rejecting genuinely
+  // out-of-year submissions rather than being weakened for screenshots.
   await prisma.academicYear.updateMany({
     where: { orgId: organizationId, isCurrent: true },
-    data: {
-      label: '2026/2027',
-      startsAt: new Date('2026-09-01T00:00:00.000Z'),
-      endsAt: new Date('2027-08-31T23:59:59.999Z'),
-    },
+    data: { label: '2026/2027' },
   });
 }
 
