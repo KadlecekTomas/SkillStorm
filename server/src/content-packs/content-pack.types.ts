@@ -50,11 +50,6 @@ export type UniversalLessonSpec = {
   shell: CreateLessonExperienceDto;
   version: AuthoredLessonVersion;
   curriculum: CurriculumOutcomeRef[];
-  /**
-   * Existing machine-readable IT-0 year-plan IDs that this detailed Lesson
-   * Experience materializes or expands. This prevents a second competing year plan.
-   */
-  yearPlanRefs: string[];
 };
 
 export type UniversalContentPack = {
@@ -63,8 +58,6 @@ export type UniversalContentPack = {
   subjectCode: string;
   title: string;
   description: string;
-  /** Existing recommended whole-year pack remains the planning source of truth. */
-  parentYearPackId: string;
   placement: {
     recommendedGrade: SchoolGrade;
     compatibleGrades: SchoolGrade[];
@@ -76,6 +69,21 @@ export type UniversalContentPack = {
   };
   activities: UniversalActivitySpec[];
   lessons: UniversalLessonSpec[];
+};
+
+/**
+ * Detailed content may expand a canonical slot from the existing IT-0
+ * machine-readable year pack. The year pack stays the planning source of truth;
+ * this map only says which concrete Lesson Experiences materialize that slot.
+ */
+export type YearPlanExpansionMap = {
+  parentYearPackId: string;
+  strategy: 'ONE_TO_ONE' | 'EXPAND' | 'COMPRESS';
+  mappings: Array<{
+    yearPlanLessonId: string;
+    lessonRefs: string[];
+    note?: string;
+  }>;
 };
 
 export type SchoolAdapterCoverage =
