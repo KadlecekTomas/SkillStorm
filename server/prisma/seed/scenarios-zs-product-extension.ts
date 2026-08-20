@@ -102,6 +102,18 @@ async function modernizeSchoolYear(organizationId: string): Promise<void> {
   });
 }
 
+async function normalizeVisualClassLabels(organizationId: string): Promise<void> {
+  // The base scenario intentionally keeps one HIGH_SCHOOL_YEAR_1 enrollment to
+  // prove the safe age-mode fallback. That technical enum must stay intact,
+  // but the ZŠ visual matrix should not look like a mixed-school fixture.
+  // Only presentation fields change; ids, enrollment and grade semantics stay
+  // untouched for the scenario contract.
+  await prisma.classSection.updateMany({
+    where: { orgId: organizationId, label: '1.SŠ' },
+    data: { label: '9.B', section: 'B' },
+  });
+}
+
 async function improveLearningCopy(organizationId: string): Promise<void> {
   await prisma.test.updateMany({
     where: { organizationId, title: 'Matematika 8.A' },
@@ -111,12 +123,17 @@ async function improveLearningCopy(organizationId: string): Promise<void> {
     where: { organizationId, title: 'Poznávání 2.A' },
     data: { title: 'Sčítání do 100 — 2.A' },
   });
+  await prisma.test.updateMany({
+    where: { organizationId, title: 'Test 1.SŠ' },
+    data: { title: 'Algoritmické myšlení — 9.B' },
+  });
 }
 
 async function main(): Promise<void> {
   const organizationId = await getScenarioOrgId();
   await renameScenarioPeople();
   await modernizeSchoolYear(organizationId);
+  await normalizeVisualClassLabels(organizationId);
   await improveLearningCopy(organizationId);
 
   // eslint-disable-next-line no-console
