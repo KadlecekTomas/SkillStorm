@@ -78,7 +78,7 @@ async function renameScenarioPeople(): Promise<void> {
     const email = `student-8a-${String(index + 1).padStart(2, '0')}@scenar.test`;
     await prisma.user.updateMany({
       where: { email },
-      data: { name: STUDENT_NAMES_8A[index] },
+      data: { name: STUDENT_NAMES_8A[index]! },
     });
   }
 
@@ -86,7 +86,7 @@ async function renameScenarioPeople(): Promise<void> {
     const email = `student-2a-${String(index + 1).padStart(2, '0')}@scenar.test`;
     await prisma.user.updateMany({
       where: { email },
-      data: { name: STUDENT_NAMES_2A[index] },
+      data: { name: STUDENT_NAMES_2A[index]! },
     });
   }
 }
