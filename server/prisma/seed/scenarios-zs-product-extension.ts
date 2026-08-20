@@ -51,6 +51,15 @@ const STUDENT_NAMES_2A = [
   'Samuel Šťastný',
 ] as const;
 
+async function getScenarioOrgId(): Promise<string> {
+  const org = await prisma.organization.findFirst({
+    where: { name: 'ZŠ Scénář' },
+    select: { id: true },
+  });
+  if (!org) throw new Error('Scenario organization ZŠ Scénář not found.');
+  return org.id;
+}
+
 async function renameScenarioPeople(): Promise<void> {
   await prisma.user.updateMany({
     where: { email: 'director@scenar.test' },
@@ -82,15 +91,9 @@ async function renameScenarioPeople(): Promise<void> {
   }
 }
 
-async function modernizeSchoolYear(): Promise<void> {
-  const org = await prisma.organization.findFirst({
-    where: { name: 'ZŠ Scénář' },
-    select: { id: true },
-  });
-  if (!org) throw new Error('Scenario organization ZŠ Scénář not found.');
-
+async function modernizeSchoolYear(organizationId: string): Promise<void> {
   await prisma.academicYear.updateMany({
-    where: { orgId: org.id, isCurrent: true },
+    where: { orgId: organizationId, isCurrent: true },
     data: {
       label: '2026/2027',
       startsAt: new Date('2026-09-01T00:00:00.000Z'),
@@ -99,27 +102,22 @@ async function modernizeSchoolYear(): Promise<void> {
   });
 }
 
-async function improveLearningCopy(): Promise<void> {
+async function improveLearningCopy(organizationId: string): Promise<void> {
   await prisma.test.updateMany({
-    where: {
-      organization: { name: 'ZŠ Scénář' },
-      title: 'Matematika 8.A',
-    },
+    where: { organizationId, title: 'Matematika 8.A' },
     data: { title: 'Zlomky a poměry — 8.A' },
   });
   await prisma.test.updateMany({
-    where: {
-      organization: { name: 'ZŠ Scénář' },
-      title: 'Poznávání 2.A',
-    },
+    where: { organizationId, title: 'Poznávání 2.A' },
     data: { title: 'Sčítání do 100 — 2.A' },
   });
 }
 
 async function main(): Promise<void> {
+  const organizationId = await getScenarioOrgId();
   await renameScenarioPeople();
-  await modernizeSchoolYear();
-  await improveLearningCopy();
+  await modernizeSchoolYear(organizationId);
+  await improveLearningCopy(organizationId);
 
   // eslint-disable-next-line no-console
   console.log(
