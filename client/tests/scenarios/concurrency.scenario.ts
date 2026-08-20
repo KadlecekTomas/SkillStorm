@@ -15,6 +15,17 @@ import type { Browser, BrowserContext, Page } from '@playwright/test';
 
 const PARALLEL = 10;
 
+type StudentListItem = {
+  membership?: {
+    user?: {
+      email?: string | null;
+      name?: string | null;
+    } | null;
+  } | null;
+};
+
+type StudentListPayload = { data?: StudentListItem[] };
+
 /**
  * A browser context authenticated as `email` via the login API. Uses a fresh
  * RANDOM client IP so the login never shares a throttle bucket — with a fixed
@@ -44,7 +55,7 @@ async function authedContext(
   return { context, page };
 }
 
-/** Answer all three questions of "Matematika 8.A" and submit. */
+/** Answer all three questions of the shared 8.A assignment and submit. */
 async function answerAndSubmit(page: Page, assignmentId: string): Promise<void> {
   await page.goto(`/app/assignments/${assignmentId}/test`, { waitUntil: 'commit' });
   await expect(page.getByTestId('test-top-status-bar')).toBeVisible({ timeout: 30_000 });
@@ -57,7 +68,10 @@ async function answerAndSubmit(page: Page, assignmentId: string): Promise<void> 
   // Q3 FITB: 9 — wait for its save so submit is not blocked on unsaved
   await page.getByRole('button', { name: 'Otázka 3' }).click();
   const saved = page.waitForResponse(
-    (r) => /\/submissions\/[0-9a-f-]+\/responses/.test(r.url()) && r.request().method() === 'PATCH' && r.ok(),
+    (r) =>
+      /\/submissions\/[0-9a-f-]+\/responses/.test(r.url()) &&
+      r.request().method() === 'PATCH' &&
+      r.ok(),
     { timeout: 20_000 },
   );
   await page.getByPlaceholder(/Napiš odpověď/i).fill('9');
@@ -67,11 +81,52 @@ async function answerAndSubmit(page: Page, assignmentId: string): Promise<void> 
   const dialog = page.getByTestId('review-submit-dialog');
   await expect(dialog).toBeVisible();
   const finished = page.waitForResponse(
-    (r) => /\/submissions\/[0-9a-f-]+\/finish/.test(r.url()) && r.request().method() === 'POST' && r.ok(),
+    (r) =>
+      /\/submissions\/[0-9a-f-]+\/finish/.test(r.url()) &&
+      r.request().method() === 'POST' &&
+      r.ok(),
     { timeout: 25_000 },
   );
   await dialog.getByTestId('confirm-submit').click();
   await finished;
+}
+
+/**
+ * Resolve the current display names through the product API instead of
+ * coupling the concurrency oracle to presentation/demo copy.
+ */
+async function studentNamesForEmails(
+  page: Page,
+  emails: string[],
+): Promise<Set<string>> {
+  const names = new Set<string>();
+
+  for (const email of emails) {
+    const response = await page.request.get(
+      `/api/students?search=${encodeURIComponent(email)}&limit=5`,
+    );
+    expect(response.ok(), `student lookup ${email}`).toBeTruthy();
+    const body = (await response.json()) as
+      | StudentListPayload
+      | StudentListItem[]
+      | { data?: StudentListPayload | StudentListItem[] };
+    const unwrapped =
+      body && typeof body === 'object' && !Array.isArray(body) && 'data' in body
+        ? body.data
+        : body;
+    const rows = Array.isArray(unwrapped)
+      ? unwrapped
+      : Array.isArray(unwrapped?.data)
+        ? unwrapped.data
+        : [];
+    const student =
+      rows.find((row) => row.membership?.user?.email === email) ?? rows[0];
+    const name = student?.membership?.user?.name?.trim();
+    expect(name, `student display name ${email}`).toBeTruthy();
+    names.add(name!);
+  }
+
+  return names;
 }
 
 test('10 students answer the same assignment in parallel — none lost', async ({
@@ -108,6 +163,7 @@ test('10 students answer the same assignment in parallel — none lost', async (
   // ground truth via the teacher results API: 10 submitted, each with 3 answers
   const { page: teacher } = await asRole('teacher');
   const testId = await testIdOfAssignment(teacher, manifest.assignment8AId);
+  const ourNames = await studentNamesForEmails(teacher, emails);
   const byTest = await teacher.request.get(`/api/tests/${testId}/results`);
   expect(byTest.ok()).toBeTruthy();
   const items = ((await byTest.json()).data.items ?? []) as Array<{
@@ -117,18 +173,15 @@ test('10 students answer the same assignment in parallel — none lost', async (
     correctCount?: number;
     incorrectCount?: number;
   }>;
-  // results expose the student NAME, not email; the seed names 8.A students
-  // "Žák 8.A #NN" where NN is the 1-based index in student-8a-NN@…
-  const ourNames = new Set(
-    emails.map((e) => `Žák 8.A #${Number(e.match(/student-8a-(\d+)@/)![1])}`),
-  );
   const submittedForOurStudents = items.filter(
     (r) => r.submittedAt && r.student?.name && ourNames.has(r.student.name),
   );
   expect(submittedForOurStudents.length, 'all 10 submitted').toBe(PARALLEL);
   for (const row of submittedForOurStudents) {
     const answered =
-      (row.correctCount ?? 0) + (row.incorrectCount ?? 0) + (row.pendingCount ?? 0);
+      (row.correctCount ?? 0) +
+      (row.incorrectCount ?? 0) +
+      (row.pendingCount ?? 0);
     expect(answered, 'no lost answer (3 evaluated per submission)').toBe(3);
   }
 
@@ -136,7 +189,10 @@ test('10 students answer the same assignment in parallel — none lost', async (
 });
 
 /** Resolve a test id from one of its assignment ids (teacher-scoped). */
-async function testIdOfAssignment(page: Page, assignmentId: string): Promise<string> {
+async function testIdOfAssignment(
+  page: Page,
+  assignmentId: string,
+): Promise<string> {
   const res = await page.request.get(`/api/assignments/${assignmentId}`);
   const body = await res.json();
   return (body.data ?? body).testId as string;
@@ -163,7 +219,10 @@ test('a student who never submits is auto-submitted when the limit expires', asy
   // answer one question, then DO NOT submit — the 20s limit must auto-submit
   await page.getByRole('radio', { name: /Ano/ }).check();
   const autoFinished = page.waitForResponse(
-    (r) => /\/submissions\/[0-9a-f-]+\/finish/.test(r.url()) && r.request().method() === 'POST' && r.ok(),
+    (r) =>
+      /\/submissions\/[0-9a-f-]+\/finish/.test(r.url()) &&
+      r.request().method() === 'POST' &&
+      r.ok(),
     { timeout: 40_000 },
   );
   await autoFinished; // fired by the timer, no manual click
