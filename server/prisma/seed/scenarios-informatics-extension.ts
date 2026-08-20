@@ -1,11 +1,15 @@
 import { Test as NestTest } from '@nestjs/testing';
 import {
+  ActivityCurriculumMappingStatus,
+  ActivityCurriculumMappingType,
   ActivityDeliveryMode,
   LessonExperienceCurriculumMappingStatus,
   LessonStageCompletionType,
   LessonStageType,
+  MappingProposerType,
   SystemRole,
 } from '@prisma/client';
+import { ActivityService } from '@/activity-engine/activity.service';
 import { AppModule } from '@/app.module';
 import type { JwtPayload } from '@/auth/types/jwt-payload';
 import { CurriculumService } from '@/curriculum/curriculum.service';
@@ -13,6 +17,7 @@ import { LessonExperienceService } from '@/lesson-experience/lesson-experience.s
 import { PrismaService } from '@/prisma/prisma.service';
 import {
   createLessonFrameworkFixture,
+  lessonActivityVersionInput,
   lessonPrimaryMapping,
 } from 'test/lesson-experience-fixtures';
 
@@ -26,6 +31,7 @@ const DATABASE_URL = assertTestDatabaseUrl(
 process.env.DATABASE_URL = DATABASE_URL;
 
 const LESSON_SLUG = 'informatika-8-algoritmy-roboticka-mise';
+const ACTIVITY_SLUG = 'informatika-8-algorithm-lab';
 
 async function main(): Promise<void> {
   const moduleRef = await NestTest.createTestingModule({ imports: [AppModule] }).compile();
@@ -34,6 +40,7 @@ async function main(): Promise<void> {
 
   const prisma = app.get(PrismaService);
   const curriculum = app.get(CurriculumService);
+  const activities = app.get(ActivityService);
   const lessons = app.get(LessonExperienceService);
 
   try {
@@ -44,16 +51,21 @@ async function main(): Promise<void> {
           where: { status: 'PUBLISHED' },
           orderBy: { versionNo: 'desc' },
           take: 1,
+          include: { stages: { orderBy: { orderIndex: 'asc' } } },
         },
       },
     });
-    if (existing?.versions[0]) {
+    if (existing?.versions[0]?.stages.some((stage) => stage.activityVersionId)) {
+      const activityVersionId = existing.versions[0].stages.find(
+        (stage) => stage.activityVersionId,
+      )?.activityVersionId;
       // eslint-disable-next-line no-console
       console.log(
         'SCENARIO_INFORMATICS_EXTENSION=' +
           JSON.stringify({
             lessonId: existing.id,
             lessonVersionId: existing.versions[0].id,
+            activityVersionId,
             slug: existing.slug,
           }),
       );
@@ -76,6 +88,101 @@ async function main(): Promise<void> {
 
     const seed = `INF8-${Date.now()}`;
     const framework = await createLessonFrameworkFixture(curriculum, platformActor, seed);
+
+    const activity = await activities.createGlobalActivity(
+      {
+        slug: `${ACTIVITY_SLUG}-${Date.now().toString(36)}`,
+        title: 'Algorithm Lab · Robotická mise',
+        description:
+          'Serverově evidovaná algoritmická aktivita: plánování programu, execution trace, debugging a spolupráce ve dvojici.',
+      },
+      platformActor,
+    );
+    const activityInput = lessonActivityVersionInput('Algorithm Lab · Robotická mise');
+    activityInput.engineKey = 'ALGORITHM_LAB_V1';
+    activityInput.supportedModes = [ActivityDeliveryMode.HYBRID];
+    activityInput.recommendedMode = ActivityDeliveryMode.HYBRID;
+    activityInput.interactionPrimitives = [
+      'BUILD',
+      'SIMULATE',
+      'DIAGNOSE',
+      'COLLABORATIVE_DECISION',
+      'CHECKPOINT',
+    ];
+    activityInput.config = {
+      kind: 'ALGORITHM_LAB',
+      missionSet: 'ROBOT_GRID_V1',
+      executionTrace: true,
+      collaboration: 'REQUIRED',
+    };
+    activityInput.capabilityRequirements = {
+      required: [
+        'SEMANTIC_EVENTS',
+        'SERVER_AUTHORITY',
+        'SHARED_GROUPS',
+        'INDIVIDUAL_PARTICIPANTS',
+        'RECONNECTABLE',
+      ],
+    };
+    activityInput.modePolicy = {
+      HYBRID: {
+        preservesObjective: true,
+        evidenceEquivalent: true,
+        fallback: 'Dvojice pokračuje nad jedním zařízením a po návratu spojení odešle eventy.',
+      },
+    };
+    activityInput.evidencePlan = {
+      completionIsMastery: false,
+      signals: [
+        {
+          type: 'PROGRAM_RUN',
+          objectiveReference: 'algorithm-design',
+          interpretation: 'Žák skutečně otestoval sestavený algoritmus.',
+          rawOrDerived: 'RAW',
+        },
+        {
+          type: 'TEST_FAILED',
+          objectiveReference: 'debugging',
+          interpretation: 'Neúspěšný běh poskytuje evidence pro debugging proces.',
+          rawOrDerived: 'RAW',
+        },
+        {
+          type: 'CHECKPOINT_COMPLETED',
+          objectiveReference: 'algorithm-validation',
+          interpretation: 'Dokončení mise je learning evidence, nikoli automaticky mastery.',
+          rawOrDerived: 'DERIVED',
+        },
+      ],
+    };
+
+    const activityVersion = await activities.createVersion(
+      activity.id,
+      activityInput,
+      platformActor,
+    );
+    const activityMapping = await activities.proposeMapping(
+      activityVersion.id,
+      {
+        frameworkOutcomeId: framework.outcomeId,
+        outcomeAspectId: framework.aspectId,
+        mappingType: ActivityCurriculumMappingType.PRIMARY,
+        rationale:
+          'Algorithm Lab přímo vyžaduje vytvoření, spuštění a interpretaci algoritmického modelu.',
+        proposedByType: MappingProposerType.HUMAN,
+      },
+      platformActor,
+    );
+    await activities.submitForReview(activityVersion.id, platformActor);
+    await activities.reviewMapping(
+      activityMapping.id,
+      {
+        status: ActivityCurriculumMappingStatus.APPROVED,
+        rationale: 'Schválená vazba algoritmické aktivity na modelování a interpretaci postupu.',
+      },
+      platformActor,
+    );
+    const publishedActivity = await activities.publish(activityVersion.id, platformActor);
+
     const lesson = await lessons.createGlobalLesson(
       {
         slug: LESSON_SLUG,
@@ -156,7 +263,8 @@ async function main(): Promise<void> {
             teacherGuidance:
               'Sleduj počet běhů a neúspěchů v Mission Control. Pomáhej otázkou, ne hotovým příkazem.',
             durationMin: 35,
-            completionType: LessonStageCompletionType.CHECKPOINT,
+            activityVersionId: publishedActivity.id,
+            completionType: LessonStageCompletionType.ACTIVITY,
             checkpoint: true,
             required: true,
             teacherIntervention: false,
@@ -204,6 +312,7 @@ async function main(): Promise<void> {
         JSON.stringify({
           lessonId: lesson.id,
           lessonVersionId: published.id,
+          activityVersionId: publishedActivity.id,
           slug: lesson.slug,
         }),
     );
