@@ -14,7 +14,8 @@ export const fzsChodovicka2023Grade6InformaticsAdapter: SchoolCurriculumAdapter 
   schoolLabel: 'FZŠ Chodovická',
   curriculumVersionLabel: 'Škola pro život — platnost od 1. 9. 2023',
   source: {
-    documentTitle: 'Škola pro život — Školní vzdělávací program pro základní vzdělávání',
+    documentTitle:
+      'Škola pro život — Školní vzdělávací program pro základní vzdělávání',
     sourceUrl:
       'https://cdn.sanity.io/files/rnavmcsp/production/e2b44c0343533ea8646ce41501a9792e4ec005e6.pdf',
     validFrom: '2023-09-01',
@@ -25,48 +26,58 @@ export const fzsChodovicka2023Grade6InformaticsAdapter: SchoolCurriculumAdapter 
     {
       sourceOutcomeKey: 'INF6-01',
       sourceAnchor: 'Informatika · období 2 · 6. ročník · výstup 1',
-      sourceSummary: 'Rozpoznání zakódované informace v běžném okolí a princip přenosu informace.',
+      sourceSummary:
+        'Rozpoznání zakódované informace v běžném okolí a princip přenosu informace.',
       coverage: 'COVERED',
       lessonRefs: ['inf-g6-encoding-01-symbols-and-codes'],
     },
     {
       sourceOutcomeKey: 'INF6-02',
       sourceAnchor: 'Informatika · období 2 · 6. ročník · výstup 2',
-      sourceSummary: 'Použití znakové sady pro kódování a dekódování znaků.',
+      sourceSummary:
+        'Použití znakové sady pro kódování a dekódování znaků.',
       coverage: 'COVERED',
       lessonRefs: ['inf-g6-encoding-01-symbols-and-codes'],
     },
     {
       sourceOutcomeKey: 'INF6-03',
       sourceAnchor: 'Informatika · období 2 · 6. ročník · výstup 3',
-      sourceSummary: 'Rozlišení přenosu dat a jednoduchého principu symetrického šifrování.',
-      coverage: 'COVERED',
+      sourceSummary:
+        'Rozlišení přenosu dat a jednoduchého principu symetrického šifrování.',
+      coverage: 'PARTIAL',
       lessonRefs: ['inf-g6-encoding-03-code-vs-cipher'],
       note:
-        'Lekce záměrně zůstává u bezpečného didaktického principu a nevydává jednoduchou substituci za moderní bezpečné šifrování.',
+        'Aktuální Lesson Experience spolehlivě rozlišuje kódování a šifrování, ale ještě neobsahuje dostatečný samostatný encode/decode transfer pro plné pokrytí školního výstupu.',
     },
     {
       sourceOutcomeKey: 'INF6-04',
       sourceAnchor: 'Informatika · období 2 · 6. ročník · výstup 4',
-      sourceSummary: 'Reprezentace barev v obrázku pomocí hodnot podle barevného modelu.',
-      coverage: 'COVERED',
+      sourceSummary:
+        'Reprezentace barev v obrázku pomocí hodnot podle barevného modelu.',
+      coverage: 'PARTIAL',
       lessonRefs: ['inf-g6-encoding-02-image-as-data'],
+      note:
+        'Barevný model je pokrytý, ale před plným coverage review chceme ještě vlastní learner-created encoding úlohu, ne pouze predikci změn hodnot.',
     },
     {
       sourceOutcomeKey: 'INF6-05',
       sourceAnchor: 'Informatika · období 2 · 6. ročník · výstup 5',
-      sourceSummary: 'Popis obrazu pomocí geometrických tvarů a porovnání způsobů reprezentace.',
-      coverage: 'COVERED',
+      sourceSummary:
+        'Popis obrazu pomocí geometrických tvarů a porovnání způsobů reprezentace.',
+      coverage: 'PARTIAL',
       lessonRefs: ['inf-g6-encoding-02-image-as-data'],
+      note:
+        'Volba reprezentace je pokrytá, ale žák zatím sám nekonstruuje geometrický zápis obrázku.',
     },
     {
       sourceOutcomeKey: 'INF6-06',
       sourceAnchor: 'Informatika · období 2 · 6. ročník · výstup 6',
-      sourceSummary: 'Zjednodušení zápisu a použití kontrolního údaje k odhalení neshody.',
-      coverage: 'COVERED',
+      sourceSummary:
+        'Zjednodušení zápisu a použití kontrolního údaje k odhalení neshody.',
+      coverage: 'PARTIAL',
       lessonRefs: ['inf-g6-encoding-04-transmission-integrity'],
       note:
-        'První verze pokrývá princip kontrolního součtu. Samostatná komprese/zjednodušování zápisu potřebuje ještě vlastní transfer activity před označením celého školního výstupu za plně validovaný.',
+        'Kontrolní součet je pokrytý. Komprese nebo jiné zjednodušení zápisu potřebuje vlastní transfer activity.',
     },
     {
       sourceOutcomeKey: 'INF6-07',
@@ -80,7 +91,8 @@ export const fzsChodovicka2023Grade6InformaticsAdapter: SchoolCurriculumAdapter 
     {
       sourceOutcomeKey: 'INF6-08',
       sourceAnchor: 'Informatika · období 2 · 6. ročník · výstup 8',
-      sourceSummary: 'Odhalení chyby nebo rozporu mezi různými reprezentacemi stejných dat.',
+      sourceSummary:
+        'Odhalení chyby nebo rozporu mezi různými reprezentacemi stejných dat.',
       coverage: 'PARTIAL',
       lessonRefs: [],
       existingExperienceRefs: ['/app/labs/data-lab'],
@@ -98,7 +110,8 @@ export const fzsChodovicka2023Grade6InformaticsAdapter: SchoolCurriculumAdapter 
     {
       sourceOutcomeKey: 'INF6-10',
       sourceAnchor: 'Informatika · období 2 · 6. ročník · výstup 10',
-      sourceSummary: 'Pravidla uspořádání dat, filtrování, řazení a třídění.',
+      sourceSummary:
+        'Pravidla uspořádání dat, filtrování, řazení a třídění.',
       coverage: 'REUSE_EXISTING',
       lessonRefs: [],
       existingExperienceRefs: ['/app/labs/data-lab'],
@@ -108,7 +121,8 @@ export const fzsChodovicka2023Grade6InformaticsAdapter: SchoolCurriculumAdapter 
     {
       sourceOutcomeKey: 'INF6-11',
       sourceAnchor: 'Informatika · období 2 · 6. ročník · výstup 11',
-      sourceSummary: 'Doplňování záznamů podle pravidel a kontrola hodnot v tabulce.',
+      sourceSummary:
+        'Doplňování záznamů podle pravidel a kontrola hodnot v tabulce.',
       coverage: 'REUSE_EXISTING',
       lessonRefs: [],
       existingExperienceRefs: ['/app/labs/data-lab'],
@@ -116,7 +130,8 @@ export const fzsChodovicka2023Grade6InformaticsAdapter: SchoolCurriculumAdapter 
     {
       sourceOutcomeKey: 'INF6-12',
       sourceAnchor: 'Informatika · období 2 · 6. ročník · výstup 12',
-      sourceSummary: 'Návrh tabulky pro evidenci dat a práce se strukturou evidence.',
+      sourceSummary:
+        'Návrh tabulky pro evidenci dat a práce se strukturou evidence.',
       coverage: 'PARTIAL',
       lessonRefs: [],
       existingExperienceRefs: ['/app/labs/data-lab'],
