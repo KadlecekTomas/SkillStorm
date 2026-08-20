@@ -6,7 +6,9 @@ import { defineConfig, devices } from '@playwright/test';
  *
  * The CI TLS edge uses an ephemeral internal CA, so certificate-chain trust is
  * ignored here; HTTPS itself remains mandatory and all Secure-cookie behavior
- * is exercised normally.
+ * is exercised normally. Chromium also receives the matching launch-level flag
+ * because context-level ignoreHTTPSErrors does not suppress every subresource
+ * certificate diagnostic emitted by the browser.
  */
 export default defineConfig({
   testDir: './tests/scenarios',
@@ -25,6 +27,9 @@ export default defineConfig({
     baseURL: process.env.BASE_URL || 'https://localhost:3443',
     headless: true,
     ignoreHTTPSErrors: true,
+    launchOptions: {
+      args: ['--ignore-certificate-errors'],
+    },
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'on',
