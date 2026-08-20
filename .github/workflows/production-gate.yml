@@ -6,8 +6,11 @@ on:
   pull_request:
     branches: [main, develop]
 
+permissions:
+  contents: read
+
 env:
-  NODE_VERSION: "20"
+  NODE_VERSION: "24.19.0"
   DATABASE_URL: postgresql://skillstorm_ci:skillstorm_ci_password@localhost:5432/skillstorm_ci
   PROD_POSTGRES_USER: skillstorm_prod_user
   PROD_POSTGRES_PASSWORD: ciSyntheticPostgresPassword1234567890
@@ -32,8 +35,8 @@ env:
   PROD_SUPERADMIN_PASSWORD: ""
 
 jobs:
-  env-and-docker:
-    name: Env and Docker Production Config
+  env-and-docker-validation:
+    name: Env and Docker Production Config (validation)
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -146,3 +149,32 @@ jobs:
         working-directory: server
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/skillstorm_test?schema=public
+
+  runtime-supply-chain-certification:
+    name: Runtime Supply Chain Certification
+    uses: ./.github/workflows/supply-chain-certification.yml
+
+  school-product-certification:
+    name: School Product Certification
+    uses: ./.github/workflows/product-certification.yml
+
+  certification-lock:
+    name: Env and Docker Production Config
+    needs:
+      - env-and-docker-validation
+      - runtime-supply-chain-certification
+      - school-product-certification
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enforce mandatory production certification
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "env_and_docker=${{ needs.env-and-docker-validation.result }}"
+          echo "runtime_supply_chain=${{ needs.runtime-supply-chain-certification.result }}"
+          echo "school_product_certification=${{ needs.school-product-certification.result }}"
+          test "${{ needs.env-and-docker-validation.result }}" = "success"
+          test "${{ needs.runtime-supply-chain-certification.result }}" = "success"
+          test "${{ needs.school-product-certification.result }}" = "success"
+          echo "mandatory_production_certification=passed"
