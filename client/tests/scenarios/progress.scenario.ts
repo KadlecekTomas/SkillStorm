@@ -197,11 +197,17 @@ test.describe('school progress — simplified ZŠ workflow', () => {
     expect(dashboard.classes.map((item) => item.classSectionId)).toContain(
       manifest.untaughtClassId,
     );
+    const untaughtClass = dashboard.classes.find(
+      (item) => item.classSectionId === manifest.untaughtClassId,
+    );
+    expect(untaughtClass, 'untaught class must be present in director dashboard').toBeTruthy();
 
     await page.goto('/app/progress', { waitUntil: 'commit' });
     await expect(page.getByRole('heading', { name: 'Pokrok školy' })).toBeVisible();
     await expect(page.getByText('Srovnání tříd')).toBeVisible();
-    await expect(page.getByRole('cell', { name: '9.Z — RBAC', exact: true })).toBeVisible();
+    await expect(
+      page.getByRole('cell', { name: untaughtClass!.classLabel, exact: true }),
+    ).toBeVisible();
 
     const downloadPromise = page.waitForEvent('download');
     await page.getByRole('button', { name: 'Stáhnout PDF' }).click();
