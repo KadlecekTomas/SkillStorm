@@ -1,0 +1,99 @@
+name: Runtime Supply Chain Certification
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: runtime-supply-chain-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  runtime-audit:
+    name: Runtime audit (${{ matrix.app }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - app: backend
+            directory: server
+          - app: frontend
+            directory: client
+
+    steps:
+      - name: Checkout exact candidate commit
+        uses: actions/checkout@v4
+
+      - name: Setup supported production Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24.19.0"
+          cache: npm
+          cache-dependency-path: ${{ matrix.directory }}/package-lock.json
+
+      - name: Audit production dependency graph
+        id: audit
+        shell: bash
+        working-directory: ${{ matrix.directory }}
+        run: |
+          set +e
+          npm audit --omit=dev --audit-level=critical --json > runtime-audit.json
+          status=$?
+          set -e
+
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = 'runtime-audit.json';
+          let report;
+          try {
+            report = JSON.parse(fs.readFileSync(path, 'utf8'));
+          } catch (error) {
+            console.error(`Unable to parse ${path}:`, error);
+            process.exit(2);
+          }
+
+          const v = report?.metadata?.vulnerabilities ?? {};
+          const summary = {
+            info: v.info ?? 0,
+            low: v.low ?? 0,
+            moderate: v.moderate ?? 0,
+            high: v.high ?? 0,
+            critical: v.critical ?? 0,
+            total: v.total ?? 0,
+          };
+          console.log('RUNTIME_AUDIT=' + JSON.stringify(summary));
+          fs.appendFileSync(
+            process.env.GITHUB_STEP_SUMMARY,
+            `### Runtime dependency audit — ${process.env.AUDIT_APP}\n\n` +
+              `| Severity | Count |\n|---|---:|\n` +
+              `| Critical | ${summary.critical} |\n` +
+              `| High | ${summary.high} |\n` +
+              `| Moderate | ${summary.moderate} |\n` +
+              `| Low | ${summary.low} |\n` +
+              `| **Total** | **${summary.total}** |\n\n` +
+              `Current hard release threshold: **critical**. High will be ratcheted to blocking after remediation/explicit review.\n`,
+          );
+          NODE
+
+          if [[ "$status" -ne 0 ]]; then
+            echo "Critical runtime vulnerability threshold failed for $AUDIT_APP."
+            exit "$status"
+          fi
+        env:
+          AUDIT_APP: ${{ matrix.app }}
+
+      - name: Upload machine-readable runtime audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-audit-${{ matrix.app }}
+          path: ${{ matrix.directory }}/runtime-audit.json
+          if-no-files-found: error
+          retention-days: 21
