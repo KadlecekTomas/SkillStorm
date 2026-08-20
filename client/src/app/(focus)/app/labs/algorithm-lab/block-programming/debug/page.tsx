@@ -1,25 +1,29 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState, type JSX } from 'react';
+import { useEffect, useMemo, useState, type JSX } from 'react';
 import {
   Bug,
   CheckCircle2,
   ChevronLeft,
   Minus,
+  Pause,
   Play,
   Plus,
   RotateCcw,
   Search,
   Sparkles,
+  StepForward,
   Wrench,
 } from 'lucide-react';
+import { AnimatedRobotArena } from '@/components/it-lab/animated-robot-arena';
 import {
   executeBlockProgram,
   type BlockExecutionStep,
   type BlockProgramNode,
   type BlockProgramResult,
 } from '@/lib/it-lab/block-program-engine';
+import { useBlockProgramRunner } from '@/lib/it-lab/use-block-program-runner';
 import {
   directionGlyph,
   type AlgorithmCommand,
@@ -106,19 +110,27 @@ function transferProgram(answer: number): BlockProgramNode[] {
 
 export default function BlockProgrammingDebugPage(): JSX.Element {
   const [program, setProgram] = useState<BlockProgramNode[]>(createBrokenProgram);
-  const [result, setResult] = useState<BlockProgramResult | null>(null);
   const [failureEvidence, setFailureEvidence] = useState<BlockProgramResult | null>(null);
   const [hypothesis, setHypothesis] = useState<Hypothesis | null>(null);
-  const [runCount, setRunCount] = useState(0);
   const [transferAnswer, setTransferAnswer] = useState<number | null>(null);
+  const runner = useBlockProgramRunner(program, world);
+
+  useEffect(() => {
+    if (runner.result?.failureType === 'WORLD_RULE') {
+      setFailureEvidence(runner.result);
+    }
+  }, [runner.result]);
 
   const count = repeatCount(program);
   const diagnosisCorrect = hypothesis === 'EXTRA_REPEAT';
   const repaired = count === 3;
-  const missionSolved = Boolean(result?.valid && samePosition(result.state.position, world.target));
-  const failedStep = failureEvidence?.steps.at(-1) ?? null;
-  const traceResult = result ?? failureEvidence;
-  const showBreakpoint = Boolean(failedStep && (!result || result.failureType === 'WORLD_RULE'));
+  const missionSolved = Boolean(runner.result?.valid && samePosition(runner.result.state.position, world.target));
+  const currentFailure = runner.result?.failureType === 'WORLD_RULE' ? runner.result : failureEvidence;
+  const failedStep = currentFailure?.steps.at(-1) ?? null;
+  const traceSteps = runner.status === 'IDLE' ? failureEvidence?.steps ?? [] : runner.visibleSteps;
+  const activeTopLevelIndex = runner.activeStep?.nodePath[0] ?? null;
+  const activeNestedIndex = runner.activeStep?.nodePath[1] ?? null;
+  const activeIteration = runner.activeStep?.iterationPath[0] ?? null;
 
   const transferResult = useMemo(() => {
     if (transferAnswer === null) return null;
@@ -132,36 +144,31 @@ export default function BlockProgrammingDebugPage(): JSX.Element {
   );
   const mastery = missionSolved && diagnosisCorrect && transferSolved;
 
-  function runProgram(): void {
-    const next = executeBlockProgram(program, world);
-    setRunCount((current) => current + 1);
-    setResult(next);
-    if (!next.valid && next.failureType === 'WORLD_RULE') {
-      setFailureEvidence(next);
-    }
-  }
-
   function changeRepeat(delta: number): void {
-    if (!diagnosisCorrect) return;
+    if (!diagnosisCorrect || runner.isRunning) return;
+    runner.resetPlayback();
     setProgram((current) => current.map((node, index) => {
       if (index !== 0 || node.type !== 'REPEAT') return node;
       return { ...node, count: Math.max(1, Math.min(12, node.count + delta)) };
     }));
-    setResult(null);
     setTransferAnswer(null);
   }
 
   function reset(): void {
     setProgram(createBrokenProgram());
-    setResult(null);
     setFailureEvidence(null);
     setHypothesis(null);
-    setRunCount(0);
     setTransferAnswer(null);
+    runner.resetAll();
   }
 
-  const robotPosition = result?.state.position ?? { x: 0, y: 0 };
-  const robotDirection = result?.state.direction ?? 'EAST';
+  const runnerStatus = runner.status === 'RUNNING'
+    ? `Běží · krok ${runner.visibleCount}/${runner.totalSteps}`
+    : runner.status === 'PAUSED'
+      ? `Pozastaveno · krok ${runner.visibleCount}/${runner.totalSteps}`
+      : runner.status === 'COMPLETE'
+        ? `Dokončeno · ${runner.visibleCount} kroků`
+        : 'Připraveno ke spuštění';
 
   return (
     <main className="min-h-screen bg-[#07101f] px-4 py-8 text-white sm:px-8">
@@ -175,11 +182,11 @@ export default function BlockProgrammingDebugPage(): JSX.Element {
               <p className="text-xs font-black uppercase tracking-[0.2em] text-rose-300">IT-2 · Debug Lab</p>
               <h1 className="mt-2 text-3xl font-black sm:text-5xl">Broken Loop</h1>
               <p className="mt-3 max-w-3xl text-slate-300">
-                Program už někdo napsal — ale robot narazí do zdi. Nehádej opravu naslepo. Nejdřív program spusť, najdi důkaz v trace, vyslov hypotézu a teprve potom oprav zdrojový blok.
+                Program už někdo napsal — ale robot narazí do zdi. Sleduj každý vykonaný příkaz, najdi důkaz v trace, vyslov hypotézu a až potom oprav zdrojový blok.
               </p>
             </div>
             <div className="rounded-2xl border border-rose-300/15 bg-rose-300/[0.06] px-4 py-3 text-sm text-rose-100">
-              <strong>{runCount}</strong> spuštění · <strong>{mastery ? 'ověřeno' : missionSolved ? 'transfer zbývá' : 'debugging'}</strong>
+              <strong>{runner.runCount}</strong> spuštění · <strong>{mastery ? 'ověřeno' : missionSolved ? 'transfer zbývá' : 'debugging'}</strong>
             </div>
           </div>
         </header>
@@ -192,36 +199,44 @@ export default function BlockProgrammingDebugPage(): JSX.Element {
                   <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">1 · Pozoruj</p>
                   <h2 className="mt-1 text-xl font-black">Robot arena</h2>
                 </div>
-                <span className="rounded-full bg-white/5 px-3 py-1 text-xs text-slate-400">Start [0,0] → cíl [4,2]</span>
+                <span data-testid="debug-runner-status" className="rounded-full bg-white/5 px-3 py-1 text-xs font-bold text-slate-300">{runnerStatus}</span>
               </div>
 
-              <div className="grid aspect-[5/3] grid-cols-5 grid-rows-3 overflow-hidden rounded-3xl border border-white/10 bg-slate-950">
-                {Array.from({ length: 15 }, (_, index) => {
-                  const position = { x: index % 5, y: Math.floor(index / 5) };
-                  const isRobot = samePosition(robotPosition, position);
-                  const isTarget = samePosition(world.target, position);
-                  const isObstacle = world.obstacles?.some((candidate) => samePosition(candidate, position));
-                  return (
-                    <div key={index} className="relative grid place-items-center border border-slate-800" data-testid={`debug-cell-${position.x}-${position.y}`}>
-                      <span className="absolute left-2 top-1 text-[10px] text-slate-700">{position.x},{position.y}</span>
-                      {isObstacle && <span className="text-3xl" aria-label="překážka">🧱</span>}
-                      {isTarget && <span className="text-3xl" aria-label="cíl">⚡</span>}
-                      {isRobot && (
-                        <div data-testid="debug-robot" data-x={robotPosition.x} data-y={robotPosition.y} className="relative z-10 grid h-16 w-16 place-items-center rounded-2xl border border-rose-300/30 bg-rose-400/10 text-3xl shadow-xl">
-                          🤖
-                          <span className="absolute -right-2 -top-2 grid h-7 w-7 place-items-center rounded-full bg-rose-300 text-sm font-black text-slate-950">
-                            {directionGlyph[robotDirection]}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+              <AnimatedRobotArena
+                accent="rose"
+                impact={Boolean(runner.activeStep && !runner.activeStep.valid)}
+                state={runner.state}
+                testIdPrefix="debug"
+                world={world}
+              />
+
+              <div className="mt-4 grid gap-2 sm:grid-cols-[1fr_auto_auto]">
+                <button data-testid="debug-run" disabled={runner.isRunning} onClick={runner.run} className="flex items-center justify-center gap-2 rounded-2xl bg-cyan-300 px-4 py-3 font-black text-slate-950 disabled:cursor-not-allowed disabled:opacity-40">
+                  <Play className="h-4 w-4" aria-hidden="true" /> {runner.status === 'COMPLETE' ? 'Spustit znovu' : 'Spustit algoritmus'}
+                </button>
+                <button data-testid="debug-pause" disabled={runner.status === 'IDLE' || runner.status === 'COMPLETE'} onClick={runner.togglePause} className="flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 font-black disabled:opacity-35">
+                  {runner.isRunning ? <Pause className="h-4 w-4" aria-hidden="true" /> : <Play className="h-4 w-4" aria-hidden="true" />}
+                  {runner.isRunning ? 'Pauza' : 'Pokračovat'}
+                </button>
+                <button data-testid="debug-step" disabled={runner.isRunning} onClick={runner.step} className="flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 font-black disabled:opacity-35">
+                  <StepForward className="h-4 w-4" aria-hidden="true" /> Krok
+                </button>
               </div>
 
-              <button data-testid="debug-run" onClick={runProgram} className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-cyan-300 px-4 py-3 font-black text-slate-950">
-                <Play className="h-4 w-4" aria-hidden="true" /> {result ? 'Spustit znovu' : 'Spustit rozbitý program'}
-              </button>
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-slate-950/55 px-4 py-3 text-xs text-slate-400">
+                <span>Rychlost simulace</span>
+                <div className="flex gap-2">
+                  {([
+                    ['SLOW', '0.5×', 'debug-speed-slow'],
+                    ['NORMAL', '1×', 'debug-speed-normal'],
+                    ['FAST', '2×', 'debug-speed-fast'],
+                  ] as const).map(([value, label, testId]) => (
+                    <button key={value} data-testid={testId} onClick={() => runner.setSpeed(value)} className={`rounded-lg px-3 py-1.5 font-black ${runner.speed === value ? 'bg-cyan-300 text-slate-950' : 'bg-white/5 text-slate-300'}`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
 
             <div className="rounded-[30px] border border-white/10 bg-white/[0.035] p-5">
@@ -229,14 +244,14 @@ export default function BlockProgrammingDebugPage(): JSX.Element {
                 <Search className="h-5 w-5 text-cyan-300" aria-hidden="true" />
                 <div>
                   <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">Execution trace</p>
-                  <h2 className="text-lg font-black">Co se skutečně vykonalo?</h2>
+                  <h2 className="text-lg font-black">Trace vzniká spolu s během</h2>
                 </div>
               </div>
 
               <div data-testid="debug-trace" className="mt-4 max-h-72 space-y-2 overflow-auto rounded-2xl bg-slate-950/70 p-3">
-                {!traceResult ? (
-                  <p className="p-2 text-sm text-slate-500">Nejdřív program spusť. Trace je důkaz, ne nápověda před pokusem.</p>
-                ) : traceResult.steps.map((step) => (
+                {traceSteps.length === 0 ? (
+                  <p className="p-2 text-sm text-slate-500">Spusť program nebo použij Krok. Každý řádek se objeví až po skutečném vykonání příkazu.</p>
+                ) : traceSteps.map((step) => (
                   <div
                     key={`${step.stepNumber}-${step.sourcePath.join('.')}`}
                     data-testid={`debug-trace-step-${step.stepNumber}`}
@@ -251,9 +266,9 @@ export default function BlockProgrammingDebugPage(): JSX.Element {
                 ))}
               </div>
 
-              {showBreakpoint && failedStep && (
+              {failedStep && (
                 <div data-testid="debug-failure-evidence" className="mt-3 rounded-2xl border border-rose-300/25 bg-rose-300/10 p-4 text-sm text-rose-100">
-                  <strong>{result?.failureType === 'WORLD_RULE' ? 'Breakpoint:' : 'Původní breakpoint:'}</strong> krok {failedStep.stepNumber} vznikl ze zdroje <strong>{formatProvenance(failedStep)}</strong> a skončil stavem <strong>{failedStep.reason}</strong>.
+                  <strong>{missionSolved ? 'Původní breakpoint:' : 'Breakpoint:'}</strong> krok {failedStep.stepNumber} vznikl ze zdroje <strong>{formatProvenance(failedStep)}</strong> a skončil stavem <strong>{failedStep.reason}</strong>.
                 </div>
               )}
             </div>
@@ -274,41 +289,56 @@ export default function BlockProgrammingDebugPage(): JSX.Element {
                 </button>
               </div>
 
+              {runner.activeStep && (
+                <p data-testid="debug-active-source" className="mt-4 rounded-xl border border-cyan-300/25 bg-cyan-300/10 px-3 py-2 text-sm font-bold text-cyan-100">
+                  Právě běží: {formatProvenance(runner.activeStep)}
+                </p>
+              )}
+
               <div data-testid="debug-program" className="mt-4 space-y-2 rounded-2xl bg-slate-950/70 p-3">
                 {program.map((node, index) => {
+                  const isActive = activeTopLevelIndex === index;
                   const isFailureSource = failureEvidence?.steps.at(-1)?.nodePath[0] === index;
+
                   if (node.type === 'COMMAND') {
                     return (
-                      <div key={index} className="rounded-xl border border-white/5 bg-slate-900 px-3 py-3 font-bold text-slate-300">
+                      <div key={index} className={`rounded-xl border px-3 py-3 font-bold transition ${isActive ? 'border-cyan-300/60 bg-cyan-300/15 text-cyan-50 ring-2 ring-cyan-300/20' : 'border-white/5 bg-slate-900 text-slate-300'}`}>
                         <span className="mr-3 text-xs text-slate-600">{index + 1}</span>{commandLabel[node.command]}
                       </div>
                     );
                   }
 
-                  const sourceClass = isFailureSource
-                    ? missionSolved
-                      ? 'border-emerald-300/35 bg-emerald-300/10'
-                      : 'border-rose-300/40 bg-rose-300/10'
-                    : 'border-violet-300/20 bg-violet-300/10';
+                  const sourceClass = isActive
+                    ? 'border-cyan-300/60 bg-cyan-300/15 ring-2 ring-cyan-300/20'
+                    : isFailureSource
+                      ? missionSolved
+                        ? 'border-emerald-300/35 bg-emerald-300/10'
+                        : 'border-rose-300/40 bg-rose-300/10'
+                      : 'border-violet-300/20 bg-violet-300/10';
 
                   return (
-                    <div key={index} data-testid="debug-repeat-block" className={`rounded-2xl border p-3 ${sourceClass}`}>
+                    <div key={index} data-testid="debug-repeat-block" className={`rounded-2xl border p-3 transition ${sourceClass}`}>
                       <div className="flex flex-wrap items-center justify-between gap-3">
                         <div>
                           <span className="mr-3 text-xs text-slate-500">{index + 1}</span>
                           <strong>Opakuj <span data-testid="debug-repeat-count">{node.count}×</span></strong>
+                          {isActive && activeIteration !== null && (
+                            <span data-testid="debug-active-iteration" className="ml-3 rounded-full bg-cyan-200/15 px-2 py-1 text-xs text-cyan-100">opakování {activeIteration + 1}/{node.count}</span>
+                          )}
                         </div>
                         <div className="flex items-center gap-2">
-                          <button data-testid="debug-repeat-minus" aria-label="Snížit počet opakování" disabled={!diagnosisCorrect} onClick={() => changeRepeat(-1)} className="rounded-lg bg-slate-950/60 p-1.5 disabled:cursor-not-allowed disabled:opacity-30">
+                          <button data-testid="debug-repeat-minus" aria-label="Snížit počet opakování" disabled={!diagnosisCorrect || runner.isRunning} onClick={() => changeRepeat(-1)} className="rounded-lg bg-slate-950/60 p-1.5 disabled:cursor-not-allowed disabled:opacity-30">
                             <Minus className="h-4 w-4" aria-hidden="true" />
                           </button>
-                          <button data-testid="debug-repeat-plus" aria-label="Zvýšit počet opakování" disabled={!diagnosisCorrect} onClick={() => changeRepeat(1)} className="rounded-lg bg-slate-950/60 p-1.5 disabled:cursor-not-allowed disabled:opacity-30">
+                          <button data-testid="debug-repeat-plus" aria-label="Zvýšit počet opakování" disabled={!diagnosisCorrect || runner.isRunning} onClick={() => changeRepeat(1)} className="rounded-lg bg-slate-950/60 p-1.5 disabled:cursor-not-allowed disabled:opacity-30">
                             <Plus className="h-4 w-4" aria-hidden="true" />
                           </button>
                         </div>
                       </div>
-                      <div className="mt-2 rounded-xl bg-slate-950/50 px-3 py-2 text-sm font-bold text-violet-100">↳ Krok vpřed</div>
-                      {isFailureSource && (
+                      <div className={`mt-2 rounded-xl border px-3 py-2 text-sm font-bold transition ${isActive && activeNestedIndex === 0 ? 'border-cyan-300/50 bg-cyan-300/15 text-cyan-50' : 'border-transparent bg-slate-950/50 text-violet-100'}`}>
+                        ↳ Krok vpřed
+                      </div>
+                      {isFailureSource && !isActive && (
                         <p className={`mt-2 text-xs font-bold ${missionSolved ? 'text-emerald-200' : 'text-rose-200'}`}>
                           {missionSolved ? 'Původní chyba vznikla v tomto bloku. Oprava je ověřena.' : 'Trace ukazuje na tento zdrojový blok.'}
                         </p>
@@ -329,7 +359,7 @@ export default function BlockProgrammingDebugPage(): JSX.Element {
               </div>
 
               {!failureEvidence ? (
-                <p className="mt-4 rounded-2xl bg-slate-950/60 p-4 text-sm text-slate-500">Hypotézu vybírej až podle důkazu z běhu programu.</p>
+                <p className="mt-4 rounded-2xl bg-slate-950/60 p-4 text-sm text-slate-500">Hypotézu vybírej až poté, co se běh zastaví na konkrétní chybě.</p>
               ) : (
                 <div className="mt-4 space-y-2" data-testid="debug-hypotheses">
                   {hypothesisCopy.map((option) => (
@@ -362,7 +392,7 @@ export default function BlockProgrammingDebugPage(): JSX.Element {
                   <div>
                     <p className="text-xs font-black uppercase tracking-[0.16em] text-emerald-200/70">Oprava ověřena</p>
                     <h2 className="mt-1 text-xl font-black">Program už funguje.</h2>
-                    <p className="mt-2 text-sm text-emerald-50/80">To ale ještě není důkaz, že rozumíš principu. Poslední krok mění situaci a ověří transfer.</p>
+                    <p className="mt-2 text-sm text-emerald-50/80">Viděl jsi celý opravený běh krok po kroku. Poslední úloha teď ověří, jestli rozumíš principu i mimo původní trasu.</p>
                   </div>
                 </div>
 
@@ -396,7 +426,7 @@ export default function BlockProgrammingDebugPage(): JSX.Element {
                   <div>
                     <p className="text-xs font-black uppercase tracking-[0.16em] text-violet-200/70">IT-2 · Debugging evidence</p>
                     <h2 className="mt-1 text-xl font-black">Princip ověřen na změněné situaci.</h2>
-                    <p className="mt-2 text-sm text-slate-300">Našel jsi chybu z trace, opravil její zdroj a stejný princip použil i bez původní trasy. To je silnější důkaz než samotné dokončení mise.</p>
+                    <p className="mt-2 text-sm text-slate-300">Našel jsi chybu během vykonávání, opravil její zdroj a stejný princip použil i bez původní trasy.</p>
                   </div>
                 </div>
               </div>
