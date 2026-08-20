@@ -44,7 +44,23 @@ async function authedContext(
   return { context, page };
 }
 
-/** Answer all three questions of "Matematika 8.A" and submit. */
+/**
+ * Resolve the current display name from the authenticated student's own
+ * identity endpoint. The concurrency oracle must not require broader teacher
+ * directory access and must not depend on placeholder/demo copy.
+ */
+async function currentUserName(page: Page): Promise<string> {
+  const response = await page.request.get('/api/auth/me');
+  expect(response.ok(), 'student can read own authenticated identity').toBeTruthy();
+  const body = await response.json();
+  const data = body.data ?? body;
+  const user = data.user ?? data;
+  const name = String(user.name ?? user.fullName ?? '').trim();
+  expect(name, 'student self identity exposes a display name').toBeTruthy();
+  return name;
+}
+
+/** Answer all three questions of the shared 8.A assignment and submit. */
 async function answerAndSubmit(page: Page, assignmentId: string): Promise<void> {
   await page.goto(`/app/assignments/${assignmentId}/test`, { waitUntil: 'commit' });
   await expect(page.getByTestId('test-top-status-bar')).toBeVisible({ timeout: 30_000 });
@@ -57,7 +73,10 @@ async function answerAndSubmit(page: Page, assignmentId: string): Promise<void> 
   // Q3 FITB: 9 — wait for its save so submit is not blocked on unsaved
   await page.getByRole('button', { name: 'Otázka 3' }).click();
   const saved = page.waitForResponse(
-    (r) => /\/submissions\/[0-9a-f-]+\/responses/.test(r.url()) && r.request().method() === 'PATCH' && r.ok(),
+    (r) =>
+      /\/submissions\/[0-9a-f-]+\/responses/.test(r.url()) &&
+      r.request().method() === 'PATCH' &&
+      r.ok(),
     { timeout: 20_000 },
   );
   await page.getByPlaceholder(/Napiš odpověď/i).fill('9');
@@ -67,7 +86,10 @@ async function answerAndSubmit(page: Page, assignmentId: string): Promise<void> 
   const dialog = page.getByTestId('review-submit-dialog');
   await expect(dialog).toBeVisible();
   const finished = page.waitForResponse(
-    (r) => /\/submissions\/[0-9a-f-]+\/finish/.test(r.url()) && r.request().method() === 'POST' && r.ok(),
+    (r) =>
+      /\/submissions\/[0-9a-f-]+\/finish/.test(r.url()) &&
+      r.request().method() === 'POST' &&
+      r.ok(),
     { timeout: 25_000 },
   );
   await dialog.getByTestId('confirm-submit').click();
@@ -88,6 +110,12 @@ test('10 students answer the same assignment in parallel — none lost', async (
     emails.map((email) =>
       authedContext(browser, email, manifest.password, manifest.orgId),
     ),
+  );
+  const ourNames = new Set(
+    await Promise.all(sessions.map(({ page }) => currentUserName(page))),
+  );
+  expect(ourNames.size, 'all 10 concurrent students have distinct identities').toBe(
+    PARALLEL,
   );
 
   // 5xx guard across every context
@@ -117,18 +145,15 @@ test('10 students answer the same assignment in parallel — none lost', async (
     correctCount?: number;
     incorrectCount?: number;
   }>;
-  // results expose the student NAME, not email; the seed names 8.A students
-  // "Žák 8.A #NN" where NN is the 1-based index in student-8a-NN@…
-  const ourNames = new Set(
-    emails.map((e) => `Žák 8.A #${Number(e.match(/student-8a-(\d+)@/)![1])}`),
-  );
   const submittedForOurStudents = items.filter(
     (r) => r.submittedAt && r.student?.name && ourNames.has(r.student.name),
   );
   expect(submittedForOurStudents.length, 'all 10 submitted').toBe(PARALLEL);
   for (const row of submittedForOurStudents) {
     const answered =
-      (row.correctCount ?? 0) + (row.incorrectCount ?? 0) + (row.pendingCount ?? 0);
+      (row.correctCount ?? 0) +
+      (row.incorrectCount ?? 0) +
+      (row.pendingCount ?? 0);
     expect(answered, 'no lost answer (3 evaluated per submission)').toBe(3);
   }
 
@@ -136,7 +161,10 @@ test('10 students answer the same assignment in parallel — none lost', async (
 });
 
 /** Resolve a test id from one of its assignment ids (teacher-scoped). */
-async function testIdOfAssignment(page: Page, assignmentId: string): Promise<string> {
+async function testIdOfAssignment(
+  page: Page,
+  assignmentId: string,
+): Promise<string> {
   const res = await page.request.get(`/api/assignments/${assignmentId}`);
   const body = await res.json();
   return (body.data ?? body).testId as string;
@@ -163,7 +191,10 @@ test('a student who never submits is auto-submitted when the limit expires', asy
   // answer one question, then DO NOT submit — the 20s limit must auto-submit
   await page.getByRole('radio', { name: /Ano/ }).check();
   const autoFinished = page.waitForResponse(
-    (r) => /\/submissions\/[0-9a-f-]+\/finish/.test(r.url()) && r.request().method() === 'POST' && r.ok(),
+    (r) =>
+      /\/submissions\/[0-9a-f-]+\/finish/.test(r.url()) &&
+      r.request().method() === 'POST' &&
+      r.ok(),
     { timeout: 40_000 },
   );
   await autoFinished; // fired by the timer, no manual click

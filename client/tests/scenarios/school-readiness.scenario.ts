@@ -78,7 +78,7 @@ test.describe('school readiness — RBAC and visible-action contract', () => {
     await expect(nav.locator('a[href="/app/classrooms"]')).toHaveCount(0);
     await expect(nav.locator('a[href="/app/tests"]')).toHaveCount(0);
     await expect(nav.locator('a[href="/app/results"]')).toHaveCount(0);
-    await expect(page.getByText(/Žák · 8\.A/i)).toBeVisible();
+    await expect(page.getByRole('heading', { name: /· 8\.A$/i })).toBeVisible();
 
     await page.goto('/app/results', { waitUntil: 'commit' });
     await expect(page.getByText('Přístup není povolen')).toBeVisible();

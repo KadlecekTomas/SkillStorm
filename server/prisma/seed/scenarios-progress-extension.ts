@@ -58,12 +58,15 @@ async function main(): Promise<void> {
     create: { teacherId: teacher.id, subjectId: subject.id },
   });
 
+  // This is an intentionally untaught class used as the progress/RBAC scope
+  // oracle. Keep the technical purpose in ids/manifest, not in user-facing
+  // labels that appear in whole-product screenshots.
   const untaughtClass =
     (await prisma.classSection.findFirst({
       where: {
         orgId: org.id,
         yearId: year.id,
-        label: '9.Z — RBAC',
+        label: '9.C',
       },
       select: { id: true },
     })) ??
@@ -72,8 +75,8 @@ async function main(): Promise<void> {
         orgId: org.id,
         yearId: year.id,
         grade: $Enums.SchoolGrade.GRADE_9,
-        section: 'Z',
-        label: '9.Z — RBAC',
+        section: 'C',
+        label: '9.C',
       },
       select: { id: true },
     }));
@@ -88,11 +91,16 @@ async function main(): Promise<void> {
       data: {
         email: UNRELATED_EMAIL,
         username: `progress_scope_${Date.now().toString(36)}`,
-        name: 'Žák mimo učitelův rozsah',
+        name: 'Klára Veselá',
         passwordHash,
         status: $Enums.UserStatus.ACTIVE,
       },
       select: { id: true },
+    });
+  } else {
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { name: 'Klára Veselá' },
     });
   }
 

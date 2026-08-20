@@ -1,7 +1,14 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import {
+  ArrowRight,
+  CheckCircle2,
+  Clock3,
+  Sparkles,
+  Trophy,
+} from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -12,16 +19,21 @@ import { useGamification } from "@/hooks/use-gamification";
 import { useBadges } from "@/hooks/use-badges";
 import { BadgesPanel } from "@/components/gamification/badges-panel";
 import { LevelUpModal } from "@/components/gamification/level-up-modal";
-import { getDashboardStudent, type StudentDashboardResponse } from "@/lib/api/dashboard";
+import {
+  getDashboardStudent,
+  type StudentDashboardResponse,
+} from "@/lib/api/dashboard";
 import { fetchWithAuth } from "@/lib/http/client";
 import { formatDate } from "@/lib/format-date";
 import { vocative } from "@/lib/czech-vocative";
 import { ErrorAlert } from "@/components/ui/alert";
 import { useAuth } from "@/hooks/use-auth";
-import { getMyStudentProgress, type StudentSelfProgress } from "@/lib/student-progress";
+import {
+  getMyStudentProgress,
+  type StudentSelfProgress,
+} from "@/lib/student-progress";
 
 const EMPTY_SUBMISSIONS = "Zatím nemáš žádné odevzdané testy.";
-const EMPTY_OPEN = "Teď na tebe nic nečeká. 🎉";
 
 const scoreToPercent = (score: number | null | undefined): string => {
   if (typeof score !== "number" || Number.isNaN(score)) return "—";
@@ -66,13 +78,23 @@ async function fetchOpenAssignments(): Promise<OpenAssignment[]> {
         new Date(r.openAt).getTime() <= now &&
         now <= new Date(r.closeAt).getTime(),
     )
+    .sort(
+      (a, b) =>
+        new Date(a.closeAt).getTime() - new Date(b.closeAt).getTime(),
+    )
     .slice(0, 5);
 
   return Promise.all(
     open.map(async (r) => {
-      const detail = await fetchWithAuth<unknown>("GET", `/tests/${r.testId}`).catch(() => null);
+      const detail = await fetchWithAuth<unknown>("GET", `/tests/${r.testId}`).catch(
+        () => null,
+      );
       const test = unwrap<{ title?: string }>(detail);
-      return { id: r.id, closeAt: r.closeAt, testTitle: test?.title ?? "Test" };
+      return {
+        id: r.id,
+        closeAt: r.closeAt,
+        testTitle: test?.title ?? "Test",
+      };
     }),
   );
 }
@@ -122,13 +144,17 @@ function StudentProgressPanel({
       {hasSummary && (
         <div className="grid gap-3 sm:grid-cols-3">
           <Card className="p-4">
-            <p className="text-xs font-bold uppercase tracking-wide text-ink-dim">Průměrná známka</p>
+            <p className="text-xs font-bold uppercase tracking-wide text-ink-dim">
+              Průměrná známka
+            </p>
             <p className="mt-1 text-2xl font-black text-ink">
               {data.summary.averageGrade?.toFixed(2) ?? "—"}
             </p>
           </Card>
           <Card className="p-4">
-            <p className="text-xs font-bold uppercase tracking-wide text-ink-dim">Kompetence</p>
+            <p className="text-xs font-bold uppercase tracking-wide text-ink-dim">
+              Kompetence
+            </p>
             <p className="mt-1 text-2xl font-black text-ink">
               {data.summary.competencyMasteryPercent === null
                 ? "—"
@@ -136,9 +162,13 @@ function StudentProgressPanel({
             </p>
           </Card>
           <Card className="p-4">
-            <p className="text-xs font-bold uppercase tracking-wide text-ink-dim">Docházka</p>
+            <p className="text-xs font-bold uppercase tracking-wide text-ink-dim">
+              Docházka
+            </p>
             <p className="mt-1 text-2xl font-black text-ink">
-              {data.summary.attendanceRate === null ? "—" : `${data.summary.attendanceRate} %`}
+              {data.summary.attendanceRate === null
+                ? "—"
+                : `${data.summary.attendanceRate} %`}
             </p>
           </Card>
         </div>
@@ -157,7 +187,9 @@ function StudentProgressPanel({
                     </p>
                   )}
                   {item.authorName && (
-                    <p className="mt-1 text-xs font-semibold text-ink-dim">{item.authorName}</p>
+                    <p className="mt-1 text-xs font-semibold text-ink-dim">
+                      {item.authorName}
+                    </p>
                   )}
                 </div>
                 <time className="shrink-0 text-xs font-semibold text-ink-dim">
@@ -181,7 +213,9 @@ export function StudentDashboard(): React.JSX.Element {
   const [openAssignments, setOpenAssignments] = useState<OpenAssignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [schoolProgress, setSchoolProgress] = useState<StudentSelfProgress | null>(null);
+  const [schoolProgress, setSchoolProgress] = useState<StudentSelfProgress | null>(
+    null,
+  );
   const [progressLoading, setProgressLoading] = useState(true);
   const [progressError, setProgressError] = useState<string | null>(null);
   const { user } = useAuth();
@@ -201,7 +235,10 @@ export function StudentDashboard(): React.JSX.Element {
         setOpenAssignments(open);
       })
       .catch((err) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Nepodařilo se načíst data.");
+        if (!cancelled)
+          setError(
+            err instanceof Error ? err.message : "Nepodařilo se načíst data.",
+          );
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -235,7 +272,11 @@ export function StudentDashboard(): React.JSX.Element {
   }, []);
 
   useEffect(() => {
-    if (gamification?.level != null && previousLevelRef.current !== null && gamification.level > previousLevelRef.current) {
+    if (
+      gamification?.level != null &&
+      previousLevelRef.current !== null &&
+      gamification.level > previousLevelRef.current
+    ) {
       setLevelModalOpen(true);
     }
     if (gamification?.level !== undefined) {
@@ -252,14 +293,14 @@ export function StudentDashboard(): React.JSX.Element {
   }
 
   if (error) {
-    return (
-      <ErrorAlert title="Chyba načítání dat" description={error} />
-    );
+    return <ErrorAlert title="Chyba načítání dat" description={error} />;
   }
 
   const submissions = data?.lastSubmissions ?? [];
   const firstName =
-    (data?.member.name ?? user?.fullName ?? user?.name ?? "").trim().split(" ")[0] || null;
+    (data?.member.name ?? user?.fullName ?? user?.name ?? "")
+      .trim()
+      .split(" ")[0] || null;
 
   const xp = gamification?.xp ?? data?.member.xp ?? 0;
   const streakDays = gamification?.streakDays ?? 0;
@@ -267,43 +308,149 @@ export function StudentDashboard(): React.JSX.Element {
   const nextLevelXp = gamification?.nextLevelXp ?? null;
   const toNext = nextLevelXp != null ? Math.max(nextLevelXp - xp, 0) : null;
   const levelProgress =
-    nextLevelXp != null && nextLevelXp > 0 ? Math.min((xp / nextLevelXp) * 100, 100) : 100;
+    nextLevelXp != null && nextLevelXp > 0
+      ? Math.min((xp / nextLevelXp) * 100, 100)
+      : 100;
+  const primaryAssignment = openAssignments[0] ?? null;
+  const remainingAssignments = openAssignments.slice(1);
 
   return (
     <>
-      <div className="mx-auto max-w-3xl space-y-8">
+      <div className="mx-auto max-w-4xl space-y-8">
         <div>
           <h1 className="text-3xl font-extrabold text-ink sm:text-4xl">
             {firstName ? `Ahoj, ${vocative(firstName)}! 👋` : "Ahoj! 👋"}
           </h1>
           <p className="mt-1 text-base leading-relaxed text-ink-muted">
-            Tvůj parťák už se těší na dnešní procvičování.
+            Nemusíš nic hledat. Tady máš nejdůležitější další krok.
           </p>
         </div>
 
-        <Card className="flex flex-wrap items-center gap-7 p-8" data-testid="student-hero-card">
-          <PartakBlob size={110} />
+        {primaryAssignment ? (
+          <Link
+            href={`/app/assignments/${primaryAssignment.id}`}
+            className="group block"
+            data-testid="student-primary-action"
+          >
+            <div className="overflow-hidden rounded-3xl border-2 border-accent bg-gradient-to-br from-accent-soft via-white to-canvas-alt p-6 shadow-tactile [--tactile-shadow:rgb(var(--accent-deep))] transition-transform group-hover:-translate-y-0.5 sm:p-8">
+              <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <div className="inline-flex items-center gap-2 rounded-full bg-accent px-3 py-1.5 text-xs font-extrabold uppercase tracking-[.08em] text-white">
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Teď pokračuj
+                  </div>
+                  <h2 className="mt-4 text-2xl font-black tracking-tight text-ink sm:text-3xl">
+                    {primaryAssignment.testTitle}
+                  </h2>
+                  <p className="mt-2 flex items-center gap-2 text-sm font-semibold text-ink-muted">
+                    <Clock3 className="h-4 w-4 text-streak" />
+                    Odevzdat do {formatDate(primaryAssignment.closeAt)}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-4">
+                  <div className="hidden sm:block">
+                    <PartakBlob size={92} />
+                  </div>
+                  <span className="inline-flex items-center gap-2 rounded-xl bg-accent px-5 py-3 text-sm font-extrabold text-white shadow-tactile [--tactile-shadow:rgb(var(--accent-deep))]">
+                    Začít teď
+                    <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+                  </span>
+                </div>
+              </div>
+            </div>
+          </Link>
+        ) : (
+          <Card className="overflow-hidden border-accent/25 bg-gradient-to-br from-accent-soft via-white to-canvas-alt p-6 sm:p-8">
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-accent text-white">
+                <CheckCircle2 className="h-6 w-6" />
+              </div>
+              <div>
+                <p className="text-xl font-black text-ink">Pro tuto chvíli máš hotovo. 🎉</p>
+                <p className="mt-1 text-sm leading-6 text-ink-muted">
+                  Můžeš se podívat na svůj pokrok nebo si zopakovat poslední výsledky.
+                </p>
+              </div>
+            </div>
+          </Card>
+        )}
+
+        <Card
+          className="flex flex-wrap items-center gap-6 p-6"
+          data-testid="student-hero-card"
+        >
+          <div className="hidden sm:block">
+            <PartakBlob size={82} />
+          </div>
           <div className="min-w-[220px] flex-1">
-            <div className="mb-3.5 flex flex-wrap gap-2" data-testid="student-hero-badges">
+            <div
+              className="mb-3 flex flex-wrap gap-2"
+              data-testid="student-hero-badges"
+            >
               <Badge variant="info">⚡ {xp} XP</Badge>
               <Badge variant="success">Úroveň {level ?? 1}</Badge>
               {streakDays > 0 && (
                 <Badge variant="warning">
                   🔥 {streakDays}{" "}
-                  {streakDays === 1 ? "den" : streakDays <= 4 ? "dny" : "dní"} v řadě
+                  {streakDays === 1
+                    ? "den"
+                    : streakDays <= 4
+                      ? "dny"
+                      : "dní"}{" "}
+                  v řadě
                 </Badge>
               )}
             </div>
-            {toNext != null ? (
-              <p className="mb-2 text-sm text-ink-muted">
-                Do další úrovně zbývá <strong className="text-ink">{toNext} XP</strong>
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm text-ink-muted">
+                {toNext != null ? (
+                  <>
+                    Do další úrovně zbývá{" "}
+                    <strong className="text-ink">{toNext} XP</strong>
+                  </>
+                ) : (
+                  "Jsi na nejvyšší sledované úrovni. 🏆"
+                )}
               </p>
-            ) : (
-              <p className="mb-2 text-sm text-ink-muted">Jsi na nejvyšší sledované úrovni. 🏆</p>
-            )}
-            <Progress value={levelProgress} />
+              <Trophy className="h-4 w-4 shrink-0 text-streak" />
+            </div>
+            <div className="mt-2">
+              <Progress value={levelProgress} />
+            </div>
           </div>
         </Card>
+
+        {remainingAssignments.length > 0 && (
+          <section>
+            <SectionLabel>Potom pokračuj</SectionLabel>
+            <div className="space-y-2.5">
+              {remainingAssignments.map((assignment) => (
+                <Link
+                  key={assignment.id}
+                  href={`/app/assignments/${assignment.id}`}
+                  className="block"
+                >
+                  <Card
+                    hoverable
+                    className="flex items-center justify-between gap-4 px-5 py-4"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-base font-bold text-ink">
+                        {assignment.testTitle}
+                      </p>
+                      <p className="mt-0.5 text-xs font-semibold text-ink-muted">
+                        další otevřené zadání
+                      </p>
+                    </div>
+                    <span className="whitespace-nowrap text-[13px] font-semibold text-streak">
+                      do {formatDate(assignment.closeAt)}
+                    </span>
+                  </Card>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
 
         <section>
           <SectionLabel>Můj pokrok</SectionLabel>
@@ -315,31 +462,14 @@ export function StudentDashboard(): React.JSX.Element {
         </section>
 
         <section>
-          <SectionLabel>Čeká na tebe</SectionLabel>
-          {openAssignments.length > 0 ? (
-            <div className="space-y-2.5">
-              {openAssignments.map((a) => (
-                <Link key={a.id} href={`/app/assignments/${a.id}`} className="block">
-                  <Card hoverable className="flex items-center justify-between gap-3 px-5 py-4">
-                    <span className="text-base font-bold text-ink">{a.testTitle}</span>
-                    <span className="whitespace-nowrap text-[13px] font-semibold text-streak">
-                      do {formatDate(a.closeAt)}
-                    </span>
-                  </Card>
-                </Link>
-              ))}
-            </div>
-          ) : (
-            <Card className="px-5 py-8 text-center text-sm text-ink-muted">{EMPTY_OPEN}</Card>
-          )}
-        </section>
-
-        <section>
           <SectionLabel>Hotovo</SectionLabel>
           {submissions.length > 0 ? (
             <div className="space-y-2.5">
               {submissions.slice(0, 5).map((sub) => (
-                <Card key={sub.id} className="flex items-center justify-between gap-3 px-5 py-4">
+                <Card
+                  key={sub.id}
+                  className="flex items-center justify-between gap-3 px-5 py-4"
+                >
                   <div>
                     <p className="text-base font-bold text-ink">{sub.testTitle}</p>
                     <p className="mt-0.5 text-sm text-ink-muted">
@@ -357,7 +487,9 @@ export function StudentDashboard(): React.JSX.Element {
               ))}
             </div>
           ) : (
-            <Card className="px-5 py-8 text-center text-sm text-ink-muted">{EMPTY_SUBMISSIONS}</Card>
+            <Card className="px-5 py-8 text-center text-sm text-ink-muted">
+              {EMPTY_SUBMISSIONS}
+            </Card>
           )}
         </section>
 

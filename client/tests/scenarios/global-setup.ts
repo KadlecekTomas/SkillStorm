@@ -13,8 +13,10 @@ const { assertTestDatabaseUrl } = require('../../../server/scripts/db-safety.js'
  * 2. Brings the schema up to date (migrate deploy) and runs the deterministic
  *    scenario seed (server/prisma/seed/scenarios-e2e.seed.ts), whose own wipe
  *    resets the scenario data idempotently.
- * 3. Adds verified PARENT, progress/RBAC and platform fixtures.
- * 4. Captures the combined manifest (accounts, ids) to
+ * 3. Applies presentation-safe ZŠ data (realistic display names/year/copy)
+ *    without changing technical account identifiers used by tests.
+ * 4. Adds verified PARENT, progress/RBAC and platform fixtures.
+ * 5. Captures the combined manifest (accounts, ids) to
  *    tests/scenarios/.manifest.json for auth.setup + specs.
  *
  * Product-certification preseed mode:
@@ -101,6 +103,19 @@ export default async function globalSetup() {
   }
   const manifest = JSON.parse(line.replace('SCENARIO_MANIFEST=', ''));
 
+  const productOut = execSync(
+    'npx ts-node --transpile-only prisma/seed/scenarios-zs-product-extension.ts',
+    { cwd: serverDir, env: { ...process.env, DATABASE_URL_TEST: dbUrl } },
+  ).toString();
+  const productLine = productOut
+    .split('\n')
+    .find((l) => l.startsWith('SCENARIO_ZS_PRODUCT_EXTENSION='));
+  if (!productLine) {
+    throw new Error(
+      'ZŠ product scenario extension did not emit SCENARIO_ZS_PRODUCT_EXTENSION',
+    );
+  }
+
   const parentOut = execSync(
     'npx ts-node --transpile-only prisma/seed/scenarios-parent-extension.ts',
     { cwd: serverDir, env: { ...process.env, DATABASE_URL_TEST: dbUrl } },
@@ -109,7 +124,9 @@ export default async function globalSetup() {
     .split('\n')
     .find((l) => l.startsWith('SCENARIO_PARENT_EXTENSION='));
   if (!parentLine) {
-    throw new Error('parent scenario extension did not emit SCENARIO_PARENT_EXTENSION');
+    throw new Error(
+      'parent scenario extension did not emit SCENARIO_PARENT_EXTENSION',
+    );
   }
   const parent = JSON.parse(
     parentLine.replace('SCENARIO_PARENT_EXTENSION=', ''),
@@ -127,7 +144,9 @@ export default async function globalSetup() {
     .split('\n')
     .find((l) => l.startsWith('SCENARIO_PROGRESS_EXTENSION='));
   if (!progressLine) {
-    throw new Error('progress scenario extension did not emit SCENARIO_PROGRESS_EXTENSION');
+    throw new Error(
+      'progress scenario extension did not emit SCENARIO_PROGRESS_EXTENSION',
+    );
   }
   const progress = JSON.parse(
     progressLine.replace('SCENARIO_PROGRESS_EXTENSION=', ''),
@@ -144,17 +163,22 @@ export default async function globalSetup() {
     .split('\n')
     .find((l) => l.startsWith('SCENARIO_PLATFORM_EXTENSION='));
   if (!platformLine) {
-    throw new Error('platform scenario extension did not emit SCENARIO_PLATFORM_EXTENSION');
+    throw new Error(
+      'platform scenario extension did not emit SCENARIO_PLATFORM_EXTENSION',
+    );
   }
   const platform = JSON.parse(
     platformLine.replace('SCENARIO_PLATFORM_EXTENSION=', ''),
   );
-  manifest.accounts = { ...manifest.accounts, superadmin: platform.superadmin };
+  manifest.accounts = {
+    ...manifest.accounts,
+    superadmin: platform.superadmin,
+  };
   manifest.superadminUserId = platform.superadminUserId;
 
   writeFileSync(MANIFEST_PATH, JSON.stringify(manifest, null, 2));
   // eslint-disable-next-line no-console
   console.log(
-    `[scenarios] seeded org=${manifest.orgId} (8.A ${manifest.students8A.length}, 2.A ${manifest.students2A.length}, parent=1, progress-scope=1, superadmin=1)`,
+    `[scenarios] seeded org=${manifest.orgId} (8.A ${manifest.students8A.length}, 2.A ${manifest.students2A.length}, parent=1, progress-scope=1, superadmin=1, zs-product=1)`,
   );
 }
