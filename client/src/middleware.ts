@@ -10,8 +10,8 @@ const JOIN_PREFIX = "/join";
 
 /**
  * Build auth redirects from the request host. Legacy /dashboard routes are
- * intentionally handled by Next route pages instead of middleware, so their
- * relative `redirect()` calls preserve the browser origin and host-only cookie.
+ * intentionally handled by Next config redirects before rendering, so this
+ * middleware stays focused on session-gating the canonical /app surface.
  */
 function sameOriginUrl(request: NextRequest, pathname: string): URL {
   const host =
@@ -43,7 +43,7 @@ function redirectToLogin(
 
 /**
  * Server-side gate for protected app and join routes:
- * - legacy /dashboard* bookmarks are handled by server route redirects;
+ * - legacy /dashboard* bookmarks redirect to canonical routes in next.config;
  * - unauthenticated /app* → /login?from=pathname;
  * - unauthenticated /join* → /login?redirect=fullUrl;
  * - role-based /app/platform* access is enforced by the platform guard.
