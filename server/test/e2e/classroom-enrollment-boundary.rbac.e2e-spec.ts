@@ -6,6 +6,7 @@ import {
   ActivityDeliveryMode,
   EnrollmentStatus,
   LessonExperienceCurriculumMappingStatus,
+  LiveSessionMode,
   MappingProposerType,
   OrganizationRole,
   OrganizationStatus,
@@ -219,7 +220,7 @@ describe('classroom enrollment boundary RBAC (PostgreSQL e2e)', () => {
     const classBoundSession = await classroom.createLessonSession(
       {
         lessonExperienceVersionId: publishedLesson.id,
-        mode: ActivityDeliveryMode.DEVICES,
+        mode: LiveSessionMode.DEVICES,
         classSectionId: class8A.id,
       },
       directorCtx,
