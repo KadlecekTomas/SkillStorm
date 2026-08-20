@@ -50,6 +50,11 @@ export type UniversalLessonSpec = {
   shell: CreateLessonExperienceDto;
   version: AuthoredLessonVersion;
   curriculum: CurriculumOutcomeRef[];
+  /**
+   * Existing machine-readable IT-0 year-plan IDs that this detailed Lesson
+   * Experience materializes or expands. This prevents a second competing year plan.
+   */
+  yearPlanRefs: string[];
 };
 
 export type UniversalContentPack = {
@@ -58,6 +63,8 @@ export type UniversalContentPack = {
   subjectCode: string;
   title: string;
   description: string;
+  /** Existing recommended whole-year pack remains the planning source of truth. */
+  parentYearPackId: string;
   placement: {
     recommendedGrade: SchoolGrade;
     compatibleGrades: SchoolGrade[];
@@ -71,7 +78,11 @@ export type UniversalContentPack = {
   lessons: UniversalLessonSpec[];
 };
 
-export type SchoolAdapterCoverage = 'COVERED' | 'PARTIAL' | 'GAP' | 'REUSE_EXISTING';
+export type SchoolAdapterCoverage =
+  | 'COVERED'
+  | 'PARTIAL'
+  | 'GAP'
+  | 'REUSE_EXISTING';
 
 export type SchoolOutcomeAdapterEntry = {
   sourceOutcomeKey: string;
