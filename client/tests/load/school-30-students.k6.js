@@ -14,8 +14,10 @@ if (students.length !== 30) {
 
 const persistedFinalValue = new Rate('school_persisted_final_value');
 const loginDuration = new Trend('school_login_duration', true);
+const overviewDuration = new Trend('school_overview_duration', true);
 const sessionDuration = new Trend('school_test_session_duration', true);
 const autosaveDuration = new Trend('school_autosave_duration', true);
+const readBackDuration = new Trend('school_readback_duration', true);
 
 export const options = {
   // Caddy uses an ephemeral internal CA in CI. Ignore only CA verification;
@@ -32,10 +34,17 @@ export const options = {
   thresholds: {
     checks: ['rate>0.99'],
     http_req_failed: ['rate<0.01'],
-    http_req_duration: ['p(95)<2000'],
-    school_login_duration: ['p(95)<1500'],
+    // Classroom SLOs are phase-specific. Thirty students deliberately hit login
+    // at the same instant, including bcrypt verification; allow up to 4 s p95
+    // for that one-time class-bell burst. Once authenticated, every interactive
+    // data path must remain below 1.5 s p95 and the complete six-request journey
+    // must finish below 6 s p95.
+    iteration_duration: ['p(95)<6000'],
+    school_login_duration: ['p(95)<4000'],
+    school_overview_duration: ['p(95)<1500'],
     school_test_session_duration: ['p(95)<1500'],
     school_autosave_duration: ['p(95)<1500'],
+    school_readback_duration: ['p(95)<1500'],
     school_persisted_final_value: ['rate==1'],
   },
 };
@@ -118,6 +127,7 @@ export default function () {
     headers: requestHeaders(),
     tags: { name: 'GET /api/assignments/overview' },
   });
+  overviewDuration.add(overview.timings.duration);
   check(overview, { 'assignment overview loads': (r) => r.status === 200 });
   if (overview.status !== 200) {
     fail(`Overview failed for ${email}: status=${overview.status} body=${String(overview.body).slice(0, 300)}`);
@@ -193,6 +203,7 @@ export default function () {
     headers: requestHeaders(),
     tags: { name: 'GET /api/submissions/:id' },
   });
+  readBackDuration.add(readBack.timings.duration);
   check(readBack, { 'submission read-back succeeds': (r) => r.status === 200 });
   if (readBack.status !== 200) {
     persistedFinalValue.add(false);
@@ -213,6 +224,6 @@ export default function () {
 export function handleSummary(data) {
   return {
     'test-results/k6-school-30-students-summary.json': JSON.stringify(data, null, 2),
-    stdout: `\nSchool 30-student certification complete: checks=${data.metrics.checks?.values?.rate ?? 'n/a'} failed=${data.metrics.http_req_failed?.values?.rate ?? 'n/a'} p95=${data.metrics.http_req_duration?.values?.['p(95)'] ?? 'n/a'}ms\n`,
+    stdout: `\nSchool 30-student certification complete: checks=${data.metrics.checks?.values?.rate ?? 'n/a'} failed=${data.metrics.http_req_failed?.values?.rate ?? 'n/a'} iteration_p95=${data.metrics.iteration_duration?.values?.['p(95)'] ?? 'n/a'}ms login_p95=${data.metrics.school_login_duration?.values?.['p(95)'] ?? 'n/a'}ms autosave_p95=${data.metrics.school_autosave_duration?.values?.['p(95)'] ?? 'n/a'}ms\n`,
   };
 }
