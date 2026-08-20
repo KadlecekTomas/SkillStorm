@@ -10,6 +10,7 @@ import {
 } from '@prisma/client';
 import type { OrgContext } from '@/common/org-context/org-context.types';
 import { PrismaService } from '@/prisma/prisma.service';
+import { ClassroomStudentAccessService } from './classroom-student-access.service';
 
 const ACTIVE_STATUSES = [
   LiveSessionStatus.DRAFT,
@@ -28,7 +29,10 @@ function normalizeCode(code: string): string {
 
 @Injectable()
 export class AlgorithmLabJoinCodeService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly studentAccess: ClassroomStudentAccessService,
+  ) {}
 
   async resolve(code: string, ctx: OrgContext): Promise<{ sessionId: string }> {
     const normalized = normalizeCode(code);
@@ -56,9 +60,19 @@ export class AlgorithmLabJoinCodeService {
       select: { id: true },
     });
 
-    const matches = sessions.filter(
+    const codeMatches = sessions.filter(
       (session) => normalizeCode(classroomCodeForSession(session.id)) === normalized,
     );
+    const matches: Array<{ id: string }> = [];
+    for (const session of codeMatches) {
+      try {
+        await this.studentAccess.assertCanAccessSession(session.id, ctx);
+        matches.push(session);
+      } catch (error) {
+        if (error instanceof NotFoundException) continue;
+        throw error;
+      }
+    }
 
     if (matches.length === 0) {
       throw new NotFoundException({

@@ -24,6 +24,7 @@ import { AlgorithmLabJoinCodeService } from './algorithm-lab-join-code.service';
 import { AlgorithmLabQuickStartService } from './algorithm-lab-quick-start.service';
 import { BuildPcAnalyticsService } from './build-pc-analytics.service';
 import { ClassroomOrchestrationService } from './classroom-orchestration.service';
+import { ClassroomStudentAccessService } from './classroom-student-access.service';
 import { NetworkedCoopProgramService } from './networked-coop-program.service';
 import { NetworkedCoopService } from './networked-coop.service';
 import {
@@ -44,6 +45,7 @@ import { NetworkedCoopTransitionDto } from './dto/networked-coop.dto';
 export class ClassroomOrchestrationController {
   constructor(
     private readonly service: ClassroomOrchestrationService,
+    private readonly studentAccess: ClassroomStudentAccessService,
     private readonly algorithmLabAnalytics: AlgorithmLabAnalyticsService,
     private readonly algorithmLabAutoPair: AlgorithmLabAutoPairService,
     private readonly algorithmLabJoinCode: AlgorithmLabJoinCodeService,
@@ -89,7 +91,9 @@ export class ClassroomOrchestrationController {
     @Req() req: RequestWithUser,
   ) {
     const ctx = await this.orgContext.get(req);
-    return this.algorithmLabJoinCode.resolve(code, ctx);
+    const resolved = await this.algorithmLabJoinCode.resolve(code, ctx);
+    await this.studentAccess.assertCanAccessSession(resolved.sessionId, ctx);
+    return resolved;
   }
 
   @Get(':id')
@@ -178,6 +182,7 @@ export class ClassroomOrchestrationController {
     @Req() req: RequestWithUser,
   ) {
     const ctx = await this.orgContext.get(req);
+    await this.studentAccess.assertCanAccessSession(id, ctx);
     return this.algorithmLabAutoPair.join(id, dto, ctx);
   }
 
@@ -189,6 +194,7 @@ export class ClassroomOrchestrationController {
     @Req() req: RequestWithUser,
   ) {
     const ctx = await this.orgContext.get(req);
+    await this.studentAccess.assertCanAccessSession(id, ctx);
     return this.service.disconnectStudent(id, ctx);
   }
 
@@ -200,6 +206,7 @@ export class ClassroomOrchestrationController {
     @Req() req: RequestWithUser,
   ) {
     const ctx = await this.orgContext.get(req);
+    await this.studentAccess.assertCanAccessSession(id, ctx);
     return this.service.getStudentProjection(id, ctx);
   }
 
@@ -211,6 +218,7 @@ export class ClassroomOrchestrationController {
     @Req() req: RequestWithUser,
   ) {
     const ctx = await this.orgContext.get(req);
+    await this.studentAccess.assertCanAccessSession(id, ctx);
     return this.networkedCoop.get(id, ctx);
   }
 
@@ -223,6 +231,7 @@ export class ClassroomOrchestrationController {
     @Req() req: RequestWithUser,
   ) {
     const ctx = await this.orgContext.get(req);
+    await this.studentAccess.assertCanAccessSession(id, ctx);
     return this.networkedCoop.transition(id, dto, ctx);
   }
 
@@ -234,6 +243,7 @@ export class ClassroomOrchestrationController {
     @Req() req: RequestWithUser,
   ) {
     const ctx = await this.orgContext.get(req);
+    await this.studentAccess.assertCanAccessSession(id, ctx);
     return this.networkedCoopProgram.get(id, ctx);
   }
 
@@ -246,6 +256,7 @@ export class ClassroomOrchestrationController {
     @Req() req: RequestWithUser,
   ) {
     const ctx = await this.orgContext.get(req);
+    await this.studentAccess.assertCanAccessSession(id, ctx);
     return this.networkedCoopProgram.update(id, dto, ctx);
   }
 
@@ -258,6 +269,7 @@ export class ClassroomOrchestrationController {
     @Req() req: RequestWithUser,
   ) {
     const ctx = await this.orgContext.get(req);
+    await this.studentAccess.assertCanAccessSession(id, ctx);
     return this.service.recordSemanticEvent(id, dto, ctx);
   }
 }
