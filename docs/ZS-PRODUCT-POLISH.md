@@ -1,5 +1,13 @@
 # SkillStorm — ZŠ Product Polish
 
+> **Status:** `VISION / APPROVED`  
+> **Owner:** Product + Engineering  
+> **Last reviewed:** 2026-08-20  
+> **Scope:** produktový acceptance bar pro ZŠ vertical slice Ředitel → učitel → třída → žák → výuka → odevzdání → výsledek.  
+> **Authority:** schválený cílový produktový směr pro ZŠ polish; executable code, RBAC/security invarianty a production gates zůstávají technickou autoritou a tento dokument nesmí být používán jako důkaz implementace bez browser/CI evidence.
+
+---
+
 ## Cíl
 
 SkillStorm musí během prvních pěti sekund působit jako hotový pracovní produkt pro reálnou základní školu, ne jako sada administrativních obrazovek.
