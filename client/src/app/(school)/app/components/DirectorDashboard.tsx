@@ -1,7 +1,7 @@
 "use client";
 
-import { DirectorCommandCenter } from "@/components/dashboard/DirectorCommandCenter";
+import { DirectorSchoolCockpit } from "@/components/dashboard/DirectorSchoolCockpit";
 
 export function DirectorDashboard(): React.JSX.Element {
-  return <DirectorCommandCenter />;
+  return <DirectorSchoolCockpit />;
 }
