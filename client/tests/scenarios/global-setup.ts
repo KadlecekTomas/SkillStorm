@@ -183,7 +183,7 @@ export default async function globalSetup() {
   manifest.superadminUserId = platform.superadminUserId;
 
   const informaticsOut = execSync(
-    'npx ts-node --transpile-only prisma/seed/scenarios-informatics-extension.ts',
+    'npx ts-node -r tsconfig-paths/register --transpile-only prisma/seed/scenarios-informatics-extension.ts',
     { cwd: serverDir, env: { ...process.env, DATABASE_URL_TEST: dbUrl } },
   ).toString();
   const informaticsLine = informaticsOut
