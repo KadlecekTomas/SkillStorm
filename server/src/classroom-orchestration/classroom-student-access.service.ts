@@ -33,6 +33,13 @@ export class ClassroomStudentAccessService {
     if (!session.classSectionId) return;
 
     const student = await this.requireStudentRecord(ctx);
+    if (!student) {
+      // requireStudentRecord() throws by default, but keep the boundary explicit so
+      // TypeScript and future refactors cannot accidentally treat a missing Student
+      // profile as an authorized classroom participant.
+      throw this.notAvailable();
+    }
+
     const enrollment = await this.prisma.enrollment.findFirst({
       where: {
         studentId: student.id,
