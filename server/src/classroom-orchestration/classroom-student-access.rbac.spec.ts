@@ -62,6 +62,17 @@ describe('ClassroomStudentAccessService RBAC boundary', () => {
     });
   });
 
+  it('fails closed when a STUDENT membership has no valid Student profile', async () => {
+    liveSessionFindFirst.mockResolvedValue({ id: 'session-1', classSectionId: 'class-8a' });
+    membershipFindFirst.mockResolvedValue({ id: studentCtx.membershipId });
+    studentFindUnique.mockResolvedValue(null);
+
+    await expect(service.assertCanAccessSession('session-1', studentCtx)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    expect(enrollmentFindFirst).not.toHaveBeenCalled();
+  });
+
   it('hides a class-bound session from a same-org student enrolled elsewhere', async () => {
     liveSessionFindFirst.mockResolvedValue({ id: 'session-1', classSectionId: 'class-8a' });
     membershipFindFirst.mockResolvedValue({ id: studentCtx.membershipId });
