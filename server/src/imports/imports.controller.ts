@@ -4,6 +4,7 @@ import {
   Controller,
   Post,
   Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -19,6 +20,8 @@ import {
 import { OrgContextService } from '@/common/org-context/org-context.service';
 import { Permission } from '@/modules/rbac/permission.decorator';
 import { RequestWithUser } from '@/types/request-with-user';
+import type { Response } from 'express';
+import { NoHttpCache } from '@/common/cache/no-http-cache.decorator';
 import { ImportsService } from './imports.service';
 import { StudentImportCommitDto } from './dto/student-import-commit.dto';
 import { StudentImportPreviewDto } from './dto/student-import-preview.dto';
@@ -66,11 +69,15 @@ export class ImportsController {
 
   @Post('commit')
   @Permission(PermissionKey.MANAGE_STUDENTS)
+  @NoHttpCache()
   @ApiOperation({ summary: 'Commit edited student import rows' })
   async commit(
     @Body() dto: StudentImportCommitDto,
     @Req() req: RequestWithUser,
+    @Res({ passthrough: true }) res: Response,
   ) {
+    res.setHeader('Cache-Control', 'no-store, private');
+    res.setHeader('Pragma', 'no-cache');
     const ctx = await this.orgContext.get(req);
     if (!ctx.activeAcademicYearId) {
       throw new BadRequestException('Missing active academic year.');

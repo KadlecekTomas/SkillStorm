@@ -66,6 +66,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         deletedAt: true,
         isPlatformAdmin: true,
         passwordChangedAt: true,
+        mustChangePassword: true,
         tokenVersion: true,
       },
     });
@@ -189,6 +190,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       organizationId: organizationId ?? null,
       membershipId: membershipId ?? null,
       isPlatformAdmin,
+      mustChangePassword: user.mustChangePassword,
       ...(learningSessionId ? { learningSessionId } : {}),
     };
   }

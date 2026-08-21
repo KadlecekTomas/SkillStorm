@@ -17,7 +17,7 @@ export function PostAuthResolver(): null {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { authStatus, isAuthenticated, context } = useAuth();
+  const { authStatus, isAuthenticated, context, user } = useAuth();
   const navigatedThisTransitionRef = useRef(false);
   const prevAuthenticatedRef = useRef(false);
 
@@ -36,6 +36,12 @@ export function PostAuthResolver(): null {
     const path = pathname ?? "";
     const isAuthRoute = path === "/login" || path === "/register" || path === "/join" || path.startsWith("/join/");
     if (!isAuthRoute || !justBecameAuthenticated || navigatedThisTransitionRef.current) {
+      return;
+    }
+
+    if (user?.mustChangePassword === true) {
+      navigatedThisTransitionRef.current = true;
+      router.replace("/change-password");
       return;
     }
 
@@ -71,7 +77,7 @@ export function PostAuthResolver(): null {
     }
     navigatedThisTransitionRef.current = true;
     router.replace(target);
-  }, [authStatus, isAuthenticated, pathname, context?.mode, router, searchParams]);
+  }, [authStatus, isAuthenticated, pathname, context?.mode, router, searchParams, user?.mustChangePassword]);
 
   return null;
 }

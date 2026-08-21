@@ -1207,7 +1207,11 @@ export class AuthService {
     );
 
     const activeRole = await this.resolveActiveRole(membership);
-    const tokens = await this.generateTokens(updatedUser, membership, activeRole);
+    const tokens = await this.generateTokens(
+      updatedUser,
+      membership,
+      activeRole,
+    );
 
     await this.auditService.log({
       action: opts.auditAction ?? 'LOGIN',
@@ -1285,7 +1289,11 @@ export class AuthService {
 
     // Login obnovuje poslední aktivní role-kontext (multi-role Etapa A).
     const activeRole = await this.resolveActiveRole(membership);
-    const tokens = await this.generateTokens(updatedUser, membership, activeRole);
+    const tokens = await this.generateTokens(
+      updatedUser,
+      membership,
+      activeRole,
+    );
 
     if (membership?.id) {
       await this.gamification.awardXpForEvent(
@@ -1442,6 +1450,7 @@ export class AuthService {
         isPlatformAdmin: true,
         createdAt: true,
         lastLoginAt: true,
+        mustChangePassword: true,
         memberships: {
           where: { deletedAt: null },
           select: {
@@ -1478,6 +1487,7 @@ export class AuthService {
       isPlatformAdmin,
       createdAt: user.createdAt,
       lastLoginAt: user.lastLoginAt,
+      mustChangePassword: user.mustChangePassword,
       memberships: mappedMemberships,
       organizationRole: primaryMembership?.role ?? null,
       organizationId: primaryMembership?.organizationId ?? null,
@@ -1512,6 +1522,7 @@ export class AuthService {
         isPlatformAdmin: true,
         createdAt: true,
         lastLoginAt: true,
+        mustChangePassword: true,
         lastActiveMembershipId: true,
         memberships: {
           where: { deletedAt: null },
@@ -1685,6 +1696,7 @@ export class AuthService {
         userRow.systemRole === SystemRole.SUPERADMIN,
       createdAt: userRow.createdAt,
       lastLoginAt: userRow.lastLoginAt,
+      mustChangePassword: userRow.mustChangePassword,
       memberships: membershipsOut,
       organizationRole: activeRole,
       organizationId: activeMembership?.organizationId ?? null,
@@ -1957,8 +1969,12 @@ export class AuthService {
   async changePassword(
     userId: string,
     dto: ChangePasswordDto,
-    ctx?: { ipAddress?: string | null; userAgent?: string | null },
-  ): Promise<void> {
+    ctx?: {
+      ipAddress?: string | null;
+      userAgent?: string | null;
+      organizationId?: string | null;
+    },
+  ): Promise<{ tokens: { accessToken: string; refreshToken: string } }> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { id: true, passwordHash: true, tokenVersion: true },
@@ -1966,24 +1982,63 @@ export class AuthService {
     if (!user) throw new UnauthorizedException('User not found');
     const valid = await bcrypt.compare(dto.currentPassword, user.passwordHash);
     if (!valid) throw new UnauthorizedException('Operace se nezdařila.');
+    const reusesCurrentPassword = await bcrypt.compare(
+      dto.newPassword,
+      user.passwordHash,
+    );
+    if (reusesCurrentPassword) {
+      throw new BadRequestException('Nové heslo musí být jiné než současné.');
+    }
     const passwordHash = await bcrypt.hash(dto.newPassword, 10);
-    const now = new Date();
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: {
-        passwordHash,
-        passwordChangedAt: now,
-        tokenVersion: (user.tokenVersion ?? 0) + 1,
-      },
+    // JWT iat has second precision. Flooring keeps the newly issued token
+    // valid while tokenVersion still invalidates every older access token.
+    const now = new Date(Math.floor(Date.now() / 1000) * 1000);
+    const updatedUser = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.user.updateMany({
+        where: {
+          id: userId,
+          passwordHash: user.passwordHash,
+          tokenVersion: user.tokenVersion ?? 0,
+        },
+        data: {
+          passwordHash,
+          mustChangePassword: false,
+          passwordChangedAt: now,
+          tokenVersion: { increment: 1 },
+        },
+      });
+      if (updated.count !== 1) {
+        throw new UnauthorizedException('Operace se nezdařila.');
+      }
+      await tx.refreshToken.updateMany({
+        where: { userId, revokedAt: null },
+        data: { revokedAt: now },
+      });
+      await tx.auditLog.create({
+        data: {
+          action: 'PASSWORD_CHANGED',
+          entityType: AuditEntityType.USER,
+          userId,
+          organizationId: ctx?.organizationId ?? null,
+          entityId: userId,
+          ipAddress: ctx?.ipAddress ?? null,
+          userAgent: ctx?.userAgent ?? null,
+        },
+      });
+      return tx.user.findUniqueOrThrow({ where: { id: userId } });
     });
-    await this.auditService.log({
-      action: 'PASSWORD_CHANGED',
-      entityType: AuditEntityType.USER,
-      userId,
-      entityId: userId,
-      ipAddress: ctx?.ipAddress ?? null,
-      userAgent: ctx?.userAgent ?? null,
-    });
+
+    const membership = await this.resolveSessionMembership(
+      updatedUser,
+      ctx?.organizationId ?? null,
+    );
+    const activeRole = await this.resolveActiveRole(membership);
+    const tokens = await this.generateTokens(
+      updatedUser,
+      membership,
+      activeRole,
+    );
+    return { tokens };
   }
 
   private hashResetToken(token: string): string {
@@ -2055,6 +2110,7 @@ export class AuthService {
         where: { id: row.userId },
         data: {
           passwordHash,
+          mustChangePassword: false,
           passwordChangedAt: now,
           tokenVersion: nextVersion,
         },
@@ -2062,6 +2118,10 @@ export class AuthService {
       this.prisma.passwordResetToken.update({
         where: { id: row.id },
         data: { usedAt: now },
+      }),
+      this.prisma.refreshToken.updateMany({
+        where: { userId: row.userId, revokedAt: null },
+        data: { revokedAt: now },
       }),
     ]);
     await this.auditService.log({

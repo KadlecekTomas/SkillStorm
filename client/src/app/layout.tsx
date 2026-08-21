@@ -9,6 +9,7 @@ import { AppToasts } from "@/components/ui/app-toasts";
 import { ServiceWorkerRegistration } from "@/components/pwa/service-worker-registration";
 import "react-toastify/dist/ReactToastify.css";
 import "@/styles/toasts.css";
+import { FirstLoginGate } from "@/components/auth/FirstLoginGate";
 
 const inter = Inter({
   subsets: ["latin", "latin-ext"],
@@ -58,7 +59,7 @@ export default async function RootLayout({
           <TooltipProvider>
             {MswLoader ? <MswLoader /> : null}
             <Suspense fallback={<LoadingSpinner fullScreen />}>
-              {children}
+              <FirstLoginGate>{children}</FirstLoginGate>
             </Suspense>
           </TooltipProvider>
           <AppToasts />

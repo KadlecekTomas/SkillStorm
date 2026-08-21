@@ -44,6 +44,7 @@ import { ResetPasswordDto } from './dto/reset-password.dto';
 import { AllowAnyOrgStatus } from '@/common/decorators/allow-any-org-status.decorator';
 import { ApiStandardResponses } from '@/common/http/api-standard-responses.decorator';
 import { NoHttpCache } from '@/common/cache/no-http-cache.decorator';
+import { AllowPasswordChangeRequired } from '@/common/decorators/allow-password-change-required.decorator';
 
 @ApiTags('auth')
 @ApiStandardResponses()
@@ -230,6 +231,7 @@ export class AuthController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @AllowAnyOrgStatus()
+  @AllowPasswordChangeRequired()
   @NoHttpCache()
   @ApiOperation({ summary: 'Get current user profile (auth context)' })
   async me(
@@ -361,18 +363,32 @@ export class AuthController {
   @Post('change-password')
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
+  @AllowPasswordChangeRequired()
   @ApiOperation({ summary: 'Change password (authenticated user)' })
   @Throttle({ default: { limit: 5, ttl: seconds(60) } })
   async changePassword(
     @Req() req: RequestWithUser,
     @Body() dto: ChangePasswordDto,
+    @Res({ passthrough: true }) res: Response,
   ) {
     const ctx = {
       ipAddress: req.ip ?? null,
       userAgent: req.get('user-agent') ?? null,
+      organizationId: req.user.organizationId ?? null,
     };
-    await this.authService.changePassword(req.user.userId, dto, ctx);
-    return ok({ ok: true });
+    const result = await this.authService.changePassword(
+      req.user.userId,
+      dto,
+      ctx,
+    );
+    setAuthCookies(res, result.tokens);
+    setCsrfCookie(res, generateCsrfToken());
+    const profile = await this.authService.getMeContext(req.user.userId, {
+      membershipId: req.user.membershipId ?? null,
+      organizationId: req.user.organizationId ?? null,
+      activeRole: req.user.organizationRole ?? null,
+    });
+    return ok(profile);
   }
 
   @Public()

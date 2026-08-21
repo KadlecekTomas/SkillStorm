@@ -213,4 +213,6 @@ export type User = {
   memberships?: MembershipSummary[];
   needsOnboarding?: boolean;
   isPlatformAdmin?: boolean;
+  /** Server-authoritative first-login password change state. */
+  mustChangePassword?: boolean;
 };

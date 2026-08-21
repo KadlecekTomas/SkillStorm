@@ -31,6 +31,7 @@ import { isRepairStateClassrooms } from "@/lib/app-state/app-state";
 import { isYearWriteBlocked } from "@/lib/academic-year/write-gate";
 import { ReportIssueButton } from "@/components/support/report-issue-button";
 import { StudentImportPreviewDialog } from "@/components/students/student-import-preview-dialog";
+import { StudentImportCredentialsDialog } from "@/components/students/student-import-credentials-dialog";
 import { ArrowUp, ArrowDown, ChevronDown, ChevronRight, Minus, Star } from "lucide-react";
 import { cn } from "@/utils/cn";
 import {
@@ -237,6 +238,7 @@ export function ClassroomsPageContent(): React.JSX.Element {
   const [studentImportPreviewLoading, setStudentImportPreviewLoading] = useState(false);
   const [studentImportCommitPending, setStudentImportCommitPending] = useState(false);
   const [studentImportError, setStudentImportError] = useState<string | null>(null);
+  const [studentImportCredentials, setStudentImportCredentials] = useState<StudentImportCommitResponse | null>(null);
   const [addError, setAddError] = useState<string | null>(null);
   const [addSubmitting, setAddSubmitting] = useState(false);
   const [bulkResult, setBulkResult] = useState<{
@@ -904,6 +906,7 @@ export function ClassroomsPageContent(): React.JSX.Element {
         setStudentImportPreview(null);
         setCsvFileName(null);
         setAddOpen(false);
+        setStudentImportCredentials(result);
         showToastOnce(`Importováno ${result.summary.importedRows} žáků.`, { type: "success" });
         return result;
       } catch (err) {
@@ -2258,6 +2261,11 @@ export function ClassroomsPageContent(): React.JSX.Element {
         error={studentImportError}
         onOpenChange={setStudentImportPreviewOpen}
         onCommit={handleCommitStudentImport}
+      />
+
+      <StudentImportCredentialsDialog
+        result={studentImportCredentials}
+        onClose={() => setStudentImportCredentials(null)}
       />
 
       <BaseModal

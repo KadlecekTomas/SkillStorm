@@ -7,6 +7,7 @@ import {
 import { PrismaService } from '@/prisma/prisma.service';
 import type { JwtPayload } from '@/auth/types/jwt-payload';
 import {
+  AuditEntityType,
   EnrollmentStatus,
   ImportStatus,
   OrganizationRole,
@@ -14,6 +15,7 @@ import {
   SystemRole,
 } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
+import { generateTemporaryPassword } from '@/auth/temporary-password.util';
 
 type ParsedCsvRow = {
   rowNumber: number;
@@ -34,7 +36,7 @@ type ValidationContext = {
   domainAlias: string | null;
   settings: {
     usernamePattern: string;
-    initialPassword: string;
+    forceResetOnFirstLogin: boolean;
   };
   classOptions: ClassOption[];
   classMap: Map<string, ClassOption>;
@@ -153,6 +155,10 @@ export class ImportsService {
       rowNumber: number;
       status: 'IMPORTED' | 'ERROR';
       message?: string;
+      email?: string;
+      username?: string;
+      temporaryPassword?: string;
+      mustChangePassword?: boolean;
     }> = [];
     const errors: Array<{ rowNumber: number; message: string }> = [];
     let createdUsers = 0;
@@ -178,15 +184,9 @@ export class ImportsService {
       }
 
       try {
-        await this.prisma.$transaction(async (tx) => {
-          const passwordHash = await bcrypt.hash(
-            this.renderPattern(
-              context.settings.initialPassword,
-              row.firstName,
-              row.lastName,
-            ),
-            10,
-          );
+        const imported = await this.prisma.$transaction(async (tx) => {
+          const temporaryPassword = generateTemporaryPassword();
+          const passwordHash = await bcrypt.hash(temporaryPassword, 10);
           const email = row.email.trim().toLowerCase();
           const username = await this.ensureUniqueUsername(
             tx,
@@ -204,12 +204,11 @@ export class ImportsService {
               username,
               name: `${row.firstName} ${row.lastName}`.trim(),
               passwordHash,
+              mustChangePassword: context.settings.forceResetOnFirstLogin,
               systemRole: null,
             },
             select: { id: true },
           });
-          createdUsers += 1;
-
           const membership = await tx.membership.create({
             data: {
               userId: createdUser.id,
@@ -218,8 +217,6 @@ export class ImportsService {
             },
             select: { id: true },
           });
-          createdMemberships += 1;
-
           const student = await tx.student.create({
             data: {
               membershipId: membership.id,
@@ -227,8 +224,6 @@ export class ImportsService {
             },
             select: { id: true },
           });
-          createdStudents += 1;
-
           await tx.enrollment.create({
             data: {
               studentId: student.id,
@@ -238,10 +233,45 @@ export class ImportsService {
               status: EnrollmentStatus.ACTIVE,
             },
           });
-          createdEnrollments += 1;
+
+          await tx.auditLog.create({
+            data: {
+              action: 'STUDENT_IMPORTED',
+              entityType: AuditEntityType.USER,
+              entityId: createdUser.id,
+              userId: user.userId,
+              organizationId: orgId,
+            },
+          });
+          if (context.settings.forceResetOnFirstLogin) {
+            await tx.auditLog.create({
+              data: {
+                action: 'PASSWORD_CHANGE_REQUIRED',
+                entityType: AuditEntityType.USER,
+                entityId: createdUser.id,
+                userId: user.userId,
+                organizationId: orgId,
+              },
+            });
+          }
+
+          return {
+            email,
+            username,
+            temporaryPassword,
+            mustChangePassword: context.settings.forceResetOnFirstLogin,
+          };
         });
 
-        results.push({ rowNumber: row.rowNumber, status: 'IMPORTED' });
+        createdUsers += 1;
+        createdMemberships += 1;
+        createdStudents += 1;
+        createdEnrollments += 1;
+        results.push({
+          rowNumber: row.rowNumber,
+          status: 'IMPORTED',
+          ...imported,
+        });
       } catch (error) {
         const message = this.mapCommitError(error);
         this.logger.warn({
@@ -303,7 +333,7 @@ export class ImportsService {
         where: { orgId: input.orgId },
         select: {
           usernamePattern: true,
-          initialPassword: true,
+          forceResetOnFirstLogin: true,
           domainAlias: true,
         },
       }),
@@ -379,7 +409,7 @@ export class ImportsService {
       domainAlias: settings?.domainAlias?.trim() || null,
       settings: {
         usernamePattern: settings?.usernamePattern ?? '{surname}{fi}{yy}',
-        initialPassword: settings?.initialPassword ?? 'ChangeMe!{yy}',
+        forceResetOnFirstLogin: settings?.forceResetOnFirstLogin ?? true,
       },
       classOptions,
       classMap,
