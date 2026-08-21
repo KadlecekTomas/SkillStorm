@@ -76,8 +76,10 @@ async function main(): Promise<void> {
       where: { systemRole: SystemRole.SUPERADMIN, deletedAt: null },
       select: { id: true, email: true },
     });
-    if (!superadmin) {
-      throw new Error('Scenario Informatics extension requires the SUPERADMIN fixture first.');
+    if (!superadmin?.email) {
+      throw new Error(
+        'Scenario Informatics extension requires the SUPERADMIN fixture with an email first.',
+      );
     }
     const platformActor: JwtPayload = {
       userId: superadmin.id,
