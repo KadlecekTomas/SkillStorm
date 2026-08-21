@@ -1,22 +1,64 @@
-import { toast, type ToastOptions } from "react-toastify";
+import { toast, type Id, type ToastOptions } from "react-toastify";
 import type { HttpError } from "@/lib/http/client";
 
-const activeToasts = new Set<string>();
+type ActiveToast = {
+  id: Id;
+  type: ToastOptions["type"];
+};
 
-export function showToastOnce(message: string, options?: ToastOptions): ReturnType<typeof toast> | undefined {
-  const trimmed = message?.toString().trim();
-  if (!trimmed) return undefined;
-  if (activeToasts.has(trimmed)) return undefined;
-  const id = toast(trimmed, {
+let activeToast: ActiveToast | null = null;
+
+const normalizeToastMessage = (message: string): string =>
+  message
+    .toString()
+    .trim()
+    // Stav už komunikuje ikona toastu. Emoji v textu zbytečně duplikují význam.
+    .replace(/\s*(?:🎉|❌|✅|⚠️|⚠|✨)+\s*$/gu, "")
+    .trim();
+
+/**
+ * Jeden transient feedback channel pro celou aplikaci.
+ *
+ * - Nevrství několik potvrzení přes sebe.
+ * - Nová chyba má vždy přednost před aktivním success/info toastem.
+ * - Text je bez redundantních stavových emoji, protože význam nese ikona.
+ */
+export function showToastOnce(
+  message: string,
+  options?: ToastOptions,
+): ReturnType<typeof toast> | undefined {
+  const normalized = normalizeToastMessage(message);
+  if (!normalized) return undefined;
+
+  if (activeToast && toast.isActive(activeToast.id)) {
+    const nextIsError = options?.type === "error";
+    const currentIsError = activeToast.type === "error";
+
+    if (!nextIsError || currentIsError) {
+      return activeToast.id;
+    }
+
+    toast.dismiss(activeToast.id);
+  }
+
+  let id: Id;
+  id = toast(normalized, {
     ...options,
     onClose: (...args) => {
-      activeToasts.delete(trimmed);
+      if (activeToast?.id === id) {
+        activeToast = null;
+      }
       if (options?.onClose) {
         (options.onClose as (...p: unknown[]) => void)(...args);
       }
     },
   });
-  activeToasts.add(trimmed);
+
+  activeToast = {
+    id,
+    type: options?.type,
+  };
+
   return id;
 }
 
@@ -32,18 +74,27 @@ const isNonEmptyString = (value: unknown): value is string =>
 const extractErrorMeta = (
   err: HttpError,
 ): { status: number; code: string | null; message: string | null } => {
-  const raw = err.data as { code?: string; message?: string; meta?: { code?: string; message?: string } } | null | undefined;
+  const raw = err.data as
+    | {
+        code?: string;
+        message?: string;
+        meta?: { code?: string; message?: string };
+      }
+    | null
+    | undefined;
   const meta = raw && typeof raw === "object" ? raw.meta : undefined;
-  const code = (raw && "code" in raw && isNonEmptyString(raw.code))
-    ? raw.code
-    : meta && isNonEmptyString(meta.code)
-      ? meta.code
-      : null;
-  const backendMessage = (raw && "message" in raw && isNonEmptyString(raw.message))
-    ? raw.message.trim()
-    : meta && isNonEmptyString(meta.message)
-      ? meta.message.trim()
-      : null;
+  const code =
+    raw && "code" in raw && isNonEmptyString(raw.code)
+      ? raw.code
+      : meta && isNonEmptyString(meta.code)
+        ? meta.code
+        : null;
+  const backendMessage =
+    raw && "message" in raw && isNonEmptyString(raw.message)
+      ? raw.message.trim()
+      : meta && isNonEmptyString(meta.message)
+        ? meta.message.trim()
+        : null;
 
   return {
     status: err.status,
@@ -112,13 +163,17 @@ export function resolveToastFromHttpError(err: HttpError): ResolvedToast {
  */
 export function showHttpErrorToastOnce(err: unknown): void {
   if (!err || typeof err !== "object") {
-    showToastOnce("Došlo k technické chybě. Zkus to prosím znovu.", { type: "error" });
+    showToastOnce("Došlo k technické chybě. Zkus to prosím znovu.", {
+      type: "error",
+    });
     return;
   }
 
   const maybeHttpError = err as HttpError;
   if (typeof maybeHttpError.status !== "number") {
-    showToastOnce("Došlo k technické chybě. Zkus to prosím znovu.", { type: "error" });
+    showToastOnce("Došlo k technické chybě. Zkus to prosím znovu.", {
+      type: "error",
+    });
     return;
   }
 
