@@ -223,23 +223,30 @@ describe('Tests (e2e)', () => {
   });
 
   afterAll(async () => {
-    // hard cleanup: nejdřív test-related entities (questions/options/answers cascade via FK),
-    // pak memberships/orgs/users/tokens
-    await prisma.question.deleteMany({});
-    await prisma.testAssignment.deleteMany({});
-    await prisma.submission.deleteMany({});
+    const organizationIds = [orgA.id, orgB.id];
+    // Remove tenant-owned submissions before their questions. Submitted
+    // responses are intentionally protected by the SUBMISSION_LOCKED trigger.
+    await prisma.submission.deleteMany({
+      where: { organizationId: { in: organizationIds } },
+    });
+    await prisma.testAssignment.deleteMany({
+      where: { test: { organizationId: { in: organizationIds } } },
+    });
+    await prisma.question.deleteMany({
+      where: { test: { organizationId: { in: organizationIds } } },
+    });
     await prisma.test.deleteMany({
-      where: { organizationId: { in: [orgA.id, orgB.id] } },
+      where: { organizationId: { in: organizationIds } },
     });
     await prisma.classSection.deleteMany({
-      where: { orgId: { in: [orgA.id, orgB.id] } },
+      where: { orgId: { in: organizationIds } },
     });
 
     await prisma.membership.deleteMany({
-      where: { organizationId: { in: [orgA.id, orgB.id] } },
+      where: { organizationId: { in: organizationIds } },
     });
     await prisma.organization.deleteMany({
-      where: { id: { in: [orgA.id, orgB.id] } },
+      where: { id: { in: organizationIds } },
     });
 
     await prisma.refreshToken.deleteMany({
