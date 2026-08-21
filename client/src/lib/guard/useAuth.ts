@@ -334,14 +334,13 @@ export const useAuth = (): UseAuthResult => {
         setHadSession(true);
         setAuthStatus("authenticated");
         audit({ action: "LOGIN" });
-        showToastOnce("Přihlášení proběhlo úspěšně! 🎉", { type: "success" });
       } catch (error) {
         // Rate limiting must read as such — not as "wrong credentials".
         const status = error instanceof HttpError ? error.status : undefined;
         showToastOnce(
           status === 429
             ? "Příliš mnoho pokusů o přihlášení. Zkus to prosím za chvíli."
-            : "Neplatné přihlašovací údaje ❌",
+            : "Neplatné přihlašovací údaje",
           { type: "error" },
         );
         throw error;

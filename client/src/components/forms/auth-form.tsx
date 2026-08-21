@@ -111,7 +111,6 @@ export const AuthForm = ({
       if (mode === "login") {
         await login({ email: values.email, password: values.password });
         await syncProfile({ force: true });
-        showToastOnce("Přihlašuji…", { type: "success" });
         return;
       }
 
@@ -214,6 +213,16 @@ export const AuthForm = ({
     e.preventDefault();
     form.handleSubmit(handleSubmit)(e);
   };
+
+  const isSubmitting = mode === "login" ? authLoading : registering;
+  const submitLabel =
+    mode === "login"
+      ? authLoading
+        ? "Přihlašuji…"
+        : "Přihlásit se"
+      : registering
+        ? "Vytvářím účet…"
+        : "Vytvořit účet";
 
   return (
     <motion.form
@@ -350,13 +359,12 @@ export const AuthForm = ({
 
       <Button
         type="submit"
-        disabled={mode === "login" ? authLoading : registering}
+        disabled={isSubmitting}
+        aria-busy={isSubmitting}
         className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl text-base transition-opacity disabled:cursor-not-allowed disabled:opacity-60"
       >
-        {(mode === "login" ? authLoading : registering) && (
-          <Loader2 className="h-4 w-4 animate-spin" />
-        )}
-        {mode === "login" ? "Přihlásit se" : "Vytvořit účet"}
+        {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+        {submitLabel}
       </Button>
     </motion.form>
   );

@@ -1,0 +1,123 @@
+/* SkillStorm transient feedback — calm, compact and product-like. */
+
+.Toastify__toast-container.skillstorm-toast-container {
+  --toastify-color-success: rgb(var(--accent-deep));
+  --toastify-color-error: rgb(var(--danger-deep));
+  --toastify-color-info: rgb(var(--xp-deep));
+  --toastify-color-warning: rgb(var(--streak-deep));
+  width: min(390px, calc(100vw - 32px));
+  padding: 0;
+  top: 20px;
+  right: 20px;
+}
+
+.skillstorm-toast {
+  position: relative;
+  min-height: 62px;
+  margin-bottom: 10px;
+  padding: 13px 42px 13px 14px;
+  overflow: hidden;
+  border: 1px solid rgb(var(--line));
+  border-radius: 16px;
+  background: rgb(var(--canvas) / 0.96);
+  color: rgb(var(--ink));
+  box-shadow:
+    0 18px 50px rgb(var(--ink) / 0.12),
+    0 3px 12px rgb(var(--ink) / 0.06);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  font-family: var(--font-inter), Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+.skillstorm-toast::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 11px;
+  bottom: 11px;
+  width: 3px;
+  border-radius: 0 999px 999px 0;
+  background: rgb(var(--line-strong));
+}
+
+.skillstorm-toast.Toastify__toast--success::before {
+  background: rgb(var(--accent-deep));
+}
+
+.skillstorm-toast.Toastify__toast--error::before {
+  background: rgb(var(--danger-deep));
+}
+
+.skillstorm-toast.Toastify__toast--info::before {
+  background: rgb(var(--xp-deep));
+}
+
+.skillstorm-toast.Toastify__toast--warning::before {
+  background: rgb(var(--streak-deep));
+}
+
+.skillstorm-toast .Toastify__toast-body {
+  margin: 0;
+  padding: 0;
+  align-items: center;
+  color: rgb(var(--ink));
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: -0.01em;
+}
+
+.skillstorm-toast .Toastify__toast-icon {
+  width: 20px;
+  min-width: 20px;
+  margin-inline-end: 10px;
+}
+
+.skillstorm-toast .Toastify__close-button {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  width: 24px;
+  height: 24px;
+  padding: 4px;
+  border-radius: 8px;
+  color: rgb(var(--ink-muted));
+  opacity: 0.58;
+  transform: translateY(-50%);
+  transition:
+    opacity 140ms ease,
+    background-color 140ms ease;
+}
+
+.skillstorm-toast .Toastify__close-button:hover,
+.skillstorm-toast .Toastify__close-button:focus-visible {
+  background: rgb(var(--surface));
+  opacity: 1;
+}
+
+.skillstorm-toast .Toastify__progress-bar,
+.skillstorm-toast .Toastify__progress-bar--wrp {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .Toastify__toast-container.skillstorm-toast-container {
+    top: 12px;
+    left: 12px;
+    right: 12px;
+    width: auto;
+  }
+
+  .skillstorm-toast {
+    min-height: 58px;
+    margin-bottom: 8px;
+    border-radius: 14px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skillstorm-toast,
+  .skillstorm-toast * {
+    transition: none !important;
+  }
+}
