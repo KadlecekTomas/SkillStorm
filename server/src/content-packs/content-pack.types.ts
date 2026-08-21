@@ -18,7 +18,7 @@ import type { SchoolGrade } from '@prisma/client';
 export type CurriculumOutcomeRef = {
   frameworkCode: string;
   outcomeExternalCode: string;
-  role: 'PRIMARY' | 'SECONDARY' | 'SUPPORTING';
+  role: 'PRIMARY' | 'SUPPORTING' | 'RELATED';
   rationale: string;
 };
 
