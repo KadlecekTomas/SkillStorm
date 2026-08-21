@@ -272,8 +272,24 @@ async function main(): Promise<void> {
             teacherIntervention: false,
           },
           {
-            stageKey: 'REFLECT',
+            stageKey: 'EVIDENCE',
             orderIndex: 1,
+            stageType: LessonStageType.EVIDENCE,
+            title: 'Dolož řešení během programu',
+            studentPrompt:
+              'Spusť finální program a použij execution trace jako důkaz, že algoritmus řeší robotickou misi krok po kroku.',
+            teacherGuidance:
+              'Ověř, že dvojice umí propojit úspěšný PROGRAM_RUN s konkrétními kroky algoritmu. Completion není mastery.',
+            durationMin: 2,
+            activityVersionId: publishedActivity.id,
+            completionType: LessonStageCompletionType.ACTIVITY,
+            checkpoint: true,
+            required: true,
+            teacherIntervention: false,
+          },
+          {
+            stageKey: 'REFLECT',
+            orderIndex: 2,
             stageType: LessonStageType.REFLECTION,
             title: 'Co jsme změnili a proč?',
             studentPrompt:
