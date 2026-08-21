@@ -3,6 +3,7 @@ import {
   ExecutionContext,
   ForbiddenException,
   Injectable,
+  NotFoundException,
 } from '@nestjs/common';
 import { OrganizationRole, SystemRole } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
@@ -38,17 +39,21 @@ export class TeacherAssignmentClassAccessGuard implements CanActivate {
       return true;
     }
 
+    // Anti-enumeration boundary: resolve the class inside the active tenant
+    // before evaluating teacher/class relationships. Foreign and nonexistent
+    // UUIDs are intentionally indistinguishable.
+    const classInOrg = await this.prisma.classSection.findFirst({
+      where: { id: classSectionId, orgId: user.organizationId },
+      select: { id: true },
+    });
+    if (!classInOrg) {
+      throw new NotFoundException('Třída nebyla nalezena.');
+    }
+
     if (
       user.organizationRole === OrganizationRole.DIRECTOR ||
       user.organizationRole === OrganizationRole.OWNER
     ) {
-      const sameOrg = await this.prisma.classSection.findFirst({
-        where: { id: classSectionId, orgId: user.organizationId },
-        select: { id: true },
-      });
-      if (!sameOrg) {
-        throw new ForbiddenException('Třída nepatří do aktivní organizace.');
-      }
       return true;
     }
 
@@ -78,7 +83,7 @@ export class TeacherAssignmentClassAccessGuard implements CanActivate {
 
     const allowedClass = await this.prisma.classSection.findFirst({
       where: {
-        id: classSectionId,
+        id: classInOrg.id,
         orgId: user.organizationId,
         ...teacherClassScope(teacher.id),
       },
