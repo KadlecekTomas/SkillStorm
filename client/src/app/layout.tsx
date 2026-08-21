@@ -5,9 +5,10 @@ import { Suspense } from "react";
 import { AppErrorBoundary } from "@/components/layout/app-error-boundary";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { AppToasts } from "@/components/ui/app-toasts";
 import { ServiceWorkerRegistration } from "@/components/pwa/service-worker-registration";
-import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import "@/styles/toasts.css";
 
 const inter = Inter({
   subsets: ["latin", "latin-ext"],
@@ -60,14 +61,7 @@ export default async function RootLayout({
               {children}
             </Suspense>
           </TooltipProvider>
-          <ToastContainer
-            position="top-right"
-            autoClose={2500}
-            hideProgressBar={false}
-            newestOnTop
-            closeOnClick
-            theme="dark"
-          />
+          <AppToasts />
         </AppErrorBoundary>
       </body>
     </html>
