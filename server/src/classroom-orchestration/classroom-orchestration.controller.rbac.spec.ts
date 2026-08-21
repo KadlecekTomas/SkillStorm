@@ -17,7 +17,10 @@ describe('ClassroomOrchestrationController student classroom RBAC wiring', () =>
     getStudentProjection: jest.fn(),
     recordSemanticEvent: jest.fn(),
   };
-  const studentAccess = { assertCanAccessSession: jest.fn() };
+  const studentAccess = {
+    assertCanAccessSession: jest.fn(),
+    findActiveSession: jest.fn(),
+  };
   const algorithmLabAnalytics = {};
   const algorithmLabAutoPair = { join: jest.fn() };
   const algorithmLabJoinCode = { resolve: jest.fn() };
@@ -44,6 +47,7 @@ describe('ClassroomOrchestrationController student classroom RBAC wiring', () =>
     jest.clearAllMocks();
     orgContext.get.mockResolvedValue(ctx);
     studentAccess.assertCanAccessSession.mockResolvedValue(undefined);
+    studentAccess.findActiveSession.mockResolvedValue({ id: 'session-live' });
     algorithmLabJoinCode.resolve.mockResolvedValue({ sessionId: 'session-code' });
     algorithmLabAutoPair.join.mockResolvedValue({ id: 'participant-1' });
     service.disconnectStudent.mockResolvedValue({ id: 'participant-1' });
@@ -53,6 +57,11 @@ describe('ClassroomOrchestrationController student classroom RBAC wiring', () =>
     networkedCoop.transition.mockResolvedValue({ replayed: false });
     networkedCoopProgram.get.mockResolvedValue({ programRevision: 0 });
     networkedCoopProgram.update.mockResolvedValue({ replayed: false });
+  });
+
+  it('discovers the current student class lesson through the central access boundary', async () => {
+    await expect(controller.myActiveSession(req)).resolves.toEqual({ id: 'session-live' });
+    expect(studentAccess.findActiveSession).toHaveBeenCalledWith(ctx);
   });
 
   it('guards short-code resolution before disclosing a class-bound session id', async () => {
