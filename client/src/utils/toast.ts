@@ -115,8 +115,7 @@ export function resolveToastFromHttpError(err: HttpError): ResolvedToast {
   if (
     code === "ORG_PENDING" ||
     code === "ORG_NOT_READY" ||
-    code === "NO_CURRENT_ACADEMIC_YEAR" ||
-    code === "NO_ACTIVE_ACADEMIC_YEAR"
+    code === "NO_CURRENT_ACADEMIC_YEAR"
   ) {
     return { showToast: false };
   }

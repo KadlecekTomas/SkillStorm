@@ -51,22 +51,6 @@ export class AcademicYearsController {
     return ok(this.service.list(req.user));
   }
 
-  @Get('active')
-  @AllowPendingOrg()
-  @NoHttpCache()
-  @CacheTTL(0)
-  @ApiOperation({
-    summary: 'Get current academic year (deprecated)',
-    description:
-      'Deprecated: use GET /academic-years/current instead. Returns same payload. Kept for backward compatibility.',
-  })
-  /** @deprecated Use getCurrent() and GET /academic-years/current instead. */
-  getActive(@Req() req: RequestWithUser) {
-    return ok(
-      this.service.getCurrentForOrgOrFail(req.user.organizationId ?? null),
-    );
-  }
-
   @Get('current')
   @AllowPendingOrg()
   @NoHttpCache()

@@ -500,7 +500,7 @@ export class TestsService {
     // verify the year still exists in the DB and has not been soft-deleted.
     if (!ctx.activeAcademicYearId) {
       throw new BadRequestException({
-        code: 'NO_ACTIVE_ACADEMIC_YEAR',
+        code: 'NO_CURRENT_ACADEMIC_YEAR',
         message:
           'Není aktivní školní rok. Požádejte ředitele o nastavení aktívního roku.',
       });
@@ -515,7 +515,7 @@ export class TestsService {
     });
     if (!fallbackYear) {
       throw new BadRequestException({
-        code: 'NO_ACTIVE_ACADEMIC_YEAR',
+        code: 'NO_CURRENT_ACADEMIC_YEAR',
         message:
           'Aktivní školní rok byl smazán nebo je neplatný. Požádejte ředitele o aktualizaci.',
       });

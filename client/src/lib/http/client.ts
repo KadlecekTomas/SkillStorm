@@ -64,7 +64,7 @@ const extractBackendCode = (data: unknown): string | null => {
 };
 
 const isMissingCurrentAcademicYearCode = (code: string | null): boolean =>
-  code === "NO_CURRENT_ACADEMIC_YEAR" || code === "NO_ACTIVE_ACADEMIC_YEAR";
+  code === "NO_CURRENT_ACADEMIC_YEAR";
 
 const currentPathForRecovery = (): string | null => {
   if (typeof window === "undefined") return null;
@@ -511,7 +511,6 @@ export const request = async <TResponse = unknown, TBody = unknown>(
     }
     if (
       path.startsWith("/academic-years/current") ||
-      path.startsWith("/academic-years/active") ||
       (method === "POST" && path.startsWith("/academic-years")) ||
       (method === "PATCH" && /\/academic-years\/[^/]+\/activate$/.test(path))
     ) {
@@ -522,7 +521,6 @@ export const request = async <TResponse = unknown, TBody = unknown>(
 
   if (
     path.startsWith("/academic-years/current") ||
-    path.startsWith("/academic-years/active") ||
     (method === "POST" && path.startsWith("/academic-years")) ||
     (method === "PATCH" && /\/academic-years\/[^/]+\/activate$/.test(path))
   ) {

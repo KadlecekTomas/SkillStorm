@@ -57,7 +57,7 @@ function isNoCurrentAcademicYear(err: unknown): boolean {
   if (!(err instanceof HttpError) || err.status !== 409) return false;
   const data = err.data as { meta?: { code?: string }; code?: string } | undefined;
   const code = data?.meta?.code ?? data?.code;
-  return code === "NO_CURRENT_ACADEMIC_YEAR" || code === "NO_ACTIVE_ACADEMIC_YEAR";
+  return code === "NO_CURRENT_ACADEMIC_YEAR";
 }
 
 type AcademicYearUIState = "loading" | "empty" | "needs-selection" | "selected";
@@ -1150,7 +1150,7 @@ export function ClassroomsPageContent(): React.JSX.Element {
     );
   }
 
-  if (yearConfigError === "NO_CURRENT_ACADEMIC_YEAR" || yearConfigError === "NO_ACTIVE_ACADEMIC_YEAR") {
+  if (yearConfigError === "NO_CURRENT_ACADEMIC_YEAR") {
     return (
       <div className="space-y-6">
         <div className="rounded-3xl border border-slate-200 bg-white px-5 py-4">
@@ -1172,7 +1172,7 @@ export function ClassroomsPageContent(): React.JSX.Element {
     );
   }
 
-  if (yearConfigError === "MULTIPLE_CURRENT_ACADEMIC_YEARS" || yearConfigError === "MULTIPLE_ACTIVE_ACADEMIC_YEARS") {
+  if (yearConfigError === "MULTIPLE_CURRENT_ACADEMIC_YEARS") {
     return (
       <div className="space-y-6">
         <InfoAlert

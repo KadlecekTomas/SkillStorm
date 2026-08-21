@@ -62,8 +62,7 @@ export function AppStateScreens({ state, onRetry }: AppStateScreensProps): React
 
   if (state.code === "ORG_NOT_READY") {
     const isMultiple =
-      state.errorCode === BACKEND_STATE_CODES.MULTIPLE_CURRENT_ACADEMIC_YEARS ||
-      state.errorCode === BACKEND_STATE_CODES.MULTIPLE_ACTIVE_ACADEMIC_YEARS;
+      state.errorCode === BACKEND_STATE_CODES.MULTIPLE_CURRENT_ACADEMIC_YEARS;
     const isNoClassSection = state.errorCode === BACKEND_STATE_CODES.NO_CLASS_SECTION;
     const isClassNotInCurrentYear =
       state.errorCode === BACKEND_STATE_CODES.CLASS_NOT_IN_CURRENT_YEAR ||
@@ -157,10 +156,7 @@ export function AppStateScreens({ state, onRetry }: AppStateScreensProps): React
       );
     }
 
-    if (
-      state.errorCode === BACKEND_STATE_CODES.NO_CURRENT_ACADEMIC_YEAR ||
-      state.errorCode === BACKEND_STATE_CODES.NO_ACTIVE_ACADEMIC_YEAR
-    ) {
+    if (state.errorCode === BACKEND_STATE_CODES.NO_CURRENT_ACADEMIC_YEAR) {
       return (
         <CurrentAcademicYearRequiredScreen
           {...(onRetry ? { onRecovered: onRetry } : {})}

@@ -76,9 +76,7 @@ export const AcademicYearGate = ({ children }: AcademicYearGateProps): ReactNode
           err instanceof HttpError &&
           (err.status === 409 ||
             code === "NO_CURRENT_ACADEMIC_YEAR" ||
-            code === "NO_ACTIVE_ACADEMIC_YEAR" ||
-            code === "MULTIPLE_CURRENT_ACADEMIC_YEARS" ||
-            code === "MULTIPLE_ACTIVE_ACADEMIC_YEARS");
+            code === "MULTIPLE_CURRENT_ACADEMIC_YEARS");
 
         if (isNoCurrentYear) {
           setStatus("redirect");
