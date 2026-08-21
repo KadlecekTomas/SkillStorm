@@ -14,6 +14,8 @@ export type JwtPayload = {
   organizationId?: string;
   membershipId?: string;
   isPlatformAdmin?: boolean;
+  /** Server-authoritative first-login restriction, refreshed from DB per request. */
+  mustChangePassword?: boolean;
   /**
    * Guardian Etapa C: identifikátor žákovské relace („Spustit pro Matěje").
    * Přítomnost claimu znamená token relace — jwt.strategy ověřuje, že relace

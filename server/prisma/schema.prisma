@@ -19,6 +19,7 @@ model User {
   status                 UserStatus           @default(ACTIVE)
   lastLoginAt            DateTime?            @map("last_login_at")
   passwordChangedAt      DateTime?            @map("password_changed_at")
+  mustChangePassword     Boolean              @default(false) @map("must_change_password")
   tokenVersion           Int                  @default(0) @map("token_version")
   // Prezentační preference basic/detail (guardian spec bod 4) — nikdy
   // nemění oprávnění, jen zobrazení už povolených dat.

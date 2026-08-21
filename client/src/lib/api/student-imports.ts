@@ -41,6 +41,10 @@ export type StudentImportCommitResponse = {
     rowNumber: number;
     status: "IMPORTED" | "ERROR";
     message?: string;
+    email?: string;
+    username?: string;
+    temporaryPassword?: string;
+    mustChangePassword?: boolean;
   }>;
   errors: Array<{
     rowNumber: number;

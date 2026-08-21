@@ -27,6 +27,7 @@ import { AssignmentsModule } from './assignments/assignments.module';
 import { SubmissionsModule } from './submissions/submissions.module';
 import { RbacModule } from './modules/rbac/rbac.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
+import { PasswordChangeRequiredGuard } from './auth/guards/password-change-required.guard';
 import { RbacGuard } from './modules/rbac/rbac.guard';
 import { ApplicationReadinessGuard } from './platform/application-readiness.guard';
 import { RequireActiveOrganizationGuard } from './platform/require-active-organization.guard';
@@ -168,6 +169,7 @@ import {
     { provide: APP_INTERCEPTOR, useClass: ResponseEnvelopeInterceptor },
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: PasswordChangeRequiredGuard },
     { provide: APP_GUARD, useClass: RbacGuard },
     { provide: APP_GUARD, useClass: ApplicationReadinessGuard },
     { provide: APP_GUARD, useClass: RequireActiveOrganizationGuard },
