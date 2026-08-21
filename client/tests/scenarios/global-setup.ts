@@ -35,6 +35,18 @@ const { assertTestDatabaseUrl } = require('../../../server/scripts/db-safety.js'
  */
 export const MANIFEST_PATH = join(__dirname, '.manifest.json');
 
+// The Informatics extension intentionally boots AppModule so it exercises the
+// real curriculum/activity/lesson publication lifecycle. That module also
+// constructs auth strategies, so this isolated seed child needs explicit test
+// secrets even when the outer production-certification job only exposes
+// PROD_* runtime secrets. Never inherit/re-map production secrets into test
+// auth configuration: the seed does not sign user sessions.
+const SCENARIO_APP_ENV = {
+  NODE_ENV: 'test',
+  JWT_ACCESS_SECRET: 'scenario-only-access-secret-not-for-production',
+  JWT_REFRESH_SECRET: 'scenario-only-refresh-secret-not-for-production',
+} as const;
+
 function validatePreseededManifest(): void {
   if (!existsSync(MANIFEST_PATH)) {
     throw new Error(
@@ -184,7 +196,15 @@ export default async function globalSetup() {
 
   const informaticsOut = execSync(
     'npx ts-node -r tsconfig-paths/register --transpile-only prisma/seed/scenarios-informatics-extension.ts',
-    { cwd: serverDir, env: { ...process.env, DATABASE_URL_TEST: dbUrl } },
+    {
+      cwd: serverDir,
+      env: {
+        ...process.env,
+        ...SCENARIO_APP_ENV,
+        DATABASE_URL_TEST: dbUrl,
+        DATABASE_URL: dbUrl,
+      },
+    },
   ).toString();
   const informaticsLine = informaticsOut
     .split('\n')
