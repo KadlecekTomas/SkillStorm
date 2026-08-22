@@ -47,6 +47,9 @@ jobs:
       - name: Check no real env files are committed
         run: bash scripts/check-no-committed-env.sh
 
+      - name: Enforce maximum Mend security policy
+        run: node scripts/check-mend-policy.mjs
+
       - name: Render production Docker config
         run: docker compose -f docker-compose.prod.yml config
 
