@@ -1,4 +1,5 @@
 # Security-sensitive CI and policy files.
+/SECURITY.md @KadlecekTomas
 /.github/workflows/security-gate.yml @KadlecekTomas
 /.github/dependency-review-config.yml @KadlecekTomas
 /.github/dependabot.yml @KadlecekTomas
