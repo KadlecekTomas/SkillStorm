@@ -34,8 +34,8 @@ jobs:
             pushd "$directory"
             npm install --package-lock-only --ignore-scripts
             npm update --package-lock-only --ignore-scripts
-            npm audit fix --package-lock-only --omit=dev --ignore-scripts || true
-            npm audit --omit=dev --json > security-audit-after-refresh.json || true
+            npm audit fix --package-lock-only --ignore-scripts || true
+            npm audit --json > security-audit-after-refresh.json || true
             popd
           done
 
