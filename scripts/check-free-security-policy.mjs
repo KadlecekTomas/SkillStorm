@@ -125,6 +125,7 @@ const codeownersPath = '.github/CODEOWNERS';
 const codeowners = read(codeownersPath);
 requireIncludes(codeownersPath, codeowners, [
   '/SECURITY.md @KadlecekTomas',
+  '/.github/CODEOWNERS @KadlecekTomas',
   '/.github/workflows/security-gate.yml @KadlecekTomas',
   '/.github/dependency-review-config.yml @KadlecekTomas',
   '/.github/dependabot.yml @KadlecekTomas',
