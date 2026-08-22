@@ -79,6 +79,9 @@ jobs:
           npm install -g @nestjs/cli
           npm run prisma:generate
           npx prisma migrate deploy
+          npx prisma validate
+          npx prisma migrate status
+          npm run verify:db-integrity
           npm run typecheck
           npm run build
           npm run test:policy
