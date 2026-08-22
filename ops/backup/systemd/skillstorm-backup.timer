@@ -1,0 +1,11 @@
+[Unit]
+Description=Run SkillStorm production backup daily
+
+[Timer]
+OnCalendar=*-*-* 02:15:00
+RandomizedDelaySec=15m
+Persistent=true
+Unit=skillstorm-backup.service
+
+[Install]
+WantedBy=timers.target
