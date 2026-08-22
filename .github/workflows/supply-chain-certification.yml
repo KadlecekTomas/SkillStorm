@@ -12,6 +12,165 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  secret-scan:
+    name: Gitleaks secret gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout exact candidate commit with history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install pinned Gitleaks with checksum verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="8.30.1"
+          archive="gitleaks_${version}_linux_x64.tar.gz"
+          curl --fail --silent --show-error --location --output "$archive" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${version}/${archive}"
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  ${archive}" | sha256sum --check --strict
+          tar -xzf "$archive" gitleaks
+          sudo install -m 0755 gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+
+      - name: Resolve commit range for secret scanning
+        id: secret-range
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          EVENT_BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          zero_sha="0000000000000000000000000000000000000000"
+          if [[ "$EVENT_NAME" == "pull_request" && -n "$PR_BASE_SHA" ]]; then
+            base="$PR_BASE_SHA"
+          elif [[ -n "$EVENT_BEFORE_SHA" && "$EVENT_BEFORE_SHA" != "$zero_sha" ]]; then
+            base="$EVENT_BEFORE_SHA"
+          else
+            base="$(git rev-list --max-parents=0 HEAD | tail -n 1)"
+          fi
+
+          if [[ "$base" == "$GITHUB_SHA" ]]; then
+            echo "range=--all" >> "$GITHUB_OUTPUT"
+          else
+            echo "range=${base}..${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          fi
+          echo "gitleaks_base=$base"
+          echo "gitleaks_head=$GITHUB_SHA"
+
+      - name: Block newly introduced secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          gitleaks git \
+            --redact \
+            --verbose \
+            --report-format json \
+            --report-path gitleaks-report.json \
+            --log-opts="${{ steps.secret-range.outputs.range }}" \
+            .
+
+      - name: Upload Gitleaks evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitleaks-report
+          path: gitleaks-report.json
+          if-no-files-found: warn
+          retention-days: 21
+
+  sast:
+    name: Semgrep CE SAST gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout exact candidate commit with history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install pinned Semgrep CE
+        run: python -m pip install --disable-pip-version-check "semgrep==1.172.0"
+
+      - name: Resolve SAST baseline
+        id: sast-baseline
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          EVENT_BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          zero_sha="0000000000000000000000000000000000000000"
+          if [[ "$EVENT_NAME" == "pull_request" && -n "$PR_BASE_SHA" ]]; then
+            base="$PR_BASE_SHA"
+          elif [[ -n "$EVENT_BEFORE_SHA" && "$EVENT_BEFORE_SHA" != "$zero_sha" ]]; then
+            base="$EVENT_BEFORE_SHA"
+          else
+            base="$(git rev-list --max-parents=0 HEAD | tail -n 1)"
+          fi
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+          echo "semgrep_base=$base"
+          echo "semgrep_head=$GITHUB_SHA"
+
+      - name: Block newly introduced SAST findings
+        if: github.actor != 'dependabot[bot]'
+        shell: bash
+        env:
+          SEMGREP_ENABLE_VERSION_CHECK: "0"
+        run: |
+          set -euo pipefail
+          semgrep scan \
+            --config auto \
+            --baseline-commit "${{ steps.sast-baseline.outputs.base }}" \
+            --error \
+            --sarif-output semgrep.sarif \
+            .
+
+      - name: Explain Dependabot SAST skip
+        if: github.actor == 'dependabot[bot]'
+        run: echo "Semgrep CE is skipped for Dependabot-only dependency PRs; Gitleaks, Trivy and runtime dependency audits still run."
+
+      - name: Upload Semgrep evidence
+        if: always() && github.actor != 'dependabot[bot]'
+        uses: actions/upload-artifact@v4
+        with:
+          name: semgrep-sast-report
+          path: semgrep.sarif
+          if-no-files-found: warn
+          retention-days: 21
+
+  trivy-repository:
+    name: Trivy HIGH/CRITICAL gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout exact candidate commit
+        uses: actions/checkout@v4
+
+      - name: Scan dependencies and IaC with Trivy
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,misconfig
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          format: table
+
   runtime-audit:
     name: Runtime audit (${{ matrix.app }})
     runs-on: ubuntu-latest
@@ -75,7 +234,7 @@ jobs:
               `| Moderate | ${summary.moderate} |\n` +
               `| Low | ${summary.low} |\n` +
               `| **Total** | **${summary.total}** |\n\n` +
-              `Current hard release threshold: **critical**. High will be ratcheted to blocking after remediation/explicit review.\n`,
+              `Current hard release threshold: **critical**. Trivy independently blocks HIGH/CRITICAL repository findings.\n`,
           );
           NODE
 
