@@ -96,6 +96,14 @@ export class ClassroomOrchestrationController {
     return resolved;
   }
 
+  @Get('my-active')
+  @Permission(OrganizationRole.STUDENT)
+  @ApiOperation({ summary: 'Discover the active Lesson Experience for the current student class' })
+  async myActiveSession(@Req() req: RequestWithUser) {
+    const ctx = await this.orgContext.get(req);
+    return this.studentAccess.findActiveSession(ctx);
+  }
+
   @Get(':id')
   @Permission(
     OrganizationRole.TEACHER,

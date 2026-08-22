@@ -6,6 +6,7 @@ import {
   ActivityDeliveryMode,
   EnrollmentStatus,
   LessonExperienceCurriculumMappingStatus,
+  LiveSessionCommandType,
   LiveSessionMode,
   MappingProposerType,
   OrganizationRole,
@@ -32,12 +33,16 @@ import {
 
 const MODES = [ActivityDeliveryMode.DEVICES];
 
-function studentContext(organizationId: string, membershipId: string): OrgContext {
+function studentContext(
+  organizationId: string,
+  membershipId: string,
+  activeAcademicYearId: string,
+): OrgContext {
   return {
     organizationId,
     membershipId,
     role: OrganizationRole.STUDENT,
-    activeAcademicYearId: null,
+    activeAcademicYearId,
     isAcademicYearExpired: false,
   };
 }
@@ -204,7 +209,10 @@ describe('classroom enrollment boundary RBAC (PostgreSQL e2e)', () => {
         },
         select: { id: true },
       });
-      return { ctx: studentContext(organizationId, membership.id), enrollmentId: enrollment.id };
+      return {
+        ctx: studentContext(organizationId, membership.id, year.id),
+        enrollmentId: enrollment.id,
+      };
     }
 
     const enrolled8A = await createEnrolledStudent('student8a', class8A.id);
@@ -233,6 +241,28 @@ describe('classroom enrollment boundary RBAC (PostgreSQL e2e)', () => {
       access.assertCanAccessSession(classBoundSession.id, enrolled8B.ctx),
     ).rejects.toMatchObject({ status: 404 });
 
+    // Discovery is intentionally silent while the teacher is still preparing a DRAFT.
+    await expect(access.findActiveSession(enrolled8A.ctx)).resolves.toBeNull();
+    await expect(access.findActiveSession(enrolled8B.ctx)).resolves.toBeNull();
+
+    await classroom.command(
+      classBoundSession.id,
+      {
+        commandId: `start-${seed}`,
+        type: LiveSessionCommandType.START,
+        expectedRevision: 0,
+      },
+      directorCtx,
+    );
+
+    // Once RUNNING, only the enrolled 8.A student discovers the live lesson.
+    await expect(access.findActiveSession(enrolled8A.ctx)).resolves.toMatchObject({
+      id: classBoundSession.id,
+      status: 'RUNNING',
+      classSectionId: class8A.id,
+    });
+    await expect(access.findActiveSession(enrolled8B.ctx)).resolves.toBeNull();
+
     await prisma.enrollment.update({
       where: { id: enrolled8A.enrollmentId },
       data: { status: EnrollmentStatus.LEFT },
@@ -240,6 +270,7 @@ describe('classroom enrollment boundary RBAC (PostgreSQL e2e)', () => {
     await expect(
       access.assertCanAccessSession(classBoundSession.id, enrolled8A.ctx),
     ).rejects.toMatchObject({ status: 404 });
+    await expect(access.findActiveSession(enrolled8A.ctx)).resolves.toBeNull();
   });
 
   afterAll(async () => {
@@ -247,7 +278,7 @@ describe('classroom enrollment boundary RBAC (PostgreSQL e2e)', () => {
     await app.close();
   });
 
-  it('enforces exact ACTIVE class enrollment against a real PostgreSQL schema', () => {
+  it('enforces exact ACTIVE class enrollment and live discovery against PostgreSQL', () => {
     expect(true).toBe(true);
   });
 });

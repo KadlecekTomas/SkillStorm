@@ -33,6 +33,9 @@ export interface ScenarioManifest {
   foreignOrgId: string;
   foreignTestId: string;
   foreignAssignmentId: string;
+  informaticsLessonId: string;
+  informaticsLessonVersionId: string;
+  informaticsLessonSlug: string;
 }
 
 let cached: ScenarioManifest | null = null;

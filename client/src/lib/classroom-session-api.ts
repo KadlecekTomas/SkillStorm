@@ -15,6 +15,34 @@ export type ClassroomStage = {
   checkpoint: boolean;
 };
 
+export type ActiveClassroomSessionSummary = {
+  id: string;
+  status: 'RUNNING' | 'PAUSED';
+  mode: ClassroomDeliveryMode;
+  stateRevision: number;
+  classSectionId: string;
+  startedAt: string | null;
+  pausedAt: string | null;
+  currentLessonStageId: string | null;
+  classSection: {
+    id: string;
+    grade: string;
+    section: string;
+  } | null;
+  currentStage: {
+    id: string;
+    stageKey: string;
+    title: string;
+    activityVersionId: string | null;
+  } | null;
+  lesson: {
+    id: string;
+    slug: string;
+    title: string;
+    versionId: string;
+  };
+};
+
 export type StudentClassroomSessionProjection = {
   id: string;
   status: ClassroomSessionStatus;
@@ -265,6 +293,20 @@ function commandId(type: ClassroomCommandType): string {
 }
 
 export const classroomSessionApi = {
+  createSession: (input: {
+    lessonExperienceVersionId: string;
+    classSectionId?: string;
+    mode: ClassroomDeliveryMode;
+  }): Promise<TeacherClassroomSessionProjection> =>
+    fetchWithAuth<TeacherClassroomSessionProjection>('POST', '/classroom-sessions', {
+      body: input,
+    }),
+
+  myActiveSession: (): Promise<ActiveClassroomSessionSummary | null> =>
+    fetchWithAuth<ActiveClassroomSessionSummary | null>('GET', '/classroom-sessions/my-active', {
+      cache: 'no-store',
+    }),
+
   quickStartAlgorithmLab: (): Promise<TeacherClassroomSessionProjection> =>
     fetchWithAuth<TeacherClassroomSessionProjection>(
       'POST',

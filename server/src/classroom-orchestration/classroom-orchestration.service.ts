@@ -149,7 +149,7 @@ export class ClassroomOrchestrationService {
     if (dto.classSectionId) {
       const classSection = await this.prisma.classSection.findFirst({
         where: { id: dto.classSectionId, orgId: ctx.organizationId },
-        select: { id: true, grade: true },
+        select: { id: true, grade: true, yearId: true, teacherId: true },
       });
       if (!classSection) {
         throw new NotFoundException({
@@ -157,6 +157,7 @@ export class ClassroomOrchestrationService {
           message: 'Třída nebyla nalezena.',
         });
       }
+      await this.assertTeacherClassAccess(classSection, ctx);
       classGrade = classSection.grade;
     }
 
@@ -726,9 +727,9 @@ export class ClassroomOrchestrationService {
             sourceEventId: event.id,
             evidenceType: dto.eventType,
             payload:
-            dto.payload === undefined
-              ? Prisma.DbNull
-              : (dto.payload as Prisma.InputJsonValue),
+              dto.payload === undefined
+                ? Prisma.DbNull
+                : (dto.payload as Prisma.InputJsonValue),
             completionIsMastery: false,
           },
         });
@@ -770,6 +771,54 @@ export class ClassroomOrchestrationService {
         ).length,
       },
     };
+  }
+
+  private async assertTeacherClassAccess(
+    classSection: {
+      id: string;
+      yearId: string;
+      teacherId: string | null;
+    },
+    ctx: OrgContext,
+  ): Promise<void> {
+    if (ctx.role !== OrganizationRole.TEACHER) return;
+
+    const teacher = await this.prisma.teacher.findFirst({
+      where: {
+        membershipId: ctx.membershipId,
+        organizationId: ctx.organizationId,
+        deletedAt: null,
+      },
+      select: { id: true },
+    });
+    if (!teacher) {
+      throw new ForbiddenException({
+        code: 'CLASSROOM_CLASS_ACCESS_DENIED',
+        message: 'Učitel nemá přístup ke spuštění hodiny v této třídě.',
+      });
+    }
+    if (classSection.teacherId === teacher.id) return;
+
+    const now = new Date();
+    const scopedAccess = await this.prisma.teacherClassSection.findFirst({
+      where: {
+        teacherId: teacher.id,
+        classSectionId: classSection.id,
+        yearId: classSection.yearId,
+        deletedAt: null,
+        AND: [
+          { OR: [{ validFrom: null }, { validFrom: { lte: now } }] },
+          { OR: [{ validTo: null }, { validTo: { gte: now } }] },
+        ],
+      },
+      select: { id: true },
+    });
+    if (!scopedAccess) {
+      throw new ForbiddenException({
+        code: 'CLASSROOM_CLASS_ACCESS_DENIED',
+        message: 'Učitel nemá přístup ke spuštění hodiny v této třídě.',
+      });
+    }
   }
 
   private assertTeacher(ctx: OrgContext) {

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
 import { usePermissions } from "@/hooks/use-permissions";
 import { withGuard } from "@/lib/guard/withGuard";
+import { StudentActiveLessonBanner } from "@/components/dashboard/student-active-lesson-banner";
 import { StudentDashboard } from "./components/StudentDashboard";
 import { TeacherDashboard } from "./components/TeacherDashboard";
 import { DirectorDashboard } from "./components/DirectorDashboard";
@@ -38,7 +39,12 @@ function DashboardPage() {
 
   return (
     <div className="space-y-8">
-      {isStudent && <StudentDashboard />}
+      {isStudent && (
+        <>
+          <StudentActiveLessonBanner />
+          <StudentDashboard />
+        </>
+      )}
       {isTeacher && <TeacherDashboard />}
       {isDirectorOrOwner && !isTeacher && <DirectorDashboard />}
       {!isStudent && !isTeacher && !isDirectorOrOwner && (

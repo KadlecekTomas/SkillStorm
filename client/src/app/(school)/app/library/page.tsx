@@ -5,6 +5,7 @@ import {
   ContentLibraryList,
   subjectLabel,
 } from "@/components/content/content-library-list";
+import { LessonExperienceLibraryList } from "@/components/content/lesson-experience-library-list";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { formatGradeLong, gradeNumber, isHighSchoolGrade } from "@/lib/class-label";
@@ -15,31 +16,45 @@ import { useAuth } from "@/hooks/use-auth";
 import { withGuard } from "@/lib/guard/withGuard";
 import { InfoAlert } from "@/components/ui/alert";
 import Link from "next/link";
+import {
+  lessonExperienceApi,
+  type LessonExperience,
+} from "@/lib/lesson-experience-api";
 
 function LibraryPage(): React.JSX.Element {
   const [grade, setGrade] = useState("All");
   const [subject, setSubject] = useState("All");
   const [search, setSearch] = useState("");
   const [items, setItems] = useState<ContentItem[]>([]);
+  const [experiences, setExperiences] = useState<LessonExperience[]>([]);
   const [loading, setLoading] = useState(true);
-  const { org, context } = useAuth();
+  const { org, context, activeRole } = useAuth();
+  const canLaunchInteractiveLessons =
+    activeRole === "TEACHER" || activeRole === "DIRECTOR" || activeRole === "OWNER";
 
   useEffect(() => {
     let active = true;
     setLoading(true);
-    fetchWithAuth<{ items: ContentItem[] }>("GET", "/learning-materials")
-      .then((data) => {
+    const materialsRequest = fetchWithAuth<{ items: ContentItem[] }>("GET", "/learning-materials")
+      .then((data) => data?.items ?? [])
+      .catch(() => [] as ContentItem[]);
+    const lessonsRequest = canLaunchInteractiveLessons
+      ? lessonExperienceApi.list().catch(() => [] as LessonExperience[])
+      : Promise.resolve([] as LessonExperience[]);
+
+    Promise.all([materialsRequest, lessonsRequest])
+      .then(([materials, lessons]) => {
         if (!active) return;
-        setItems(data?.items ?? []);
+        setItems(materials);
+        setExperiences(lessons);
       })
-      .catch(() => setItems([]))
       .finally(() => {
         if (active) setLoading(false);
       });
     return () => {
       active = false;
     };
-  }, [org?.id]);
+  }, [org?.id, canLaunchInteractiveLessons]);
 
   // Filtry se skládají z reálně dostupných materiálů — žádný pevný seznam.
   const gradeOptions = useMemo(() => {
@@ -75,12 +90,24 @@ function LibraryPage(): React.JSX.Element {
     });
   }, [grade, subject, search, items]);
 
+  const filteredExperiences = useMemo(() => {
+    if (grade !== "All" || subject !== "All") return [];
+    const needle = search.trim().toLocaleLowerCase("cs");
+    if (!needle) return experiences;
+    return experiences.filter((lesson) => {
+      const version = lesson.versions.find((item) => item.status === "PUBLISHED") ?? lesson.versions[0];
+      return [lesson.title, lesson.description, version?.title, version?.summary]
+        .filter(Boolean)
+        .some((value) => String(value).toLocaleLowerCase("cs").includes(needle));
+    });
+  }, [experiences, grade, search, subject]);
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div className="rounded-3xl border border-slate-100 bg-white p-6 shadow-soft">
         <div className="flex flex-wrap items-center gap-4">
           <Input
-            placeholder="Hledat materiály…"
+            placeholder="Hledat materiály a hodiny…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="max-w-sm"
@@ -136,6 +163,7 @@ function LibraryPage(): React.JSX.Element {
             aria-hidden="true"
             style={{ position: "absolute", width: 0, height: 0, overflow: "hidden" }}
           />
+          <LessonExperienceLibraryList items={filteredExperiences} />
           <ContentLibraryList items={filtered} />
         </>
       )}

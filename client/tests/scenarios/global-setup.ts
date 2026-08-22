@@ -16,7 +16,9 @@ const { assertTestDatabaseUrl } = require('../../../server/scripts/db-safety.js'
  * 3. Applies presentation-safe ZŠ data (realistic display names/year/copy)
  *    without changing technical account identifiers used by tests.
  * 4. Adds verified PARENT, progress/RBAC and platform fixtures.
- * 5. Captures the combined manifest (accounts, ids) to
+ * 5. Publishes a real Informatics Lesson Experience through the same
+ *    curriculum review/publish lifecycle used by the product.
+ * 6. Captures the combined manifest (accounts, ids) to
  *    tests/scenarios/.manifest.json for auth.setup + specs.
  *
  * Product-certification preseed mode:
@@ -27,11 +29,23 @@ const { assertTestDatabaseUrl } = require('../../../server/scripts/db-safety.js'
  *   only validates/reuses the manifest, avoiding a destructive reseed while
  *   the production application is serving traffic.
  *
- * DB work is pure Prisma (migrate deploy + seed) — no psql needed. Crucially
- * it NEVER drops the database: Playwright may run against an already-started
- * backend and a DROP would force-close live connections.
+ * DB work is pure Prisma/service lifecycle (migrate deploy + seed) — no psql
+ * needed. Crucially it NEVER drops the database: Playwright may run against an
+ * already-started backend and a DROP would force-close live connections.
  */
 export const MANIFEST_PATH = join(__dirname, '.manifest.json');
+
+// The Informatics extension intentionally boots AppModule so it exercises the
+// real curriculum/activity/lesson publication lifecycle. That module also
+// constructs auth strategies, so this isolated seed child needs explicit test
+// secrets even when the outer production-certification job only exposes
+// PROD_* runtime secrets. Never inherit/re-map production secrets into test
+// auth configuration: the seed does not sign user sessions.
+const SCENARIO_APP_ENV = {
+  NODE_ENV: 'test',
+  JWT_ACCESS_SECRET: 'scenario-only-access-secret-not-for-production',
+  JWT_REFRESH_SECRET: 'scenario-only-refresh-secret-not-for-production',
+} as const;
 
 function validatePreseededManifest(): void {
   if (!existsSync(MANIFEST_PATH)) {
@@ -45,6 +59,8 @@ function validatePreseededManifest(): void {
     students8A?: unknown[];
     accounts?: { superadmin?: string };
     superadminUserId?: string;
+    informaticsLessonId?: string;
+    informaticsLessonVersionId?: string;
   };
 
   if (
@@ -52,16 +68,18 @@ function validatePreseededManifest(): void {
     !Array.isArray(manifest.students8A) ||
     manifest.students8A.length !== 30 ||
     !manifest.accounts?.superadmin ||
-    !manifest.superadminUserId
+    !manifest.superadminUserId ||
+    !manifest.informaticsLessonId ||
+    !manifest.informaticsLessonVersionId
   ) {
     throw new Error(
-      'Preseeded scenario manifest is incomplete; expected org, 30 students and SUPERADMIN fixture.',
+      'Preseeded scenario manifest is incomplete; expected org, 30 students, SUPERADMIN and published Informatics lesson.',
     );
   }
 
   // eslint-disable-next-line no-console
   console.log(
-    `[scenarios] reusing preseeded org=${manifest.orgId} (8.A ${manifest.students8A.length}, superadmin=1)`,
+    `[scenarios] reusing preseeded org=${manifest.orgId} (8.A ${manifest.students8A.length}, superadmin=1, informatics=1)`,
   );
 }
 
@@ -176,9 +194,36 @@ export default async function globalSetup() {
   };
   manifest.superadminUserId = platform.superadminUserId;
 
+  const informaticsOut = execSync(
+    'npx ts-node -r tsconfig-paths/register --transpile-only prisma/seed/scenarios-informatics-extension.ts',
+    {
+      cwd: serverDir,
+      env: {
+        ...process.env,
+        ...SCENARIO_APP_ENV,
+        DATABASE_URL_TEST: dbUrl,
+        DATABASE_URL: dbUrl,
+      },
+    },
+  ).toString();
+  const informaticsLine = informaticsOut
+    .split('\n')
+    .find((l) => l.startsWith('SCENARIO_INFORMATICS_EXTENSION='));
+  if (!informaticsLine) {
+    throw new Error(
+      'Informatics scenario extension did not emit SCENARIO_INFORMATICS_EXTENSION',
+    );
+  }
+  const informatics = JSON.parse(
+    informaticsLine.replace('SCENARIO_INFORMATICS_EXTENSION=', ''),
+  );
+  manifest.informaticsLessonId = informatics.lessonId;
+  manifest.informaticsLessonVersionId = informatics.lessonVersionId;
+  manifest.informaticsLessonSlug = informatics.slug;
+
   writeFileSync(MANIFEST_PATH, JSON.stringify(manifest, null, 2));
   // eslint-disable-next-line no-console
   console.log(
-    `[scenarios] seeded org=${manifest.orgId} (8.A ${manifest.students8A.length}, 2.A ${manifest.students2A.length}, parent=1, progress-scope=1, superadmin=1, zs-product=1)`,
+    `[scenarios] seeded org=${manifest.orgId} (8.A ${manifest.students8A.length}, 2.A ${manifest.students2A.length}, parent=1, progress-scope=1, superadmin=1, informatics=1, zs-product=1)`,
   );
 }

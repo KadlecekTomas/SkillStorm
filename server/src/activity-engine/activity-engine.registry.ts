@@ -56,6 +56,15 @@ const coreConfigSchema = z
   })
   .strict();
 
+const algorithmLabConfigSchema = z
+  .object({
+    kind: z.literal('ALGORITHM_LAB'),
+    missionSet: z.string().trim().min(1).max(120),
+    executionTrace: z.boolean().default(true),
+    collaboration: z.enum(['OPTIONAL', 'REQUIRED']).default('REQUIRED'),
+  })
+  .strict();
+
 export type ActivityEngineDefinition = {
   key: string;
   schemaVersion: number;
@@ -99,8 +108,40 @@ const CORE_INTERACTION_V1: ActivityEngineDefinition = {
   configSchema: coreConfigSchema,
 };
 
+const ALGORITHM_LAB_V1: ActivityEngineDefinition = {
+  key: 'ALGORITHM_LAB_V1',
+  schemaVersion: 1,
+  supportedModes: [
+    ActivityDeliveryMode.SHARED_DEVICES,
+    ActivityDeliveryMode.DEVICES,
+    ActivityDeliveryMode.HYBRID,
+  ],
+  supportedPrimitives: [
+    'BUILD',
+    'SIMULATE',
+    'DIAGNOSE',
+    'COLLABORATIVE_DECISION',
+    'REFLECT',
+    'EXPLAIN',
+    'CHECKPOINT',
+  ],
+  capabilities: [
+    'SEMANTIC_EVENTS',
+    'LOCAL_FIRST_INTERACTION',
+    'SERVER_AUTHORITY',
+    'SHARED_GROUPS',
+    'INDIVIDUAL_PARTICIPANTS',
+    'TOUCH_INPUT',
+    'KEYBOARD_INPUT',
+    'REDUCED_MOTION',
+    'RECONNECTABLE',
+  ],
+  configSchema: algorithmLabConfigSchema,
+};
+
 const registry = new Map<string, ActivityEngineDefinition>([
   [CORE_INTERACTION_V1.key, CORE_INTERACTION_V1],
+  [ALGORITHM_LAB_V1.key, ALGORITHM_LAB_V1],
 ]);
 
 export function listActivityEngines(): Array<
