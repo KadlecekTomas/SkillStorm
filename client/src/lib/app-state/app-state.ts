@@ -25,8 +25,6 @@ export const BACKEND_STATE_CODES = {
   ORG_NOT_READY: "ORG_NOT_READY",
   /** Canonical: no current academic year. */
   NO_CURRENT_ACADEMIC_YEAR: "NO_CURRENT_ACADEMIC_YEAR",
-  /** @deprecated Use NO_CURRENT_ACADEMIC_YEAR. Accepted for backward compatibility. */
-  NO_ACTIVE_ACADEMIC_YEAR: "NO_ACTIVE_ACADEMIC_YEAR",
   /** Init/repair state: no class in current year yet. Must NOT block POST /classrooms (backend allows first class). */
   NO_CLASS_SECTION: "NO_CLASS_SECTION",
   CLASS_NOT_IN_CURRENT_YEAR: "CLASS_NOT_IN_CURRENT_YEAR",
@@ -34,8 +32,6 @@ export const BACKEND_STATE_CODES = {
   CLASS_NOT_IN_ACTIVE_YEAR: "CLASS_NOT_IN_ACTIVE_YEAR",
   /** Canonical: more than one current year. */
   MULTIPLE_CURRENT_ACADEMIC_YEARS: "MULTIPLE_CURRENT_ACADEMIC_YEARS",
-  /** @deprecated Use MULTIPLE_CURRENT_ACADEMIC_YEARS. Accepted for backward compatibility. */
-  MULTIPLE_ACTIVE_ACADEMIC_YEARS: "MULTIPLE_ACTIVE_ACADEMIC_YEARS",
   ACADEMIC_YEAR_INVARIANT_BROKEN: "ACADEMIC_YEAR_INVARIANT_BROKEN",
 } as const;
 

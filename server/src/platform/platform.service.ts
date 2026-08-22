@@ -38,10 +38,6 @@ export type PlatformOrgListDto = {
   classroomsCount: number;
   hasCurrentAcademicYear: boolean;
   hasAnyClassSectionInCurrentYear: boolean;
-  /** @deprecated Use hasCurrentAcademicYear. Same value, kept for one release. */
-  hasActiveAcademicYear?: boolean;
-  /** @deprecated Use hasAnyClassSectionInCurrentYear. Same value, kept for one release. */
-  hasAnyClassSectionInActiveYear?: boolean;
 };
 
 export type PlatformOrgDetailDto = PlatformOrgListDto & {
@@ -233,8 +229,6 @@ export class PlatformService {
         classroomsCount: o._count?.classSections ?? 0,
         hasCurrentAcademicYear: currentYearId !== null,
         hasAnyClassSectionInCurrentYear,
-        hasActiveAcademicYear: currentYearId !== null,
-        hasAnyClassSectionInActiveYear: hasAnyClassSectionInCurrentYear,
       });
     }
 
@@ -295,8 +289,6 @@ export class PlatformService {
       classroomsCount: org._count?.classSections ?? 0,
       hasCurrentAcademicYear: currentYearId !== null,
       hasAnyClassSectionInCurrentYear,
-      hasActiveAcademicYear: currentYearId !== null,
-      hasAnyClassSectionInActiveYear: hasAnyClassSectionInCurrentYear,
       lastActivityAt: lastSub?.submittedAt ?? null,
     };
   }

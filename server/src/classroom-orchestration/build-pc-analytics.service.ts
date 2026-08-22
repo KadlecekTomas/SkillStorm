@@ -216,7 +216,10 @@ export function buildBuildPcAnalytics(
   participantRows.sort((a, b) => {
     if (a.needsAttention !== b.needsAttention) return a.needsAttention ? -1 : 1;
     if (a.completed !== b.completed) return a.completed ? 1 : -1;
-    return a.progressPct - b.progressPct;
+    const progressOrder = a.progressPct - b.progressPct;
+    if (progressOrder !== 0) return progressOrder;
+    const nicknameOrder = a.nickname.localeCompare(b.nickname, 'cs');
+    return nicknameOrder || a.participantId.localeCompare(b.participantId);
   });
 
   const misconceptionClusters = [...clusters.entries()]

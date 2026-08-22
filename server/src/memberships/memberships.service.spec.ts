@@ -23,6 +23,7 @@ describe('MembershipsService', () => {
       findUnique: jest.fn(),
       update: jest.fn(),
     },
+    membershipRoleAssignment: { updateMany: jest.fn() },
     teacher: { findMany: jest.fn(), updateMany: jest.fn() },
     student: { updateMany: jest.fn() },
     classSection: { updateMany: jest.fn() },
@@ -56,6 +57,7 @@ describe('MembershipsService', () => {
       deletedAt: null,
     });
     prisma.membership.update.mockResolvedValue({ id: 'm1' });
+    prisma.membershipRoleAssignment.updateMany.mockResolvedValue({ count: 1 });
     prisma.teacher.findMany.mockResolvedValue([{ id: 't1' }]);
     prisma.teacher.updateMany.mockResolvedValue({ count: 1 });
     prisma.student.updateMany.mockResolvedValue({ count: 1 });
@@ -70,6 +72,7 @@ describe('MembershipsService', () => {
     });
 
     expect(prisma.membership.update).toHaveBeenCalled();
+    expect(prisma.membershipRoleAssignment.updateMany).toHaveBeenCalled();
     expect(prisma.teacher.updateMany).toHaveBeenCalled();
     expect(prisma.student.updateMany).toHaveBeenCalled();
   });

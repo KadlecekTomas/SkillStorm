@@ -5,7 +5,7 @@
  * 1. Cross-tenant subject   → 400 SUBJECT_NOT_ENABLED_FOR_ORGANIZATION
  * 2. Cross-tenant year      → 400 INVALID_ACADEMIC_YEAR
  * 3. Missing subjectId      → 400 (ValidationPipe)
- * 4. academicYearId omitted → 201 + response uses active year (NO_ACTIVE_ACADEMIC_YEAR path not hit)
+ * 4. academicYearId omitted → 201 + response uses current year (NO_CURRENT_ACADEMIC_YEAR path not hit)
  * 5. GET filter by subjectId → only matching tests returned
  * 6. Soft-deleted subject   → 400 SUBJECT_NOT_ENABLED_FOR_ORGANIZATION
  */

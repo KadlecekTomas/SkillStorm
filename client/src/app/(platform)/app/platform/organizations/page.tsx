@@ -394,14 +394,14 @@ export default function PlatformOrganizationsPage(): React.JSX.Element {
                     <td className="px-4 py-3">
                       <span
                         className={
-                          (o.hasCurrentAcademicYear ?? o.hasActiveAcademicYear) &&
-                          (o.hasAnyClassSectionInCurrentYear ?? o.hasAnyClassSectionInActiveYear)
+                          o.hasCurrentAcademicYear &&
+                          o.hasAnyClassSectionInCurrentYear
                             ? "text-emerald-600"
                             : "text-amber-600"
                         }
                       >
-                        {(o.hasCurrentAcademicYear ?? o.hasActiveAcademicYear) &&
-                        (o.hasAnyClassSectionInCurrentYear ?? o.hasAnyClassSectionInActiveYear)
+                        {o.hasCurrentAcademicYear &&
+                        o.hasAnyClassSectionInCurrentYear
                           ? "Připravena"
                           : "Nepřipravena"}
                       </span>

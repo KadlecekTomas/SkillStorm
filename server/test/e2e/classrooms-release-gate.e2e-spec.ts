@@ -4,7 +4,7 @@
  * Ověřuje invarianty:
  * - POST /classrooms bez yearId → 400
  * - GET /classrooms bez yearId → 200 a použije aktivní rok
- * - POST bez aktivního roku v org → 409 NO_ACTIVE_ACADEMIC_YEAR
+ * - POST bez aktuálního roku v org → 409 NO_CURRENT_ACADEMIC_YEAR
  * - POST s yearId OK → 201, vrací id + yearId
  * - yearId musí patřit org uživatele
  */
@@ -394,8 +394,8 @@ describe('Classrooms Release Gate (e2e)', () => {
     });
   });
 
-  describe('409 NO_ACTIVE_ACADEMIC_YEAR', () => {
-    it('org without active year returns 409 on POST /classrooms', async () => {
+  describe('409 NO_CURRENT_ACADEMIC_YEAR', () => {
+    it('org without current year returns 409 on POST /classrooms', async () => {
       const orgNoActive = await prisma.organization.create({
         data: {
           name: `RG NoActive Org ${Date.now()}`,

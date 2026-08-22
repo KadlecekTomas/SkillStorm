@@ -373,7 +373,7 @@ describe('Multi-org security hardening (e2e)', () => {
   it('active org A user cannot assign org A test to org B class', async () => {
     const openAt = new Date(Date.now() - 60_000).toISOString();
     const closeAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-    const res = await request(app.getHttpServer())
+    const foreignClassResponse = await request(app.getHttpServer())
       .post(`/tests/${testOrgAId}/assign`)
       .set('Authorization', `Bearer ${actorOrgAToken}`)
       .send({
@@ -385,7 +385,24 @@ describe('Multi-org security hardening (e2e)', () => {
         showExplain: 'after_close',
       });
 
-    expect(res.status).toBe(404);
+    const nonexistentClassResponse = await request(app.getHttpServer())
+      .post(`/tests/${testOrgAId}/assign`)
+      .set('Authorization', `Bearer ${actorOrgAToken}`)
+      .send({
+        classSectionId: '00000000-0000-4000-8000-000000000999',
+        openAt,
+        closeAt,
+        maxAttempts: 1,
+        shuffle: true,
+        showExplain: 'after_close',
+      });
+
+    expect(foreignClassResponse.status).toBe(404);
+    expect(nonexistentClassResponse.status).toBe(404);
+    expect(foreignClassResponse.body).toEqual(nonexistentClassResponse.body);
+    expect(JSON.stringify(foreignClassResponse.body)).not.toContain(
+      classSectionOrgBId,
+    );
   });
 
   it('active org A user cannot create assignment using org B class section', async () => {

@@ -89,6 +89,16 @@ jobs:
         working-directory: ./server
         run: npm run lint
 
+      # Required branch-protection context `build` must cover the complete
+      # backend regression baseline, not only selected feature suites.
+      - name: 🧪 Full backend unit regression gate
+        working-directory: ./server
+        run: npm run test:unit:light
+
+      - name: 🧪 Full backend E2E regression gate
+        working-directory: ./server
+        run: npm run test:e2e
+
       - name: 🔐 RBAC server tests
         working-directory: ./server
         run: npm run test -- rbac

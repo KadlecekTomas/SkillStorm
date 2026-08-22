@@ -3,8 +3,8 @@
  * INVARIANT (why POST /students can return 409):
  * StudentsController is under @UseGuards(RequireActiveAcademicYearGuard).
  * Before that, APP_GUARD ApplicationReadinessGuard runs: it throws 409 when the
- * org has no active academic year (code NO_ACTIVE_ACADEMIC_YEAR) or multiple
- * (MULTIPLE_ACTIVE_ACADEMIC_YEARS). See application-readiness.guard.ts lines 69–74.
+ * org has no current academic year (code NO_CURRENT_ACADEMIC_YEAR) or multiple
+ * (MULTIPLE_CURRENT_ACADEMIC_YEARS). See application-readiness.guard.ts.
  * RequireOrgReadyGuard then calls assertOrgReady (org-readiness.utils.ts): READY
  * requires exactly one active academic year AND at least one ClassSection in that year.
  * So E2E must: (1) create org with one active year + at least one class section,

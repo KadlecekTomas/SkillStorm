@@ -69,8 +69,8 @@ describe('Build a PC classroom analytics', () => {
     expect(result.classSummary.totalHints).toBe(2);
     expect(result.classSummary.needsAttention).toBe(2);
     expect(result.participants.map((participant) => participant.nickname)).toEqual([
-      'Adam',
       'Bára',
+      'Adam',
     ]);
   });
 

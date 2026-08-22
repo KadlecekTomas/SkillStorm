@@ -252,17 +252,27 @@ describe('Live sessions — interaktivní kola (e2e)', () => {
         section: 'B',
       },
     });
+    const teacherMembershipId = ctxA.actor.membership!.id as string;
+    const teacher = await prisma.teacher.upsert({
+      where: { membershipId: teacherMembershipId },
+      create: {
+        membershipId: teacherMembershipId,
+        organizationId: orgAId,
+      },
+      update: {},
+      select: { id: true },
+    });
     const classSection = await prisma.classSection.create({
       data: {
         orgId: orgAId,
         yearId: yearA.id,
         grade: SchoolGrade.GRADE_4,
         section: 'I',
+        teacherId: teacher.id,
       },
     });
     classSectionId = classSection.id;
 
-    const teacherMembershipId = ctxA.actor.membership!.id as string;
     const test = await prisma.test.create({
       data: {
         organizationId: orgAId,

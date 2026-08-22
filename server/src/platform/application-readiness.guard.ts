@@ -23,10 +23,6 @@ export const READINESS_ERROR_CODES = {
   ORG_SUSPENDED: 'ORG_SUSPENDED',
   NO_CURRENT_ACADEMIC_YEAR: 'NO_CURRENT_ACADEMIC_YEAR',
   MULTIPLE_CURRENT_ACADEMIC_YEARS: 'MULTIPLE_CURRENT_ACADEMIC_YEARS',
-  /** @deprecated Use NO_CURRENT_ACADEMIC_YEAR. Kept for one release cycle. */
-  NO_ACTIVE_ACADEMIC_YEAR: 'NO_ACTIVE_ACADEMIC_YEAR',
-  /** @deprecated Use MULTIPLE_CURRENT_ACADEMIC_YEARS. Kept for one release cycle. */
-  MULTIPLE_ACTIVE_ACADEMIC_YEARS: 'MULTIPLE_ACTIVE_ACADEMIC_YEARS',
 } as const;
 
 @Injectable()
@@ -65,7 +61,6 @@ export class ApplicationReadinessGuard implements CanActivate {
           'Current academic year is not configured for this organization.',
         meta: {
           code: READINESS_ERROR_CODES.NO_CURRENT_ACADEMIC_YEAR,
-          deprecatedCode: READINESS_ERROR_CODES.NO_ACTIVE_ACADEMIC_YEAR,
         },
       });
     }
@@ -74,7 +69,6 @@ export class ApplicationReadinessGuard implements CanActivate {
         message: 'Multiple academic years are marked as current.',
         meta: {
           code: READINESS_ERROR_CODES.MULTIPLE_CURRENT_ACADEMIC_YEARS,
-          deprecatedCode: READINESS_ERROR_CODES.MULTIPLE_ACTIVE_ACADEMIC_YEARS,
         },
       });
     }

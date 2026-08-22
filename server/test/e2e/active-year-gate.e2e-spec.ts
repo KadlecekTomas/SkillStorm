@@ -121,5 +121,5 @@ describe('Active academic year gate (e2e)', () => {
     expect(body?.meta?.code).toBe('NO_CURRENT_ACADEMIC_YEAR');
   });
 
-  // MULTIPLE_ACTIVE_ACADEMIC_YEARS is covered by unit test; DB unique index prevents it in e2e.
+  // MULTIPLE_CURRENT_ACADEMIC_YEARS is covered by unit test; DB unique index prevents it in e2e.
 });

@@ -28,7 +28,7 @@ function isMissingCurrentAcademicYearError(error: unknown): boolean {
   if (!(error instanceof HttpError) || error.status !== 409) return false;
   const data = error.data as { code?: string; meta?: { code?: string } } | undefined;
   const code = data?.meta?.code ?? data?.code ?? null;
-  return code === "NO_CURRENT_ACADEMIC_YEAR" || code === "NO_ACTIVE_ACADEMIC_YEAR";
+  return code === "NO_CURRENT_ACADEMIC_YEAR";
 }
 
 export function CurrentAcademicYearBoundary({

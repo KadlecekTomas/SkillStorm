@@ -8,7 +8,6 @@ import {
 } from '@nestjs/swagger';
 import { Permission } from '@/modules/rbac/permission.decorator';
 import { PermissionKey } from '@prisma/client';
-// ⚠️ odstraněn CacheTTL import
 import { StatsService } from './stats.service';
 import {
   OverviewScope,
@@ -42,7 +41,6 @@ export class StatsController {
     description:
       'How passRate is computed. "evaluated" = APPROVED/(APPROVED+REJECTED). "all" = APPROVED/ALL (incl. PENDING). Default: evaluated.',
   })
-  // ⚠️ odstraněno @CacheTTL(0)
   overview(@Req() req: RequestWithUser, @Query() query: StatsOverviewQueryDto) {
     const organizationId = req.user.organizationId ?? null;
 
@@ -57,7 +55,6 @@ export class StatsController {
   @Get('dashboards/student')
   @Permission(PermissionKey.VIEW_RESULTS)
   @ApiOperation({ summary: 'Student dashboard (my progress)' })
-  // ⚠️ odstraněno @CacheTTL(0)
   student(@Req() req: RequestWithUser) {
     const organizationId = req.user.organizationId ?? null;
     const membershipPayload: {
@@ -74,7 +71,6 @@ export class StatsController {
   @Get('dashboards/teacher')
   @Permission(PermissionKey.VIEW_RESULTS)
   @ApiOperation({ summary: 'Teacher dashboard (my classes/tests/performance)' })
-  // ⚠️ odstraněno @CacheTTL(0)
   teacher(@Req() req: RequestWithUser) {
     const organizationId = req.user.organizationId ?? null;
     return this.service.getTeacherDashboard(organizationId, req.user);

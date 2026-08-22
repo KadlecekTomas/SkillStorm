@@ -23,10 +23,6 @@ export const NO_CURRENT_ACADEMIC_YEAR = 'NO_CURRENT_ACADEMIC_YEAR';
 /** @deprecated Kept for backward compatibility in error-code consumers; DB now enforces at-most-one. */
 export const MULTIPLE_CURRENT_ACADEMIC_YEARS =
   'MULTIPLE_CURRENT_ACADEMIC_YEARS';
-/** Deprecated alias; emit alongside new code for one release. */
-export const NO_ACTIVE_ACADEMIC_YEAR_DEPRECATED = 'NO_ACTIVE_ACADEMIC_YEAR';
-export const MULTIPLE_ACTIVE_ACADEMIC_YEARS_DEPRECATED =
-  'MULTIPLE_ACTIVE_ACADEMIC_YEARS';
 
 type AcademicYearResponse = {
   id: string;
@@ -249,7 +245,6 @@ export class AcademicYearsService {
           'Current academic year is not configured for this organization.',
         meta: {
           code: NO_CURRENT_ACADEMIC_YEAR,
-          deprecatedCode: NO_ACTIVE_ACADEMIC_YEAR_DEPRECATED,
         },
       });
     }

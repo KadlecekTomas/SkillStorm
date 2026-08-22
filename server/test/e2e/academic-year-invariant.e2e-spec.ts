@@ -1,6 +1,6 @@
 /**
  * E2E: Invariant "exactly one current academic year per organization".
- * - Create org via API → default academic year exists; GET /academic-years/current or /active → 200.
+ * - Create org via API → default academic year exists; GET /academic-years/current → 200.
  * - Create second academic year with isActive true → transaction flips previous to false; DB has exactly one current.
  */
 import { Test } from '@nestjs/testing';
@@ -160,7 +160,7 @@ describe('Academic year invariant (e2e)', () => {
     await prisma.organization.deleteMany({ where: { id: orgId } }).catch(() => {});
   });
 
-  it('create org → GET /academic-years/active returns 200 and exactly one current year (deprecated route)', async () => {
+  it('create org → GET /academic-years/current returns 200 and exactly one current year', async () => {
     const auth = await authAs(app, OrganizationRole.OWNER, {
       seed: `inv_${Date.now()}`,
       mode: RegisterMode.CREATE_ORG,
@@ -182,15 +182,16 @@ describe('Academic year invariant (e2e)', () => {
     const newToken = (unwrap(useOrgRes) ?? useOrgRes.body)?.sessionToken ?? useOrgRes.body?.sessionToken;
     expect(newToken).toBeTruthy();
 
-    const activeRes = await request(app.getHttpServer())
-      .get('/academic-years/active')
+    const currentRes = await request(app.getHttpServer())
+      .get('/academic-years/current')
       .set('Authorization', `Bearer ${newToken}`)
       .expect(200);
 
-    const activeYear = unwrap(activeRes);
-    expect(activeYear).toBeTruthy();
-    expect(activeYear.isActive).toBe(true);
-    expect(activeYear.organizationId).toBe(orgId);
+    const currentYear = unwrap(currentRes);
+    expect(currentYear).toMatchObject({
+      id: expect.any(String),
+      name: expect.any(String),
+    });
 
     const count = await prisma.academicYear.count({
       where: { orgId, isCurrent: true },
@@ -202,7 +203,7 @@ describe('Academic year invariant (e2e)', () => {
     await prisma.organization.deleteMany({ where: { id: orgId } }).catch(() => {});
   });
 
-  it('GET /academic-years/active returns same id and name as GET /academic-years/current (backward compat)', async () => {
+  it('GET /academic-years/active is removed while GET /academic-years/current remains available', async () => {
     const auth = await authAs(app, OrganizationRole.OWNER, {
       seed: `compat_${Date.now()}`,
       mode: RegisterMode.CREATE_ORG,
@@ -219,19 +220,20 @@ describe('Academic year invariant (e2e)', () => {
       .expect(201);
     const token = (unwrap(useOrgRes) ?? useOrgRes.body)?.sessionToken ?? useOrgRes.body?.sessionToken;
 
-    const activeRes = await request(app.getHttpServer())
+    await request(app.getHttpServer())
       .get('/academic-years/active')
       .set('Authorization', `Bearer ${token}`)
-      .expect(200);
+      .expect(404);
     const currentRes = await request(app.getHttpServer())
       .get('/academic-years/current')
       .set('Authorization', `Bearer ${token}`)
       .expect(200);
 
-    const active = unwrap(activeRes);
     const current = unwrap(currentRes);
-    expect(active?.id).toBe(current?.id);
-    expect(active?.name).toBe(current?.name);
+    expect(current).toMatchObject({
+      id: expect.any(String),
+      name: expect.any(String),
+    });
 
     await prisma.academicYear.deleteMany({ where: { orgId } }).catch(() => {});
     await prisma.membership.deleteMany({ where: { organizationId: orgId } }).catch(() => {});
@@ -260,12 +262,12 @@ describe('Academic year invariant (e2e)', () => {
     const newToken = (unwrap(useOrgRes) ?? useOrgRes.body)?.sessionToken ?? useOrgRes.body?.sessionToken;
     expect(newToken).toBeTruthy();
 
-    const activeRes = await request(app.getHttpServer())
-      .get('/academic-years/active')
+    const currentRes = await request(app.getHttpServer())
+      .get('/academic-years/current')
       .set('Authorization', `Bearer ${newToken}`)
       .expect(200);
-    const firstActive = unwrap(activeRes);
-    expect(firstActive?.isActive).toBe(true);
+    const firstCurrent = unwrap(currentRes);
+    expect(firstCurrent?.id).toEqual(expect.any(String));
 
     // Contract change: POST with isActive=true is rejected (400
     // CURRENT_YEAR_ALREADY_EXISTS) while a current year exists — switching

@@ -1,5 +1,5 @@
 import type { ExecutionContext } from '@nestjs/common';
-import { ForbiddenException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { OrganizationRole, SystemRole } from '@prisma/client';
 import type { PrismaService } from '@/prisma/prisma.service';
 import { TeacherAssignmentClassAccessGuard } from './teacher-assignment-class-access.guard';
@@ -62,7 +62,7 @@ describe('TeacherAssignmentClassAccessGuard', () => {
     });
   });
 
-  it('rejects DIRECTOR when the class is outside the active organization', async () => {
+  it('returns 404 to DIRECTOR when the class is outside the active organization', async () => {
     (prisma.classSection.findFirst as jest.Mock).mockResolvedValue(null);
 
     await expect(
@@ -73,7 +73,7 @@ describe('TeacherAssignmentClassAccessGuard', () => {
           organizationRole: OrganizationRole.DIRECTOR,
         }),
       ),
-    ).rejects.toBeInstanceOf(ForbiddenException);
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('allows TEACHER only when teacherClassScope resolves the class', async () => {
@@ -113,7 +113,9 @@ describe('TeacherAssignmentClassAccessGuard', () => {
 
   it('rejects TEACHER for another same-org class', async () => {
     (prisma.teacher.findFirst as jest.Mock).mockResolvedValue({ id: 'teacher-1' });
-    (prisma.classSection.findFirst as jest.Mock).mockResolvedValue(null);
+    (prisma.classSection.findFirst as jest.Mock)
+      .mockResolvedValueOnce({ id: 'class-not-taught' })
+      .mockResolvedValueOnce(null);
 
     await expect(
       guard.canActivate(

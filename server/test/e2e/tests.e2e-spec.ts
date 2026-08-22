@@ -223,23 +223,30 @@ describe('Tests (e2e)', () => {
   });
 
   afterAll(async () => {
-    // hard cleanup: nejdřív test-related entities (questions/options/answers cascade via FK),
-    // pak memberships/orgs/users/tokens
-    await prisma.question.deleteMany({});
-    await prisma.testAssignment.deleteMany({});
-    await prisma.submission.deleteMany({});
+    const organizationIds = [orgA.id, orgB.id];
+    // Remove tenant-owned submissions before their questions. Submitted
+    // responses are intentionally protected by the SUBMISSION_LOCKED trigger.
+    await prisma.submission.deleteMany({
+      where: { organizationId: { in: organizationIds } },
+    });
+    await prisma.testAssignment.deleteMany({
+      where: { test: { organizationId: { in: organizationIds } } },
+    });
+    await prisma.question.deleteMany({
+      where: { test: { organizationId: { in: organizationIds } } },
+    });
     await prisma.test.deleteMany({
-      where: { organizationId: { in: [orgA.id, orgB.id] } },
+      where: { organizationId: { in: organizationIds } },
     });
     await prisma.classSection.deleteMany({
-      where: { orgId: { in: [orgA.id, orgB.id] } },
+      where: { orgId: { in: organizationIds } },
     });
 
     await prisma.membership.deleteMany({
-      where: { organizationId: { in: [orgA.id, orgB.id] } },
+      where: { organizationId: { in: organizationIds } },
     });
     await prisma.organization.deleteMany({
-      where: { id: { in: [orgA.id, orgB.id] } },
+      where: { id: { in: organizationIds } },
     });
 
     await prisma.refreshToken.deleteMany({
@@ -438,7 +445,7 @@ describe('Tests (e2e)', () => {
   // DETAIL / GET :id
   // ---------------------------
 
-  it('GET /tests/:id → 200 v rámci stejné org; 403 cross-org', async () => {
+  it('GET /tests/:id → author/leadership only; same-org non-author gets 403', async () => {
     const created = await prisma.test.create({
       data: { title: 'Detail-OK', organizationId: orgA.id, creatorId: mTA1.id },
     });
@@ -446,7 +453,7 @@ describe('Tests (e2e)', () => {
     await request(app.getHttpServer())
       .get(`/tests/${created.id}`)
       .set('Authorization', `Bearer ${teacherUserA2.token}`) // same org
-      .expect(200);
+      .expect(403);
 
     await request(app.getHttpServer())
       .get(`/tests/${created.id}`)
@@ -459,13 +466,19 @@ describe('Tests (e2e)', () => {
     await prisma.test.delete({ where: { id: created.id } });
   });
 
-  it('GET /tests/:id → 200 and response includes assignability report', async () => {
+  it('GET /tests/:id/view → published same-org colleague gets read-only assignability report', async () => {
     const created = await prisma.test.create({
-      data: { title: 'Assignability-Check', organizationId: orgA.id, creatorId: mTA1.id },
+      data: {
+        title: 'Assignability-Check',
+        organizationId: orgA.id,
+        creatorId: mTA1.id,
+        status: PublishStatus.PUBLISHED,
+        publishedAt: new Date(),
+      },
     });
 
     const res = await request(app.getHttpServer())
-      .get(`/tests/${created.id}`)
+      .get(`/tests/${created.id}/view`)
       .set('Authorization', `Bearer ${teacherUserA2.token}`)
       .expect(200);
 
@@ -955,7 +968,7 @@ describe('Tests (e2e)', () => {
         expectUpdate: 403,
         expectDelete: 403,
         expectList: 200,
-        expectDetail: [200],
+        expectDetail: [403],
         expectCreate: 201,
       },
       {

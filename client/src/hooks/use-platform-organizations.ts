@@ -19,10 +19,6 @@ export type PlatformOrganization = {
   /** Canonical: org has exactly one current academic year. */
   hasCurrentAcademicYear: boolean;
   hasAnyClassSectionInCurrentYear: boolean;
-  /** @deprecated Use hasCurrentAcademicYear. Accepted from API for backward compat. */
-  hasActiveAcademicYear?: boolean;
-  /** @deprecated Use hasAnyClassSectionInCurrentYear. Accepted from API for backward compat. */
-  hasAnyClassSectionInActiveYear?: boolean;
 };
 
 export type PlatformOrganizationsState =
