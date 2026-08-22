@@ -1,0 +1,11 @@
+[Unit]
+Description=Verify SkillStorm off-host backup freshness
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/skillstorm
+UMask=0077
+ExecStart=/usr/bin/docker compose --env-file /etc/skillstorm/production.env -f docker-compose.prod.yml -f docker-compose.backup.yml --profile ops run --rm backup-check
