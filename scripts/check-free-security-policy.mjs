@@ -29,6 +29,13 @@ function requireExcludes(path, content, forbidden) {
   }
 }
 
+function requireOccurrences(path, content, needle, minimum) {
+  const count = content.split(needle).length - 1;
+  if (count < minimum) {
+    fail(`${path} must contain ${JSON.stringify(needle)} at least ${minimum} times (found ${count})`);
+  }
+}
+
 if (fs.existsSync('.whitesource')) {
   fail('.whitesource must remain absent; SkillStorm uses the free security stack, not paid Mend policy');
 }
@@ -134,6 +141,28 @@ requireIncludes(securityPolicyPath, securityPolicy, [
   'private vulnerability reporting',
   'Report a vulnerability',
 ]);
+
+const serverDockerPath = 'server/Dockerfile';
+const serverDocker = read(serverDockerPath);
+requireIncludes(serverDockerPath, serverDocker, [
+  '--no-install-recommends',
+  'USER node',
+]);
+requireOccurrences(serverDockerPath, serverDocker, '--no-install-recommends', 3);
+requireOccurrences(serverDockerPath, serverDocker, 'USER node', 2);
+
+const clientDockerPath = 'client/Dockerfile';
+const clientDocker = read(clientDockerPath);
+requireIncludes(clientDockerPath, clientDocker, [
+  'USER node',
+  'COPY --chown=node:node',
+]);
+
+const composePath = 'docker-compose.prod.yml';
+const compose = read(composePath);
+requireOccurrences(composePath, compose, 'no-new-privileges:true', 2);
+requireOccurrences(composePath, compose, 'cap_drop:', 2);
+requireOccurrences(composePath, compose, '- ALL', 2);
 
 const productionPath = '.github/workflows/production-gate.yml';
 const production = read(productionPath);
