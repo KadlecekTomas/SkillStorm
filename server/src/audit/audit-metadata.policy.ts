@@ -5,8 +5,9 @@
  * Nested objects (e.g. `before`, `after`) have their values recursively
  * denylist-filtered but are NOT subject to the allowlist.
  *
- * DENYLIST — these keys are stripped at every depth, case-insensitively.
- * Matching is always case-insensitive to catch variants like Password, PASSWORD.
+ * DENYLIST — credential-shaped keys are stripped at every depth. Keys are
+ * normalized (lowercase, punctuation removed) before matching, so variants
+ * like `Password`, `reset_token` and `set-cookie` cannot bypass the policy.
  */
 
 export const AUDIT_METADATA_ALLOWLIST = new Set<string>([
@@ -21,9 +22,11 @@ export const AUDIT_METADATA_ALLOWLIST = new Set<string>([
 
   // operational
   'reason',
+  'reasonCode',
   'counts',
   'result',
   'count',
+  'source',
 
   // registration audit trail (enum / internal id — no PII)
   'mode',
@@ -38,10 +41,17 @@ export const AUDIT_METADATA_ALLOWLIST = new Set<string>([
   'bodySize',
   'bodyHasNested',
 
-  // platform ops
+  // platform / authorization operations
   'organizationId',
   'targetUserId',
   'targetEntityId',
+  'actorMembershipId',
+  'targetMembershipId',
+  'role',
+  'previousRole',
+  'previousPrimaryRole',
+  'nextRole',
+  'permissionKey',
 
   // curriculum provenance — stable identifiers, hashes and enums only.
   // Human-entered curriculum titles, rationales and document names remain
@@ -93,14 +103,34 @@ export const AUDIT_METADATA_ALLOWLIST = new Set<string>([
   'resolvedAt',
 ]);
 
+/**
+ * Values are normalized forms (lowercase, non-alphanumeric characters removed).
+ * Keep this list credential-focused: business identifiers such as tokenVersion
+ * are intentionally not blocked by substring matching.
+ */
 export const AUDIT_METADATA_DENYLIST = new Set<string>([
   'password',
   'pass',
+  'temporarypassword',
+  'passwordhash',
   'token',
+  'tokenhash',
   'accesstoken',
   'refreshtoken',
+  'refreshtokenhash',
+  'resettoken',
+  'resettokenhash',
+  'invitetoken',
+  'sessiontoken',
+  'jwt',
   'secret',
+  'clientsecret',
+  'sessionsecret',
   'apikey',
   'authorization',
   'cookie',
+  'setcookie',
+  'credential',
+  'credentials',
+  'privatekey',
 ]);
