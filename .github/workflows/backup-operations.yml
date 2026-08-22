@@ -1,0 +1,81 @@
+name: Backup Operations
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/ops/backup-db.sh'
+      - 'scripts/ops/backup-production.sh'
+      - 'scripts/ops/check-backup-freshness.sh'
+      - 'ops/backup/**'
+      - 'docker-compose.backup.yml'
+      - 'server/src/ops/backup-operations.spec.ts'
+      - '.github/workflows/backup-operations.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/ops/backup-db.sh'
+      - 'scripts/ops/backup-production.sh'
+      - 'scripts/ops/check-backup-freshness.sh'
+      - 'ops/backup/**'
+      - 'docker-compose.backup.yml'
+      - 'server/src/ops/backup-operations.spec.ts'
+      - '.github/workflows/backup-operations.yml'
+
+jobs:
+  backup-operations-contract:
+    name: Backup Operations Contract
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate shell syntax
+        run: |
+          bash -n scripts/ops/backup-production.sh
+          bash -n scripts/ops/check-backup-freshness.sh
+
+      - name: Build deterministic backup runner
+        run: docker build -f ops/backup/Dockerfile -t skillstorm-backup-ci .
+
+      - name: Prove backup runner fails closed without production configuration
+        run: |
+          set +e
+          output="$(docker run --rm skillstorm-backup-ci 2>&1)"
+          rc=$?
+          set -e
+          test "$rc" -ne 0
+          grep -q 'DATABASE_URL is required' <<< "$output"
+
+      - name: Render production plus backup Compose overlay
+        env:
+          PROD_POSTGRES_USER: skillstorm_ci
+          PROD_POSTGRES_PASSWORD: ci-only-password
+          PROD_POSTGRES_DB: skillstorm_ci
+          PROD_DATABASE_URL: postgresql://skillstorm_ci:ci-only-password@postgres:5432/skillstorm_ci
+          PROD_JWT_ACCESS_SECRET: 4f8c1e6a2b9d7350a1c8e4f62b0d935a7c1e8f402b6d9153a8c0e7f42b5d961c
+          PROD_JWT_REFRESH_SECRET: 9d2b7f40c6a1e8535f0c3b96d2e7a140b8f5c2091e6d3a74c0b9f6e13d8a52c7
+          PROD_COOKIE_SECRET: 71e4c9a2f6b0d8535a2e7c1094f6b3d8072c5e9a1f4b8d63095c2e7f1a4b8d60
+          PROD_RUN_MIGRATIONS: '0'
+          PROD_RUN_SEED: '0'
+          PROD_METRICS_INGEST_KEY: 2c8f5a1e9b4d7063f1a8c5e20b7d4a9163f0c8e5a2b9d7461305f8c2e9a6b4d1
+          PROD_PUBLIC_APP_URL: https://skillstorm.example.invalid
+          PROD_API_URL: https://skillstorm.example.invalid/api
+          PROD_CORS_ORIGINS: https://skillstorm.example.invalid
+          PROD_ALLOW_CROSS_SITE_COOKIES: '0'
+          PROD_ALLOW_PUBLIC_ORG_CREATION: 'false'
+          PROD_API_PROXY_TARGET: http://backend:4200
+          PROD_FRONTEND_PORT: '3000'
+          PROD_BACKUP_S3_ENDPOINT: https://backup.example.invalid
+          PROD_BACKUP_S3_BUCKET: skillstorm-ci
+          PROD_BACKUP_S3_REGION: auto
+          PROD_BACKUP_S3_ACCESS_KEY_ID: ci-access-key
+          PROD_BACKUP_S3_SECRET_ACCESS_KEY: ci-secret-key
+          PROD_BACKUP_ALERT_WEBHOOK_URL: https://alerts.example.invalid/backup
+          PROD_BACKUP_S3_PREFIX: skillstorm/ci
+          PROD_BACKUP_MAX_AGE_HOURS: '30'
+        run: |
+          docker compose \
+            -f docker-compose.prod.yml \
+            -f docker-compose.backup.yml \
+            --profile ops \
+            config --quiet
