@@ -1,8 +1,8 @@
 name: Security Lockfile Remediation Preview
 
 on:
-  push:
-    branches: [security/free-hardening-stack]
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: read
