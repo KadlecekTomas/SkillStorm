@@ -1,0 +1,176 @@
+name: SkillStorm Security Gate
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-gate-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  policy-integrity:
+    name: Security Policy Integrity
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Enforce free security baseline
+        run: node scripts/check-free-security-policy.mjs
+
+  dependency-review:
+    name: Dependency Review
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Block vulnerable or policy-violating dependency changes
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          config-file: ./.github/dependency-review-config.yml
+
+  codeql:
+    name: CodeQL (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: read
+      packages: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language:
+          - javascript-typescript
+          - actions
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-and-quality
+      - name: Analyze with CodeQL
+        uses: github/codeql-action/analyze@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
+        with:
+          category: /language:${{ matrix.language }}
+
+  trivy:
+    name: Trivy Repository Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+    env:
+      TRIVY_SECRET_CONFIG: trivy-secret.yaml
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      # Current dependency debt is inventoried below and remediated through
+      # Dependabot. PR dependency deltas are blocked at LOW+ by Dependency
+      # Review, which gives us a ratchet instead of deadlocking all work on
+      # vulnerabilities that pre-date this security baseline.
+      - name: Block HIGH and CRITICAL repository misconfigurations
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: misconfig
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+          format: table
+          version: v0.74.0
+
+      - name: Inventory current HIGH and CRITICAL dependency vulnerabilities
+        if: ${{ always() }}
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+          exit-code: '0'
+          format: table
+          version: v0.74.0
+
+      - name: Block repository secrets
+        if: ${{ always() }}
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: secret
+          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+          exit-code: '1'
+          format: table
+          version: v0.74.0
+
+      - name: Produce SARIF evidence for all Trivy findings
+        if: ${{ always() }}
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,misconfig,secret
+          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+          ignore-unfixed: false
+          exit-code: '0'
+          format: sarif
+          output: trivy-results.sarif
+          version: v0.74.0
+
+      - name: Upload Trivy findings to GitHub code scanning
+        if: ${{ always() && hashFiles('trivy-results.sarif') != '' }}
+        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
+        with:
+          sarif_file: trivy-results.sarif
+          category: trivy-repository
+
+  security-lock:
+    name: Security Gate
+    if: ${{ always() }}
+    needs:
+      - policy-integrity
+      - dependency-review
+      - codeql
+      - trivy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Enforce mandatory security checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "policy_integrity=${{ needs.policy-integrity.result }}"
+          echo "dependency_review=${{ needs.dependency-review.result }}"
+          echo "codeql=${{ needs.codeql.result }}"
+          echo "trivy=${{ needs.trivy.result }}"
+
+          test "${{ needs.policy-integrity.result }}" = "success"
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            test "${{ needs.dependency-review.result }}" = "success"
+          else
+            test "${{ needs.dependency-review.result }}" = "skipped"
+          fi
+          test "${{ needs.codeql.result }}" = "success"
+          test "${{ needs.trivy.result }}" = "success"
+
+          echo "mandatory_security_gate=passed"
