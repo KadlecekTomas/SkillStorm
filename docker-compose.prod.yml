@@ -42,6 +42,11 @@ services:
       dockerfile: Dockerfile
       target: runner
     restart: unless-stopped
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     environment:
       NODE_ENV: production
       PORT: 4200
@@ -99,6 +104,11 @@ services:
       args:
         API_PROXY_TARGET: ${PROD_API_PROXY_TARGET:?PROD_API_PROXY_TARGET is required}
     restart: unless-stopped
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     environment:
       NODE_ENV: production
       PORT: 3000
