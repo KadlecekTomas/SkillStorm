@@ -51,11 +51,17 @@ requireIncludes(workflowPath, workflow, [
   'javascript-typescript',
   '- actions',
   'queries: security-and-quality',
-  'scanners: vuln,misconfig',
+  'name: Block HIGH and CRITICAL repository misconfigurations',
+  'scanners: misconfig',
+  'name: Inventory current HIGH and CRITICAL dependency vulnerabilities',
+  'scanners: vuln',
   'severity: HIGH,CRITICAL',
+  "exit-code: '0'",
+  'name: Block repository secrets',
   'scanners: secret',
   'severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL',
   "exit-code: '1'",
+  'TRIVY_SECRET_CONFIG: trivy-secret.yaml',
   'version: v0.74.0',
   'security-events: write',
 ]);
@@ -79,6 +85,21 @@ requireIncludes(dependencyPath, dependency, [
   'show-patched-versions: true',
   'AGPL-3.0-only',
   'GPL-3.0-or-later',
+]);
+
+const secretConfigPath = 'trivy-secret.yaml';
+const secretConfig = read(secretConfigPath);
+requireIncludes(secretConfigPath, secretConfig, [
+  'allow-rules:',
+  'id: prisma-live-session-index-identifiers',
+  'live_session_rounds_live_session_id_order_key',
+  'live_session_participants_live_session_id_idx',
+  'live_session_groups_live_session_id_label_key',
+]);
+requireExcludes(secretConfigPath, secretConfig, [
+  'disable-rules:',
+  'path:',
+  'paths:',
 ]);
 
 const dependabotPath = '.github/dependabot.yml';
