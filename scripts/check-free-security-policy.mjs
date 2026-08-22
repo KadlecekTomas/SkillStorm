@@ -114,6 +114,27 @@ requireIncludes(dependabotPath, dependabot, [
   'timezone: Europe/Prague',
 ]);
 
+const codeownersPath = '.github/CODEOWNERS';
+const codeowners = read(codeownersPath);
+requireIncludes(codeownersPath, codeowners, [
+  '/SECURITY.md @KadlecekTomas',
+  '/.github/workflows/security-gate.yml @KadlecekTomas',
+  '/.github/dependency-review-config.yml @KadlecekTomas',
+  '/.github/dependabot.yml @KadlecekTomas',
+  '/.github/workflows/production-gate.yml @KadlecekTomas',
+  '/trivy-secret.yaml @KadlecekTomas',
+  '/scripts/check-free-security-policy.mjs @KadlecekTomas',
+]);
+
+const securityPolicyPath = 'SECURITY.md';
+const securityPolicy = read(securityPolicyPath);
+requireIncludes(securityPolicyPath, securityPolicy, [
+  '# SkillStorm Security Policy',
+  'Do **not** open a public issue',
+  'private vulnerability reporting',
+  'Report a vulnerability',
+]);
+
 const productionPath = '.github/workflows/production-gate.yml';
 const production = read(productionPath);
 requireIncludes(productionPath, production, [
