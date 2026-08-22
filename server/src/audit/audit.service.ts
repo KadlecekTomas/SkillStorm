@@ -1,8 +1,11 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import type { AuditEntityType } from '@prisma/client';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
-import { sanitizeAuditMetadata } from './audit-metadata.sanitize';
+import {
+  sanitizeAuditChangedFields,
+  sanitizeAuditMetadata,
+} from './audit-metadata.sanitize';
 
 // ---------------------------------------------------------------------------
 // Input types
@@ -34,6 +37,8 @@ export interface AuditQueryInput {
   limit?: number;
 }
 
+export type AuditDbClient = PrismaService | Prisma.TransactionClient;
+
 // ---------------------------------------------------------------------------
 // Output DTO
 // ---------------------------------------------------------------------------
@@ -49,6 +54,7 @@ export type AuditLogDto = {
   ipAddress: string | null;
   userAgent: string | null;
   metadata: unknown;
+  changedFields: unknown;
   createdAt: Date;
 };
 
@@ -63,48 +69,41 @@ export type AuditQueryResult = {
 
 @Injectable()
 export class AuditService {
-  private readonly logger = new Logger(AuditService.name);
-
   constructor(private readonly prisma: PrismaService) {}
 
-  async log(event: AuditEventInput): Promise<void> {
-    try {
-      const data: Prisma.AuditLogUncheckedCreateInput = {
-        action: event.action,
-        entityType: event.entityType,
-        entityId: event.entityId ?? null,
-        userId: event.userId ?? null,
-        organizationId: event.organizationId ?? null,
-        systemRole: event.systemRole ?? null,
-        ipAddress: event.ipAddress ?? null,
-        userAgent: event.userAgent ?? null,
-      };
-      const sanitizedMetadata = sanitizeAuditMetadata(event.metadata ?? null);
-      if (sanitizedMetadata !== null && sanitizedMetadata !== undefined) {
-        data.metadata = sanitizedMetadata as Prisma.InputJsonValue;
-      }
-      const sanitizedChangedFields = sanitizeAuditMetadata(
-        event.changedFields ?? null,
-      );
-      if (
-        sanitizedChangedFields !== null &&
-        sanitizedChangedFields !== undefined
-      ) {
-        data.changedFields = sanitizedChangedFields as Prisma.InputJsonValue;
-      }
-      await this.prisma.auditLog.create({ data });
-    } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2003'
-      ) {
-        this.logger.warn(
-          `Audit log skipped due to missing relation: ${JSON.stringify(event)}`,
-        );
-        return;
-      }
-      throw error;
+  /**
+   * Append a canonical audit event.
+   *
+   * Critical invariant: audit failures are fail-closed. Callers that require
+   * mutation+audit atomicity pass the active Prisma TransactionClient, so an
+   * audit insert failure rolls the business mutation back as part of the same
+   * transaction. We intentionally do not swallow FK errors or log raw input.
+   */
+  async log(
+    event: AuditEventInput,
+    db: AuditDbClient = this.prisma,
+  ): Promise<void> {
+    const data: Prisma.AuditLogUncheckedCreateInput = {
+      action: event.action,
+      entityType: event.entityType,
+      entityId: event.entityId ?? null,
+      userId: event.userId ?? null,
+      organizationId: event.organizationId ?? null,
+      systemRole: event.systemRole ?? null,
+      ipAddress: event.ipAddress ?? null,
+      userAgent: event.userAgent ?? null,
+    };
+    const sanitizedMetadata = sanitizeAuditMetadata(event.metadata ?? null);
+    if (sanitizedMetadata !== null && sanitizedMetadata !== undefined) {
+      data.metadata = sanitizedMetadata as Prisma.InputJsonValue;
     }
+    const sanitizedChangedFields = sanitizeAuditChangedFields(
+      event.changedFields ?? null,
+    );
+    if (sanitizedChangedFields !== null) {
+      data.changedFields = sanitizedChangedFields as Prisma.InputJsonValue;
+    }
+    await db.auditLog.create({ data });
   }
 
   /**
@@ -157,6 +156,7 @@ export class AuditService {
           ipAddress: true,
           userAgent: true,
           metadata: true,
+          changedFields: true,
           createdAt: true,
         },
       }),
