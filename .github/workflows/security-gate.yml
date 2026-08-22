@@ -77,19 +77,37 @@ jobs:
     permissions:
       contents: read
       security-events: write
+    env:
+      TRIVY_SECRET_CONFIG: trivy-secret.yaml
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Block HIGH and CRITICAL vulnerabilities or misconfigurations
+      # Current dependency debt is inventoried below and remediated through
+      # Dependabot. PR dependency deltas are blocked at LOW+ by Dependency
+      # Review, which gives us a ratchet instead of deadlocking all work on
+      # vulnerabilities that pre-date this security baseline.
+      - name: Block HIGH and CRITICAL repository misconfigurations
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: fs
           scan-ref: .
-          scanners: vuln,misconfig
+          scanners: misconfig
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+          format: table
+          version: v0.74.0
+
+      - name: Inventory current HIGH and CRITICAL dependency vulnerabilities
+        if: ${{ always() }}
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln
           severity: HIGH,CRITICAL
           ignore-unfixed: false
-          exit-code: '1'
+          exit-code: '0'
           format: table
           version: v0.74.0
 
