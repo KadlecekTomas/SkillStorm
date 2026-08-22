@@ -79,6 +79,12 @@
     "wait-on": "^9.0.1",
     "whatwg-fetch": "^3.6.20"
   },
+  "overrides": {
+    "next": {
+      "postcss": "8.5.26",
+      "sharp": "0.35.3"
+    }
+  },
   "msw": {
     "workerDirectory": [
       "public"

@@ -1,0 +1,67 @@
+name: Security Lockfile Remediation Preview
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  refresh-lockfiles:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    name: Refresh security lockfiles
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout candidate branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "24.19.0"
+
+      - name: Regenerate client and server lockfiles
+        shell: bash
+        run: |
+          set -euo pipefail
+          for directory in client server; do
+            echo "Refreshing ${directory}/package-lock.json"
+            pushd "$directory"
+            npm install --package-lock-only --ignore-scripts
+            npm update --package-lock-only --ignore-scripts
+            npm audit fix --package-lock-only --ignore-scripts || true
+            npm audit --json > security-audit-after-refresh.json || true
+            popd
+          done
+
+      - name: Commit regenerated lockfiles to candidate branch
+        shell: bash
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          git add client/package-lock.json server/package-lock.json
+          if git diff --cached --quiet; then
+            echo "Lockfiles already current."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore: refresh security lockfiles"
+          git push origin "HEAD:${HEAD_REF}"
+
+      - name: Upload audit evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: security-lockfile-audits
+          path: |
+            client/security-audit-after-refresh.json
+            server/security-audit-after-refresh.json
+          if-no-files-found: warn
+          retention-days: 3
