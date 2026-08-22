@@ -21,11 +21,13 @@ ENV PORT=3000
 ARG API_PROXY_TARGET
 ENV API_PROXY_TARGET=${API_PROXY_TARGET}
 
-COPY package*.json package-lock.json* ./
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/public ./public
-COPY next.config.* ./
+COPY --chown=node:node package*.json package-lock.json* ./
+COPY --chown=node:node --from=deps /app/node_modules ./node_modules
+COPY --chown=node:node --from=builder /app/.next ./.next
+COPY --chown=node:node --from=builder /app/public ./public
+COPY --chown=node:node next.config.* ./
+
+USER node
 
 EXPOSE 3000
 
