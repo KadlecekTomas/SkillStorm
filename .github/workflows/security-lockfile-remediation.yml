@@ -1,0 +1,55 @@
+name: Security Lockfile Remediation Preview
+
+on:
+  push:
+    branches: [security/free-hardening-stack]
+
+permissions:
+  contents: read
+
+jobs:
+  refresh-lockfiles:
+    name: Refresh ${{ matrix.app }} lockfile
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - app: client
+            directory: client
+          - app: server
+            directory: server
+
+    steps:
+      - name: Checkout candidate branch
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24.19.0"
+          cache: npm
+          cache-dependency-path: ${{ matrix.directory }}/package-lock.json
+
+      - name: Refresh dependency graph within declared ranges
+        working-directory: ${{ matrix.directory }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm update --package-lock-only --ignore-scripts
+          set +e
+          npm audit fix --package-lock-only --omit=dev --ignore-scripts
+          audit_fix_status=$?
+          set -e
+          echo "npm_audit_fix_status=$audit_fix_status"
+          npm audit --omit=dev --json > security-audit-after-refresh.json || true
+
+      - name: Upload regenerated lockfile and audit
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-lockfile-${{ matrix.app }}
+          path: |
+            ${{ matrix.directory }}/package-lock.json
+            ${{ matrix.directory }}/security-audit-after-refresh.json
+          if-no-files-found: error
+          retention-days: 3
