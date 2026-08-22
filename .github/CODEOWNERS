@@ -3,4 +3,5 @@
 /.github/dependency-review-config.yml @KadlecekTomas
 /.github/dependabot.yml @KadlecekTomas
 /.github/workflows/production-gate.yml @KadlecekTomas
+/trivy-secret.yaml @KadlecekTomas
 /scripts/check-free-security-policy.mjs @KadlecekTomas
