@@ -5,51 +5,63 @@ on:
     branches: [main]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   refresh-lockfiles:
-    name: Refresh ${{ matrix.app }} lockfile
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    name: Refresh security lockfiles
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - app: client
-            directory: client
-          - app: server
-            directory: server
+    timeout-minutes: 15
 
     steps:
       - name: Checkout candidate branch
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
 
       - name: Setup Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "24.19.0"
-          cache: npm
-          cache-dependency-path: ${{ matrix.directory }}/package-lock.json
 
-      - name: Refresh dependency graph within declared ranges
-        working-directory: ${{ matrix.directory }}
+      - name: Regenerate client and server lockfiles
         shell: bash
         run: |
           set -euo pipefail
-          npm update --package-lock-only --ignore-scripts
-          set +e
-          npm audit fix --package-lock-only --omit=dev --ignore-scripts
-          audit_fix_status=$?
-          set -e
-          echo "npm_audit_fix_status=$audit_fix_status"
-          npm audit --omit=dev --json > security-audit-after-refresh.json || true
+          for directory in client server; do
+            echo "Refreshing ${directory}/package-lock.json"
+            pushd "$directory"
+            npm install --package-lock-only --ignore-scripts
+            npm update --package-lock-only --ignore-scripts
+            npm audit fix --package-lock-only --omit=dev --ignore-scripts || true
+            npm audit --omit=dev --json > security-audit-after-refresh.json || true
+            popd
+          done
 
-      - name: Upload regenerated lockfile and audit
+      - name: Commit regenerated lockfiles to candidate branch
+        shell: bash
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          git add client/package-lock.json server/package-lock.json
+          if git diff --cached --quiet; then
+            echo "Lockfiles already current."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore: refresh security lockfiles"
+          git push origin "HEAD:${HEAD_REF}"
+
+      - name: Upload audit evidence
+        if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: security-lockfile-${{ matrix.app }}
+          name: security-lockfile-audits
           path: |
-            ${{ matrix.directory }}/package-lock.json
-            ${{ matrix.directory }}/security-audit-after-refresh.json
-          if-no-files-found: error
+            client/security-audit-after-refresh.json
+            server/security-audit-after-refresh.json
+          if-no-files-found: warn
           retention-days: 3
