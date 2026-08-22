@@ -97,6 +97,7 @@ model Organization {
   schoolCurriculumProfiles  SchoolCurriculumProfile[]
   curriculumApplicabilities CurriculumApplicability[]
   activities                Activity[]
+  competencies              Competency[]
 
   lessonExperiences LessonExperience[]
 
@@ -180,43 +181,49 @@ model IdempotencyKey {
 }
 
 model Membership {
-  id                        String                     @id @default(uuid()) @map("membership_id")
-  userId                    String                     @map("user_id")
-  organizationId            String                     @map("organization_id")
-  role                      OrganizationRole
-  lastActiveRole            OrganizationRole?          @map("last_active_role")
-  xp                        Int                        @default(0)
-  level                     Int                        @default(1)
-  avatarType                String?                    @map("avatar_type") @db.VarChar(50)
-  createdAt                 DateTime                   @default(now()) @map("created_at")
-  updatedAt                 DateTime                   @updatedAt @map("updated_at")
-  deletedAt                 DateTime?                  @map("deleted_at")
-  assignmentStudents        AssignmentStudent[]
-  createdAssignments        Assignment[]               @relation("AssignmentCreatedBy")
-  exportedLogs              ExportLog[]
-  importedBatches           ImportBatch[]
-  createdMaterials          LearningMaterial[]
-  achievements              MembershipAchievement[]
-  badges                    MembershipBadge[]
-  organization              Organization               @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  user                      User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  lastActiveFor             User?                      @relation("LastActiveMembership")
-  student                   Student?
-  submissions               Submission[]
-  teacher                   Teacher?
-  createdTests              Test[]
-  xpEvents                  XpEvent[]
-  hostedLiveSessions        LiveSession[]              @relation("HostedLiveSessions")
-  liveSessionCommands       LiveSessionCommand[]       @relation("LiveSessionCommandActor")
-  liveParticipations        LiveSessionParticipant[]
-  roleAssignments           MembershipRoleAssignment[]
-  guardianRelations         GuardianStudentRelation[]  @relation("GuardianRelations")
-  verifiedGuardianRelations GuardianStudentRelation[]  @relation("VerifiedGuardianRelations")
-  revokedGuardianRelations  GuardianStudentRelation[]  @relation("RevokedGuardianRelations")
-  createdInvites            Invite[]                   @relation("CreatedInvites")
-  initiatedLearningSessions LearningSession[]          @relation("InitiatedLearningSessions")
+  id                              String                     @id @default(uuid()) @map("membership_id")
+  userId                          String                     @map("user_id")
+  organizationId                  String                     @map("organization_id")
+  role                            OrganizationRole
+  lastActiveRole                  OrganizationRole?          @map("last_active_role")
+  xp                              Int                        @default(0)
+  level                           Int                        @default(1)
+  avatarType                      String?                    @map("avatar_type") @db.VarChar(50)
+  createdAt                       DateTime                   @default(now()) @map("created_at")
+  updatedAt                       DateTime                   @updatedAt @map("updated_at")
+  deletedAt                       DateTime?                  @map("deleted_at")
+  assignmentStudents              AssignmentStudent[]
+  createdAssignments              Assignment[]               @relation("AssignmentCreatedBy")
+  exportedLogs                    ExportLog[]
+  importedBatches                 ImportBatch[]
+  createdMaterials                LearningMaterial[]
+  achievements                    MembershipAchievement[]
+  badges                          MembershipBadge[]
+  organization                    Organization               @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user                            User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastActiveFor                   User?                      @relation("LastActiveMembership")
+  student                         Student?
+  submissions                     Submission[]
+  teacher                         Teacher?
+  createdTests                    Test[]
+  xpEvents                        XpEvent[]
+  hostedLiveSessions              LiveSession[]              @relation("HostedLiveSessions")
+  liveSessionCommands             LiveSessionCommand[]       @relation("LiveSessionCommandActor")
+  liveParticipations              LiveSessionParticipant[]
+  roleAssignments                 MembershipRoleAssignment[]
+  guardianRelations               GuardianStudentRelation[]  @relation("GuardianRelations")
+  verifiedGuardianRelations       GuardianStudentRelation[]  @relation("VerifiedGuardianRelations")
+  revokedGuardianRelations        GuardianStudentRelation[]  @relation("RevokedGuardianRelations")
+  createdInvites                  Invite[]                   @relation("CreatedInvites")
+  initiatedLearningSessions       LearningSession[]          @relation("InitiatedLearningSessions")
+  tenantInitiatedLearningSessions LearningSession[]          @relation("LearningSessionInitiatorOrganization")
+  tenantGuardianRelations         GuardianStudentRelation[]  @relation("GuardianMembershipOrganization")
+  authoredProgressEntries         StudentProgressEntry[]
+  authoredAttendanceRecords       AttendanceRecord[]
+  authoredInterventions           StudentIntervention[]
 
   @@unique([userId, organizationId])
+  @@unique([id, organizationId], map: "memberships_membership_id_organization_id_key")
   @@index([organizationId, role])
   @@index([userId])
   @@map("memberships")
@@ -640,9 +647,11 @@ model LearningSession {
   endedAt               DateTime?               @map("ended_at")
   createdAt             DateTime                @default(now()) @map("created_at")
   updatedAt             DateTime                @updatedAt @map("updated_at")
-  student               Student                 @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  student               Student                 @relation("LearningSessionStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  tenantStudent         Student                 @relation("LearningSessionStudentOrganization", fields: [studentId, organizationId], references: [id, orgId], onDelete: Cascade, onUpdate: NoAction, map: "learning_sessions_student_org_fkey")
   organization          Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   initiatorMembership   Membership              @relation("InitiatedLearningSessions", fields: [initiatorMembershipId], references: [id], onDelete: Cascade)
+  tenantInitiator       Membership              @relation("LearningSessionInitiatorOrganization", fields: [initiatorMembershipId, organizationId], references: [id, organizationId], onDelete: Cascade, onUpdate: NoAction, map: "learning_sessions_initiator_org_fkey")
   guardianRelation      GuardianStudentRelation @relation(fields: [guardianRelationId], references: [id], onDelete: Restrict)
   assignment            Assignment              @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
   submissions           Submission[]
@@ -677,7 +686,9 @@ model GuardianStudentRelation {
   createdAt            DateTime                @default(now()) @map("created_at")
   updatedAt            DateTime                @updatedAt @map("updated_at")
   guardianMembership   Membership              @relation("GuardianRelations", fields: [guardianMembershipId], references: [id], onDelete: Cascade)
-  student              Student                 @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  tenantGuardian       Membership              @relation("GuardianMembershipOrganization", fields: [guardianMembershipId, organizationId], references: [id, organizationId], onDelete: Cascade, onUpdate: NoAction, map: "guardian_relations_membership_org_fkey")
+  student              Student                 @relation("GuardianStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  tenantStudent        Student                 @relation("GuardianStudentOrganization", fields: [studentId, organizationId], references: [id, orgId], onDelete: Cascade, onUpdate: NoAction, map: "guardian_relations_student_org_fkey")
   organization         Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   verifiedBy           Membership?             @relation("VerifiedGuardianRelations", fields: [verifiedById], references: [id], onDelete: SetNull)
   revokedBy            Membership?             @relation("RevokedGuardianRelations", fields: [revokedById], references: [id], onDelete: SetNull)
@@ -707,6 +718,9 @@ model AcademicYear {
   tests                     Test[]
   teacherClassSections      TeacherClassSection[]
   curriculumApplicabilities CurriculumApplicability[]
+  progressEntries           StudentProgressEntry[]
+  attendanceRecords         AttendanceRecord[]
+  interventions             StudentIntervention[]
 
   @@unique([orgId, label])
   @@index([orgId, isCurrent])
@@ -750,6 +764,9 @@ model ClassSection {
   invitations               Invitation[]
   invites                   Invite[]
   teachers                  TeacherClassSection[]
+  progressEntries           StudentProgressEntry[]
+  attendanceRecords         AttendanceRecord[]
+  interventions             StudentIntervention[]
   liveSessions              LiveSession[]
   classPartak               ClassPartak?
   campaignProgresses        CampaignProgress[]
@@ -803,26 +820,31 @@ model TeacherClassSection {
 }
 
 model Student {
-  id                String                    @id @default(uuid()) @map("student_id")
-  membershipId      String                    @unique @map("membership_id")
-  orgId             String                    @map("organization_id")
-  studentNumber     String?
-  externalId        String?
+  id                      String                    @id @default(uuid()) @map("student_id")
+  membershipId            String                    @unique @map("membership_id")
+  orgId                   String                    @map("organization_id")
+  studentNumber           String?
+  externalId              String?
   // Žákovský PIN (guardian Etapa B): jen hash, nikdy plaintext — ani v
   // lozích. Počítadla slouží limitu pokusů; vynucení přijde s login/ověřovací
   // cestou v Etapě C.
-  pinHash           String?                   @map("pin_hash") @db.VarChar(255)
-  pinUpdatedAt      DateTime?                 @map("pin_updated_at")
-  pinFailedCount    Int                       @default(0) @map("pin_failed_count")
-  pinLockedUntil    DateTime?                 @map("pin_locked_until")
-  deletedAt         DateTime?                 @map("deleted_at")
-  enrollments       Enrollment[]
-  StudentClassroom  StudentClassroom[]
-  guardianRelations GuardianStudentRelation[]
-  guardianInvites   Invite[]                  @relation("GuardianInvites")
-  learningSessions  LearningSession[]
-  membership        Membership                @relation(fields: [membershipId], references: [id], onDelete: Cascade)
-  organization      Organization              @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  pinHash                 String?                   @map("pin_hash") @db.VarChar(255)
+  pinUpdatedAt            DateTime?                 @map("pin_updated_at")
+  pinFailedCount          Int                       @default(0) @map("pin_failed_count")
+  pinLockedUntil          DateTime?                 @map("pin_locked_until")
+  deletedAt               DateTime?                 @map("deleted_at")
+  enrollments             Enrollment[]
+  StudentClassroom        StudentClassroom[]
+  guardianRelations       GuardianStudentRelation[] @relation("GuardianStudent")
+  tenantGuardianRelations GuardianStudentRelation[] @relation("GuardianStudentOrganization")
+  guardianInvites         Invite[]                  @relation("GuardianInvites")
+  learningSessions        LearningSession[]         @relation("LearningSessionStudent")
+  tenantLearningSessions  LearningSession[]         @relation("LearningSessionStudentOrganization")
+  progressEntries         StudentProgressEntry[]
+  attendanceRecords       AttendanceRecord[]
+  interventions           StudentIntervention[]
+  membership              Membership                @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  organization            Organization              @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
   // (id, orgId) musí být unikátní, aby na něj mohl mířit composite FK z
   // enrollments — DB-level záruka, že enrollment.orgId == student.orgId.
@@ -887,19 +909,23 @@ model CatalogTopic {
 }
 
 model Subject {
-  id                String             @id @default(uuid()) @map("subject_id")
-  catalogSubjectId  String?            @unique @map("catalog_subject_id")
+  id                String                 @id @default(uuid()) @map("subject_id")
+  catalogSubjectId  String?                @unique @map("catalog_subject_id")
   name              String
-  gradeFrom         Int                @default(1) @map("grade_from")
-  gradeTo           Int                @default(9) @map("grade_to")
-  createdAt         DateTime           @default(now()) @map("created_at")
-  deletedAt         DateTime?          @map("deleted_at")
+  gradeFrom         Int                    @default(1) @map("grade_from")
+  gradeTo           Int                    @default(9) @map("grade_to")
+  createdAt         DateTime               @default(now()) @map("created_at")
+  deletedAt         DateTime?              @map("deleted_at")
   learningMaterials LearningMaterial[]
   levels            SubjectLevel[]
   orgSubjects       OrgSubject[]
   tests             Test[]
-  catalogSubject    CatalogSubject?    @relation(fields: [catalogSubjectId], references: [id], onDelete: Restrict)
+  catalogSubject    CatalogSubject?        @relation(fields: [catalogSubjectId], references: [id], onDelete: Restrict)
   teachers          TeacherSubject[]
+  competencies      Competency[]
+  progressEntries   StudentProgressEntry[]
+  attendanceRecords AttendanceRecord[]
+  interventions     StudentIntervention[]
 
   @@index([catalogSubjectId])
   @@map("subjects")
@@ -1321,6 +1347,7 @@ model LiveSessionParticipant {
   learningEvidence LiveLearningEvidence[]
 
   @@unique([sessionId, membershipId])
+  @@index([sessionId], map: "live_session_participants_live_session_id_idx")
   @@index([sessionId, status])
   @@index([groupId])
   @@map("live_session_participants")
@@ -1380,7 +1407,7 @@ model LiveSemanticEvent {
 
   @@unique([sessionId, eventId])
   @@index([sessionId, receivedAt])
-  @@index([participantId, receivedAt])
+  @@index([participantId, receivedAt], map: "live_semantic_events_live_session_participant_id_received_at_id")
   @@index([stageId])
   @@map("live_semantic_events")
 }
@@ -1401,7 +1428,7 @@ model LiveLearningEvidence {
   sourceEvent         LiveSemanticEvent       @relation(fields: [sourceEventId], references: [id], onDelete: Restrict)
 
   @@index([sessionId, createdAt])
-  @@index([participantId, createdAt])
+  @@index([participantId, createdAt], map: "live_learning_evidence_live_session_participant_id_created_at_i")
   @@index([stageId])
   @@map("live_learning_evidence")
 }
@@ -1931,7 +1958,7 @@ model SchoolCurriculumProfile {
   organization   Organization                  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   versions       SchoolCurriculumVersion[]
 
-  @@index([organizationId, status, deletedAt])
+  @@index([organizationId, status, deletedAt], map: "school_curriculum_profiles_organization_id_status_deleted_at_id")
   @@map("school_curriculum_profiles")
 }
 
@@ -1999,7 +2026,7 @@ model SchoolOutcome {
   mappings                  SchoolOutcomeMapping[]
 
   @@unique([schoolCurriculumVersionId, externalCode])
-  @@index([schoolCurriculumVersionId, schoolSubjectId])
+  @@index([schoolCurriculumVersionId, schoolSubjectId], map: "school_outcomes_school_curriculum_version_id_school_subject_id_")
   @@index([checksum])
   @@map("school_outcomes")
 }
@@ -2024,8 +2051,8 @@ model CurriculumApplicability {
   academicYear              AcademicYear                  @relation(fields: [academicYearId], references: [id], onDelete: Restrict)
   classSection              ClassSection?                 @relation(fields: [classSectionId], references: [id], onDelete: Restrict)
 
-  @@index([organizationId, academicYearId, status])
-  @@index([classSectionId, academicYearId, status])
+  @@index([organizationId, academicYearId, status], map: "curriculum_applicabilities_organization_id_academic_year_id_sta")
+  @@index([classSectionId, academicYearId, status], map: "curriculum_applicabilities_class_section_id_academic_year_id_st")
   @@index([grade, academicYearId, status])
   @@index([schoolCurriculumVersionId])
   @@index([frameworkReleaseId])
@@ -2256,11 +2283,11 @@ model LessonExperience {
   createdAt      DateTime                  @default(now()) @map("created_at")
   updatedAt      DateTime                  @updatedAt @map("updated_at")
   deletedAt      DateTime?                 @map("deleted_at")
-  organization   Organization?             @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  organization   Organization?             @relation(fields: [organizationId], references: [id], onDelete: Restrict, map: "lesson_experiences_organization_fkey")
   versions       LessonExperienceVersion[]
 
-  @@index([organizationId, scope, deletedAt])
-  @@index([scope, deletedAt])
+  @@index([organizationId, scope, deletedAt], map: "lesson_experiences_org_scope_deleted_idx")
+  @@index([scope, deletedAt], map: "lesson_experiences_scope_deleted_idx")
   @@map("lesson_experiences")
 }
 
@@ -2291,15 +2318,14 @@ model LessonExperienceVersion {
   publishedBy          String?                             @map("published_by")
   createdAt            DateTime                            @default(now()) @map("created_at")
   updatedAt            DateTime                            @updatedAt @map("updated_at")
-  lessonExperience     LessonExperience                    @relation(fields: [lessonExperienceId], references: [id], onDelete: Restrict)
+  lessonExperience     LessonExperience                    @relation(fields: [lessonExperienceId], references: [id], onDelete: Restrict, map: "lesson_experience_versions_experience_fkey")
   stages               LessonStage[]
   curriculumMappings   LessonExperienceCurriculumMapping[]
   liveSessions         LiveSession[]
 
-  @@unique([lessonExperienceId, versionNo])
-  @@index([lessonExperienceId, contentChecksum])
-  @@index([lessonExperienceId, status])
-  @@index([status, publishedAt])
+  @@unique([lessonExperienceId, versionNo], map: "lesson_experience_versions_number_key")
+  @@index([lessonExperienceId, status], map: "lesson_experience_versions_status_idx")
+  @@index([status, publishedAt], map: "lesson_experience_versions_published_idx")
   @@map("lesson_experience_versions")
 }
 
@@ -2319,15 +2345,15 @@ model LessonStage {
   required                  Boolean                   @default(true)
   teacherIntervention       Boolean                   @default(false) @map("teacher_intervention")
   createdAt                 DateTime                  @default(now()) @map("created_at")
-  lessonExperienceVersion   LessonExperienceVersion   @relation(fields: [lessonExperienceVersionId], references: [id], onDelete: Restrict)
-  activityVersion           ActivityVersion?          @relation(fields: [activityVersionId], references: [id], onDelete: Restrict)
+  lessonExperienceVersion   LessonExperienceVersion   @relation(fields: [lessonExperienceVersionId], references: [id], onDelete: Restrict, map: "lesson_stages_version_fkey")
+  activityVersion           ActivityVersion?          @relation(fields: [activityVersionId], references: [id], onDelete: Restrict, map: "lesson_stages_activity_version_fkey")
   currentLiveSessions       LiveSession[]             @relation("CurrentLiveSessionStage")
   semanticEvents            LiveSemanticEvent[]
   learningEvidence          LiveLearningEvidence[]
 
-  @@unique([lessonExperienceVersionId, stageKey])
-  @@unique([lessonExperienceVersionId, orderIndex])
-  @@index([activityVersionId])
+  @@unique([lessonExperienceVersionId, stageKey], map: "lesson_stages_key_key")
+  @@unique([lessonExperienceVersionId, orderIndex], map: "lesson_stages_order_key")
+  @@index([activityVersionId], map: "lesson_stages_activity_version_idx")
   @@map("lesson_stages")
 }
 
@@ -2349,15 +2375,15 @@ model LessonExperienceCurriculumMapping {
   outcomeAspectReviewVersion Int?                                    @map("outcome_aspect_review_version")
   createdAt                  DateTime                                @default(now()) @map("created_at")
   updatedAt                  DateTime                                @updatedAt @map("updated_at")
-  lessonExperienceVersion    LessonExperienceVersion                 @relation(fields: [lessonExperienceVersionId], references: [id], onDelete: Restrict)
-  frameworkOutcome           FrameworkOutcome                        @relation(fields: [frameworkOutcomeId], references: [id], onDelete: Restrict)
-  outcomeAspect              OutcomeAspect?                          @relation(fields: [outcomeAspectId], references: [id], onDelete: Restrict)
-  frameworkRelease           CurriculumFrameworkRelease              @relation("LessonExperienceMappingRelease", fields: [frameworkReleaseId], references: [id], onDelete: Restrict)
+  lessonExperienceVersion    LessonExperienceVersion                 @relation(fields: [lessonExperienceVersionId], references: [id], onDelete: Restrict, map: "lesson_mapping_version_fkey")
+  frameworkOutcome           FrameworkOutcome                        @relation(fields: [frameworkOutcomeId], references: [id], onDelete: Restrict, map: "lesson_mapping_outcome_fkey")
+  outcomeAspect              OutcomeAspect?                          @relation(fields: [outcomeAspectId], references: [id], onDelete: Restrict, map: "lesson_mapping_aspect_fkey")
+  frameworkRelease           CurriculumFrameworkRelease              @relation("LessonExperienceMappingRelease", fields: [frameworkReleaseId], references: [id], onDelete: Restrict, map: "lesson_mapping_release_fkey")
 
-  @@index([lessonExperienceVersionId, status])
-  @@index([frameworkOutcomeId, status])
-  @@index([outcomeAspectId, status])
-  @@index([frameworkReleaseId])
+  @@index([lessonExperienceVersionId, status], map: "lesson_mapping_version_status_idx")
+  @@index([frameworkOutcomeId, status], map: "lesson_mapping_outcome_status_idx")
+  @@index([outcomeAspectId, status], map: "lesson_mapping_aspect_status_idx")
+  @@index([frameworkReleaseId], map: "lesson_mapping_release_idx")
   @@map("lesson_experience_curriculum_mappings")
 }
 
@@ -2674,18 +2700,21 @@ enum InterventionStatus {
 }
 
 model Competency {
-  id             String    @id @default(uuid()) @map("competency_id")
-  organizationId String    @map("organization_id")
-  subjectId      String?   @map("subject_id")
-  name           String    @db.VarChar(180)
-  description    String?   @db.VarChar(1000)
-  scaleMin       Int       @default(1) @map("scale_min")
-  scaleMax       Int       @default(4) @map("scale_max")
-  sortOrder      Int?      @map("sort_order")
-  isActive       Boolean   @default(true) @map("is_active")
-  createdAt      DateTime  @default(now()) @map("created_at")
-  updatedAt      DateTime  @updatedAt @map("updated_at")
-  deletedAt      DateTime? @map("deleted_at")
+  id              String                 @id @default(uuid()) @map("competency_id")
+  organizationId  String                 @map("organization_id")
+  subjectId       String?                @map("subject_id")
+  name            String                 @db.VarChar(180)
+  description     String?                @db.VarChar(1000)
+  scaleMin        Int                    @default(1) @map("scale_min")
+  scaleMax        Int                    @default(4) @map("scale_max")
+  sortOrder       Int?                   @map("sort_order")
+  isActive        Boolean                @default(true) @map("is_active")
+  createdAt       DateTime               @default(now()) @map("created_at")
+  updatedAt       DateTime               @default(now()) @updatedAt @map("updated_at")
+  deletedAt       DateTime?              @map("deleted_at")
+  organization    Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade, map: "competencies_organization_fkey")
+  subject         Subject?               @relation(fields: [subjectId], references: [id], onDelete: SetNull, map: "competencies_subject_fkey")
+  progressEntries StudentProgressEntry[]
 
   @@index([organizationId, subjectId], map: "competencies_org_subject_idx")
   @@index([organizationId, isActive, deletedAt], map: "competencies_org_active_idx")
@@ -2708,14 +2737,20 @@ model StudentProgressEntry {
   clientMutationId String?           @map("client_mutation_id") @db.VarChar(64)
   occurredAt       DateTime          @default(now()) @map("occurred_at")
   createdAt        DateTime          @default(now()) @map("created_at")
-  updatedAt        DateTime          @updatedAt @map("updated_at")
+  updatedAt        DateTime          @default(now()) @updatedAt @map("updated_at")
   deletedAt        DateTime?         @map("deleted_at")
+  author           Membership        @relation(fields: [createdById], references: [id], onDelete: Restrict, map: "student_progress_author_fkey")
+  classSection     ClassSection      @relation(fields: [classSectionId], references: [id], onDelete: Restrict, map: "student_progress_class_fkey")
+  competency       Competency?       @relation(fields: [competencyId], references: [id], onDelete: SetNull, map: "student_progress_competency_fkey")
+  student          Student           @relation(fields: [studentId, organizationId], references: [id, orgId], onDelete: Cascade, map: "student_progress_student_org_fkey")
+  subject          Subject?          @relation(fields: [subjectId], references: [id], onDelete: SetNull, map: "student_progress_subject_fkey")
+  academicYear     AcademicYear      @relation(fields: [academicYearId], references: [id], onDelete: Restrict, map: "student_progress_year_fkey")
 
-  @@index([studentId, occurredAt], map: "student_progress_student_time_idx")
-  @@index([organizationId, academicYearId, occurredAt], map: "student_progress_org_year_idx")
-  @@index([classSectionId, occurredAt], map: "student_progress_class_time_idx")
-  @@index([subjectId, occurredAt], map: "student_progress_subject_time_idx")
-  @@index([competencyId, occurredAt], map: "student_progress_competency_time_idx")
+  @@index([studentId, occurredAt(sort: Desc)], map: "student_progress_student_time_idx")
+  @@index([organizationId, academicYearId, occurredAt(sort: Desc)], map: "student_progress_org_year_idx")
+  @@index([classSectionId, occurredAt(sort: Desc)], map: "student_progress_class_time_idx")
+  @@index([subjectId, occurredAt(sort: Desc)], map: "student_progress_subject_time_idx")
+  @@index([competencyId, occurredAt(sort: Desc)], map: "student_progress_competency_time_idx")
   @@map("student_progress_entries")
 }
 
@@ -2732,12 +2767,17 @@ model AttendanceRecord {
   note           String?          @db.VarChar(1000)
   occurredAt     DateTime         @default(now()) @map("occurred_at")
   createdAt      DateTime         @default(now()) @map("created_at")
-  updatedAt      DateTime         @updatedAt @map("updated_at")
+  updatedAt      DateTime         @default(now()) @updatedAt @map("updated_at")
   deletedAt      DateTime?        @map("deleted_at")
+  author         Membership       @relation(fields: [createdById], references: [id], onDelete: Restrict, map: "attendance_author_fkey")
+  classSection   ClassSection     @relation(fields: [classSectionId], references: [id], onDelete: Restrict, map: "attendance_class_fkey")
+  student        Student          @relation(fields: [studentId, organizationId], references: [id, orgId], onDelete: Cascade, map: "attendance_student_org_fkey")
+  subject        Subject?         @relation(fields: [subjectId], references: [id], onDelete: SetNull, map: "attendance_subject_fkey")
+  academicYear   AcademicYear     @relation(fields: [academicYearId], references: [id], onDelete: Restrict, map: "attendance_year_fkey")
 
-  @@index([studentId, occurredAt], map: "attendance_student_time_idx")
-  @@index([classSectionId, occurredAt], map: "attendance_class_time_idx")
-  @@index([organizationId, academicYearId, occurredAt], map: "attendance_org_year_idx")
+  @@index([studentId, occurredAt(sort: Desc)], map: "attendance_student_time_idx")
+  @@index([classSectionId, occurredAt(sort: Desc)], map: "attendance_class_time_idx")
+  @@index([organizationId, academicYearId, occurredAt(sort: Desc)], map: "attendance_org_year_idx")
   @@map("attendance_records")
 }
 
@@ -2755,11 +2795,16 @@ model StudentIntervention {
   startedAt      DateTime           @default(now()) @map("started_at")
   resolvedAt     DateTime?          @map("resolved_at")
   createdAt      DateTime           @default(now()) @map("created_at")
-  updatedAt      DateTime           @updatedAt @map("updated_at")
+  updatedAt      DateTime           @default(now()) @updatedAt @map("updated_at")
   deletedAt      DateTime?          @map("deleted_at")
+  author         Membership         @relation(fields: [createdById], references: [id], onDelete: Restrict, map: "interventions_author_fkey")
+  classSection   ClassSection       @relation(fields: [classSectionId], references: [id], onDelete: Restrict, map: "interventions_class_fkey")
+  student        Student            @relation(fields: [studentId, organizationId], references: [id, orgId], onDelete: Cascade, map: "interventions_student_org_fkey")
+  subject        Subject?           @relation(fields: [subjectId], references: [id], onDelete: SetNull, map: "interventions_subject_fkey")
+  academicYear   AcademicYear       @relation(fields: [academicYearId], references: [id], onDelete: Restrict, map: "interventions_year_fkey")
 
-  @@index([studentId, status, startedAt], map: "interventions_student_status_idx")
-  @@index([classSectionId, status, startedAt], map: "interventions_class_status_idx")
-  @@index([organizationId, status, startedAt], map: "interventions_org_status_idx")
+  @@index([studentId, status, startedAt(sort: Desc)], map: "interventions_student_status_idx")
+  @@index([classSectionId, status, startedAt(sort: Desc)], map: "interventions_class_status_idx")
+  @@index([organizationId, status, startedAt(sort: Desc)], map: "interventions_org_status_idx")
   @@map("student_interventions")
 }
