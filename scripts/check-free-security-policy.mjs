@@ -1,0 +1,107 @@
+import fs from 'node:fs';
+
+function fail(message) {
+  console.error(`Free security policy violation: ${message}`);
+  process.exit(1);
+}
+
+function read(path) {
+  try {
+    return fs.readFileSync(path, 'utf8');
+  } catch (error) {
+    fail(`cannot read ${path}: ${error.message}`);
+  }
+}
+
+function requireIncludes(path, content, required) {
+  for (const value of required) {
+    if (!content.includes(value)) {
+      fail(`${path} must contain ${JSON.stringify(value)}`);
+    }
+  }
+}
+
+function requireExcludes(path, content, forbidden) {
+  for (const value of forbidden) {
+    if (content.includes(value)) {
+      fail(`${path} must not contain ${JSON.stringify(value)}`);
+    }
+  }
+}
+
+if (fs.existsSync('.whitesource')) {
+  fail('.whitesource must remain absent; SkillStorm uses the free security stack, not paid Mend policy');
+}
+
+const workflowPath = '.github/workflows/security-gate.yml';
+const workflow = read(workflowPath);
+requireIncludes(workflowPath, workflow, [
+  'name: SkillStorm Security Gate',
+  'name: Security Policy Integrity',
+  'name: Dependency Review',
+  'name: CodeQL (${{ matrix.language }})',
+  'name: Trivy Repository Gate',
+  'name: Security Gate',
+  'actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd',
+  'actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294',
+  'aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25',
+  'github/codeql-action/init@v4',
+  'github/codeql-action/analyze@v4',
+  'github/codeql-action/upload-sarif@v4',
+  'javascript-typescript',
+  '- actions',
+  'queries: security-and-quality',
+  'scanners: vuln,misconfig',
+  'severity: HIGH,CRITICAL',
+  'scanners: secret',
+  'severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL',
+  "exit-code: '1'",
+  'version: v0.74.0',
+  'security-events: write',
+]);
+requireExcludes(workflowPath, workflow, [
+  'pull_request_target:',
+  'continue-on-error: true',
+  'permissions: write-all',
+]);
+
+const dependencyPath = '.github/dependency-review-config.yml';
+const dependency = read(dependencyPath);
+requireIncludes(dependencyPath, dependency, [
+  'fail-on-severity: low',
+  '- runtime',
+  '- development',
+  '- unknown',
+  'vulnerability-check: true',
+  'license-check: true',
+  'warn-only: false',
+  'show-openssf-scorecard: true',
+  'show-patched-versions: true',
+  'AGPL-3.0-only',
+  'GPL-3.0-or-later',
+]);
+
+const dependabotPath = '.github/dependabot.yml';
+const dependabot = read(dependabotPath);
+requireIncludes(dependabotPath, dependabot, [
+  'package-ecosystem: npm',
+  'directory: /server',
+  'directory: /client',
+  'package-ecosystem: github-actions',
+  'package-ecosystem: docker',
+  'interval: daily',
+  'timezone: Europe/Prague',
+]);
+
+const productionPath = '.github/workflows/production-gate.yml';
+const production = read(productionPath);
+requireIncludes(productionPath, production, [
+  'name: Enforce free security policy',
+  'run: node scripts/check-free-security-policy.mjs',
+]);
+requireExcludes(productionPath, production, [
+  'check-mend-policy.mjs',
+  'Enforce maximum Mend security policy',
+]);
+
+console.log('SkillStorm free security baseline is intact.');
