@@ -157,20 +157,25 @@ export class MembershipRolesService {
         });
       }
       await this.ensureSatellite(tx, membership, role);
+      await this.auditService.log(
+        {
+          action: 'MEMBERSHIP_ROLE_ASSIGN',
+          entityType: AuditEntityType.PERMISSION,
+          entityId: membershipId,
+          userId: input.actor.userId ?? null,
+          organizationId: membership.organizationId,
+          systemRole: input.actor.systemRole ?? null,
+          metadata: {
+            role,
+            targetUserId: membership.userId,
+            targetMembershipId: membershipId,
+            actorMembershipId,
+          },
+        },
+        tx,
+      );
     });
 
-    await this.auditService.log({
-      action: 'MEMBERSHIP_ROLE_ASSIGN',
-      entityType: AuditEntityType.PERMISSION,
-      entityId: membershipId,
-      userId: input.actor.userId ?? null,
-      organizationId: membership.organizationId,
-      metadata: {
-        role,
-        targetUserId: membership.userId,
-        actorMembershipId,
-      },
-    });
     emitRbacInvalidation({
       userId: membership.userId,
       organizationId: membership.organizationId,
@@ -224,20 +229,25 @@ export class MembershipRolesService {
         });
       }
       await this.softDeleteSatellite(tx, membershipId, role);
+      await this.auditService.log(
+        {
+          action: 'MEMBERSHIP_ROLE_REVOKE',
+          entityType: AuditEntityType.PERMISSION,
+          entityId: membershipId,
+          userId: input.actor.userId ?? null,
+          organizationId: membership.organizationId,
+          systemRole: input.actor.systemRole ?? null,
+          metadata: {
+            role,
+            targetUserId: membership.userId,
+            targetMembershipId: membershipId,
+            actorMembershipId: input.actor.membershipId ?? null,
+          },
+        },
+        tx,
+      );
     });
 
-    await this.auditService.log({
-      action: 'MEMBERSHIP_ROLE_REVOKE',
-      entityType: AuditEntityType.PERMISSION,
-      entityId: membershipId,
-      userId: input.actor.userId ?? null,
-      organizationId: membership.organizationId,
-      metadata: {
-        role,
-        targetUserId: membership.userId,
-        actorMembershipId: input.actor.membershipId ?? null,
-      },
-    });
     emitRbacInvalidation({
       userId: membership.userId,
       organizationId: membership.organizationId,
@@ -281,20 +291,24 @@ export class MembershipRolesService {
           data: { deletedAt: null },
         });
       }
+      await this.auditService.log(
+        {
+          action: 'MEMBERSHIP_PRIMARY_ROLE_CHANGE',
+          entityType: AuditEntityType.PERMISSION,
+          entityId: membershipId,
+          userId: input.actorUserId ?? null,
+          organizationId: membership.organizationId,
+          metadata: {
+            previousRole: membership.role,
+            nextRole: role,
+            targetUserId: membership.userId,
+            targetMembershipId: membershipId,
+          },
+        },
+        tx,
+      );
     });
 
-    await this.auditService.log({
-      action: 'MEMBERSHIP_PRIMARY_ROLE_CHANGE',
-      entityType: AuditEntityType.PERMISSION,
-      entityId: membershipId,
-      userId: input.actorUserId ?? null,
-      organizationId: membership.organizationId,
-      metadata: {
-        previousRole: membership.role,
-        nextRole: role,
-        targetUserId: membership.userId,
-      },
-    });
     emitRbacInvalidation({
       userId: membership.userId,
       organizationId: membership.organizationId,

@@ -5,17 +5,22 @@ import {
 
 const MAX_STRING_LENGTH = 500;
 const MAX_ARRAY_LENGTH = 50;
+const MAX_CHANGED_FIELDS = 50;
+
+function normalizeKey(key: string): string {
+  return key.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
 
 function isDenylisted(key: string): boolean {
-  return AUDIT_METADATA_DENYLIST.has(key.toLowerCase());
+  return AUDIT_METADATA_DENYLIST.has(normalizeKey(key));
 }
 
 /**
  * Recursively sanitize a nested value (object / array / primitive).
  *
- * At this level the ALLOWLIST is NOT applied — only the DENYLIST.
- * This allows `before`/`after` objects to preserve their actual field names
- * (e.g. `name`, `status`) while still stripping secrets at any depth.
+ * At this level the ALLOWLIST is NOT applied — only the credential denylist.
+ * This keeps intentionally structured forensic context while stripping secrets
+ * at any depth, including objects nested inside arrays.
  */
 function sanitizeValue(input: unknown): unknown {
   if (typeof input === 'string') {
@@ -68,13 +73,41 @@ function summarizeBody(body: unknown): BodySummary | null {
 }
 
 /**
+ * `changedFields` is forensic structure, not a before/after data snapshot.
+ * Persist field NAMES only. This prevents callers that pass an update DTO from
+ * copying names, e-mails, student numbers or credentials into AuditLog while
+ * still answering "what changed?".
+ */
+export function sanitizeAuditChangedFields(input: unknown): string[] | null {
+  if (input === null || input === undefined) return null;
+
+  const candidates = Array.isArray(input)
+    ? input.filter((value): value is string => typeof value === 'string')
+    : typeof input === 'object'
+      ? Object.keys(input as Record<string, unknown>)
+      : [];
+
+  const fields = Array.from(
+    new Set(
+      candidates
+        .map((field) => field.trim())
+        .filter((field) => field.length > 0 && !isDenylisted(field)),
+    ),
+  )
+    .sort()
+    .slice(0, MAX_CHANGED_FIELDS);
+
+  return fields.length > 0 ? fields : null;
+}
+
+/**
  * Sanitize the top-level audit log metadata object.
  *
  * Processing order:
  *   1. BODY TRANSFORM — if `body` key exists and is an object, replace it with
  *      `{ bodyKeys, bodySize, bodyHasNested }`. No actual values are propagated.
- *   2. DENYLIST — strip keys matching a sensitive name (case-insensitive).
- *   3. ALLOWLIST — keep only keys present in AUDIT_METADATA_ALLOWLIST.
+ *   2. DENYLIST — strip credential-shaped keys (case/punctuation insensitive).
+ *   3. ALLOWLIST — keep only explicitly approved top-level forensic keys.
  *   4. Recurse into surviving values via `sanitizeValue` (denylist-only at depth).
  *
  * Returns `null` when the result is empty so callers can skip writing metadata.

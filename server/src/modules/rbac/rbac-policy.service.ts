@@ -5,12 +5,14 @@ import {
 } from '@nestjs/common';
 import type { PermissionKey, Prisma } from '@prisma/client';
 import { AuditEntityType, OrganizationRole } from '@prisma/client';
+import { AuditService } from '@/audit/audit.service';
 import { PrismaService } from '@/prisma/prisma.service';
 import { emitRbacInvalidation } from './rbac.events';
 
 type ActorContext = {
   userId?: string | null;
   organizationId?: string | null;
+  systemRole?: string | null;
   ipAddress?: string | null;
   userAgent?: string | null;
 };
@@ -27,9 +29,14 @@ type UserPermissionInput = {
   organizationId?: string | null;
 };
 
+type RbacDb = PrismaService | Prisma.TransactionClient;
+
 @Injectable()
 export class RbacPolicyService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auditService: AuditService,
+  ) {}
 
   async grantRolePermission(actor: ActorContext, input: RolePermissionInput) {
     const permission = await this.prisma.permission.findUnique({
@@ -42,33 +49,45 @@ export class RbacPolicyService {
       );
     }
 
-    const record = input.organizationId
-      ? await this.prisma.rolePermission.upsert({
-          where: {
-            organizationId_role_permissionId: {
+    const record = await this.prisma.$transaction(async (tx) => {
+      const next = input.organizationId
+        ? await tx.rolePermission.upsert({
+            where: {
+              organizationId_role_permissionId: {
+                organizationId: input.organizationId,
+                role: input.role,
+                permissionId: permission.id,
+              },
+            },
+            create: {
               organizationId: input.organizationId,
               role: input.role,
               permissionId: permission.id,
+              allowed: true,
             },
-          },
-          create: {
-            organizationId: input.organizationId,
-            role: input.role,
-            permissionId: permission.id,
-            allowed: true,
-          },
-          update: { allowed: true },
-        })
-      : await this.upsertGlobalRolePermission(input.role, permission.id);
+            update: { allowed: true },
+          })
+        : await this.upsertGlobalRolePermission(input.role, permission.id, tx);
 
-    await this.audit(actor, {
-      action: 'ROLE_PERMISSION_GRANT',
-      entityId: record.id,
-      metadata: {
-        role: input.role,
-        permissionKey: input.permissionKey,
-        organizationId: input.organizationId ?? null,
-      },
+      await this.auditService.log(
+        {
+          action: 'ROLE_PERMISSION_GRANT',
+          entityType: AuditEntityType.PERMISSION,
+          entityId: next.id,
+          userId: actor.userId ?? null,
+          organizationId: input.organizationId ?? actor.organizationId ?? null,
+          systemRole: actor.systemRole ?? null,
+          ipAddress: actor.ipAddress ?? null,
+          userAgent: actor.userAgent ?? null,
+          metadata: {
+            role: input.role,
+            permissionKey: input.permissionKey,
+            organizationId: input.organizationId ?? null,
+          },
+        },
+        tx,
+      );
+      return next;
     });
 
     emitRbacInvalidation({
@@ -102,16 +121,26 @@ export class RbacPolicyService {
       return null;
     }
 
-    await this.prisma.rolePermission.delete({ where: { id: existing.id } });
-
-    await this.audit(actor, {
-      action: 'ROLE_PERMISSION_REVOKE',
-      entityId: existing.id,
-      metadata: {
-        role: input.role,
-        permissionKey: input.permissionKey,
-        organizationId: input.organizationId ?? null,
-      },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.rolePermission.delete({ where: { id: existing.id } });
+      await this.auditService.log(
+        {
+          action: 'ROLE_PERMISSION_REVOKE',
+          entityType: AuditEntityType.PERMISSION,
+          entityId: existing.id,
+          userId: actor.userId ?? null,
+          organizationId: input.organizationId ?? actor.organizationId ?? null,
+          systemRole: actor.systemRole ?? null,
+          ipAddress: actor.ipAddress ?? null,
+          userAgent: actor.userAgent ?? null,
+          metadata: {
+            role: input.role,
+            permissionKey: input.permissionKey,
+            organizationId: input.organizationId ?? null,
+          },
+        },
+        tx,
+      );
     });
 
     emitRbacInvalidation({
@@ -148,33 +177,45 @@ export class RbacPolicyService {
       );
     }
 
-    const record = input.organizationId
-      ? await this.prisma.userPermission.upsert({
-          where: {
-            userId_organizationId_permissionId: {
+    const record = await this.prisma.$transaction(async (tx) => {
+      const next = input.organizationId
+        ? await tx.userPermission.upsert({
+            where: {
+              userId_organizationId_permissionId: {
+                userId: input.userId,
+                organizationId: input.organizationId,
+                permissionId: permission.id,
+              },
+            },
+            create: {
               userId: input.userId,
               organizationId: input.organizationId,
               permissionId: permission.id,
+              allowed: true,
             },
-          },
-          create: {
-            userId: input.userId,
-            organizationId: input.organizationId,
-            permissionId: permission.id,
-            allowed: true,
-          },
-          update: { allowed: true },
-        })
-      : await this.upsertGlobalUserPermission(input.userId, permission.id);
+            update: { allowed: true },
+          })
+        : await this.upsertGlobalUserPermission(input.userId, permission.id, tx);
 
-    await this.audit(actor, {
-      action: 'USER_PERMISSION_GRANT',
-      entityId: record.id,
-      metadata: {
-        userId: input.userId,
-        permissionKey: input.permissionKey,
-        organizationId: input.organizationId ?? null,
-      },
+      await this.auditService.log(
+        {
+          action: 'USER_PERMISSION_GRANT',
+          entityType: AuditEntityType.PERMISSION,
+          entityId: next.id,
+          userId: actor.userId ?? null,
+          organizationId: input.organizationId ?? actor.organizationId ?? null,
+          systemRole: actor.systemRole ?? null,
+          ipAddress: actor.ipAddress ?? null,
+          userAgent: actor.userAgent ?? null,
+          metadata: {
+            targetUserId: input.userId,
+            permissionKey: input.permissionKey,
+            organizationId: input.organizationId ?? null,
+          },
+        },
+        tx,
+      );
+      return next;
     });
 
     emitRbacInvalidation({
@@ -209,16 +250,26 @@ export class RbacPolicyService {
       return null;
     }
 
-    await this.prisma.userPermission.delete({ where: { id: existing.id } });
-
-    await this.audit(actor, {
-      action: 'USER_PERMISSION_REVOKE',
-      entityId: existing.id,
-      metadata: {
-        userId: input.userId,
-        permissionKey: input.permissionKey,
-        organizationId: input.organizationId ?? null,
-      },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.userPermission.delete({ where: { id: existing.id } });
+      await this.auditService.log(
+        {
+          action: 'USER_PERMISSION_REVOKE',
+          entityType: AuditEntityType.PERMISSION,
+          entityId: existing.id,
+          userId: actor.userId ?? null,
+          organizationId: input.organizationId ?? actor.organizationId ?? null,
+          systemRole: actor.systemRole ?? null,
+          ipAddress: actor.ipAddress ?? null,
+          userAgent: actor.userAgent ?? null,
+          metadata: {
+            targetUserId: input.userId,
+            permissionKey: input.permissionKey,
+            organizationId: input.organizationId ?? null,
+          },
+        },
+        tx,
+      );
     });
 
     emitRbacInvalidation({
@@ -268,43 +319,21 @@ export class RbacPolicyService {
     }
   }
 
-  private audit(
-    actor: ActorContext,
-    payload: {
-      action: string;
-      entityId: string;
-      metadata: Record<string, any>;
-    },
-  ) {
-    const data: Prisma.AuditLogUncheckedCreateInput = {
-      userId: actor.userId ?? null,
-      organizationId: actor.organizationId ?? null,
-      entityType: AuditEntityType.PERMISSION,
-      entityId: payload.entityId,
-      action: payload.action,
-      ipAddress: actor.ipAddress ?? null,
-      userAgent: actor.userAgent ?? null,
-    };
-    if (payload.metadata !== undefined) {
-      data.metadata = payload.metadata;
-    }
-    return this.prisma.auditLog.create({ data });
-  }
-
   private async upsertGlobalRolePermission(
     role: OrganizationRole,
     permissionId: string,
+    db: RbacDb = this.prisma,
   ) {
-    const existing = await this.prisma.rolePermission.findFirst({
+    const existing = await db.rolePermission.findFirst({
       where: { organizationId: null, role, permissionId },
     });
     if (existing) {
-      return this.prisma.rolePermission.update({
+      return db.rolePermission.update({
         where: { id: existing.id },
         data: { allowed: true },
       });
     }
-    return this.prisma.rolePermission.create({
+    return db.rolePermission.create({
       data: { organizationId: null, role, permissionId, allowed: true },
     });
   }
@@ -312,17 +341,18 @@ export class RbacPolicyService {
   private async upsertGlobalUserPermission(
     userId: string,
     permissionId: string,
+    db: RbacDb = this.prisma,
   ) {
-    const existing = await this.prisma.userPermission.findFirst({
+    const existing = await db.userPermission.findFirst({
       where: { userId, organizationId: null, permissionId },
     });
     if (existing) {
-      return this.prisma.userPermission.update({
+      return db.userPermission.update({
         where: { id: existing.id },
         data: { allowed: true },
       });
     }
-    return this.prisma.userPermission.create({
+    return db.userPermission.create({
       data: {
         userId,
         organizationId: null,
