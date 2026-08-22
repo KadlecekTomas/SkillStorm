@@ -1,21 +1,74 @@
 import { Injectable } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { OrganizationType, PlanTarget, PrismaClient } from '@prisma/client';
+import {
+  sanitizeAuditChangedFields,
+  sanitizeAuditMetadata,
+} from '@/audit/audit-metadata.sanitize';
 import { getPrismaContext } from './prisma-context';
 
 @Injectable()
 export class PrismaService extends PrismaClient {
   constructor() {
     super();
+    // Audit writes exist in both the canonical AuditService and older direct
+    // tx.auditLog.create call sites. Keep a DB-client boundary sanitizer so a
+    // future direct write cannot bypass credential/PII minimization policy.
+    this.$use(this.sanitizeAuditLogWrites);
     this.$use(this.enforceAuditLogImmutability);
     this.$use(this.enforceSubscriptionTargets);
   }
+
+  private readonly sanitizeAuditLogWrites: Prisma.Middleware = async (
+    params,
+    next,
+  ) => {
+    if (
+      params.model !== 'AuditLog' ||
+      !['create', 'createMany'].includes(params.action)
+    ) {
+      return next(params);
+    }
+
+    const sanitizeRow = (input: unknown): void => {
+      if (!input || typeof input !== 'object' || Array.isArray(input)) return;
+      const row = input as Record<string, unknown>;
+
+      if ('metadata' in row) {
+        const metadata = sanitizeAuditMetadata(row.metadata);
+        if (metadata === null || metadata === undefined) {
+          delete row.metadata;
+        } else {
+          row.metadata = metadata;
+        }
+      }
+
+      if ('changedFields' in row) {
+        const changedFields = sanitizeAuditChangedFields(row.changedFields);
+        if (changedFields === null) {
+          delete row.changedFields;
+        } else {
+          row.changedFields = changedFields;
+        }
+      }
+    };
+
+    const args = (params.args ?? {}) as { data?: unknown };
+    if (Array.isArray(args.data)) {
+      args.data.forEach(sanitizeRow);
+    } else {
+      sanitizeRow(args.data);
+    }
+
+    return next(params);
+  };
 
   /**
    * GDPR invariant: AuditLog records are append-only.
    *
    * Blocked unconditionally:
    *   update      — single-row mutation is never permitted
+   *   upsert      — could update an existing immutable audit row
    *   delete      — records must never be deleted
    *   deleteMany  — bulk delete is never permitted, even with bypass
    *
@@ -33,9 +86,9 @@ export class PrismaService extends PrismaClient {
     if (params.model !== 'AuditLog') return next(params);
 
     // Structural mutations: always blocked, no bypass.
-    if (['update', 'delete', 'deleteMany'].includes(params.action)) {
+    if (['update', 'upsert', 'delete', 'deleteMany'].includes(params.action)) {
       throw new Error(
-        'AuditLog records are immutable. Structural mutations (update, delete, deleteMany) are prohibited.',
+        'AuditLog records are immutable. Structural mutations (update, upsert, delete, deleteMany) are prohibited.',
       );
     }
 
