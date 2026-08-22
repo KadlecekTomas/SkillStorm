@@ -1,0 +1,11 @@
+[Unit]
+Description=Check SkillStorm production backup freshness hourly
+
+[Timer]
+OnCalendar=hourly
+RandomizedDelaySec=5m
+Persistent=true
+Unit=skillstorm-backup-freshness.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,65 @@
+services:
+  backup:
+    build:
+      context: .
+      dockerfile: ops/backup/Dockerfile
+    profiles: ["ops"]
+    restart: "no"
+    environment:
+      DATABASE_URL: ${PROD_DATABASE_URL:?DATABASE_URL is required}
+      BACKUP_DIR: /backups
+      BACKUP_S3_ENDPOINT: ${PROD_BACKUP_S3_ENDPOINT:?BACKUP_S3_ENDPOINT is required}
+      BACKUP_S3_BUCKET: ${PROD_BACKUP_S3_BUCKET:?BACKUP_S3_BUCKET is required}
+      BACKUP_S3_REGION: ${PROD_BACKUP_S3_REGION:?BACKUP_S3_REGION is required}
+      BACKUP_S3_ACCESS_KEY_ID: ${PROD_BACKUP_S3_ACCESS_KEY_ID:?BACKUP_S3_ACCESS_KEY_ID is required}
+      BACKUP_S3_SECRET_ACCESS_KEY: ${PROD_BACKUP_S3_SECRET_ACCESS_KEY:?BACKUP_S3_SECRET_ACCESS_KEY is required}
+      BACKUP_S3_PREFIX: ${PROD_BACKUP_S3_PREFIX:-skillstorm/production}
+      BACKUP_ALERT_WEBHOOK_URL: ${PROD_BACKUP_ALERT_WEBHOOK_URL:?BACKUP_ALERT_WEBHOOK_URL is required}
+      BACKUP_MAX_AGE_HOURS: ${PROD_BACKUP_MAX_AGE_HOURS:-30}
+    volumes:
+      - backupdata:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - internal
+      - public
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+  backup-check:
+    build:
+      context: .
+      dockerfile: ops/backup/Dockerfile
+    profiles: ["ops"]
+    entrypoint: ["/app/scripts/ops/check-backup-freshness.sh"]
+    restart: "no"
+    environment:
+      BACKUP_DIR: /backups
+      BACKUP_S3_ENDPOINT: ${PROD_BACKUP_S3_ENDPOINT:?BACKUP_S3_ENDPOINT is required}
+      BACKUP_S3_BUCKET: ${PROD_BACKUP_S3_BUCKET:?BACKUP_S3_BUCKET is required}
+      BACKUP_S3_REGION: ${PROD_BACKUP_S3_REGION:?BACKUP_S3_REGION is required}
+      BACKUP_S3_ACCESS_KEY_ID: ${PROD_BACKUP_S3_ACCESS_KEY_ID:?BACKUP_S3_ACCESS_KEY_ID is required}
+      BACKUP_S3_SECRET_ACCESS_KEY: ${PROD_BACKUP_S3_SECRET_ACCESS_KEY:?BACKUP_S3_SECRET_ACCESS_KEY is required}
+      BACKUP_S3_PREFIX: ${PROD_BACKUP_S3_PREFIX:-skillstorm/production}
+      BACKUP_ALERT_WEBHOOK_URL: ${PROD_BACKUP_ALERT_WEBHOOK_URL:?BACKUP_ALERT_WEBHOOK_URL is required}
+      BACKUP_MAX_AGE_HOURS: ${PROD_BACKUP_MAX_AGE_HOURS:-30}
+    volumes:
+      - backupdata:/backups:ro
+    networks:
+      - public
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  backupdata:
